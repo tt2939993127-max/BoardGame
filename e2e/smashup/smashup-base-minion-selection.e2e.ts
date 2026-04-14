@@ -9,26 +9,94 @@
  * 5. 顶部显示交互标题横幅
  */
 
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { waitForTestHarness } from '../helpers/common';
+import { getMatchState, injectMatchState } from '../helpers/state-injection';
+
+const HOST_PLAYER_ID = '0';
+
+async function applySmashUpStatePatch(
+    matchId: string,
+    page: Page,
+    updater: (state: any) => any,
+): Promise<void> {
+    const currentState = await getMatchState(matchId, page);
+    const nextState = normalizeInjectedMatchState(matchId, updater(currentState));
+    await injectMatchState(matchId, nextState, page);
+    await page.waitForTimeout(500);
+}
+
+function normalizeInjectedMatchState(matchId: string, state: any): any {
+    const next = structuredClone(state);
+    const fallbackTurnOrder = Array.isArray(next.core?.turnOrder)
+        ? [...next.core.turnOrder]
+        : Object.keys(next.core?.players ?? {});
+    const currentPlayerIndex = typeof next.sys?.currentPlayerIndex === 'number'
+        ? next.sys.currentPlayerIndex
+        : typeof next.core?.currentPlayerIndex === 'number'
+            ? next.core.currentPlayerIndex
+            : Math.max(0, fallbackTurnOrder.indexOf(next.core?.activePlayerId ?? HOST_PLAYER_ID));
+
+    next.sys = {
+        ...next.sys,
+        matchId,
+        turnOrder: Array.isArray(next.sys?.turnOrder) ? next.sys.turnOrder : fallbackTurnOrder,
+        currentPlayerIndex,
+        phase: typeof next.sys?.phase === 'string' ? next.sys.phase : next.core?.phase,
+    };
+    next.core = {
+        ...next.core,
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex,
+        phase: typeof next.core?.phase === 'string' ? next.core.phase : next.sys.phase,
+    };
+    return next;
+}
+
+function updatePlayer(core: any, playerId: string, patch: Record<string, unknown>): Record<string, unknown> {
+    return {
+        ...(core.players ?? {}),
+        [playerId]: {
+            ...(core.players?.[playerId] ?? {}),
+            ...patch,
+        },
+    };
+}
+
+function updateBase(core: any, index: number, patch: Record<string, unknown>): Array<Record<string, unknown>> {
+    const bases = [...(core.bases ?? [])];
+    bases[index] = {
+        ...(bases[index] ?? {}),
+        ...patch,
+    };
+    return bases;
+}
 
 test.describe('SmashUp Base/Minion Selection', () => {
+    test.describe.configure({ timeout: 90000 });
+
     test('基地选择：外星人地形改造 - 不弹窗，直接点击基地', async ({ smashupMatch }) => {
-        const { hostPage: page } = smashupMatch;
+        const { hostPage: page, matchId } = smashupMatch;
 
         // 等待测试工具就绪
         await waitForTestHarness(page);
 
         // 注入状态：玩家1手牌中有地形改造卡
-        await page.evaluate(() => {
-            const harness = window.__BG_TEST_HARNESS__!;
-            harness.state.patch({
-                'core.players.0.hand': [
-                    { uid: 'terraform-1', defId: 'alien_terraform', type: 'action' },
-                ],
-                'core.players.0.actionsPlayed': 0,
-                'core.players.0.actionLimit': 1,
+        await applySmashUpStatePatch(matchId, page, (state) => {
+            const core = state.core ?? {};
+            const players = updatePlayer(core, HOST_PLAYER_ID, {
+                hand: [{ uid: 'terraform-1', defId: 'alien_terraform', type: 'action', owner: HOST_PLAYER_ID }],
+                actionsPlayed: 0,
+                actionLimit: 1,
             });
+            return {
+                ...state,
+                core: {
+                    ...core,
+                    players,
+                },
+            };
         });
 
         // 等待手牌渲染
@@ -60,24 +128,32 @@ test.describe('SmashUp Base/Minion Selection', () => {
     });
 
     test('随从选择：外星人至高霸主 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
-        const { hostPage: page } = smashupMatch;
+        const { hostPage: page, matchId } = smashupMatch;
 
         await waitForTestHarness(page);
 
         // 注入状态：场上有随从，玩家1手牌中有至高霸主
-        await page.evaluate(() => {
-            const harness = window.__BG_TEST_HARNESS__!;
-            harness.state.patch({
-                'core.bases.0.minions': [
+        await applySmashUpStatePatch(matchId, page, (state) => {
+            const core = state.core ?? {};
+            const bases = updateBase(core, 0, {
+                minions: [
                     { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] },
                     { uid: 'minion-2', defId: 'pirate_buccaneer', owner: '1', controller: '1', attachedActions: [] },
                 ],
-                'core.players.0.hand': [
-                    { uid: 'overlord-1', defId: 'alien_supreme_overlord', type: 'minion' },
-                ],
-                'core.players.0.minionsPlayed': 0,
-                'core.players.0.minionLimit': 1,
             });
+            const players = updatePlayer(core, HOST_PLAYER_ID, {
+                hand: [{ uid: 'overlord-1', defId: 'alien_supreme_overlord', type: 'minion', owner: HOST_PLAYER_ID }],
+                minionsPlayed: 0,
+                minionLimit: 1,
+            });
+            return {
+                ...state,
+                core: {
+                    ...core,
+                    bases,
+                    players,
+                },
+            };
         });
 
         // 等待手牌渲染
@@ -107,30 +183,38 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         // 验证：随从应该被返回手牌（交互完成）
         await page.waitForTimeout(1000);
-        const state = await page.evaluate(() => window.__BG_TEST_HARNESS__!.state.read());
+        const state = await getMatchState(matchId, page);
         const base0Minions = state.core.bases[0].minions;
         expect(base0Minions.length).toBeLessThan(2); // 至少有一个随从被返回
     });
 
     test('随从选择：外星人收集者 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
-        const { hostPage: page } = smashupMatch;
+        const { hostPage: page, matchId } = smashupMatch;
 
         await waitForTestHarness(page);
 
         // 注入状态：场上有力量≤3的随从，玩家1手牌中有收集者
-        await page.evaluate(() => {
-            const harness = window.__BG_TEST_HARNESS__!;
-            harness.state.patch({
-                'core.bases.0.minions': [
+        await applySmashUpStatePatch(matchId, page, (state) => {
+            const core = state.core ?? {};
+            const bases = updateBase(core, 0, {
+                minions: [
                     { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] }, // 力量2
                     { uid: 'minion-2', defId: 'pirate_first_mate', owner: '1', controller: '1', attachedActions: [] }, // 力量4
                 ],
-                'core.players.0.hand': [
-                    { uid: 'collector-1', defId: 'alien_collector', type: 'minion' },
-                ],
-                'core.players.0.minionsPlayed': 0,
-                'core.players.0.minionLimit': 1,
             });
+            const players = updatePlayer(core, HOST_PLAYER_ID, {
+                hand: [{ uid: 'collector-1', defId: 'alien_collector', type: 'minion', owner: HOST_PLAYER_ID }],
+                minionsPlayed: 0,
+                minionLimit: 1,
+            });
+            return {
+                ...state,
+                core: {
+                    ...core,
+                    bases,
+                    players,
+                },
+            };
         });
 
         await page.waitForSelector('[data-card-uid="collector-1"]', { timeout: 5000 });
@@ -156,30 +240,38 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         // 验证：随从应该被返回手牌
         await page.waitForTimeout(1000);
-        const state = await page.evaluate(() => window.__BG_TEST_HARNESS__!.state.read());
+        const state = await getMatchState(matchId, page);
         const base0Minions = state.core.bases[0].minions;
         expect(base0Minions.some((m: any) => m.uid === 'minion-1')).toBe(false);
     });
 
     test('基地选择：外星人入侵（第二步）- 不弹窗，直接点击基地', async ({ smashupMatch }) => {
-        const { hostPage: page } = smashupMatch;
+        const { hostPage: page, matchId } = smashupMatch;
 
         await waitForTestHarness(page);
 
         // 注入状态：场上有随从，玩家1手牌中有入侵卡
-        await page.evaluate(() => {
-            const harness = window.__BG_TEST_HARNESS__!;
-            harness.state.patch({
-                'core.bases.0.minions': [
+        await applySmashUpStatePatch(matchId, page, (state) => {
+            const core = state.core ?? {};
+            let bases = updateBase(core, 0, {
+                minions: [
                     { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] },
                 ],
-                'core.bases.1.minions': [],
-                'core.players.0.hand': [
-                    { uid: 'invasion-1', defId: 'alien_invasion', type: 'action' },
-                ],
-                'core.players.0.actionsPlayed': 0,
-                'core.players.0.actionLimit': 1,
             });
+            bases = updateBase({ ...core, bases }, 1, { minions: [] });
+            const players = updatePlayer(core, HOST_PLAYER_ID, {
+                hand: [{ uid: 'invasion-1', defId: 'alien_invasion', type: 'action', owner: HOST_PLAYER_ID }],
+                actionsPlayed: 0,
+                actionLimit: 1,
+            });
+            return {
+                ...state,
+                core: {
+                    ...core,
+                    bases,
+                    players,
+                },
+            };
         });
 
         await page.waitForSelector('[data-card-uid="invasion-1"]', { timeout: 5000 });
@@ -210,7 +302,7 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         // 验证：随从应该被移动到第二个基地
         await page.waitForTimeout(1000);
-        const state = await page.evaluate(() => window.__BG_TEST_HARNESS__!.state.read());
+        const state = await getMatchState(matchId, page);
         expect(state.core.bases[1].minions.some((m: any) => m.uid === 'minion-1')).toBe(true);
     });
 });

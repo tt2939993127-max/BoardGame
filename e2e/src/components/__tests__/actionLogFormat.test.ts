@@ -48,4 +48,20 @@ describe('actionLogFormat', () => {
             text: 'KIND_A',
         });
     });
+
+    it('formatActionLogSegments 支持 diceResult 缺失/异常数据', () => {
+        const result = formatActionLogSegments([
+            { type: 'text', text: '掷骰' },
+            { type: 'diceResult', spriteAsset: 'summonerwars/common/dice', spriteCols: 3, spriteRows: 3 } as any,
+        ]);
+        expect(result).toBe('掷骰');
+    });
+
+    it('formatActionLogSegments 显示 diceResult 数值', () => {
+        const result = formatActionLogSegments([
+            { type: 'text', text: '掷骰' },
+            { type: 'diceResult', spriteAsset: 'summonerwars/common/dice', spriteCols: 3, spriteRows: 3, dice: [{ value: 1 }, { value: 2 }] } as any,
+        ]);
+        expect(result).toBe('掷骰 [1,2]');
+    });
 });

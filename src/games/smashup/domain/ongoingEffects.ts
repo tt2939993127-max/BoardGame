@@ -405,6 +405,7 @@ function buildTriggerId(
 }
 
 function createTriggerInstance(
+    state: SmashUpCore,
     entry: TriggerEntry,
     timing: TitanAwareTriggerTiming,
     now: number,
@@ -416,6 +417,9 @@ function createTriggerInstance(
     const mandatory = entry.mandatory ?? !(entry.optional ?? false);
     const sourceEventId = ctx.sourceEventId ?? `${timing}:${now}`;
     const frameId = ctx.frameId ?? `${timing}:${sourceEventId}`;
+    const triggerBaseControllersAtTrigger = ctx.baseIndex !== undefined
+        ? Array.from(new Set((state.bases[ctx.baseIndex]?.minions ?? []).map((minion) => minion.controller)))
+        : undefined;
     return {
         id: buildTriggerId(entry, timing, now, order, located),
         timing,
@@ -442,6 +446,7 @@ function createTriggerInstance(
         reason: ctx.reason,
         affectType: ctx.affectType,
         rankings: ctx.rankings,
+        triggerBaseControllersAtTrigger,
         buriedCardUid: (ctx as any).buriedCardUid,
         buriedCardDefId: (ctx as any).buriedCardDefId,
         buriedCardControllerId: (ctx as any).buriedCardControllerId,
@@ -500,14 +505,14 @@ export function collectTriggers(
         if (entry.phase === 'replacement') continue;
         if (entry.global) {
             if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
-            triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
+            triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, {}, ctx));
             continue;
         }
 
         const locatedSources = locateSources(state, entry.sourceDefId);
         if (locatedSources.length === 0) {
             if (!entry.perInstance && isSourceActive(state, entry.sourceDefId)) {
-                triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
+                triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, {}, ctx));
             }
             continue;
         }
@@ -516,7 +521,7 @@ export function collectTriggers(
             for (const located of locatedSources) {
                 if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
                 if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
-                triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
+                triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, located, ctx));
             }
             continue;
         }
@@ -524,7 +529,7 @@ export function collectTriggers(
         const located = locatedSources[0];
         if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
         if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
-        triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
+        triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, located, ctx));
     }
 
     if (triggers.length === 0) return undefined;

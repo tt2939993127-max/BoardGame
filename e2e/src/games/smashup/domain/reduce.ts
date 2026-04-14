@@ -1543,6 +1543,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { minionUid, minionDefId, fromBaseIndex, toPlayerId } = event.payload;
             const base = state.bases[fromBaseIndex];
             const minion = base?.minions.find(m => m.uid === minionUid);
+            if (!base || !minion) {
+                return state;
+            }
             
             // 从基地移除随从
             const newBases = state.bases.map((b, i) => {
@@ -1553,6 +1556,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 随从返回手牌
             let newPlayers = { ...state.players };
             const owner = newPlayers[toPlayerId];
+            if (!owner) {
+                return state;
+            }
+            const alreadyInHand = owner.hand.some(c => c.uid === minionUid);
             const returnedCard: CardInstance = {
                 uid: minionUid,
                 defId: minionDefId,
@@ -1561,7 +1568,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
             newPlayers = {
                 ...newPlayers,
-                [toPlayerId]: { ...owner, hand: [...owner.hand, returnedCard] },
+                [toPlayerId]: { ...owner, hand: alreadyInHand ? owner.hand : [...owner.hand, returnedCard] },
             };
             
             // 附着的行动卡回各自所有者弃牌堆（与 MINION_DESTROYED 逻辑一致）

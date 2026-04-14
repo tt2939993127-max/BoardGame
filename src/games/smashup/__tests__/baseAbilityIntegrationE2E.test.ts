@@ -37,6 +37,7 @@ import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpCore, SmashUpCommand, CardInstance } from '../domain/types';
 import type { MatchState, RandomFn, Command } from '../../../engine/types';
 import type { PhaseExitResult, PhaseEnterResult } from '../../../engine/systems/FlowSystem';
+import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import {
     makePlayer,
     makeState,
@@ -44,6 +45,7 @@ import {
     makeBase,
     makeMinion,
     getInteractionsFromMS,
+    applyEvents,
 } from './helpers';
 import { runCommand } from './testRunner';
 // 确定性随机
@@ -113,6 +115,10 @@ function callOnPhaseEnterStartTurn(ms: MatchState<SmashUpCore>) {
         state: ms, from: 'endTurn', to: 'startTurn',
         command: mockCommand, random: dummyRandom,
     });
+    const events = Array.isArray(result) ? result : (result as any)?.events ?? [];
+    if (events.length > 0) {
+        ms.core = applyEvents(ms.core, events as any);
+    }
     // onPhaseEnter 返回 PhaseEnterResult.updatedState 而非变异 ms.sys
     // 将 updatedState 的 sys 同步回 ms，保持测试兼容
     if (result && !Array.isArray(result) && (result as PhaseEnterResult).updatedState) {
@@ -128,6 +134,9 @@ function callOnPhaseExitScoreBases(ms: MatchState<SmashUpCore>) {
         command: mockCommand, random: dummyRandom,
     });
     const events = Array.isArray(result) ? result : (result as PhaseExitResult).events ?? [];
+    if (events.length > 0) {
+        ms.core = applyEvents(ms.core, events as any);
+    }
     // Fix 2 后 onPhaseExit 返回 PhaseExitResult.updatedState 而非变异 ms.sys
     // 将 updatedState 的 sys 同步回 ms，保持测试兼容
     if (!Array.isArray(result) && (result as PhaseExitResult).updatedState) {
@@ -139,6 +148,52 @@ function callOnPhaseExitScoreBases(ms: MatchState<SmashUpCore>) {
 /** 检查 Interaction 是否包含指定 sourceId */
 function hasInteraction(ms: MatchState<SmashUpCore>, sourceId: string): boolean {
     return getInteractionsFromMS(ms).some(i => i.data?.sourceId === sourceId);
+}
+
+function resolveReactionQueueTriggerForSourceDefId(
+    initialState: MatchState<SmashUpCore>,
+    sourceDefId: string,
+    now: number,
+): MatchState<SmashUpCore> {
+    let state = initialState;
+
+    for (let step = 0; step < 10; step += 1) {
+        const prompt = getInteractionsFromMS(state)[0] as any;
+        if (!prompt) {
+            const rq = maybeResolveReactionQueue(state, dummyRandom, now + step);
+            if (rq) {
+                state = rq.state;
+                continue;
+            }
+            return state;
+        }
+
+        if (prompt?.data?.sourceId !== 'smashup_reaction_choose') {
+            return state;
+        }
+
+        const triggersById = new Map((state.core.triggerQueue ?? []).map((trigger: any) => [trigger.id, trigger]));
+        const options = (prompt.data?.options ?? []) as any[];
+        const wanted = options.find((option: any) => {
+            const triggerId = option?.value?.triggerId;
+            const trigger = triggerId ? triggersById.get(triggerId) : undefined;
+            return trigger?.sourceDefId === sourceDefId;
+        });
+        const fallback = options.find((option: any) => typeof option?.id === 'string' && option.id.startsWith('trigger:'))
+            ?? options.find((option: any) => option?.value?.kind === 'trigger')
+            ?? options[0];
+        const chosen = wanted ?? fallback;
+        if (!chosen) return state;
+
+        const response = runCommand(
+            state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: prompt.playerId, payload: { optionId: chosen.id } } as any,
+            dummyRandom,
+        );
+        state = response.finalState;
+    }
+
+    return state;
 }
 
 
@@ -198,6 +253,45 @@ describe('集成: base_the_asylum 疯人院 (onMinionPlayed)', () => {
         const { ms: resultMs3 } = executePlayMinion(ms, '0', 'minion-1', 0);
         expect(hasInteraction(resultMs3, 'base_the_asylum')).toBe(true);
     });
+
+    it('修格斯打到疯人院后，自抽的疯狂卡应先进入手牌，再出现在疯人院选择里', () => {
+        const core = makeState({
+            bases: [makeBase({
+                defId: 'base_the_asylum',
+                minions: [makeMinion('support-1', 'support_minion', '0', 5)],
+            })],
+            players: {
+                '0': makePlayer('0', { hand: [
+                    { uid: 'shoggoth-1', defId: 'elder_thing_shoggoth_pod', type: 'minion', owner: '0' },
+                ] }),
+                '1': makePlayer('1'),
+            },
+            madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
+        });
+        const ms = makeMatchState(core);
+        const { ms: playedMs } = executePlayMinion(ms, '0', 'shoggoth-1', 0);
+
+        const shoggothInteraction = getInteractionsFromMS(playedMs).find(i => i.data?.sourceId === 'elder_thing_shoggoth_pod');
+        expect(shoggothInteraction).toBeDefined();
+
+        const yesOption = shoggothInteraction!.data.options.find((option: any) => option.id === 'yes');
+        expect(yesOption).toBeDefined();
+
+        const response = runCommand(playedMs, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '1',
+            payload: { optionId: yesOption.id },
+        } as SmashUpCommand, dummyRandom);
+
+        expect(response.success).toBe(true);
+        expect(response.finalState.core.players['0'].hand.filter((card: CardInstance) => card.defId === MADNESS_CARD_DEF_ID)).toHaveLength(2);
+
+        const asylumInteraction = getInteractionsFromMS(response.finalState).find(i => i.data?.sourceId === 'base_the_asylum');
+        expect(asylumInteraction).toBeDefined();
+
+        const madnessOptions = asylumInteraction!.data.options.filter((entry: any) => entry.value?.defId === MADNESS_CARD_DEF_ID);
+        expect(madnessOptions).toHaveLength(2);
+    });
 });
 
 describe('集成: base_innsmouth_base 印斯茅斯 (onMinionPlayed)', () => {
@@ -215,7 +309,8 @@ describe('集成: base_innsmouth_base 印斯茅斯 (onMinionPlayed)', () => {
         });
         const ms = makeMatchState(core);
         const { ms: resultMs4 } = executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(resultMs4, 'base_innsmouth_base_choose_player')).toBe(true);
+        const resolved = resolveReactionQueueTriggerForSourceDefId(resultMs4, 'base_innsmouth_base', 1);
+        expect(hasInteraction(resolved, 'base_innsmouth_base_choose_player')).toBe(true);
     });
 });
 
@@ -424,7 +519,8 @@ describe('集成: base_ninja_dojo 忍者道场 (afterScoring)', () => {
         const ms = makeScoreBasesMS(core);
         const { events } = callOnPhaseExitScoreBases(ms);
         expect(events.some(e => e.type === SU_EVENTS.BASE_SCORED)).toBe(true);
-        expect(hasInteraction(ms, 'base_ninja_dojo')).toBe(true);
+        const resolved = resolveReactionQueueTriggerForSourceDefId(ms, 'base_ninja_dojo', 11);
+        expect(hasInteraction(resolved, 'base_ninja_dojo')).toBe(true);
     });
 });
 
@@ -525,7 +621,8 @@ describe('集成: base_greenhouse 温室 (afterScoring)', () => {
         const core = makeScoringCore('base_greenhouse', 24);
         const ms = makeScoreBasesMS(core);
         callOnPhaseExitScoreBases(ms);
-        expect(hasInteraction(ms, 'base_greenhouse')).toBe(true);
+        const resolved = resolveReactionQueueTriggerForSourceDefId(ms, 'base_greenhouse', 21);
+        expect(hasInteraction(resolved, 'base_greenhouse')).toBe(true);
     });
 });
 

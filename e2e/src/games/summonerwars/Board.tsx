@@ -84,7 +84,8 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.18;
 const MOBILE_LANDSCAPE_HUD_RAIL_WIDTH = '9.75rem';
-const DEFAULT_MAP_SIDE_RATIO = 0.1;
+const MOBILE_LANDSCAPE_MAP_PADDING = '4vw';
+const DESKTOP_MAP_PADDING = '10vw';
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
 ]);
@@ -104,10 +105,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const isLandscapeMobileViewport = isMobileViewport && viewport.width > viewport.height;
   const useCompactHandLayout = isLandscapeMobileViewport;
   const mapInitialScale = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
-  const mapSideRatio = DEFAULT_MAP_SIDE_RATIO;
-  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
-  const mapContainerPaddingBlock = '0px';
-  const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
+  const mapPaddingLeft = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
+  const mapPaddingRight = isLandscapeMobileViewport
+    ? `calc(${MOBILE_LANDSCAPE_MAP_PADDING} + ${MOBILE_LANDSCAPE_HUD_RAIL_WIDTH})`
+    : DESKTOP_MAP_PADDING;
+  const mapShadeWidth = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
   const activeEventNameClass = 'text-[11px] py-0.5 px-1';
@@ -118,25 +120,29 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseControlsClass = isLandscapeMobileViewport
-    ? 'pointer-events-auto flex flex-col items-end gap-3'
+    ? 'absolute right-3 bottom-3 z-50 pointer-events-auto flex flex-col items-end gap-3'
     : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
   const phaseTrackerClass = isLandscapeMobileViewport
-    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-slate-700/20 min-w-[5.75rem] max-w-[5.75rem]'
-    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-slate-700/20 min-w-[5.75rem] max-w-[5.75rem] pointer-events-auto'
+    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem] pointer-events-auto';
   const phaseTrackerWrapperClass = isLandscapeMobileViewport
-    ? 'pointer-events-auto'
-    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
-  const mobileHudRailClass = 'absolute top-3 right-3 bottom-3 z-40 flex flex-col items-end justify-between pointer-events-none';
-  const mobileHudRailStyle = isLandscapeMobileViewport
-    ? { width: MOBILE_LANDSCAPE_HUD_RAIL_WIDTH } as React.CSSProperties
-    : undefined;
+    ? 'absolute top-3 right-3 z-30 pointer-events-auto'
+    : 'absolute top-[40%] right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
     : '100vw';
   const boardShellStyle = {
     '--sw-board-reference-width': boardReferenceWidthCss,
-    ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.1' } : {}),
+    '--sw-hand-reference-width': '100vw',
+    ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.145' } : {}),
   } as React.CSSProperties;
+
+  const handAreaStyle: React.CSSProperties = {
+    left: isLandscapeMobileViewport
+      ? `calc(50% - (${MOBILE_LANDSCAPE_HUD_RAIL_WIDTH} / 2))`
+      : '50%',
+    transform: 'translateX(-50%)',
+  };
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -947,6 +953,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
                   className="w-full h-full flex items-center justify-center"
+                  style={{ paddingLeft: mapPaddingLeft, paddingRight: mapPaddingRight }}
                   initialScale={mapInitialScale}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
@@ -956,10 +963,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div
-                    className="relative inline-block"
-                    style={{ paddingInline: mapContainerPadding, paddingBlock: mapContainerPaddingBlock }}
-                  >
+                  <div className="relative inline-block">
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -1148,32 +1152,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {isLandscapeMobileViewport ? (
-                  <div className={mobileHudRailClass} style={mobileHudRailStyle}>
-                    <div
-                      className={phaseTrackerWrapperClass}
-                      data-testid="sw-phase-tracker"
-                      data-tutorial-id="sw-phase-tracker"
-                    >
-                      {phaseTrackerNode}
-                    </div>
-                    <div className={phaseControlsClass} data-testid="sw-phase-controls">
-                      {phaseControlsNode}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-                    <div className={phaseControlsClass} data-testid="sw-phase-controls">
-                      {phaseControlsNode}
-                    </div>
+                {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
+                <div className={phaseControlsClass} data-testid="sw-phase-controls">
+                  {phaseControlsNode}
+                </div>
 
-                    {/* 右侧：阶段指示器 */}
-                    <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
-                      {phaseTrackerNode}
-                    </div>
-                  </>
-                )}
+                {/* 右侧：阶段指示器 */}
+                <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                  {phaseTrackerNode}
+                </div>
 
                 {/* 顶部中央：提示横幅 */}
                 <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2 pointer-events-auto" data-tutorial-id="sw-action-banner">
@@ -1243,56 +1230,31 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   />
                 </div>
 
-                  {/* 底部：手牌区 */}
-                  {isLandscapeMobileViewport ? (
-                    <div
-                      className="absolute bottom-0 left-1/2 z-30 -translate-x-1/2 pointer-events-auto"
-                      data-tutorial-id="sw-hand-area"
-                    >
-                      <HandArea
-                        cards={myHand}
-                        phase={currentPhase}
-                        isMyTurn={isMyTurn}
-                        currentMagic={myMagic}
-                        selectedCardId={interaction.selectedHandCardId}
-                        selectedCardIds={abilityMode?.step === 'selectCards'
-                          ? interaction.abilitySelectedCardIds
-                          : interaction.selectedCardsForDiscard}
-                        onCardClick={interaction.handleCardClick}
-                        onCardSelect={interaction.handleCardSelect}
-                        onPlayEvent={interaction.handlePlayEvent}
-                        onMagnifyCard={handleMagnifyCard}
-                        bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
-                        abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                        interactionBusy={handInteractionBusy}
-                        compactLayout={useCompactHandLayout}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className="absolute bottom-0 left-1/2 z-30 -translate-x-1/2 pointer-events-auto"
-                      data-tutorial-id="sw-hand-area"
-                    >
-                      <HandArea
-                        cards={myHand}
-                        phase={currentPhase}
-                        isMyTurn={isMyTurn}
-                        currentMagic={myMagic}
-                        selectedCardId={interaction.selectedHandCardId}
-                        selectedCardIds={abilityMode?.step === 'selectCards'
-                          ? interaction.abilitySelectedCardIds
-                          : interaction.selectedCardsForDiscard}
-                        onCardClick={interaction.handleCardClick}
-                        onCardSelect={interaction.handleCardSelect}
-                        onPlayEvent={interaction.handlePlayEvent}
-                        onMagnifyCard={handleMagnifyCard}
-                        bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
-                        abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                        interactionBusy={handInteractionBusy}
-                        compactLayout={useCompactHandLayout}
-                      />
-                    </div>
-                  )}
+                  {/* 底部：手牌区（中心对齐到左右 HUD 留出的“安全走廊”，避免侵入右侧 controls） */}
+                  <div
+                    className="absolute bottom-0 z-30 pointer-events-auto"
+                    style={handAreaStyle}
+                    data-tutorial-id="sw-hand-area"
+                  >
+                    <HandArea
+                      cards={myHand}
+                      phase={currentPhase}
+                      isMyTurn={isMyTurn}
+                      currentMagic={myMagic}
+                      selectedCardId={interaction.selectedHandCardId}
+                      selectedCardIds={abilityMode?.step === 'selectCards'
+                        ? interaction.abilitySelectedCardIds
+                        : interaction.selectedCardsForDiscard}
+                      onCardClick={interaction.handleCardClick}
+                      onCardSelect={interaction.handleCardSelect}
+                      onPlayEvent={interaction.handlePlayEvent}
+                      onMagnifyCard={handleMagnifyCard}
+                      bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
+                      abilitySelectingCards={abilityMode?.step === 'selectCards'}
+                      interactionBusy={handInteractionBusy}
+                      compactLayout={useCompactHandLayout}
+                    />
+                  </div>
                 </div>
                 </div>
 

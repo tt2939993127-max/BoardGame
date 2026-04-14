@@ -458,6 +458,24 @@ const waitForSummonerWarsHarness = async (page: Page, timeout = 15000) => {
   );
 };
 
+const readLastErrorContext = async (page: Page) => (
+  page.evaluate(() => (window as any).__BG_LAST_ERROR_CONTEXT__ ?? null).catch(() => null)
+);
+
+const assertNoReactCrash = async (page: Page, label: string) => {
+  const ctx = await readLastErrorContext(page);
+  if (!ctx?.message) return;
+  const stack = ctx.stack ? `\nstack:\n${ctx.stack}` : '';
+  throw new Error(
+    [
+      `[${label}] 页面发生运行时错误（可能被 ErrorBoundary 捕获）`,
+      `message=${ctx.message}`,
+      `source=${ctx.source || 'EMPTY'}`,
+      stack,
+    ].filter(Boolean).join('\n'),
+  );
+};
+
 const injectSummonerWarsMobileEvidenceScene = async (page: Page) => {
   const sceneState = createSummonerWarsMobileEvidenceState();
   await page.evaluate((state) => {
@@ -2327,7 +2345,10 @@ test.describe('SummonerWars', () => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-    const hostContext = await browser.newContext({ baseURL });
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1440, height: 900 },
+    });
     await blockAudioRequests(hostContext);
     await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
@@ -2347,7 +2368,10 @@ test.describe('SummonerWars', () => {
 
     await ensurePlayerIdInUrl(hostPage, '0');
 
-    const guestContext = await browser.newContext({ baseURL });
+    const guestContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1440, height: 900 },
+    });
     await blockAudioRequests(guestContext);
     await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
@@ -2401,10 +2425,110 @@ test.describe('SummonerWars', () => {
     const preparedCore = prepareDeterministicCore(coreState);
     await applyOnlineCoreState(preparedCore);
 
+    attachPageDiagnostics(hostPage);
+    const beforeAttackErrorCount = attachPageDiagnostics(hostPage).errors.length;
+
+    const assertDesktopLayoutStable = async (snapshotKey: string) => {
+      await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 8000 });
+      await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 8000 });
+      await expect(hostPage.getByTestId('sw-phase-controls')).toBeVisible({ timeout: 8000 });
+      await expect(hostPage.getByTestId('sw-map-container')).toBeVisible({ timeout: 8000 });
+
+      const layout = await hostPage.evaluate(() => {
+        const getRect = (testId: string) => {
+          const el = document.querySelector(`[data-testid="${testId}"]`) as HTMLElement | null;
+          if (!el) return null;
+          const rect = el.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+            centerX: rect.left + rect.width / 2,
+            centerY: rect.top + rect.height / 2,
+          };
+        };
+
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const hand = getRect('sw-hand-area');
+        const controls = getRect('sw-phase-controls');
+        const tracker = getRect('sw-phase-tracker');
+        const mapContent = getRect('sw-map-content');
+        const mapContainer = getRect('sw-map-container');
+        const lastError = (window as any).__BG_LAST_ERROR_CONTEXT__ as { message?: string } | undefined;
+
+        return {
+          viewportWidth,
+          viewportHeight,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          bodyScrollWidth: document.body.scrollWidth,
+          hand,
+          controls,
+          tracker,
+          mapContent,
+          mapContainer,
+          lastErrorMessage: lastError?.message ?? '',
+          hasViteOverlay: Boolean(document.querySelector('vite-error-overlay')),
+        };
+      });
+
+      expect(layout.rootScrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+      expect(layout.bodyScrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+
+      expect(layout.hand).toBeTruthy();
+      expect(layout.controls).toBeTruthy();
+      expect(layout.tracker).toBeTruthy();
+      expect(layout.mapContent).toBeTruthy();
+
+      const hand = layout.hand!;
+      const controls = layout.controls!;
+      const tracker = layout.tracker!;
+      const mapContent = layout.mapContent!;
+
+      // 手牌不要侵入右下 controls
+      expect(controls.left - hand.right).toBeGreaterThanOrEqual(8);
+      // 阶段条不要压到 controls
+      expect(controls.top - tracker.bottom).toBeGreaterThanOrEqual(8);
+
+      // 中心稳定：手牌与棋盘内容都应接近中线
+      expect(Math.abs(hand.centerX - layout.viewportWidth / 2)).toBeLessThanOrEqual(layout.viewportWidth * 0.08);
+      expect(Math.abs(mapContent.centerX - layout.viewportWidth / 2)).toBeLessThanOrEqual(layout.viewportWidth * 0.06);
+
+      // 防止主内容缩在左上角一小块（PC 回归常见症状）
+      expect(mapContent.width).toBeGreaterThanOrEqual(layout.viewportWidth * 0.35);
+      expect(mapContent.height).toBeGreaterThanOrEqual(layout.viewportHeight * 0.45);
+
+      // 攻击/阶段切换后不应出现前端崩溃 overlay 或全局错误上下文
+      expect(layout.hasViteOverlay).toBe(false);
+      expect(layout.lastErrorMessage).toBe('');
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, snapshotKey, {
+          filename: `${snapshotKey}.png`,
+        }),
+        fullPage: false,
+      });
+
+      await captureEvidenceClipAroundLocators(hostPage, [
+        hostPage.getByTestId('sw-hand-area'),
+        hostPage.getByTestId('sw-phase-tracker'),
+        hostPage.getByTestId('sw-phase-controls'),
+      ], {
+        path: getEvidenceScreenshotPath(testInfo, `${snapshotKey}-hand-phase-clip`, {
+          filename: `${snapshotKey}-hand-phase-clip.png`,
+        }),
+      });
+    };
+
+    await assertDesktopLayoutStable('50-pc-online-layout-start');
+
     // 召唤
     const unitCard = hostPage.getByTestId('sw-hand-area')
       .locator('[data-card-type="unit"][data-can-play="true"]')
-      .first();
+      .last();
     await expect(unitCard).toBeVisible({ timeout: 8000 });
     await unitCard.click();
 
@@ -2514,6 +2638,10 @@ test.describe('SummonerWars', () => {
       await diceOverlay.click({ force: true });
       await expect(diceOverlay).toBeHidden({ timeout: 5000 });
     }
+
+    // 攻击后：不报错 + 布局仍稳定
+    expect(attachPageDiagnostics(hostPage).errors.length).toBe(beforeAttackErrorCount);
+    await assertDesktopLayoutStable('51-pc-online-layout-after-attack');
 
     // 切到魔力阶段后弃牌
     const magicCoreState = normalizePhaseState(await readOnlineCoreState(), 'magic');
@@ -3427,7 +3555,7 @@ test.describe('SummonerWars', () => {
 
     const unitCard = hostPage.getByTestId('sw-hand-area')
       .locator('[data-card-type="unit"][data-can-play="true"]')
-      .first();
+      .last();
     await expect(unitCard).toBeVisible({ timeout: 8000 });
     await unitCard.click();
     expect.poll(() => hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').count(), {
@@ -3550,6 +3678,7 @@ test.describe('SummonerWars', () => {
     const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
     const attackCountBefore = attackSetup.core.players?.['0']?.attackCount ?? 0;
     await expect.poll(async () => {
+      await assertNoReactCrash(hostPage, 'mobile-basic-flow:waiting-dice-overlay');
       if (await diceOverlay.isVisible().catch(() => false)) {
         return true;
       }
@@ -3862,6 +3991,24 @@ test.describe('SummonerWars', () => {
     const phaseDetailPanel = hostPage.getByTestId('sw-phase-detail-panel');
     await expect(phaseDetailPanel).toBeVisible({ timeout: 5000 });
     await expect(phaseDetailPanel).toContainText(/Build|建造/i);
+
+    // 证据要求：必须在截图里肉眼可见 “阶段详情面板” 本体。
+    const phaseDetailBox = await phaseDetailPanel.boundingBox().catch(() => null);
+    if (phaseDetailBox) {
+      const padding = 12;
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, '12-phone-phase-detail-open-clip', {
+          filename: '12-phone-phase-detail-open-clip.png',
+        }),
+        clip: {
+          x: Math.max(0, phaseDetailBox.x - padding),
+          y: Math.max(0, phaseDetailBox.y - padding),
+          width: phaseDetailBox.width + padding * 2,
+          height: phaseDetailBox.height + padding * 2,
+        },
+        fullPage: false,
+      });
+    }
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '12-phone-phase-detail-open', {
         filename: '12-phone-phase-detail-open.png',

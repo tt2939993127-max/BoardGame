@@ -225,7 +225,6 @@ if (Test-Path $OutputPath) {
 $viteJob = Start-Job -ScriptBlock {
     param($rootPath, $portNumber, $logFile)
     Set-Location $rootPath
-    $env:BG_VITE_FORCE_INLINE = '1'
     $env:BG_ENABLE_CAPTURE_SAVE = '1'
     $env:BG_CAPTURE_TRACE_REQUESTS = '1'
     node scripts/infra/vite-with-logging.js --host 127.0.0.1 --port $portNumber --configLoader native *> $logFile

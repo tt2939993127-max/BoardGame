@@ -2877,6 +2877,52 @@ describe('Samurai abilities', () => {
         expect(tempPowerTargets).toContain('ally-2');
     });
 
+    it('samurai_final_haiku_pod 在附着随从离场后给你的随从直到回合结束 +2 力量', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('host-pod-1', 'samurai_bushi_pod', '0', 4, {
+                            attachedActions: [{ uid: 'haiku-pod-1', defId: 'samurai_final_haiku_pod', ownerId: '0' }] as any,
+                        }),
+                        makeMinion('ally-pod-1', 'samurai_ronin_pod', '0', 3),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [makeMinion('ally-pod-2', 'robot_microbot_alpha', '0', 2)],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: makeMinion('host-pod-1', 'samurai_bushi_pod', '0', 4),
+            triggerMinionUid: 'host-pod-1',
+            triggerMinionDefId: 'samurai_bushi_pod',
+            destroyerId: '1',
+            random: defaultTestRandom,
+            now: 1003,
+        });
+
+        const tempPowerTargets = result.events
+            .filter(event => event.type === SU_EVENTS.TEMP_POWER_ADDED)
+            .map((event: any) => event.payload.minionUid);
+        expect(tempPowerTargets).not.toContain('host-pod-1');
+        expect(tempPowerTargets).toContain('ally-pod-1');
+        expect(tempPowerTargets).toContain('ally-pod-2');
+    });
+
     it('samurai_honor_the_fallen 在你此处的随从进入弃牌堆后让你抓一张牌', () => {
         const state = makeState({
             players: {

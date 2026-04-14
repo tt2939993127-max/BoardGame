@@ -1,6 +1,6 @@
 ---
 name: game-ai-adaptation
-description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响应/watchdog/强制跳过/卡死兜底时使用。覆盖 InteractionSystem、ResponseWindowSystem、onlineAiRecovery、playerView 隐藏交互、allowedCommands / responder 门禁、以及 AI 专项审计与测试留证。
+description: BoardGame 项目的 AI 接入唯一入口。给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响应/watchdog/强制跳过/卡死兜底时使用。覆盖 InteractionSystem、ResponseWindowSystem、onlineAiRecovery、playerView 隐藏交互、AI 当前阶段 + human 响应窗口、allowedCommands / responder 门禁、以及 AI 专项审计与测试留证。
 ---
 
 # Game AI Adaptation
@@ -13,7 +13,7 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
 - 新增/修改 AI 自动响应、自动跳过、强制结束、watchdog
 - 修复 “AI 卡死 / 无法选择 / 重复交互 / 跳过后立刻又触发 / 响应音效循环”
 - 新游戏接 AI，需要审查交互闭环与兜底策略
-- 用户提到：`AI 适配`、`AI 卡死`、`自动跳过`、`强制推进`、`watchdog`、`response-window`、`无解交互`
+- 用户提到：`AI 接入`、`AI 适配`、`AI 卡死`、`自动跳过`、`强制推进`、`watchdog`、`response-window`、`无解交互`
 
 ---
 
@@ -23,6 +23,7 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
 2. `docs/ai-rules/testing-audit.md`
 3. 本技能 references：
    - `references/checklist.md`
+   - `references/response-window-watchdog.md`
    - `references/vitest-templates.md`
 4. 真实审计样例（优先复用旧结论并回写）：
 - `evidence/engine/online-ai-watchdog-strong-audit-2026-04-12.md`
@@ -68,7 +69,9 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
   - 是否存在合法响应命令
   - 无响应时是否能 `RESPONSE_PASS`
   - 是否会因 `pendingInteractionId` / stale queue / reopen 事件再次卡住
-- 若当前 responder 是真人，AI watchdog **不得**越权出手
+- **区分两种 human responder 场景：**
+  - 若当前轮到 human，本来就是 human 在响应：watchdog **不得**出手
+  - 若当前轮到 AI，但流程卡在 **human 的响应窗口**：watchdog 允许先 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`，再继续把 AI 阶段收口
 
 ### 3) 在线 AI 兜底链
 
@@ -86,7 +89,9 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
 - watchdog 是**AI seat 专属兜底**，不是“全局强推”
 - hidden interaction 必须靠 `applyPlayerView(match, playerId)` 生成 seat view 才能诊断
 - 当前共享态若是 `interaction.current == null && isBlocked == true`，要优先怀疑**隐藏交互**
-- response window 当前 responder 若是 human，watchdog 返回 `null` 才是正确行为
+- **不要把 `currentResponderId === human` 简化成“一律返回 null”**。正确判断是：
+  - 当前轮到 human → 返回 `null`
+  - 当前轮到 AI，但 AI 阶段被 human 响应窗口卡住 → 先 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`
 
 ---
 
@@ -125,12 +130,13 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
 - AI 被卡住时自动 `RESPONSE_PASS`
 - AI hidden interaction 自动选 skip / cancel / done
 - AI 卡在自己回合时强制推进阶段
+- AI 当前阶段被 **human 响应窗口** 卡住时，先 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`，再做 follow-up advance
 
 禁止：
 
-- 当前响应者是 human 时替 human pass
-- 把真人应该看到的响应/确认直接强关
-- 让 watchdog 推进到真人回合，或替真人完成交互
+- 当前响应者是 human 时替 human `RESPONSE_PASS` / 选项选择
+- human 自己回合里的响应窗口，直接被 watchdog 越权关闭
+- 不加门禁地“只要是 human responder 就强关窗口”
 
 ### 原则 4：先修事件源/可解性，再修 watchdog
 
@@ -222,7 +228,8 @@ watchdog 是最后兜底，不是第一修法。
 
 **guard：**
 
-- 当前 responder 为 human 时，watchdog 不出手
+- 当前轮到 human 且 responder 也是 human 时，watchdog 不出手
+- 当前轮到 AI 且 human responder 把 AI 阶段卡住时，watchdog 应改走 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`，不是傻发 `ADVANCE_PHASE`
 - 仅当当前 responder 是 AI，才允许 watchdog 执行 `RESPONSE_PASS`
 
 ### D. 重复动作循环（弃牌↔撤回、卖↔撤回、确认↔重开）
@@ -264,11 +271,16 @@ watchdog 是最后兜底，不是第一修法。
 **避免方式：**
 
 - 所有 watchdog 操作先判断 seat controller
-- 所有 response-window 兜底先判断 current responder 是否为 human
+- 所有 response-window 兜底都要同时判断：
+  - `currentPlayerId`
+  - `currentResponderId`
+  - `seatControllers`
+  - 当前卡死的是“AI 自己”还是“human 正常操作”
 
 **红线：**
 
-- 任何“帮真人 pass / cancel / close”的兜底都是错的，除非用户明确要求新的产品语义
+- 任何“帮真人 pass / choose”的兜底都是错的，除非用户明确要求新的产品语义
+- **仅在“AI 当前阶段被 human 响应窗口卡住”时，自动 close response-window 才是允许的**
 
 ---
 
@@ -332,7 +344,8 @@ watchdog 是最后兜底，不是第一修法。
 
 适合测：
 
-- human responder 时 watchdog 不得误触发
+- human 当前回合时 watchdog 不得误触发
+- AI 当前阶段 + human responder 时，watchdog 应先 `SYS_RESPONSE_WINDOW_FORCE_CLOSE` 再收口
 - hidden interaction 需要 seat view 才能识别
 - 自动反馈是否携带 unsatisfiable reason / options 摘要
 - response loop 是否只对 AI seat 强制 `RESPONSE_PASS`
@@ -388,7 +401,7 @@ watchdog 是最后兜底，不是第一修法。
 ### 必须写清三件事
 
 1. **卡死现象是什么**
-   - 例如：跳过后立刻 reopen、弃牌与撤回交替、human 响应时误弹强制失败
+   - 例如：跳过后立刻 reopen、弃牌与撤回交替、AI 当前阶段卡在 human 响应窗口、human 响应时误弹强制失败
 2. **根因落在哪一层**
    - 游戏事件源 / AI 决策 / ResponseWindow / watchdog / playerView
 3. **为什么这次修复不会误伤真人**
@@ -426,7 +439,8 @@ watchdog 是最后兜底，不是第一修法。
 
 - [ ] 每个新增/修改的 AI 交互都有合法解或显式 skip/cancel/pass
 - [ ] sharedState 不可见时，已验证 seat `playerView`
-- [ ] 当前 responder 为 human 的场景不会被 watchdog 干预
+- [ ] 已区分“human 自己回合”与“AI 当前阶段 + human 响应窗口”两种场景
+- [ ] AI 当前阶段 + human 响应窗口时，watchdog 走的是 `FORCE_CLOSE + follow-up`，不是无效 `ADVANCE_PHASE`
 - [ ] 重复动作循环在 AI 层已尽量阻断，watchdog 只作兜底
 - [ ] 单测已放入最相关现有文件
 - [ ] `npx eslint <改动文件>` 已通过

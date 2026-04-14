@@ -78,6 +78,7 @@ import { SmashUpEndgameContent, SmashUpEndgameActions } from './ui/SmashUpEndgam
 import type { PlayConstraint } from './domain/types';
 import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game/framework';
 import type { SpotlightItem } from '../../components/game/framework';
+import { resolveRuntimeLayoutScaleMetrics } from '../mobileSupport';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { RevealOverlay } from './ui/RevealOverlay';
 import { useSmashUpOverlay } from './ui/SmashUpOverlayContext';
@@ -1656,20 +1657,38 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [getCardPlayTargetState, t]);
 
     const handleSetAsideTitanSelect = useCallback((titanUid: string) => {
+        if (!playerID) return;
         if (shouldLockNormalHandInteraction) {
             playDeniedSound();
             return;
         }
-        if (!selectableSetAsideTitanUids.has(titanUid)) {
-            playDeniedSound();
+        if (isDirectHandSelectPrompt && currentPrompt && handPromptTitanUids.has(titanUid)) {
+            const option = currentPrompt.options.find(
+                opt => (opt.value as CardOrTitanChoiceValue | undefined)?.titanUid === titanUid,
+            );
+            if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
+            } else {
+                playDeniedSound();
+            }
             return;
         }
+        const activation = setAsideTitanActivationState.get(titanUid);
+        if (!activation || activation.baseIndices.size === 0) {
+            playDeniedSound();
+            if (activation?.firstError) {
+                toastCommandFeedback(activation.firstError);
+            }
+            return;
+        }
+
         setSelectedCardUid(null);
         setSelectedCardMode(null);
         setPendingFusionChoiceUid(null);
+        setDiscardStripSelectedUid(null);
         setMeFirstPendingCard(null);
         setSelectedSetAsideTitanUid((prev) => (prev === titanUid ? null : titanUid));
-    }, [selectableSetAsideTitanUids, shouldLockNormalHandInteraction]);
+    }, [playerID, shouldLockNormalHandInteraction, isDirectHandSelectPrompt, currentPrompt, handPromptTitanUids, dispatch, setAsideTitanActivationState, toastCommandFeedback]);
 
     // VIEWING STATE
     const [viewingCard, setViewingCard] = useState<CardMagnifyTarget | null>(null);
@@ -1776,7 +1795,35 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             return;
         }
-    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, reactionWindow, playerID, myPlayer]);
+        if (usableActiveBaseAbilityIndices.has(index)) {
+            if (!isTutorialCommandAllowed(SU_COMMANDS.USE_BASE_ABILITY)) {
+                playDeniedSound();
+                return;
+            }
+            dispatch(SU_COMMANDS.USE_BASE_ABILITY, { baseIndex: index });
+        }
+    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, reactionWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed, shouldLockNormalHandInteraction]);
+
+    const handleBuriedCardSelect = useCallback((cardUid: string) => {
+        if (!isBuriedSelectPrompt || !currentPrompt) return;
+        const optionMeta = buriedPromptOptionsByUid.get(cardUid);
+        if (!optionMeta || optionMeta.disabled) return;
+
+        if (isMultiBuriedSelect) {
+            setMultiSelectedOptionIds(prev => {
+                const next = new Set(prev);
+                if (next.has(optionMeta.optionId)) {
+                    next.delete(optionMeta.optionId);
+                } else if (next.size < multiMinionConstraints.max) {
+                    next.add(optionMeta.optionId);
+                }
+                return next;
+            });
+            return;
+        }
+
+        dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: optionMeta.optionId });
+    }, [buriedPromptOptionsByUid, currentPrompt, dispatch, isBuriedSelectPrompt, isMultiBuriedSelect, multiMinionConstraints.max]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         if (activeSelectedSetAsideTitanUid) {
@@ -1964,7 +2011,15 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             return;
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, reactionWindow, activeSelectedSetAsideTitanUid, shouldLockNormalHandInteraction, isDirectHandSelectPrompt, selectedCardMode, handlePlayActionWithoutTarget, validateImmediateActionPlay, toastCommandFeedback, core, pendingFusionChoiceUid, enterActionTargetSelection]);
+
+        if (selectedCardUid === card.uid) {
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
+        } else {
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode('minion');
+        }
+    }, [activeSelectedSetAsideTitanUid, core, currentPrompt, discardCount, dispatch, enterActionTargetSelection, handlePlayActionWithoutTarget, isAfterScoringResponse, isDirectHandSelectPrompt, isMeFirstResponse, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, needDiscard, pendingFusionChoiceUid, phase, reactionWindow, selectedCardMode, selectedCardUid, shouldLockNormalHandInteraction, t, validateImmediateActionPlay, toastCommandFeedback]);
 
     const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
         if (!pendingFusionChoiceUid || !myPlayer) return;
@@ -2945,46 +3000,83 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                             paddingBottom: `${layout.handAreaHeight}px`,
                         }}
                     >
-                        {core.bases.map((base, idx) => (
-                            <BaseZone
-                                key={`${base.defId}-${idx}`}
-                                base={base}
-                                baseIndex={idx}
-                                core={core}
-                                turnOrder={core.turnOrder}
-                                isDeployMode={
-                                    (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
-                                }
-                                isMinionSelectMode={!isOngoingSelectPrompt && ((selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
-                                selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
-                                multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
-                                isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
-                                isDimmed={
-                                    (isBaseSelectPrompt && !selectableBaseIndices.has(idx))
-                                    || (discardStripSelectedUid != null && !discardStripAllowedBases.has(idx))
-                                    || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && !deployableBaseIndices.has(idx))
-                                    || (!!meFirstPendingCard && !meFirstEligibleBaseIndices.has(idx))
-                                }
-                                isMyTurn={isMyTurn}
-                                myPlayerId={playerID}
-                                dispatch={dispatch}
-                                onClick={() => handleBaseClick(idx)}
-                                onMinionSelect={handleMinionSelect}
-                                onOngoingSelect={handleOngoingSelect}
-                                selectableOngoingUids={isOngoingSelectPrompt ? selectableOngoingUids : undefined}
-                                onViewMinion={(defId) => setViewingCard({ defId, type: 'minion' })}
-                                onViewAction={handleViewAction}
-                                onViewBase={(defId) => setViewingCard({ defId, type: 'base' })}
-                                onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
-                                isTutorialTargetAllowed={isTutorialTargetAllowed}
-                                phase={phase as string}
-                                tokenRef={(el) => {
-                                    if (el) baseRefsMap.current.set(idx, el);
-                                    else baseRefsMap.current.delete(idx);
-                                }}
-                            />
+                        <div
+                            className="flex items-center min-w-max"
+                            data-testid="su-battlefield-zoom-target"
+                            data-mobile-battlefield-zoom-target="true"
+                            style={{
+                                gap: `${layout.baseGap}vw`,
+                                paddingInline: `${layout.boardHorizontalPadding}px`,
+                            }}
+                        >
+                            {core.bases.map((base, idx) => (
+                                <BaseZone
+                                    key={`${base.defId}-${idx}`}
+                                    base={base}
+                                    baseIndex={idx}
+                                    core={core}
+                                    turnOrder={core.turnOrder}
+                                    isMobileViewport={isMobileViewport}
+                                    isDeployMode={
+                                        (!!selectedCardUid && selectedCardMode !== 'action' && deployableBaseIndices.has(idx))
+                                        || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
+                                        || (!!activeSelectedSetAsideTitanUid && selectedTitanDeployableBaseIndices.has(idx))
+                                        || (!!handDragPreview && draggedCardMode !== 'action' && dragDeployableBaseIndices.has(idx))
+                                    }
+                                    isMinionSelectMode={!isOngoingSelectPrompt && (
+                                        ((selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') && ongoingMinionTargetUids.size > 0)
+                                        || (isMinionSelectPrompt && selectableMinionUids.size > 0)
+                                        || (!!handDragPreview && (draggedCardMode === 'ongoing-minion' || draggedCardMode === 'action-minion') && dragOngoingMinionTargetUids.size > 0)
+                                    )}
+                                    selectableMinionUids={
+                                        isMinionSelectPrompt
+                                            ? selectableMinionUids
+                                            : (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion')
+                                                ? ongoingMinionTargetUids
+                                                : !!handDragPreview && (draggedCardMode === 'ongoing-minion' || draggedCardMode === 'action-minion')
+                                                    ? dragOngoingMinionTargetUids
+                                                    : undefined
+                                    }
+                                    multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
+                                    duelParticipantMinionUids={activeDuelParticipantUids.size > 0 ? activeDuelParticipantUids : undefined}
+                                    isBuriedSelectMode={isBuriedSelectPrompt}
+                                    selectableBuriedCardUids={isBuriedSelectPrompt ? selectableBuriedCardUids : undefined}
+                                    multiSelectedBuriedCardUids={isMultiBuriedSelect ? multiSelectedBuriedCardUids : undefined}
+                                    isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
+                                    isDimmed={
+                                        (isBaseSelectPrompt && !selectableBaseIndices.has(idx))
+                                        || (discardStripSelectedUid != null && !discardStripAllowedBases.has(idx))
+                                        || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && selectedCardMode !== 'action-minion' && selectedCardMode !== 'action' && !deployableBaseIndices.has(idx))
+                                        || (!!meFirstPendingCard && !meFirstEligibleBaseIndices.has(idx))
+                                        || (!!activeSelectedSetAsideTitanUid && !selectedTitanDeployableBaseIndices.has(idx))
+                                        || (!!handDragPreview && draggedCardMode !== 'ongoing-minion' && draggedCardMode !== 'action-minion' && draggedCardMode !== 'action' && !dragDeployableBaseIndices.has(idx))
+                                    }
+                                    isMyTurn={isMyTurn}
+                                    myPlayerId={playerID}
+                                    dispatch={dispatch}
+                                    onClick={() => handleBaseClick(idx)}
+                                    onMinionSelect={handleMinionSelect}
+                                    onOngoingSelect={handleOngoingSelect}
+                                    onBuriedCardSelect={handleBuriedCardSelect}
+                                    selectableOngoingUids={isOngoingSelectPrompt ? selectableOngoingUids : undefined}
+                                    onViewMinion={(defId) => setViewingCard({ defId, type: 'minion' })}
+                                    onViewAction={handleViewAction}
+                                    onViewBase={(defId) => setViewingCard({ defId, type: 'base' })}
+                                    onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
+                                    usableMinionTalentUids={usableMinionTalentUids}
+                                    usableSpecialMinionUids={usableSpecialMinionUids}
+                                    usableOngoingTalentUids={usableOngoingTalentUids}
+                                    usableTitanTalentUids={usableTitanTalentUids}
+                                    usableTitanOngoingUids={usableTitanOngoingUids}
+                                    canUseBaseAbility={usableActiveBaseAbilityIndices.has(idx)}
+                                    tokenRef={(el) => {
+                                        if (el) baseRefsMap.current.set(idx, el);
+                                        else baseRefsMap.current.delete(idx);
+                                    }}
+                                />
 
                             ))}
+                        </div>
                     </div>
                 </MobileBattlefieldViewport>
 

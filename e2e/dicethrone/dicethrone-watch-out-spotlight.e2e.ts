@@ -22,7 +22,7 @@ import {
     readCoreState,
     selectCharacter,
     setupDTOnlineMatch,
-    waitForGameBoard,
+    waitForDiceThroneHarness,
 } from '../helpers/dicethrone';
 import { setChineseLocale, waitForTestHarness } from '../helpers/common';
 
@@ -1704,6 +1704,199 @@ test('bonus die spotlight should close on content click in display mode', async 
         testInfo,
         'bonus-die-spotlight-should-close-on-content-click-in-display-mode',
         '06-bonus-die-spotlight-click-close.png',
+    );
+});
+
+test('opponent display-only bonus settlement should not duplicate bonus overlay when card spotlight already shows dice', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+    await waitForDiceThroneHarness(page, 40000);
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 2, HP: 50 },
+        },
+        player1: {
+            resources: { CP: 2, HP: 50 },
+            hand: ['watch-out'],
+        },
+        currentPlayer: '0',
+        phase: 'main1',
+        extra: {
+            selectedCharacters: { '0': 'moon_elf', '1': 'barbarian' },
+            hostStarted: true,
+        },
+    });
+    await expect(page.locator('[data-testid="hand-area"]')).toBeVisible({ timeout: 40000 });
+
+    const baseState = await page.evaluate(() => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        return harness?.state?.get?.() ?? null;
+    });
+    if (!baseState) {
+        throw new Error('TestHarness state not ready');
+    }
+    const nextState = cloneJson(baseState);
+
+    const cardTimestamp = 4800;
+    const bonusTimestamp = 5000;
+    const bonusDice = [
+        { index: 0, value: 1, face: 'bow', effectKey: 'bonusDie.effect.watchOut.bow', effectParams: { value: 1 } },
+        { index: 1, value: 2, face: 'bow', effectKey: 'bonusDie.effect.watchOut.bow', effectParams: { value: 2 } },
+    ];
+
+    nextState.core = {
+        ...(nextState.core ?? {}),
+        activePlayerId: '0',
+        pendingBonusDiceSettlement: {
+            id: 'watch-out',
+            sourceAbilityId: 'watch-out',
+            attackerId: '1',
+            targetId: '0',
+            dice: bonusDice,
+            rerollCostTokenId: 'cp',
+            rerollCostAmount: 1,
+            rerollCount: 0,
+            maxRerollCount: 1,
+            rerollEffectKey: 'bonusDie.effect.watchOut.bow',
+            readyToSettle: false,
+            displayOnly: true,
+        },
+    };
+
+    const baseEntries = (nextState.sys?.eventStream?.entries ?? []) as Array<{ id: number }>;
+    const baseMaxId = baseEntries.reduce((max, entry) => Math.max(max, entry.id ?? 0), 0);
+    const eventEntries = [
+        {
+            id: baseMaxId + 1,
+            event: {
+                type: 'CARD_PLAYED',
+                payload: {
+                    playerId: '1',
+                    cardId: 'watch-out',
+                },
+                timestamp: cardTimestamp,
+            },
+        },
+        {
+            id: baseMaxId + 2,
+            event: {
+                type: 'BONUS_DIE_ROLLED',
+                payload: {
+                    playerId: '1',
+                    targetPlayerId: '0',
+                    value: 1,
+                    face: 'bow',
+                    effectKey: 'bonusDie.effect.watchOut.bow',
+                    effectParams: { value: 1, index: 0 },
+                },
+                timestamp: bonusTimestamp,
+            },
+        },
+        {
+            id: baseMaxId + 3,
+            event: {
+                type: 'BONUS_DIE_ROLLED',
+                payload: {
+                    playerId: '1',
+                    targetPlayerId: '0',
+                    value: 2,
+                    face: 'bow',
+                    effectKey: 'bonusDie.effect.watchOut.bow',
+                    effectParams: { value: 2, index: 1 },
+                },
+                timestamp: bonusTimestamp + 1,
+            },
+        },
+        {
+            id: baseMaxId + 4,
+            event: {
+                type: 'BONUS_DICE_REROLL_REQUESTED',
+                payload: {
+                    settlement: {
+                        id: 'watch-out',
+                        sourceAbilityId: 'watch-out',
+                        attackerId: '1',
+                        targetId: '0',
+                        dice: bonusDice,
+                        rerollCostTokenId: 'cp',
+                        rerollCostAmount: 1,
+                        rerollCount: 0,
+                        maxRerollCount: 1,
+                        rerollEffectKey: 'bonusDie.effect.watchOut.bow',
+                        readyToSettle: false,
+                        displayOnly: true,
+                    },
+                },
+                timestamp: bonusTimestamp,
+            },
+        },
+    ];
+
+    await page.evaluate((state) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        if (!harness?.state?.set) {
+            throw new Error('TestHarness state not ready');
+        }
+        harness.state.set(state);
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    }, nextState);
+
+    await page.waitForTimeout(200);
+
+    await page.evaluate((entries) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!harness?.state?.set || !state) {
+            throw new Error('TestHarness state not ready');
+        }
+        harness.state.set({
+            ...state,
+            sys: {
+                ...state.sys,
+                eventStream: {
+                    ...state.sys?.eventStream,
+                    entries: [...(state.sys?.eventStream?.entries ?? []), ...entries],
+                },
+            },
+        });
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    }, eventEntries);
+    await ensureDebugPanelClosed(page);
+
+    const cardSpotlight = page.locator('[data-testid="card-spotlight-overlay"]');
+    await expect(cardSpotlight).toBeVisible({ timeout: 5000 });
+    await expect(cardSpotlight.locator('[data-testid="card-spotlight-die"]')).toHaveCount(2, { timeout: 5000 });
+
+    await saveLocatorEvidenceScreenshot(
+        cardSpotlight,
+        testInfo,
+        'opponent-display-only-bonus-settlement-no-duplicate-overlay',
+        '01-opponent-card-spotlight-with-dice.png',
+    );
+    await page.waitForTimeout(600);
+
+    const visibleBonusOverlayCount = await page
+        .locator('[data-testid="bonus-die-overlay"]')
+        .evaluateAll((nodes) => nodes.filter((node) => {
+            const element = node as HTMLElement;
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== 'none'
+                && style.visibility !== 'hidden'
+                && rect.width > 0
+                && rect.height > 0;
+        }).length);
+    expect(visibleBonusOverlayCount).toBe(0);
+
+    await savePageEvidenceScreenshot(
+        page,
+        testInfo,
+        'opponent-display-only-bonus-settlement-no-duplicate-overlay',
+        '02-opponent-no-duplicate-bonus-overlay.png',
     );
 });
 

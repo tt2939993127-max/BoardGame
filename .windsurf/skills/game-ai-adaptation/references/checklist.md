@@ -28,7 +28,9 @@
 ## 4. onlineAiRecovery / watchdog
 
 - [ ] 当前卡住的 seat 是否确认是 AI？
-- [ ] 当前 responder 若是 human，watchdog 是否明确返回 `null`？
+- [ ] 是否已区分：
+  - human 自己回合 → watchdog 返回 `null`
+  - AI 当前阶段 + human responder → watchdog 走 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`
 - [ ] hidden interaction 诊断是否拿到了各 AI seat 的 `playerView`？
 - [ ] 自动反馈里是否有：
   - `interactionId`

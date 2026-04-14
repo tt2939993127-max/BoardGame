@@ -55,6 +55,7 @@ import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
 import { collectTriggers, fireTriggers } from './ongoingEffects';
+import { reduce } from './reduce';
 import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
 
@@ -876,6 +877,7 @@ export function fireMinionPlayedTriggers(params: {
 }): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
     const { core, playerId, cardUid, defId, baseIndex, power, random, now } = params;
     let matchState = params.matchState;
+    let triggerCore = core;
     const events: SmashUpEvent[] = [];
 
     // 注意：此函数被 postProcessSystemEvents 调用时，MINION_PLAYED 事件已经被 reduce 到 core 中
@@ -896,7 +898,22 @@ export function fireMinionPlayedTriggers(params: {
         };
         const result = executor(ctx);
         events.push(...result.events);
-        if (result.matchState) matchState = result.matchState;
+        if (result.events.length > 0) {
+            for (const event of result.events) {
+                triggerCore = reduce(triggerCore, event);
+            }
+        }
+        if (result.matchState) {
+            matchState = {
+                ...result.matchState,
+                core: triggerCore,
+            };
+        } else if (triggerCore !== core) {
+            matchState = {
+                ...matchState,
+                core: triggerCore,
+            };
+        }
     }
 
     // 2. 基地能力触发 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
@@ -904,7 +921,7 @@ export function fireMinionPlayedTriggers(params: {
     const sourceEventId = `minion-played:${cardUid}:${baseIndex}:${now}`;
     const frameId = `minion-played-frame:${cardUid}:${baseIndex}:${now}`;
     const queuedBase = collectBaseAbilityTriggers({
-        core,
+        core: triggerCore,
         timing: 'onMinionPlayed',
         ownerPlayerId: playerId,
         baseIndex,
@@ -918,9 +935,9 @@ export function fireMinionPlayedTriggers(params: {
     if (queuedBase) events.push(queuedBase as unknown as SmashUpEvent);
 
     // 3. ongoing 触发器 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
-    const playedMinion = core.bases[baseIndex]?.minions.find(m => m.uid === cardUid);
-    const queued = collectTriggers(core, 'onMinionPlayed', {
-        state: core,
+    const playedMinion = triggerCore.bases[baseIndex]?.minions.find(m => m.uid === cardUid);
+    const queued = collectTriggers(triggerCore, 'onMinionPlayed', {
+        state: triggerCore,
         matchState,
         playerId,
         baseIndex,

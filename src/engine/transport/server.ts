@@ -255,8 +255,25 @@ const summarizeOnlineAiRecoveryLegalActions = (
     })),
 });
 
+const INTERNAL_FEEDBACK_PATH = '/internal/feedback/system';
+
+const normalizeInternalFeedbackEndpoint = (candidate: string): string | null => {
+    const trimmed = candidate.trim().replace(/\/$/, '');
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        return null;
+    }
+    if (trimmed.includes('/internal/feedback/system')) {
+        return trimmed;
+    }
+    if (trimmed.endsWith('/feedback')) {
+        return `${trimmed.replace(/\/feedback$/, '')}${INTERNAL_FEEDBACK_PATH}`;
+    }
+    return `${trimmed}${INTERNAL_FEEDBACK_PATH}`;
+};
+
 const resolveOnlineAiFeedbackEndpoint = (): string | null => {
     const rawCandidates = [
+        process.env.FEEDBACK_INTERNAL_API_URL,
         process.env.FEEDBACK_API_URL,
         process.env.VITE_FEEDBACK_API_URL,
         process.env.VITE_BACKEND_URL ? `${process.env.VITE_BACKEND_URL.replace(/\/$/, '')}/feedback` : null,
@@ -266,14 +283,37 @@ const resolveOnlineAiFeedbackEndpoint = (): string | null => {
     ];
     for (const candidate of rawCandidates) {
         if (!candidate) continue;
-        const normalized = candidate.trim();
-        if (!normalized) continue;
-        if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-            return normalized.replace(/\/$/, '');
-        }
+        const normalized = normalizeInternalFeedbackEndpoint(candidate);
+        if (normalized) return normalized;
     }
     return null;
 };
+
+type OnlineAiFeedbackConfig = {
+    endpoint: string | null;
+    token: string | null;
+    disabledReason?: 'missing-endpoint' | 'missing-token';
+};
+
+const resolveOnlineAiFeedbackConfig = (): OnlineAiFeedbackConfig => {
+    const endpoint = resolveOnlineAiFeedbackEndpoint();
+    if (!endpoint) {
+        return { endpoint: null, token: null, disabledReason: 'missing-endpoint' };
+    }
+    const token = process.env.INTERNAL_FEEDBACK_TOKEN;
+    const hasExplicitEndpoint = Boolean(process.env.FEEDBACK_INTERNAL_API_URL || process.env.FEEDBACK_API_URL);
+    if (!token) {
+        const message = '[GameTransport] INTERNAL_FEEDBACK_TOKEN 未配置，已禁用在线 AI 自动反馈';
+        if (process.env.NODE_ENV === 'production' || hasExplicitEndpoint) {
+            throw new Error(message);
+        }
+        logger.error(message, { endpoint });
+        return { endpoint: null, token: null, disabledReason: 'missing-token' };
+    }
+    return { endpoint, token };
+};
+
+const ONLINE_AI_FEEDBACK_CONFIG = resolveOnlineAiFeedbackConfig();
 
 // ============================================================================
 // 游戏引擎定义
@@ -1489,19 +1529,23 @@ export class GameTransportServer {
     }
 
     private async defaultOnlineAiFeedbackReporter(payload: OnlineAiRecoveryFeedbackPayload): Promise<void> {
-        const endpoint = resolveOnlineAiFeedbackEndpoint();
-        if (!endpoint) {
+        const { endpoint, token } = ONLINE_AI_FEEDBACK_CONFIG;
+        if (!endpoint || !token) {
             return;
         }
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-Internal-Feedback-Token': token,
             },
             body: JSON.stringify({
                 content: `[system][online-ai-watchdog] ${payload.incidentKind} ${payload.reason}`,
                 type: 'bug',
                 severity: payload.severity,
+                source: 'online-ai-watchdog',
+                autoReportKind: payload.incidentKind,
+                incidentKey: payload.trackerKey,
                 gameName: payload.gameId,
                 contactInfo: 'system:online-ai-watchdog',
                 actionLog: payload.actionLog,

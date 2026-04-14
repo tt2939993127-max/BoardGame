@@ -24,6 +24,7 @@ import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { addPowerCounter, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 import { uncoverBuriedCard } from '../domain/bury';
 import { collectTriggers, fireTriggers, interceptEvent } from '../domain/ongoingEffects';
+import { getTriggerExecutor } from '../domain/triggerExecutors';
 import { filterProtectedDestroyEvents, filterProtectedMoveEvents, filterProtectedReturnEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { initAllAbilities } from '../abilities';
@@ -2128,6 +2129,86 @@ describe('smashup', () => {
         });
     });
 
+    it('Fort Titanosaurus 会在 dino_augmentation 交互选中己方随从后起持续交互', () => {
+        const initialState = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('aug-1', 'dino_augmentation_pod', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.DINOSAURS, SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_wizard_academy',
+                minions: [
+                    makeMinion('dino-target', 'dino_armor_stego_pod', '0', 4, { tempPowerModifier: 0, powerCounters: 0 }),
+                ],
+                ongoingActions: [],
+            })],
+            titans: [{
+                uid: 't-fort',
+                defId: 'dinosaurs_fort_titanosaurus',
+                faction: SMASHUP_FACTION_IDS.DINOSAURS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 3,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            } satisfies TitanState],
+        }));
+
+        const playResult = runCommand(initialState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'aug-1', targetBaseIndex: 0 },
+            timestamp: 50,
+        }, FIXED_RANDOM);
+
+        expect(playResult.success).toBe(true);
+        expect(getInteractionsFromMS(playResult.finalState)[0]?.data?.sourceId).toBe('dino_augmentation');
+
+        const resolved = resolveInteractionChain(playResult.finalState, (prompt) => {
+            const sourceId = prompt?.data?.sourceId as string | undefined;
+            if (sourceId === 'dino_augmentation') {
+                const option = findInteractionOption(prompt, entry => entry?.value?.minionUid === 'dino-target');
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            }
+            if (sourceId === 'smashup_reaction_choose') {
+                const triggerById = new Map(
+                    (prompt?.state?.core?.triggerQueue ?? []).map((trigger: any) => [trigger.id, trigger]),
+                );
+                const option = prompt?.data?.options?.find((entry: any) => {
+                    const trigger = triggerById.get(entry?.value?.triggerId);
+                    return trigger?.sourceDefId === 'dinosaurs_fort_titanosaurus';
+                }) ?? prompt?.data?.options?.[0];
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            }
+            if (sourceId === 'titan_dinosaurs_fort_titanosaurus_ongoing') {
+                const option = findInteractionOption(
+                    prompt,
+                    entry => entry?.value?.mode === 'both' && entry?.value?.targetMinionUid === 'dino-target',
+                );
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            }
+            throw new Error(`未处理的 Fort Titanosaurus 交互: ${sourceId ?? 'unknown'}`);
+        }, FIXED_RANDOM);
+
+        expect(getInteractionsFromMS(resolved.finalState)).toHaveLength(0);
+
+        const finalCore = resolved.finalState.core;
+        const target = finalCore.bases[0].minions.find(minion => minion.uid === 'dino-target');
+        const titan = (finalCore.titans ?? []).find(candidate => candidate.uid === 't-fort');
+
+        expect(target?.tempPowerModifier).toBe(4);
+        expect(target?.powerCounters).toBe(1);
+        expect(titan?.powerCounters).toBe(4);
+        expect((titan?.metadata as { fortTitanosaurusTriggeredTurn?: number } | undefined)?.fortTitanosaurusTriggeredTurn)
+            .toBe(finalCore.turnNumber);
+    });
+
     it('克苏鲁在场时你抽疯狂卡后按抽取数量获得力量标记', () => {
         const core = makeState({
             players: {
@@ -2311,9 +2392,11 @@ describe('smashup', () => {
 
         const afterTalent = talentEvents.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
         const finalCore = response.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), afterTalent);
+        const titan = (finalCore.titans ?? []).find(candidate => candidate.uid === 't-cthulhu');
 
         expect(finalCore.players['0'].hand.filter(card => card.defId === MADNESS_CARD_DEF_ID)).toHaveLength(0);
         expect(finalCore.players['1'].hand.filter(card => card.defId === MADNESS_CARD_DEF_ID)).toHaveLength(1);
+        expect(titan?.powerCounters).toBe(0);
     });
 
     it('大衮满足同名随从条件后可通过 special 从牌库旁进场', () => {
@@ -5457,6 +5540,13 @@ describe('smashup', () => {
 
         let nextPrompt = getInteractionsFromMS(afterMoveFirstMate.finalState)[0] as any;
         let stateAfterKrakenTrigger = afterMoveFirstMate.finalState;
+        if (!nextPrompt) {
+            const reactionPrompt = maybeResolveReactionQueue(stateAfterKrakenTrigger, FIXED_RANDOM, 76);
+            if (reactionPrompt) {
+                stateAfterKrakenTrigger = reactionPrompt.state;
+                nextPrompt = getInteractionsFromMS(stateAfterKrakenTrigger)[0] as any;
+            }
+        }
         if (nextPrompt?.data?.sourceId === 'smashup_reaction_choose') {
             const secondQueueById = new Map(stateAfterKrakenTrigger.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
             const krakenOption = nextPrompt.data.options.find((option: any) => {
@@ -6202,6 +6292,52 @@ describe('smashup', () => {
             zone: 'base',
             baseIndex: 1,
         });
+    });
+
+    it('Fort Titanosaurus 会在 dino_howl 影响多个己方随从时只创建一个选择提示', () => {
+        const initial = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('action-1', 'dino_howl_pod', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.DINOSAURS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_the_jungle',
+                minions: [
+                    makeMinion('ally-1', 'dino_war_raptor_pod', '0', 2),
+                    makeMinion('ally-2', 'dino_laser_triceratops_pod', '0', 4),
+                ],
+                ongoingActions: [],
+            })],
+            titans: [{
+                uid: 'fort-1',
+                defId: 'dinosaurs_fort_titanosaurus',
+                faction: SMASHUP_FACTION_IDS.DINOSAURS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            }],
+        }));
+
+        const played = runCommand(initial, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'action-1', targetBaseIndex: 0 },
+        } as any, FIXED_RANDOM);
+
+        expect(played.success).toBe(true);
+        const prompts = getInteractionsFromMS(played.finalState);
+        expect(prompts).toHaveLength(1);
+
+        const fortPrompt = prompts[0] as any;
+        expect(fortPrompt?.data?.sourceId).toBe('titan_dinosaurs_fort_titanosaurus_ongoing');
+        expect(fortPrompt?.data?.options.filter((option: any) => option?.value?.mode === 'both')).toHaveLength(2);
+        expect(fortPrompt?.data?.options.some((option: any) => option?.value?.targetMinionUid === 'ally-1')).toBe(true);
+        expect(fortPrompt?.data?.options.some((option: any) => option?.value?.targetMinionUid === 'ally-2')).toBe(true);
     });
 });
 

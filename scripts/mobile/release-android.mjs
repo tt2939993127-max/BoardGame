@@ -26,8 +26,8 @@ Android 统一发布入口
   node scripts/mobile/release-android.mjs full [选项]
 
 子命令:
-  ota       先 doctor + sync, 再发布 OTA
-  native    可选 bump 版本, 再 build release + 发布原生 APK 更新
+  ota       先 doctor + typecheck + sync, 再发布 OTA
+  native    可选 bump 版本, 再 typecheck + build release + 发布原生 APK 更新
   packages  发布 Android 游戏包
   full      依次执行 OTA -> 可选 packages -> native
 
@@ -122,6 +122,21 @@ const runNodeScript = async (relativePath, scriptArgs = []) => {
 
 const logStep = (message) => {
     console.log(`\n[android-release] ${message}`);
+};
+
+let didTypecheck = false;
+const runTypecheck = async () => {
+    if (didTypecheck) {
+        return;
+    }
+    didTypecheck = true;
+
+    logStep('执行 TypeScript typecheck');
+    const tscPath = path.join(rootDir, 'node_modules', 'typescript', 'bin', 'tsc');
+    if (!existsSync(tscPath)) {
+        throw new Error('未找到 TypeScript 编译器（node_modules/typescript/bin/tsc）。请先安装依赖后再发布。');
+    }
+    await runCommand(process.execPath, [tscPath, '--noEmit']);
 };
 
 const ensureNoNativeVersionOverride = () => {
@@ -285,6 +300,7 @@ const runOtaRelease = async () => {
     const releaseInfo = prepareReleaseVersion();
     ensureNoForbiddenOtaCompatibilityArgs();
     await runDoctor();
+    await runTypecheck();
     await runSync();
     logStep(`发布 Android OTA (expectedBaseVersion=${releaseInfo.version})`);
     await runNodeScript('scripts/mobile/publish-android-ota.mjs', buildOtaArgsWithExpectedVersion(releaseInfo.version));
@@ -306,6 +322,7 @@ const prepareNativeVersion = () => {
 const runNativeRelease = async () => {
     const nativeInfo = prepareNativeVersion();
     await runDoctor();
+    await runTypecheck();
     if (!hasFlag('skip-build', args)) {
         await runBuildRelease();
     } else {

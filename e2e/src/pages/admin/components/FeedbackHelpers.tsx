@@ -15,10 +15,18 @@ interface FeedbackItemLike {
     type: 'bug' | 'suggestion' | 'other';
     severity: 'low' | 'medium' | 'high' | 'critical';
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
+    reporterType?: 'user' | 'system';
+    source?: string;
+    autoReportKind?: string;
+    incidentKey?: string;
     gameName?: string;
     contactInfo?: string;
     actionLog?: string;
     stateSnapshot?: string;
+    errorContext?: {
+        source?: string;
+        name?: string;
+    };
     createdAt: string;
 }
 
@@ -184,10 +192,18 @@ export function CopyFeedbackButton({
     const handleCopy = (event: ReactMouseEvent) => {
         event.stopPropagation();
         const submitter = item.userId?.username || t('feedback.anonymous');
+        const reporterType = item.reporterType ?? (item.contactInfo === 'system:online-ai-watchdog'
+            || item.errorContext?.source === 'online-ai-watchdog'
+            || /^\[system\]\[online-ai-watchdog\]\s+/.test(item.content)
+            ? 'system'
+            : 'user');
+        const source = item.source
+            ?? (reporterType === 'system' ? 'online-ai-watchdog' : 'feedback-modal');
         const parts = [
             `【${t(`feedback.type.${item.type}`)}】【${t(`feedback.severity.${item.severity}`)}】`,
             item.gameName ? `游戏: ${item.gameName}` : '',
             `提交者: ${submitter}`,
+            `来源: ${t(`feedback.reporterType.${reporterType}`)} / ${source}`,
             `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
             '',
             '--- 反馈内容 ---',

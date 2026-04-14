@@ -2703,55 +2703,76 @@ function fortTitanosaurusSpecial(ctx: AbilityContext): AbilityResult {
 }
 
 function fortTitanosaurusOnActionPlayed(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
-    if (!ctx.matchState || ctx.actionTargetType !== 'minion' || !ctx.actionTargetMinionUid) {
+    const nextMatchState = queueFortTitanosaurusOngoingChoice(
+        ctx.matchState,
+        ctx.playerId,
+        ctx.actionTargetType === 'minion' && ctx.actionTargetMinionUid
+            ? [ctx.actionTargetMinionUid]
+            : [],
+        ctx.now,
+    );
+    if (!nextMatchState) {
         return [];
     }
 
-    const titan = getFortTitanosaurus(ctx.state, ctx.playerId);
-    if (!titan) return [];
-    if (Number(titan.metadata?.fortTitanosaurusTriggeredTurn ?? -1) === ctx.state.turnNumber) {
-        return [];
+    return { events: [], matchState: nextMatchState };
+}
+
+export function queueFortTitanosaurusOngoingChoice(
+    matchState: MatchState<SmashUpCore> | undefined,
+    playerId: string,
+    targetMinionUids: readonly string[],
+    now: number,
+): MatchState<SmashUpCore> | undefined {
+    if (!matchState || targetMinionUids.length === 0) return undefined;
+
+    const titan = getFortTitanosaurus(matchState.core, playerId);
+    if (!titan) return undefined;
+    if (Number(titan.metadata?.fortTitanosaurusTriggeredTurn ?? -1) === matchState.core.turnNumber) {
+        return undefined;
     }
 
-    const target = findMinionOnBases(ctx.state, ctx.actionTargetMinionUid);
-    const options = [
-        {
-            id: 'titan-only',
-            label: 'Place it on this titan only',
-            value: { mode: 'titan' },
-            displayMode: 'button' as const,
-        },
-    ];
+    const targets = Array.from(new Set(targetMinionUids))
+        .map((targetMinionUid) => findMinionOnBases(matchState.core, targetMinionUid))
+        .filter((target): target is NonNullable<typeof target> => !!target);
+    if (targets.length === 0) return undefined;
 
-    if (target) {
+    const options = targets.flatMap((target, index) => {
         const minionName = getCardDef(target.minion.defId)?.name ?? target.minion.defId;
-        options.unshift({
-            id: 'minion-only',
-            label: `只给 ${minionName} 放置`,
-            value: { mode: 'minion' },
-            displayMode: 'button' as const,
-        });
-        options.push({
-            id: 'both',
-            label: `Place one on ${minionName} and one on this titan`,
-            value: { mode: 'both' },
-            displayMode: 'button' as const,
-        });
-    }
+        return [
+            {
+                id: `minion-only-${index}`,
+                label: `只给 ${minionName} 放置`,
+                value: { mode: 'minion' as const, targetMinionUid: target.minion.uid },
+                displayMode: 'button' as const,
+            },
+            {
+                id: `both-${index}`,
+                label: `给 ${minionName} 和此泰坦各放置 1 枚`,
+                value: { mode: 'both' as const, targetMinionUid: target.minion.uid },
+                displayMode: 'button' as const,
+            },
+        ];
+    });
+    options.push({
+        id: 'titan-only',
+        label: '只给此泰坦放置',
+        value: { mode: 'titan' as const },
+        displayMode: 'button' as const,
+    });
 
     const interaction = createSimpleChoice(
-        `titan_dinosaurs_fort_titanosaurus_ongoing_${ctx.now}`,
-        ctx.playerId,
-        'Fort Titanosaurus: choose where to place the +1 power counter',
+        `titan_dinosaurs_fort_titanosaurus_ongoing_${now}`,
+        playerId,
+        'Fort Titanosaurus：选择要放置 +1 战力标记的位置',
         options,
         { sourceId: 'titan_dinosaurs_fort_titanosaurus_ongoing', targetType: 'generic' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
-        targetMinionUid: target?.minion.uid,
     };
 
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return queueInteraction(matchState, interaction);
 }
 
 function fortTitanosaurusTalent(ctx: AbilityContext): AbilityResult {
@@ -3781,9 +3802,9 @@ export function registerTitanInteractionHandlers(): void {
     });
 
     registerInteractionHandler('titan_dinosaurs_fort_titanosaurus_ongoing', (state, _playerId, value, data, _random, timestamp) => {
-        const selected = value as { mode?: 'minion' | 'titan' | 'both' } | undefined;
+        const selected = value as { mode?: 'minion' | 'titan' | 'both'; targetMinionUid?: string } | undefined;
         const continuation = (data as {
-            continuationContext?: { titanUid?: string; targetMinionUid?: string };
+            continuationContext?: { titanUid?: string };
         } | undefined)?.continuationContext;
         if (!selected?.mode || !continuation?.titanUid) {
             return { state, events: [] };
@@ -3799,8 +3820,8 @@ export function registerTitanInteractionHandlers(): void {
         ];
 
         if (selected.mode === 'minion' || selected.mode === 'both') {
-            const found = continuation.targetMinionUid
-                ? findMinionOnBases(state.core, continuation.targetMinionUid)
+            const found = selected.targetMinionUid
+                ? findMinionOnBases(state.core, selected.targetMinionUid)
                 : undefined;
             if (found) {
                 events.push(addPowerCounter(found.minion.uid, found.baseIndex, 1, 'dinosaurs_fort_titanosaurus_ongoing', timestamp));

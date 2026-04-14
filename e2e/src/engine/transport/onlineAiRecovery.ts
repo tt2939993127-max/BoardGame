@@ -229,7 +229,32 @@ export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
     });
 }
 
-function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId: string): {
+function isControlChoiceOption(option: HiddenSimpleChoiceOption): boolean {
+    const value = option.value;
+    return option.id === 'skip'
+        || option.id === 'done'
+        || option.id === 'cancel'
+        || option.id === '__cancel__'
+        || option.id === '__emergency_skip__'
+        || value?.skip === true
+        || value?.done === true
+        || value?.cancel === true
+        || value?.__cancel__ === true
+        || value?.__emergency_skip__ === true;
+}
+
+function hasEnabledNonControlOptions(data: { options?: HiddenSimpleChoiceOption[] } | undefined): boolean {
+    const options = Array.isArray(data?.options) ? data.options : [];
+    return options.some((option) =>
+        Boolean(option) && option.disabled !== true && !isControlChoiceOption(option),
+    );
+}
+
+function buildForceSkipPayloadFromSeatState(
+    state: MatchState<unknown>,
+    playerId: string,
+    options?: { allowWhenHasNonControl?: boolean },
+): {
     interactionId: string;
     payload: { optionId?: string; optionIds?: string[] };
     sourceId?: string;
@@ -244,6 +269,10 @@ function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId
     }
 
     const data = current.data;
+    const allowWhenHasNonControl = options?.allowWhenHasNonControl ?? true;
+    if (!allowWhenHasNonControl && hasEnabledNonControlOptions(data)) {
+        return null;
+    }
     const enabledOptions = Array.isArray(data?.options)
         ? data.options.filter((option): option is HiddenSimpleChoiceOption & { id: string } =>
             Boolean(option) && option.disabled !== true && typeof option.id === 'string')
@@ -319,7 +348,9 @@ export function resolveForceSkippableHiddenAiInteraction(args: {
         if (!seatState) {
             continue;
         }
-        const forceSkipPayload = buildForceSkipPayloadFromSeatState(seatState, playerId);
+        const forceSkipPayload = buildForceSkipPayloadFromSeatState(seatState, playerId, {
+            allowWhenHasNonControl: false,
+        });
         if (!forceSkipPayload) {
             continue;
         }

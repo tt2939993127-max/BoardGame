@@ -570,8 +570,9 @@ export function registerGhostInteractionHandlers(): void {
  */
 function ghostMakeContactPod(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 行动卡已从手牌移除，hand 长度为打出后剩余手牌数
-    if (player.hand.length > 0) {
+    const handAfterPlay = ctx.handSizeAfterPlay ?? player.hand.filter(c => c.uid !== ctx.cardUid).length;
+    // 行动卡打出后仍有手牌则自毁
+    if (handAfterPlay > 0) {
         const detachEvt: OngoingDetachedEvent = {
             type: SU_EVENTS.ONGOING_DETACHED,
             payload: {

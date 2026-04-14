@@ -45,10 +45,32 @@ interface FeedbackItem {
     type: 'bug' | 'suggestion' | 'other';
     severity: 'low' | 'medium' | 'high' | 'critical';
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
+    reporterType?: 'user' | 'system';
+    source?: string;
+    autoReportKind?: string;
+    incidentKey?: string;
     gameName?: string;
     contactInfo?: string;
     actionLog?: string;
     stateSnapshot?: string;
+    clientContext?: {
+        route?: string;
+        mode?: string;
+        matchId?: string;
+        playerId?: string;
+        gameId?: string;
+        appVersion?: string;
+        userAgent?: string;
+        viewport?: { width: number; height: number };
+        language?: string;
+        timezone?: string;
+    };
+    errorContext?: {
+        message?: string;
+        name?: string;
+        stack?: string;
+        source?: string;
+    };
     createdAt: string;
 }
 
@@ -57,6 +79,9 @@ type StatusOptionWithLabel = StatusOption & { label: string };
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 type TypeOption = { value: FeedbackItem['type']; icon: IconComponent; iconColor: string };
 type TypeOptionWithLabel = TypeOption & { label: string };
+type ReporterTypeOption = { value: 'user' | 'system'; tone: string };
+type ReporterTypeOptionWithLabel = ReporterTypeOption & { label: string };
+type SourceOption = { value: string; label: string };
 type SeverityConfig = Record<FeedbackItem['severity'], { label: string; dot: string; tone: string }>;
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -70,6 +95,18 @@ const TYPE_OPTIONS: TypeOption[] = [
     { value: 'bug', icon: AlertTriangle, iconColor: 'text-red-500' },
     { value: 'suggestion', icon: Lightbulb, iconColor: 'text-amber-500' },
     { value: 'other', icon: HelpCircle, iconColor: 'text-blue-500' },
+];
+
+const REPORTER_TYPE_OPTIONS: ReporterTypeOption[] = [
+    { value: 'user', tone: 'bg-zinc-100 text-zinc-600 border-zinc-200' },
+    { value: 'system', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
+];
+
+const SOURCE_OPTION_VALUES = [
+    'feedback-modal',
+    'online-ai-watchdog',
+    'global-error-capture',
+    'unknown',
 ];
 
 const SEVERITY_STYLES: Record<FeedbackItem['severity'], { dot: string; tone: string }> = {
@@ -95,12 +132,69 @@ const buildTypeOptions = (t: TFunction<'admin'>): TypeOptionWithLabel[] => (
     }))
 );
 
+const buildReporterTypeOptions = (t: TFunction<'admin'>): ReporterTypeOptionWithLabel[] => (
+    REPORTER_TYPE_OPTIONS.map((option) => ({
+        ...option,
+        label: t(`feedback.reporterType.${option.value}`),
+    }))
+);
+
+const buildSourceOptions = (t: TFunction<'admin'>): SourceOption[] => (
+    SOURCE_OPTION_VALUES.map((value) => ({
+        value,
+        label: t(`feedback.source.${value === 'feedback-modal' ? 'feedbackModal' : value === 'online-ai-watchdog' ? 'onlineAiWatchdog' : value === 'global-error-capture' ? 'globalErrorCapture' : value === 'system-unsatisfiable-interaction' ? 'unsatAutoSkip' : 'unknown'}`),
+    }))
+);
+
 const buildSeverityConfig = (t: TFunction<'admin'>): SeverityConfig => ({
     critical: { label: t('feedback.severity.critical'), ...SEVERITY_STYLES.critical },
     high: { label: t('feedback.severity.high'), ...SEVERITY_STYLES.high },
     medium: { label: t('feedback.severity.medium'), ...SEVERITY_STYLES.medium },
     low: { label: t('feedback.severity.low'), ...SEVERITY_STYLES.low },
 });
+
+const isLegacyWatchdogFeedback = (item: FeedbackItem): boolean => (
+    item.contactInfo === 'system:online-ai-watchdog'
+    || item.errorContext?.source === 'online-ai-watchdog'
+    || /^\[system\]\[online-ai-watchdog\]\s+/.test(item.content)
+);
+
+const resolveOriginInfo = (item: FeedbackItem): {
+    reporterType: 'user' | 'system';
+    source: string;
+} => {
+    if (item.reporterType) {
+        return {
+            reporterType: item.reporterType,
+            source: item.source ?? (item.reporterType === 'system' ? 'unknown' : 'feedback-modal'),
+        };
+    }
+    if (isLegacyWatchdogFeedback(item)) {
+        return {
+            reporterType: 'system',
+            source: 'online-ai-watchdog',
+        };
+    }
+    return {
+        reporterType: 'user',
+        source: item.source ?? 'feedback-modal',
+    };
+};
+
+const resolveSourceLabel = (t: TFunction<'admin'>, source: string): string => {
+    switch (source) {
+        case 'feedback-modal':
+            return t('feedback.source.feedbackModal');
+        case 'online-ai-watchdog':
+            return t('feedback.source.onlineAiWatchdog');
+        case 'global-error-capture':
+            return t('feedback.source.globalErrorCapture');
+        case 'system-unsatisfiable-interaction':
+            return t('feedback.source.unsatAutoSkip');
+        default:
+            return t('feedback.source.unknown');
+    }
+};
 
 function StatusSelect({
     value,
@@ -206,12 +300,30 @@ export default function AdminFeedbackPage() {
 
     const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
     const typeOptions = useMemo(() => buildTypeOptions(t), [t]);
+    const reporterTypeOptions = useMemo(() => buildReporterTypeOptions(t), [t]);
+    const sourceOptions = useMemo(() => buildSourceOptions(t), [t]);
     const severityConfig = useMemo(() => buildSeverityConfig(t), [t]);
+    const severityOptions = useMemo(() => (
+        (['critical', 'high', 'medium', 'low'] as const).map((value) => ({
+            value,
+            label: severityConfig[value].label,
+        }))
+    ), [severityConfig]);
+    const sortOptions = useMemo(() => (
+        [
+            { value: 'newest', label: t('feedback.filters.newest') },
+            { value: 'oldest', label: t('feedback.filters.oldest') },
+        ]
+    ), [t]);
 
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [typeFilter, setTypeFilter] = useState<string>('all');
+    const [severityFilter, setSeverityFilter] = useState<string>('all');
+    const [reporterTypeFilter, setReporterTypeFilter] = useState<string>('all');
+    const [sourceFilter, setSourceFilter] = useState<string>('all');
+    const [sortFilter, setSortFilter] = useState<string>('newest');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -237,6 +349,10 @@ export default function AdminFeedbackPage() {
             const params = new URLSearchParams({ limit: '100' });
             if (statusFilter !== 'all') params.set('status', statusFilter);
             if (typeFilter !== 'all') params.set('type', typeFilter);
+            if (severityFilter !== 'all') params.set('severity', severityFilter);
+            if (reporterTypeFilter !== 'all') params.set('reporterType', reporterTypeFilter);
+            if (sourceFilter !== 'all') params.set('source', sourceFilter);
+            if (sortFilter) params.set('sort', sortFilter);
 
             const response = await fetch(`${ADMIN_API_URL}/feedback?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },
@@ -255,11 +371,17 @@ export default function AdminFeedbackPage() {
                 setIsPolling(false);
             }
         }
-    }, [error, statusFilter, t, token, typeFilter]);
+    }, [error, reporterTypeFilter, severityFilter, sortFilter, sourceFilter, statusFilter, t, token, typeFilter]);
 
     useEffect(() => {
         fetchFeedbacks();
     }, [fetchFeedbacks]);
+
+    useEffect(() => {
+        if (reporterTypeFilter !== 'system' && sourceFilter !== 'all') {
+            setSourceFilter('all');
+        }
+    }, [reporterTypeFilter, sourceFilter]);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -480,6 +602,80 @@ export default function AdminFeedbackPage() {
                             );
                         })}
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            {t('feedback.filters.severity')}
+                        </span>
+                        <FilterTab active={severityFilter === 'all'} onClick={() => changeFilter(setSeverityFilter, 'all')}>
+                            {t('feedback.filters.all')}
+                        </FilterTab>
+                        {severityOptions.map((option) => (
+                            <FilterTab
+                                key={option.value}
+                                active={severityFilter === option.value}
+                                onClick={() => changeFilter(setSeverityFilter, option.value)}
+                            >
+                                {option.label}
+                            </FilterTab>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            {t('feedback.filters.reporterType')}
+                        </span>
+                        <FilterTab
+                            active={reporterTypeFilter === 'all'}
+                            onClick={() => changeFilter(setReporterTypeFilter, 'all')}
+                        >
+                            {t('feedback.filters.all')}
+                        </FilterTab>
+                        {reporterTypeOptions.map((option) => (
+                            <FilterTab
+                                key={option.value}
+                                active={reporterTypeFilter === option.value}
+                                onClick={() => changeFilter(setReporterTypeFilter, option.value)}
+                            >
+                                {option.label}
+                            </FilterTab>
+                        ))}
+                    </div>
+
+                    {reporterTypeFilter === 'system' && (
+                        <div className="flex flex-wrap items-center gap-1">
+                            <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                                {t('feedback.filters.source')}
+                            </span>
+                            <FilterTab active={sourceFilter === 'all'} onClick={() => changeFilter(setSourceFilter, 'all')}>
+                                {t('feedback.filters.all')}
+                            </FilterTab>
+                            {sourceOptions.map((option) => (
+                                <FilterTab
+                                    key={option.value}
+                                    active={sourceFilter === option.value}
+                                    onClick={() => changeFilter(setSourceFilter, option.value)}
+                                >
+                                    {option.label}
+                                </FilterTab>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-1">
+                        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            {t('feedback.filters.sort')}
+                        </span>
+                        {sortOptions.map((option) => (
+                            <FilterTab
+                                key={option.value}
+                                active={sortFilter === option.value}
+                                onClick={() => changeFilter(setSortFilter, option.value)}
+                            >
+                                {option.label}
+                            </FilterTab>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -509,6 +705,7 @@ export default function AdminFeedbackPage() {
                                         </th>
                                         <th className="px-2.5 py-1">{t('feedback.table.content')}</th>
                                         <th className="w-[112px] px-2 py-1">{t('feedback.table.submitter')}</th>
+                                        <th className="w-[112px] px-2 py-1">{t('feedback.table.origin')}</th>
                                         <th className="w-[128px] px-2 py-1">{t('feedback.detail.game')}</th>
                                         <th className="w-[72px] px-2 py-1">{t('feedback.table.severity')}</th>
                                         <th className="w-[88px] px-2 py-1">{t('feedback.table.status')}</th>
@@ -596,6 +793,11 @@ function FeedbackRow({
     const hasImage = hasEmbeddedImage(item.content);
     const hasActionLog = Boolean(item.actionLog);
     const hasSnapshot = Boolean(item.stateSnapshot);
+    const origin = resolveOriginInfo(item);
+    const reporterLabel = t(`feedback.reporterType.${origin.reporterType}`);
+    const sourceLabel = resolveSourceLabel(t, origin.source);
+    const reporterTone = REPORTER_TYPE_OPTIONS.find((option) => option.value === origin.reporterType)?.tone
+        ?? 'bg-zinc-100 text-zinc-600 border-zinc-200';
 
     return (
         <tr
@@ -647,6 +849,19 @@ function FeedbackRow({
                     <span className={cn('font-medium', active ? 'text-zinc-900' : 'text-zinc-700')}>{submitter}</span>
                     <span className="text-zinc-400"> / {item._id.slice(-6)}</span>
                 </p>
+            </td>
+
+            <td className="px-2 py-1.5 align-middle">
+                <div className="flex flex-wrap items-center gap-1">
+                    <MetaBadge tone={reporterTone}>
+                        {reporterLabel}
+                    </MetaBadge>
+                    {origin.reporterType === 'system' && (
+                        <MetaBadge>
+                            {sourceLabel}
+                        </MetaBadge>
+                    )}
+                </div>
             </td>
 
             <td className="px-2 py-1.5 align-middle">
@@ -749,6 +964,11 @@ function FeedbackDetailPanel({
     const submitter = item.userId?.username || t('feedback.anonymous');
     const previewText = extractText(item.content, t);
     const hasImage = hasEmbeddedImage(item.content);
+    const origin = resolveOriginInfo(item);
+    const reporterLabel = t(`feedback.reporterType.${origin.reporterType}`);
+    const sourceLabel = resolveSourceLabel(t, origin.source);
+    const reporterTone = REPORTER_TYPE_OPTIONS.find((option) => option.value === origin.reporterType)?.tone
+        ?? 'bg-zinc-100 text-zinc-600 border-zinc-200';
 
     return (
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
@@ -810,6 +1030,14 @@ function FeedbackDetailPanel({
                         <span className={cn('h-2 w-2 rounded-full', sevCfg.dot)} />
                         {sevCfg.label}
                     </MetaBadge>
+                    <MetaBadge tone={reporterTone}>
+                        {reporterLabel}
+                    </MetaBadge>
+                    {origin.reporterType === 'system' && (
+                        <MetaBadge>
+                            {sourceLabel}
+                        </MetaBadge>
+                    )}
                     {hasImage && (
                         <MetaBadge>
                             <ImageIcon size={11} />
@@ -885,6 +1113,23 @@ function FeedbackDetailPanel({
                                 </span>
                             </MetaField>
                         )}
+
+                        <MetaField label={t('feedback.detail.origin')}>
+                            <div className="space-y-0.5 text-zinc-700">
+                                <p>{t('feedback.detail.reporterType')}: {reporterLabel}</p>
+                                <p>{t('feedback.detail.source')}: {sourceLabel}</p>
+                                {origin.reporterType === 'system' && (
+                                    <>
+                                        {item.autoReportKind && (
+                                            <p>{t('feedback.detail.autoReportKind')}: {item.autoReportKind}</p>
+                                        )}
+                                        {item.incidentKey && (
+                                            <p className="break-all">{t('feedback.detail.incidentKey')}: {item.incidentKey}</p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </MetaField>
 
                         <MetaField label={t('feedback.table.status')}>
                             <span className="text-zinc-700">

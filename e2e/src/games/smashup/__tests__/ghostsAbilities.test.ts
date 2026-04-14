@@ -248,3 +248,56 @@ describe('ghost_make_contact（交朋友）', () => {
         });
     });
 });
+
+// ============================================================================
+// 交朋友（ghost_make_contact_pod）
+// ============================================================================
+
+describe('ghost_make_contact_pod（交朋友 POD）', () => {
+    it('手牌只有本卡时控制权转移', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'ghost_make_contact_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m1', 'test', '1', 2, '1')],
+                ongoingActions: [],
+            }],
+        });
+
+        const { events } = execPlayAction(state, '0', 'a1', 0, 'm1');
+        const newState = applyEvents(state, events);
+        const minion = newState.bases[0].minions.find(m => m.uid === 'm1')!;
+        expect(minion.controller).toBe('0');
+        expect(minion.attachedActions.some(action => action.defId === 'ghost_make_contact_pod')).toBe(true);
+    });
+
+    it('手牌仍有其他卡时自毁且不转移控制权', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'ghost_make_contact_pod', 'action', '0'),
+                        makeCard('m1', 'test_minion', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m2', 'test', '1', 2, '1')],
+                ongoingActions: [],
+            }],
+        });
+
+        const { events } = execPlayAction(state, '0', 'a1', 0, 'm2');
+        const newState = applyEvents(state, events);
+        const minion = newState.bases[0].minions.find(m => m.uid === 'm2')!;
+        expect(minion.controller).toBe('1');
+        expect(minion.attachedActions.some(action => action.defId === 'ghost_make_contact_pod')).toBe(false);
+    });
+});

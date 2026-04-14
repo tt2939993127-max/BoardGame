@@ -215,7 +215,7 @@ function bearCavalryCommission(ctx: AbilityContext): AbilityResult {
     );
     // 标记是否为 POD 版本，用于后续交互链区分“必须移动”和“可以跳过”
     (interaction.data as any).isPod = ctx.defId === 'bear_cavalry_commission_pod';
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 

@@ -4,13 +4,16 @@ import { Model } from 'mongoose';
 import { normalizeDeveloperGameIds } from '../auth/schemas/developer-game-access';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
 import type { UserRole } from '../auth/schemas/user-role';
-import { Feedback, FeedbackDocument, FeedbackStatus } from './feedback.schema';
-import { CreateFeedbackDto, FeedbackFilterDto, QueryFeedbackDto } from './dto';
+import { Feedback, FeedbackDocument, FeedbackReporterType, FeedbackStatus } from './feedback.schema';
+import { CreateFeedbackDto, CreateSystemFeedbackDto, FeedbackFilterDto, QueryFeedbackDto } from './dto';
 
 type FeedbackManagerScope = {
     role: Extract<UserRole, 'developer' | 'admin'>;
     developerGameIds: string[] | null;
 };
+
+const DEFAULT_USER_SOURCE = 'feedback-modal';
+const LEGACY_WATCHDOG_SOURCE = 'online-ai-watchdog';
 
 @Injectable()
 export class FeedbackService {
@@ -23,7 +26,18 @@ export class FeedbackService {
         return this.feedbackModel.create({
             ...dto,
             gameId: this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName),
+            reporterType: FeedbackReporterType.USER,
+            source: DEFAULT_USER_SOURCE,
             ...(userId && { userId }),
+        });
+    }
+
+    async createSystem(dto: CreateSystemFeedbackDto): Promise<Feedback> {
+        return this.feedbackModel.create({
+            ...dto,
+            source: this.normalizeSource(dto.source, 'unknown'),
+            reporterType: FeedbackReporterType.SYSTEM,
+            gameId: this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName),
         });
     }
 
@@ -31,11 +45,15 @@ export class FeedbackService {
         const manager = await this.assertActorCanManage(actorUserId);
         const page = Math.max(1, Number(query.page) || 1);
         const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
-        const { status, type, severity, sort } = query;
+        const { status, type, severity, sort, reporterType, source } = query;
         const filter = this.buildScopedFilter(manager);
         if (status) filter.status = status;
         if (type) filter.type = type;
         if (severity) filter.severity = severity;
+        const originFilter = this.buildOriginFilter(reporterType, source);
+        if (originFilter) {
+            filter.$and = filter.$and ? [...(filter.$and as Record<string, unknown>[]), originFilter] : [originFilter];
+        }
         const createdAtSort = sort === 'oldest' ? 1 : -1;
 
         const total = await this.feedbackModel.countDocuments(filter);
@@ -47,7 +65,12 @@ export class FeedbackService {
             .populate('userId', 'username avatar email')
             .exec();
 
-        return { items, total, page, limit };
+        return {
+            items: items.map((item) => this.decorateLegacyOrigin(item)),
+            total,
+            page,
+            limit,
+        };
     }
 
     async updateStatus(actorUserId: string, id: string, status: FeedbackStatus): Promise<Feedback | null> {
@@ -80,6 +103,10 @@ export class FeedbackService {
         if (filterDto.status) filter.status = filterDto.status;
         if (filterDto.type) filter.type = filterDto.type;
         if (filterDto.severity) filter.severity = filterDto.severity;
+        const originFilter = this.buildOriginFilter(filterDto.reporterType, filterDto.source);
+        if (originFilter) {
+            filter.$and = filter.$and ? [...(filter.$and as Record<string, unknown>[]), originFilter] : [originFilter];
+        }
         const total = await this.feedbackModel.countDocuments(filter);
         if (total === 0) {
             return { requested: 0, deleted: 0 };
@@ -94,6 +121,65 @@ export class FeedbackService {
         }
         const normalized = value.trim().toLowerCase();
         return normalized || undefined;
+    }
+
+    private normalizeSource(value?: string | null, fallback = DEFAULT_USER_SOURCE): string {
+        if (typeof value !== 'string') {
+            return fallback;
+        }
+        const normalized = value.trim().toLowerCase();
+        return normalized || fallback;
+    }
+
+    private buildOriginFilter(
+        reporterType?: FeedbackReporterType,
+        source?: string,
+    ): Record<string, unknown> | null {
+        if (!reporterType && !source) {
+            return null;
+        }
+        const normalizedSource = source ? this.normalizeSource(source) : undefined;
+        const base: Record<string, unknown> = {};
+        if (reporterType) base.reporterType = reporterType;
+        if (normalizedSource) base.source = normalizedSource;
+
+        if (reporterType === FeedbackReporterType.SYSTEM
+            && (!normalizedSource || normalizedSource === LEGACY_WATCHDOG_SOURCE)) {
+            const legacyFilter = this.buildLegacyWatchdogFilter();
+            return { $or: [base, legacyFilter] };
+        }
+
+        return base;
+    }
+
+    private buildLegacyWatchdogFilter(): Record<string, unknown> {
+        return {
+            reporterType: null,
+            $or: [
+                { contactInfo: 'system:online-ai-watchdog' },
+                { 'errorContext.source': LEGACY_WATCHDOG_SOURCE },
+                { content: /^\[system\]\[online-ai-watchdog\]\s+/ },
+            ],
+        };
+    }
+
+    private decorateLegacyOrigin(item: FeedbackDocument): Feedback {
+        const raw = item.toObject() as Feedback;
+        const isLegacyWatchdog = raw.contactInfo === 'system:online-ai-watchdog'
+            || raw.errorContext?.source === LEGACY_WATCHDOG_SOURCE
+            || /^\[system\]\[online-ai-watchdog\]\s+/.test(raw.content);
+        if (!isLegacyWatchdog) {
+            if (raw.reporterType && raw.source) {
+                return raw;
+            }
+            return raw;
+        }
+        return {
+            ...raw,
+            reporterType: FeedbackReporterType.SYSTEM,
+            source: LEGACY_WATCHDOG_SOURCE,
+            autoReportKind: raw.errorContext?.name || raw.autoReportKind,
+        };
     }
 
     private buildScopedFilter(

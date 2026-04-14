@@ -8,7 +8,7 @@
 - 命令：
   - npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online AI 响应窗口反复卡死时，watchdog 应强制关闭响应窗口"
   - npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online AI 响应窗口在 sourceId 变化的重复 reopen 下仍应被 watchdog 收口"
-- 时间：2026-04-12
+- 时间：2026-04-12（首次），2026-04-14（复跑）
 
 ## 截图与观察
 ### 用例：Online AI 响应窗口反复卡死时，watchdog 应强制关闭响应窗口

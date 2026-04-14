@@ -73,14 +73,21 @@ const DiceResultSegment: React.FC<{
     locale?: string;
 }> = ({ segment, locale }) => {
     const { spriteAsset, spriteCols, spriteRows, dice } = segment;
+    if (!Array.isArray(dice) || dice.length === 0) {
+        return null;
+    }
     const bgImage = buildSpriteBackgroundImage(spriteAsset, locale);
-    const bgSize = `${spriteCols * 100}% ${spriteRows * 100}%`;
+    const safeCols = Number.isFinite(spriteCols) && spriteCols > 0 ? spriteCols : 1;
+    const safeRows = Number.isFinite(spriteRows) && spriteRows > 0 ? spriteRows : 1;
+    const bgSize = `${safeCols * 100}% ${safeRows * 100}%`;
 
     return (
         <span className="inline-flex items-center gap-0.5 align-middle">
             {dice.map((die, i) => {
-                const xPos = spriteCols > 1 ? (die.col / (spriteCols - 1)) * 100 : 0;
-                const yPos = spriteRows > 1 ? (die.row / (spriteRows - 1)) * 100 : 0;
+                const col = typeof die === 'object' && die !== null && typeof die.col === 'number' ? die.col : 0;
+                const row = typeof die === 'object' && die !== null && typeof die.row === 'number' ? die.row : 0;
+                const xPos = safeCols > 1 ? (col / (safeCols - 1)) * 100 : 0;
+                const yPos = safeRows > 1 ? (row / (safeRows - 1)) * 100 : 0;
                 return (
                     <span
                         key={i}

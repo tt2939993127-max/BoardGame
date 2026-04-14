@@ -55,12 +55,20 @@ export function registerSamuraiAbilities(): void {
 
     registerTrigger('samurai_samurai_chan', 'onMinionDestroyed', samuraiChanTrigger, { perInstance: true });
     registerTrigger('samurai_samurai_chan', 'onMinionDiscardedFromBase', samuraiChanTrigger, { perInstance: true });
+    registerTrigger('samurai_samurai_chan_pod', 'onMinionDestroyed', samuraiChanTrigger, { perInstance: true });
+    registerTrigger('samurai_samurai_chan_pod', 'onMinionDiscardedFromBase', samuraiChanTrigger, { perInstance: true });
     registerTrigger('samurai_bushi', 'onMinionDestroyed', samuraiBushiTrigger, { perInstance: true });
     registerTrigger('samurai_bushi', 'onMinionDiscardedFromBase', samuraiBushiTrigger, { perInstance: true });
+    registerTrigger('samurai_bushi_pod', 'onMinionDestroyed', samuraiBushiTrigger, { perInstance: true });
+    registerTrigger('samurai_bushi_pod', 'onMinionDiscardedFromBase', samuraiBushiTrigger, { perInstance: true });
     registerTrigger('samurai_shogun', 'onMinionDestroyed', samuraiShogunTrigger, { perInstance: true });
     registerTrigger('samurai_shogun', 'onMinionDiscardedFromBase', samuraiShogunTrigger, { perInstance: true });
+    registerTrigger('samurai_shogun_pod', 'onMinionDestroyed', samuraiShogunTrigger, { perInstance: true });
+    registerTrigger('samurai_shogun_pod', 'onMinionDiscardedFromBase', samuraiShogunTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDestroyed', samuraiFinalHaikuTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDiscardedFromBase', samuraiFinalHaikuTrigger, { perInstance: true });
+    registerTrigger('samurai_final_haiku_pod', 'onMinionDestroyed', samuraiFinalHaikuTrigger, { perInstance: true });
+    registerTrigger('samurai_final_haiku_pod', 'onMinionDiscardedFromBase', samuraiFinalHaikuTrigger, { perInstance: true });
     registerTrigger('samurai_way_of_the_warrior', 'onMinionDestroyed', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_way_of_the_warrior', 'onMinionDiscardedFromBase', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_way_of_the_warrior_pod', 'onMinionDestroyed', samuraiWayOfTheWarriorTrigger, { global: true });
@@ -70,6 +78,14 @@ export function registerSamuraiAbilities(): void {
         sourceScope: 'triggerBase',
     });
     registerTrigger('samurai_honor_the_fallen', 'onMinionDiscardedFromBase', samuraiHonorTheFallenTrigger, {
+        perInstance: true,
+        sourceScope: 'triggerBase',
+    });
+    registerTrigger('samurai_honor_the_fallen_pod', 'onMinionDestroyed', samuraiHonorTheFallenTrigger, {
+        perInstance: true,
+        sourceScope: 'triggerBase',
+    });
+    registerTrigger('samurai_honor_the_fallen_pod', 'onMinionDiscardedFromBase', samuraiHonorTheFallenTrigger, {
         perInstance: true,
         sourceScope: 'triggerBase',
     });

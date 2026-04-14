@@ -445,6 +445,7 @@ function executeQueuedTrigger(
         sourceCardUid: trigger.sourceCardUid,
         sourceBaseIndex: trigger.sourceBaseIndex,
         sourceControllerId: trigger.sourceControllerId,
+        triggerBaseControllersAtTrigger: trigger.triggerBaseControllersAtTrigger,
         playerId: trigger.ownerPlayerId,
         baseIndex: trigger.baseIndex,
         moveFromBaseIndex: trigger.moveFromBaseIndex,
@@ -733,7 +734,17 @@ export function advanceSmashUpReactionSession(
         session = getSmashUpReactionSession(currentState);
         if (!session) {
             const resumed = continueSuspendedReactionIfNeeded(currentState, random, now);
-            return resumed ?? { state: currentState, events: [] };
+            if (resumed) return resumed;
+
+            // 若刚结束的 session 属于“空 frame”（例如 resumed session 的 frameId 已无匹配 trigger），
+            // 但队列里还有其他 frame 的 pending triggers，则在同一次调用里直接启动下一帧。
+            const restarted = createSessionFromPendingFrame(currentState);
+            const restartedSession = getSmashUpReactionSession(restarted);
+            if (!restartedSession) {
+                return { state: currentState, events: [] };
+            }
+            currentState = restarted;
+            session = restartedSession;
         }
     }
 

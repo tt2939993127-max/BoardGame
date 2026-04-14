@@ -17,14 +17,18 @@ import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 
 describe('Feedback Module (e2e)', () => {
+    const INTERNAL_FEEDBACK_TOKEN = 'test-internal-feedback-token';
     let mongo: MongoMemoryServer | null;
     let app: import('@nestjs/common').INestApplication;
     let userModel: Model<UserDocument>;
     let feedbackModel: Model<FeedbackDocument>;
     let cacheManager: Cache;
     let authService: AuthService;
+    let previousInternalFeedbackToken: string | undefined;
 
     beforeAll(async () => {
+        previousInternalFeedbackToken = process.env.INTERNAL_FEEDBACK_TOKEN;
+        process.env.INTERNAL_FEEDBACK_TOKEN = INTERNAL_FEEDBACK_TOKEN;
         const externalMongoUri = process.env.MONGO_URI;
         mongo = externalMongoUri ? null : await MongoMemoryServer.create();
         const mongoUri = externalMongoUri ?? mongo?.getUri();
@@ -70,6 +74,11 @@ describe('Feedback Module (e2e)', () => {
         }
         if (mongo) {
             await mongo.stop();
+        }
+        if (previousInternalFeedbackToken === undefined) {
+            delete process.env.INTERNAL_FEEDBACK_TOKEN;
+        } else {
+            process.env.INTERNAL_FEEDBACK_TOKEN = previousInternalFeedbackToken;
         }
     });
 
@@ -140,6 +149,35 @@ describe('Feedback Module (e2e)', () => {
 
         expect(res.body.content).toBe('匿名反馈内容');
         expect(res.body.userId).toBeUndefined();
+    });
+
+    it('internal feedback 需要 token 且可创建系统反馈', async () => {
+        const payload = {
+            content: 'system feedback',
+            source: 'online-ai-watchdog',
+            type: 'bug',
+            severity: 'high',
+        };
+
+        await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .send(payload)
+            .expect(401);
+
+        await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', 'wrong-token')
+            .send(payload)
+            .expect(403);
+
+        const okRes = await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send(payload)
+            .expect(201);
+
+        expect(okRes.body.reporterType).toBe('system');
+        expect(okRes.body.source).toBe('online-ai-watchdog');
     });
 
     it('登录用户反馈会绑定 userId 且管理员可更新状态', async () => {
@@ -309,6 +347,44 @@ describe('Feedback Module (e2e)', () => {
         expect(listRes.body.items[0].content).toBe('第一个严重问题');
         expect(listRes.body.items[0].clientContext?.matchId).toBe('abc');
         expect(listRes.body.items[0].errorContext?.name).toBe('TypeError');
+    });
+
+    it('admin 列表支持 reporterType/source 过滤并兼容 legacy watchdog', async () => {
+        const { adminToken } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send({
+                content: 'system watchdog',
+                source: 'online-ai-watchdog',
+                type: 'bug',
+                severity: 'high',
+            })
+            .expect(201);
+
+        await feedbackModel.collection.insertOne({
+            content: '[system][online-ai-watchdog] legacy',
+            type: 'bug',
+            severity: 'high',
+            contactInfo: 'system:online-ai-watchdog',
+            errorContext: {
+                source: 'online-ai-watchdog',
+                name: 'unsatisfiable-interaction-auto-skipped',
+            },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/feedback?reporterType=system&source=online-ai-watchdog&limit=20')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(listRes.body.items).toHaveLength(2);
+        const legacyItem = listRes.body.items.find((item: { content: string }) => item.content.includes('legacy'));
+        expect(legacyItem?.reporterType).toBe('system');
+        expect(legacyItem?.source).toBe('online-ai-watchdog');
     });
 
     it('admin 列表支持按时间正序排序', async () => {

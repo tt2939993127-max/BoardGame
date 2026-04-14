@@ -758,6 +758,98 @@ describe('BonusDieOverlay', () => {
         ).toBe(false);
     });
 
+    it('displayOnly 结算缺少时间戳时，若卡牌特写已完整绑定骰子也应隐藏重复面板', () => {
+        const settlement = {
+            id: 'volley-display',
+            sourceAbilityId: 'volley',
+            attackerId: '1',
+            targetId: '0',
+            dice: [
+                { index: 0, value: 4, face: 'taiji' },
+                { index: 1, value: 3, face: 'taiji' },
+            ],
+            rerollCostTokenId: '',
+            rerollCostAmount: 0,
+            rerollCount: 0,
+            maxRerollCount: 0,
+            readyToSettle: false,
+            displayOnly: true,
+        };
+
+        expect(
+            shouldSuppressPendingDisplayOnlyBonusOverlay({
+                settlement,
+                viewerPlayerId: '0',
+                cardSpotlightQueue: [
+                    {
+                        id: 'volley-1000',
+                        timestamp: 1000,
+                        playerId: '1',
+                        playerName: '对手',
+                        bonusDice: [
+                            {
+                                value: 4,
+                                face: 'taiji',
+                                timestamp: 1100,
+                            },
+                            {
+                                value: 3,
+                                face: 'taiji',
+                                timestamp: 1101,
+                            },
+                        ],
+                    },
+                ],
+            })
+        ).toBe(true);
+    });
+
+    it('displayOnly 结算缺少时间戳时，若卡牌特写已完整绑定骰子也应隐藏重复面板', () => {
+        const settlement = {
+            id: 'volley-display',
+            sourceAbilityId: 'volley',
+            attackerId: '1',
+            targetId: '0',
+            dice: [
+                { index: 0, value: 4, face: 'taiji' },
+                { index: 1, value: 3, face: 'taiji' },
+            ],
+            rerollCostTokenId: '',
+            rerollCostAmount: 0,
+            rerollCount: 0,
+            maxRerollCount: 0,
+            readyToSettle: false,
+            displayOnly: true,
+        };
+
+        expect(
+            shouldSuppressPendingDisplayOnlyBonusOverlay({
+                settlement,
+                viewerPlayerId: '0',
+                cardSpotlightQueue: [
+                    {
+                        id: 'volley-1000',
+                        timestamp: 1000,
+                        playerId: '1',
+                        playerName: '对手',
+                        bonusDice: [
+                            {
+                                value: 4,
+                                face: 'taiji',
+                                timestamp: 1100,
+                            },
+                            {
+                                value: 3,
+                                face: 'taiji',
+                                timestamp: 1101,
+                            },
+                        ],
+                    },
+                ],
+            })
+        ).toBe(true);
+    });
+
     it('对手打出自疗型多骰卡牌时，也应把奖励骰绑定到卡牌特写而不是走独立多骰面板', async () => {
         const entries: EventStreamEntry[] = [
             {

@@ -12,9 +12,9 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { makeState, makePlayer, makeCard, makeBase, makeMinion, makeMatchState } from './helpers';
+import { applyEvents, makeState, makePlayer, makeCard, makeBase, makeMinion, makeMatchState } from './helpers';
 import { runCommand } from './testRunner';
-import { SU_COMMANDS } from '../domain';
+import { SU_COMMANDS, SU_EVENTS } from '../domain';
 import { initAllAbilities } from '../abilities';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
@@ -148,6 +148,44 @@ describe('架构测试：防止重复处理', () => {
         expect(interaction2).toBeDefined();
         expect((interaction2?.data as any)?.sourceId).toBe('frankenstein_igor');
         expect(result2.finalState.sys.interaction.queue.length).toBe(0);
+    });
+
+    it('D42: 重复 MINION_RETURNED 事件不会把同一 uid 随从复制进手牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: ['minions_of_cthulhu_pod', 'steampunks_pod'],
+                }),
+                '1': makePlayer('1', {
+                    factions: ['robots_pod', 'wizards_pod'],
+                }),
+            },
+            bases: [
+                makeBase('base_rlyeh', [
+                    makeMinion('servitor-1', 'cthulhu_servitor_pod', '0', 2, {
+                        owner: '0',
+                        attachedActions: [],
+                    }),
+                ]),
+            ],
+        });
+
+        const returnedEvent = {
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: {
+                minionUid: 'servitor-1',
+                minionDefId: 'cthulhu_servitor_pod',
+                fromBaseIndex: 0,
+                toPlayerId: '0',
+                reason: 'steampunk_escape_hatch',
+            },
+            timestamp: 1000,
+        } as any;
+
+        const next = applyEvents(core, [returnedEvent, returnedEvent]);
+
+        expect(next.bases[0].minions).toHaveLength(0);
+        expect(next.players['0'].hand.map(card => card.uid)).toEqual(['servitor-1']);
     });
 
     it('D41: 多个 Igor 被消灭时，每个 Igor 的 onDestroy 只触发一次', () => {

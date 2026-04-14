@@ -19,6 +19,23 @@ function parseDisplayOnlySettlementTimestamp(settlementId: string | undefined): 
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+function hasMatchingSpotlightTimestamp(
+    currentSpotlight: CardSpotlightItem,
+    settlementTimestamp: number,
+): boolean {
+    if (Math.abs(currentSpotlight.timestamp - settlementTimestamp) <= CARD_SPOTLIGHT_MATCH_THRESHOLD_MS) {
+        return true;
+    }
+
+    const bonusDiceTimestamps = currentSpotlight.bonusDice
+        ?.map((die) => die.timestamp)
+        .filter((value): value is number => typeof value === 'number') ?? [];
+
+    return bonusDiceTimestamps.some((timestamp) => (
+        Math.abs(timestamp - settlementTimestamp) <= CARD_SPOTLIGHT_MATCH_THRESHOLD_MS
+    ));
+}
+
 export interface PendingBonusOverlayVisibilityArgs {
     settlement?: PendingBonusDiceSettlement;
     cardSpotlightQueue: CardSpotlightItem[];
@@ -40,13 +57,14 @@ export function shouldSuppressPendingDisplayOnlyBonusOverlay({
     if (!currentSpotlight) return false;
     if (normalizePlayerId(currentSpotlight.playerId) !== attackerId) return false;
 
-    const settlementTimestamp = parseDisplayOnlySettlementTimestamp(settlement.id);
-    if (settlementTimestamp === null) return false;
-    if (Math.abs(currentSpotlight.timestamp - settlementTimestamp) > CARD_SPOTLIGHT_MATCH_THRESHOLD_MS) {
-        return false;
-    }
-
     const spotlightDiceCount = currentSpotlight.bonusDice?.length ?? 0;
     const settlementDiceCount = settlement.dice.length;
-    return spotlightDiceCount >= settlementDiceCount && settlementDiceCount > 0;
+    if (spotlightDiceCount < settlementDiceCount || settlementDiceCount <= 0) return false;
+
+    const settlementTimestamp = parseDisplayOnlySettlementTimestamp(settlement.id);
+    if (settlementTimestamp === null) {
+        return true;
+    }
+
+    return hasMatchingSpotlightTimestamp(currentSpotlight, settlementTimestamp);
 }

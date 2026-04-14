@@ -41,8 +41,16 @@ export const formatActionLogSegments = (segments: ActionLogSegment[] = []): stri
             }
             // breakdown segment：纯文本 fallback 只显示数值
             if (segment.type === 'breakdown') return segment.displayText;
-            // diceResult segment：纯文本 fallback 显示骰子点数
-            if (segment.type === 'diceResult') return `[${segment.dice.map(d => d.value).join(',')}]`;
+            // diceResult segment：纯文本 fallback 显示骰子点数（兼容异常数据）
+            if (segment.type === 'diceResult') {
+                if (!Array.isArray(segment.dice) || segment.dice.length === 0) return '';
+                const values = segment.dice.map((d, index) => {
+                    if (typeof d === 'number') return d;
+                    if (d && typeof d === 'object' && typeof d.value === 'number') return d.value;
+                    return index + 1;
+                });
+                return `[${values.join(',')}]`;
+            }
             // card segment：如果有 previewTextNs，翻译 previewText
             if (segment.previewTextNs && segment.previewText) {
                 const fullKey = `${segment.previewTextNs}:${segment.previewText}`;

@@ -28,12 +28,15 @@ import {
   isInStraightLine,
   getStructureAt,
   getUnitAbilities,
+  findUnitPositionByInstanceId,
+  hasStableAbility,
   getStunDestinations,
+  getForceDestinations,
   isValidCoord,
   BOARD_ROWS,
   BOARD_COLS,
 } from './helpers';
-import { getBaseCardId, CARD_IDS, isPlagueZombieCard } from './ids';
+import { getBaseCardId, CARD_IDS, isPlagueZombieCard, isFortressUnit, isUndeadCard } from './ids';
 
 const INTERACTIVE_EVENT_BASE_IDS = new Set<string>([
   CARD_IDS.NECRO_HELLFIRE_BLADE,
@@ -176,6 +179,120 @@ type SwInteractionMeta =
   | {
       type: 'feed_beast';
       sourceUnitId: string;
+    }
+  | {
+      type: 'before_attack_life_drain';
+      sourceUnitId: string;
+      attackerPosition: CellCoord;
+      targetPosition: CellCoord;
+    }
+  | {
+      type: 'before_attack_holy_arrow';
+      sourceUnitId: string;
+      attackerPosition: CellCoord;
+      targetPosition: CellCoord;
+    }
+  | {
+      type: 'before_attack_healing';
+      sourceUnitId: string;
+      attackerPosition: CellCoord;
+      targetPosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_telekinesis_target';
+      abilityId: 'telekinesis' | 'high_telekinesis';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_telekinesis_direction';
+      abilityId: 'telekinesis' | 'high_telekinesis';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+      targetPosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_mind_transmission';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_rapid_fire';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_withdraw_cost';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_attack_withdraw_position';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+      costType: 'charge' | 'magic';
+    }
+  | {
+      type: 'on_phase_start_illusion';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'on_phase_start_blood_rune';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_move_spirit_bond';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_move_ancestral_bond';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_move_structure_shift_target';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'after_move_structure_shift_direction';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+      targetPosition: CellCoord;
+    }
+  | {
+      type: 'after_move_frost_axe';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'activated_ability_target';
+      abilityId:
+        | 'revive_undead'
+        | 'fortress_power'
+        | 'telekinesis_instead'
+        | 'high_telekinesis_instead'
+        | 'vanish';
+      sourceUnitId: string;
+      sourcePosition: CellCoord;
+    }
+  | {
+      type: 'fire_sacrifice_summon';
+      cardId: string;
+      summonPosition: CellCoord;
+    }
+  | {
+      type: 'ice_ram_target';
+      structurePosition: CellCoord;
+      ownerId: PlayerId;
+    }
+  | {
+      type: 'ice_ram_push';
+      structurePosition: CellCoord;
+      targetPosition: CellCoord;
     };
 
 type SwInteractionValue =
@@ -209,6 +326,27 @@ type SwInteractionValue =
   | { action: 'mind_capture'; sourceUnitId: string; targetPosition: CellCoord; hits: number; choice: 'control' | 'damage' }
   | { action: 'ice_shards'; sourceUnitId: string; skip?: boolean }
   | { action: 'feed_beast'; sourceUnitId: string; choice: 'destroy_adjacent' | 'self_destroy'; targetPosition?: CellCoord }
+  | { action: 'before_attack_life_drain'; targetUnitId: string; targetPosition?: CellCoord }
+  | { action: 'before_attack_holy_arrow'; cardId: string }
+  | { action: 'before_attack_healing'; cardId: string }
+  | { action: 'before_attack_skip'; skip?: boolean }
+  | { action: 'after_attack_telekinesis_target'; targetPosition: CellCoord }
+  | { action: 'after_attack_telekinesis_direction'; targetPosition: CellCoord; moveRow: number; moveCol: number }
+  | { action: 'after_attack_mind_transmission'; targetPosition: CellCoord }
+  | { action: 'after_attack_rapid_fire'; confirm?: boolean }
+  | { action: 'after_attack_withdraw_cost'; costType: 'charge' | 'magic' }
+  | { action: 'after_attack_withdraw_position'; targetPosition: CellCoord; costType: 'charge' | 'magic' }
+  | { action: 'on_phase_start_illusion'; targetPosition: CellCoord }
+  | { action: 'on_phase_start_blood_rune'; choice: 'damage' | 'charge' }
+  | { action: 'after_move_spirit_bond'; choice: 'self' | 'transfer'; targetPosition?: CellCoord }
+  | { action: 'after_move_ancestral_bond'; targetPosition: CellCoord }
+  | { action: 'after_move_structure_shift_target'; targetPosition: CellCoord }
+  | { action: 'after_move_structure_shift_direction'; targetPosition: CellCoord; newPosition: CellCoord }
+  | { action: 'after_move_frost_axe'; choice: 'self' | 'attach'; targetPosition?: CellCoord }
+  | { action: 'activated_ability_target'; abilityId: string; targetPosition?: CellCoord; targetCardId?: string }
+  | { action: 'fire_sacrifice_summon'; sacrificeUnitId: string }
+  | { action: 'ice_ram_target'; targetPosition: CellCoord }
+  | { action: 'ice_ram_push'; targetPosition: CellCoord; pushNewPosition?: CellCoord }
   | { skip: true };
 
 type InteractionResolutionPayload = {
@@ -310,6 +448,27 @@ function buildPositionOptions<T extends { action: string }>(
   }));
 }
 
+function getWithdrawDestinations(
+  core: SummonerWarsCore,
+  sourcePosition: CellCoord,
+): CellCoord[] {
+  const result: CellCoord[] = [];
+  const dirs = [
+    { dr: -1, dc: 0 },
+    { dr: 1, dc: 0 },
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  for (const { dr, dc } of dirs) {
+    for (let step = 1; step <= 2; step++) {
+      const pos = { row: sourcePosition.row + dr * step, col: sourcePosition.col + dc * step };
+      if (!isValidCoord(pos) || !isCellEmpty(core, pos)) break;
+      result.push(pos);
+    }
+  }
+  return result;
+}
+
 function normalizeInteractionValues(value: unknown): SwInteractionValue[] {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -326,6 +485,352 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
     id: 'summonerwars-interactions',
     name: 'SummonerWars 交互映射',
     priority: 22,
+
+    beforeCommand: ({ state, command }): HookResult<SummonerWarsCore> | void => {
+      const payload = command.payload as Record<string, unknown>;
+      const playerId = (command.playerId ?? state.core.currentPlayer) as PlayerId;
+
+      if (command.type === SW_COMMANDS.DECLARE_ATTACK) {
+        if (payload.beforeAttack || payload.skipBeforeAttack) return;
+        const attacker = payload.attacker as CellCoord | undefined;
+        const target = payload.target as CellCoord | undefined;
+        if (!attacker || !target) return;
+        const attackerUnit = getUnitAt(state.core, attacker);
+        if (!attackerUnit || attackerUnit.owner !== playerId) return;
+
+        const abilityIds = getUnitAbilities(attackerUnit, state.core);
+        const beforeAttackAbility = ['life_drain', 'holy_arrow', 'healing']
+          .find((id) => abilityIds.includes(id));
+        if (!beforeAttackAbility) return;
+
+        if (beforeAttackAbility === 'life_drain') {
+          const candidates = getPlayerUnits(state.core, playerId)
+            .filter((unit) => unit.instanceId !== attackerUnit.instanceId
+              && manhattanDistance(attacker, unit.position) <= 2);
+          if (candidates.length === 0) return;
+          const options: PromptOption<SwInteractionValue>[] = [
+            ...candidates.map((unit) => ({
+              id: `unit:${unit.instanceId}`,
+              label: unit.card.name,
+              value: {
+                action: 'before_attack_life_drain',
+                targetUnitId: unit.instanceId,
+                targetPosition: unit.position,
+              },
+            })),
+            {
+              id: 'skip',
+              label: '跳过',
+              labelKey: 'actions.skip',
+              value: { action: 'before_attack_skip', skip: true },
+            },
+          ];
+          const interaction = createSimpleChoice(
+            `sw-before-attack-life-drain-${state.core.turnNumber}-${attackerUnit.instanceId}`,
+            playerId,
+            'interaction.sw.beforeAttack.lifeDrain',
+            options,
+            { sourceId: 'before_attack', targetType: 'minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'before_attack_life_drain',
+              sourceUnitId: attackerUnit.instanceId,
+              attackerPosition: attacker,
+              targetPosition: target,
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+
+        if (beforeAttackAbility === 'holy_arrow') {
+          const player = state.core.players[playerId];
+          const options: PromptOption<SwInteractionValue>[] = [];
+          const usedNames = new Set<string>();
+          for (const card of player.hand) {
+            if (card.cardType !== 'unit') continue;
+            if (card.name === attackerUnit.card.name) continue;
+            if (usedNames.has(card.name)) continue;
+            usedNames.add(card.name);
+            options.push({
+              id: card.id,
+              label: card.name,
+              value: { action: 'before_attack_holy_arrow', cardId: card.id },
+              displayMode: 'card',
+            });
+          }
+          if (options.length === 0) return;
+          options.push({
+            id: 'skip',
+            label: '跳过',
+            labelKey: 'actions.skip',
+            value: { action: 'before_attack_skip', skip: true },
+          });
+          const interaction = createSimpleChoice(
+            `sw-before-attack-holy-arrow-${state.core.turnNumber}-${attackerUnit.instanceId}`,
+            playerId,
+            'interaction.sw.beforeAttack.holyArrow',
+            options,
+            {
+              sourceId: 'before_attack',
+              targetType: 'hand',
+              autoResolveIfSingle: false,
+              multi: { min: 0 },
+            },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'before_attack_holy_arrow',
+              sourceUnitId: attackerUnit.instanceId,
+              attackerPosition: attacker,
+              targetPosition: target,
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+
+        if (beforeAttackAbility === 'healing') {
+          const player = state.core.players[playerId];
+          const options: PromptOption<SwInteractionValue>[] = player.hand.map((card) => ({
+            id: card.id,
+            label: card.name,
+            value: { action: 'before_attack_healing', cardId: card.id },
+            displayMode: 'card',
+          }));
+          if (options.length === 0) return;
+          options.push({
+            id: 'skip',
+            label: '跳过',
+            labelKey: 'actions.skip',
+            value: { action: 'before_attack_skip', skip: true },
+          });
+          const interaction = createSimpleChoice(
+            `sw-before-attack-healing-${state.core.turnNumber}-${attackerUnit.instanceId}`,
+            playerId,
+            'interaction.sw.beforeAttack.healing',
+            options,
+            { sourceId: 'before_attack', targetType: 'hand', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'before_attack_healing',
+              sourceUnitId: attackerUnit.instanceId,
+              attackerPosition: attacker,
+              targetPosition: target,
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+      }
+
+      if (command.type === SW_COMMANDS.ACTIVATE_ABILITY) {
+        const abilityId = payload.abilityId as string | undefined;
+        const sourceUnitId = payload.sourceUnitId as string | undefined;
+        if (!abilityId || !sourceUnitId) return;
+        const sourcePosition = findUnitPositionByInstanceId(state.core, sourceUnitId);
+        const sourceUnit = sourcePosition ? getUnitAt(state.core, sourcePosition) : undefined;
+        if (!sourcePosition || !sourceUnit || sourceUnit.owner !== playerId) return;
+
+        if (abilityId === 'revive_undead') {
+          const targetCardId = payload.targetCardId as string | undefined;
+          const targetPosition = payload.targetPosition as CellCoord | undefined;
+          if (targetCardId && targetPosition) return;
+          const player = state.core.players[playerId];
+          const discardCards = player.discard.filter((card) => card.cardType === 'unit' && isUndeadCard(card));
+          if (discardCards.length === 0) return;
+          const options: PromptOption<SwInteractionValue>[] = discardCards.map((card) => ({
+            id: card.id,
+            label: card.name,
+            value: { action: 'activated_ability_target', abilityId: 'revive_undead', targetCardId: card.id },
+            displayMode: 'card',
+          }));
+          const interaction = createSimpleChoice(
+            `sw-activate-revive-undead-${state.core.turnNumber}-${sourceUnitId}`,
+            playerId,
+            'interaction.sw.reviveUndead',
+            options,
+            { sourceId: 'revive_undead', targetType: 'discard_minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'activated_ability_target',
+              abilityId: 'revive_undead',
+              sourceUnitId,
+              sourcePosition,
+              step: 'selectCard',
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+
+        if (abilityId === 'fortress_power') {
+          const targetCardId = payload.targetCardId as string | undefined;
+          if (targetCardId) return;
+          const player = state.core.players[playerId];
+          const discardCards = player.discard.filter((card) => card.cardType === 'unit' && isFortressUnit(card));
+          if (discardCards.length === 0) return;
+          const options: PromptOption<SwInteractionValue>[] = discardCards.map((card) => ({
+            id: card.id,
+            label: card.name,
+            value: { action: 'activated_ability_target', abilityId: 'fortress_power', targetCardId: card.id },
+            displayMode: 'card',
+          }));
+          const interaction = createSimpleChoice(
+            `sw-activate-fortress-power-${state.core.turnNumber}-${sourceUnitId}`,
+            playerId,
+            'interaction.sw.fortressPower',
+            options,
+            { sourceId: 'fortress_power', targetType: 'discard_minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'activated_ability_target',
+              abilityId: 'fortress_power',
+              sourceUnitId,
+              sourcePosition,
+              step: 'selectCard',
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+
+        if (abilityId === 'vanish') {
+          const targetPosition = payload.targetPosition as CellCoord | undefined;
+          if (targetPosition) return;
+          const candidates = getPlayerUnits(state.core, playerId)
+            .filter((unit) => unit.instanceId !== sourceUnitId && unit.card.cost === 0);
+          if (candidates.length === 0) return;
+          const options: PromptOption<SwInteractionValue>[] = candidates.map((unit) => ({
+            id: `pos:${unit.position.row},${unit.position.col}`,
+            label: unit.card.name,
+            value: {
+              action: 'activated_ability_target',
+              abilityId: 'vanish',
+              targetPosition: unit.position,
+            },
+          }));
+          const interaction = createSimpleChoice(
+            `sw-activate-vanish-${state.core.turnNumber}-${sourceUnitId}`,
+            playerId,
+            'interaction.sw.vanish',
+            options,
+            { sourceId: 'vanish', targetType: 'minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'activated_ability_target',
+              abilityId: 'vanish',
+              sourceUnitId,
+              sourcePosition,
+              step: 'selectUnit',
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+
+        if (abilityId === 'telekinesis_instead' || abilityId === 'high_telekinesis_instead') {
+          const targetPosition = payload.targetPosition as CellCoord | undefined;
+          const moveRow = payload.moveRow as number | undefined;
+          const moveCol = payload.moveCol as number | undefined;
+          if (targetPosition && moveRow !== undefined && moveCol !== undefined) return;
+          const maxRange = abilityId === 'high_telekinesis_instead' ? 3 : 2;
+          const candidates: CellCoord[] = [];
+          for (let row = 0; row < BOARD_ROWS; row++) {
+            for (let col = 0; col < BOARD_COLS; col++) {
+              const unit = state.core.board[row]?.[col]?.unit;
+              if (!unit || unit.card.unitClass === 'summoner') continue;
+              if (hasStableAbility(unit, state.core)) continue;
+              const dist = manhattanDistance(sourcePosition, { row, col });
+              if (dist > 0 && dist <= maxRange) {
+                candidates.push({ row, col });
+              }
+            }
+          }
+          if (candidates.length === 0) return;
+          const options: PromptOption<SwInteractionValue>[] = [
+            ...buildPositionOptions(candidates, (pos) => ({
+              action: 'after_attack_telekinesis_target',
+              targetPosition: pos,
+            })),
+            {
+              id: 'skip',
+              label: '跳过',
+              labelKey: 'actions.skip',
+              value: { skip: true },
+            },
+          ];
+          const interaction = createSimpleChoice(
+            `sw-activate-${abilityId}-target-${state.core.turnNumber}-${sourceUnitId}`,
+            playerId,
+            'interaction.sw.telekinesisTarget',
+            options,
+            { sourceId: abilityId, targetType: 'minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'activated_ability_target',
+              abilityId,
+              sourceUnitId,
+              sourcePosition,
+              step: 'selectUnit',
+            } satisfies SwInteractionMeta,
+          };
+          return { halt: true, state: queueInteraction(state, interaction) };
+        }
+      }
+
+      if (command.type === SW_COMMANDS.SUMMON_UNIT) {
+        const cardId = payload.cardId as string | undefined;
+        const position = payload.position as CellCoord | undefined;
+        const sacrificeUnitId = payload.sacrificeUnitId as string | undefined;
+        if (!cardId || !position || sacrificeUnitId) return;
+        const player = state.core.players[playerId];
+        const card = player.hand.find((c) => c.id === cardId);
+        if (!card || card.cardType !== 'unit') return;
+        const unitCard = card as UnitCard;
+        const hasFireSacrifice = (unitCard.abilities ?? []).includes('fire_sacrifice_summon');
+        if (!hasFireSacrifice) return;
+        const candidates = getPlayerUnits(state.core, playerId)
+          .filter((unit) => unit.card.unitClass !== 'summoner');
+        if (candidates.length === 0) return;
+        const options: PromptOption<SwInteractionValue>[] = candidates.map((unit) => ({
+          id: `unit:${unit.instanceId}`,
+          label: unit.card.name,
+          value: { action: 'fire_sacrifice_summon', sacrificeUnitId: unit.instanceId },
+        }));
+        const interaction = createSimpleChoice(
+          `sw-fire-sacrifice-${state.core.turnNumber}-${cardId}`,
+          playerId,
+          'interaction.sw.fireSacrificeSummon',
+          options,
+          { sourceId: 'fire_sacrifice_summon', targetType: 'minion', autoResolveIfSingle: false },
+        );
+        const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+        interaction.data = {
+          ...interactionData,
+          sw: {
+            type: 'fire_sacrifice_summon',
+            cardId,
+            summonPosition: position,
+          } satisfies SwInteractionMeta,
+        };
+        return { halt: true, state: queueInteraction(state, interaction) };
+      }
+    },
 
     afterEvents: ({ state, events, random }): HookResult<SummonerWarsCore> | void => {
       let newState = state;
@@ -863,11 +1368,58 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
         }
 
         if (event.type === SW_EVENTS.ABILITY_TRIGGERED) {
-          const payload = event.payload as { actionId?: string; abilityId?: string; sourceUnitId?: string; sourcePosition?: CellCoord };
+          const payload = event.payload as {
+            actionId?: string;
+            abilityId?: string;
+            sourceUnitId?: string;
+            sourcePosition?: CellCoord;
+            iceRamOwner?: PlayerId;
+            structurePosition?: CellCoord;
+          };
           const actionId = payload.actionId ?? payload.abilityId;
           const sourceUnitId = payload.sourceUnitId;
-          if (!actionId || !sourceUnitId || !payload.sourcePosition) continue;
-          const sourceUnit = getUnitAt(newState.core, payload.sourcePosition);
+          const sourcePosition = payload.sourcePosition;
+          if (!actionId || !sourceUnitId || !sourcePosition) continue;
+
+          if (actionId === 'ice_ram_trigger') {
+            const ownerId = payload.iceRamOwner;
+            const structurePosition = payload.structurePosition ?? sourcePosition;
+            if (!ownerId || !structurePosition) continue;
+            const adj = getAdjacentCells(structurePosition).filter((pos) => !!getUnitAt(newState.core, pos));
+            if (adj.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(adj, (pos) => ({
+                action: 'ice_ram_target',
+                targetPosition: pos,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-ice-ram-target-${event.timestamp ?? 0}-${ownerId}`,
+              ownerId,
+              'interaction.sw.iceRam',
+              options,
+              { sourceId: 'ice_ram', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'ice_ram_target',
+                structurePosition,
+                ownerId,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+            continue;
+          }
+
+          const sourceUnit = getUnitAt(newState.core, sourcePosition);
           if (!sourceUnit) continue;
 
           if (actionId === 'ice_shards_damage') {
@@ -907,7 +1459,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
 
           if (actionId === 'feed_beast_check') {
-            const adj = getAdjacentCells(payload.sourcePosition);
+            const adj = getAdjacentCells(sourcePosition);
             const positions = adj.filter((pos) => {
               const unit = getUnitAt(newState.core, pos);
               return !!unit && unit.owner === sourceUnit.owner && unit.instanceId !== sourceUnitId;
@@ -942,6 +1494,435 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               } satisfies SwInteractionMeta,
             };
             newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'rapid_fire_extra_attack') {
+            const hasCharge = (sourceUnit.boosts ?? 0) >= 1;
+            if (!hasCharge) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              {
+                id: 'confirm',
+                label: '确认',
+                labelKey: 'actions.confirm',
+                value: { action: 'after_attack_rapid_fire', confirm: true },
+              },
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-rapid-fire-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.rapidFire',
+              options,
+              { sourceId: 'rapid_fire', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_rapid_fire',
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'withdraw_push_pull' || actionId === 'withdraw') {
+            const hasCharge = (sourceUnit.boosts ?? 0) >= 1;
+            const hasMagic = newState.core.players[sourceUnit.owner]?.magic >= 1;
+            if (!hasCharge && !hasMagic) continue;
+            const options: PromptOption<SwInteractionValue>[] = [];
+            if (hasCharge) {
+              options.push({
+                id: 'charge',
+                label: '消耗充能',
+                labelKey: 'actions.chargeSelf',
+                value: { action: 'after_attack_withdraw_cost', costType: 'charge' },
+              });
+            }
+            if (hasMagic) {
+              options.push({
+                id: 'magic',
+                label: '消耗魔力',
+                labelKey: 'actions.payMagic',
+                value: { action: 'after_attack_withdraw_cost', costType: 'magic' },
+              });
+            }
+            options.push({
+              id: 'skip',
+              label: '跳过',
+              labelKey: 'actions.skip',
+              value: { skip: true },
+            });
+            const interaction = createSimpleChoice(
+              `sw-withdraw-cost-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.withdraw',
+              options,
+              { sourceId: 'withdraw', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_withdraw_cost',
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'blood_rune_choice') {
+            const options: PromptOption<SwInteractionValue>[] = [
+              {
+                id: 'damage',
+                label: '自伤',
+                labelKey: 'actions.bloodRuneDamage',
+                value: { action: 'on_phase_start_blood_rune', choice: 'damage' },
+              },
+            ];
+            if (newState.core.players[sourceUnit.owner]?.magic >= 1) {
+              options.push({
+                id: 'charge',
+                label: '充能',
+                labelKey: 'actions.bloodRuneCharge',
+                value: { action: 'on_phase_start_blood_rune', choice: 'charge' },
+              });
+            }
+            const interaction = createSimpleChoice(
+              `sw-blood-rune-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.bloodRune',
+              options,
+              { sourceId: 'blood_rune', autoResolveIfSingle: true },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'on_phase_start_blood_rune',
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'illusion_copy') {
+            const options: PromptOption<SwInteractionValue>[] = [];
+            for (let row = 0; row < BOARD_ROWS; row++) {
+              for (let col = 0; col < BOARD_COLS; col++) {
+                const unit = newState.core.board[row]?.[col]?.unit;
+                if (!unit || unit.card.unitClass !== 'common') continue;
+                const dist = manhattanDistance(sourcePosition, { row, col });
+                if (dist > 0 && dist <= 3) {
+                  options.push({
+                    id: `pos:${row},${col}`,
+                    label: unit.card.name,
+                    value: { action: 'on_phase_start_illusion', targetPosition: { row, col } },
+                  });
+                }
+              }
+            }
+            if (options.length === 0) continue;
+            options.push({
+              id: 'skip',
+              label: '跳过',
+              labelKey: 'actions.skip',
+              value: { skip: true },
+            });
+            const interaction = createSimpleChoice(
+              `sw-illusion-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.illusion',
+              options,
+              { sourceId: 'illusion', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'on_phase_start_illusion',
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'telekinesis' || actionId === 'high_telekinesis') {
+            const maxRange = actionId === 'high_telekinesis' ? 3 : 2;
+            const targets: CellCoord[] = [];
+            for (let row = 0; row < BOARD_ROWS; row++) {
+              for (let col = 0; col < BOARD_COLS; col++) {
+                const unit = newState.core.board[row]?.[col]?.unit;
+                if (!unit || unit.card.unitClass === 'summoner') continue;
+                if (hasStableAbility(unit, newState.core)) continue;
+                const dist = manhattanDistance(sourcePosition, { row, col });
+                if (dist > 0 && dist <= maxRange) {
+                  targets.push({ row, col });
+                }
+              }
+            }
+            if (targets.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(targets, (pos) => ({
+                action: 'after_attack_telekinesis_target',
+                targetPosition: pos,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-telekinesis-target-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.telekinesisTarget',
+              options,
+              { sourceId: actionId, targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_telekinesis_target',
+                abilityId: actionId,
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId === 'mind_transmission') {
+            const targets: CellCoord[] = [];
+            for (let row = 0; row < BOARD_ROWS; row++) {
+              for (let col = 0; col < BOARD_COLS; col++) {
+                const unit = newState.core.board[row]?.[col]?.unit;
+                if (!unit || unit.owner !== sourceUnit.owner || unit.card.unitClass !== 'common') continue;
+                const dist = manhattanDistance(sourcePosition, { row, col });
+                if (dist > 0 && dist <= 3) {
+                  targets.push({ row, col });
+                }
+              }
+            }
+            if (targets.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(targets, (pos) => ({
+                action: 'after_attack_mind_transmission',
+                targetPosition: pos,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-mind-transmission-${event.timestamp ?? 0}-${sourceUnitId}`,
+              sourceUnit.owner,
+              'interaction.sw.mindTransmission',
+              options,
+              { sourceId: 'mind_transmission', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_mind_transmission',
+                sourceUnitId,
+                sourcePosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (actionId.startsWith('afterMove:')) {
+            const abilityId = actionId.split(':')[1] ?? '';
+            if (abilityId === 'spirit_bond') {
+              const options: PromptOption<SwInteractionValue>[] = [
+                {
+                  id: 'self',
+                  label: '充能自身',
+                  labelKey: 'actions.chargeSelf',
+                  value: { action: 'after_move_spirit_bond', choice: 'self' },
+                },
+              ];
+              if ((sourceUnit.boosts ?? 0) >= 1) {
+                const targets = getPlayerUnits(newState.core, sourceUnit.owner)
+                  .filter((unit) => unit.instanceId !== sourceUnitId
+                    && manhattanDistance(sourcePosition, unit.position) <= 3)
+                  .map((unit) => unit.position);
+                options.push(...buildPositionOptions(targets, (pos) => ({
+                  action: 'after_move_spirit_bond',
+                  choice: 'transfer',
+                  targetPosition: pos,
+                })));
+              }
+              options.push({
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              });
+              const interaction = createSimpleChoice(
+                `sw-spirit-bond-${event.timestamp ?? 0}-${sourceUnitId}`,
+                sourceUnit.owner,
+                'interaction.sw.spiritBond',
+                options,
+                { sourceId: 'spirit_bond', targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'after_move_spirit_bond',
+                  sourceUnitId,
+                  sourcePosition,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
+
+            if (abilityId === 'ancestral_bond') {
+              const targets = getPlayerUnits(newState.core, sourceUnit.owner)
+                .filter((unit) => unit.instanceId !== sourceUnitId
+                  && manhattanDistance(sourcePosition, unit.position) <= 3)
+                .map((unit) => unit.position);
+              if (targets.length === 0) continue;
+              const options: PromptOption<SwInteractionValue>[] = [
+                ...buildPositionOptions(targets, (pos) => ({
+                  action: 'after_move_ancestral_bond',
+                  targetPosition: pos,
+                })),
+                {
+                  id: 'skip',
+                  label: '跳过',
+                  labelKey: 'actions.skip',
+                  value: { skip: true },
+                },
+              ];
+              const interaction = createSimpleChoice(
+                `sw-ancestral-bond-${event.timestamp ?? 0}-${sourceUnitId}`,
+                sourceUnit.owner,
+                'interaction.sw.ancestralBond',
+                options,
+                { sourceId: 'ancestral_bond', targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'after_move_ancestral_bond',
+                  sourceUnitId,
+                  sourcePosition,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
+
+            if (abilityId === 'structure_shift') {
+              const structures: CellCoord[] = [];
+              for (let row = 0; row < BOARD_ROWS; row++) {
+                for (let col = 0; col < BOARD_COLS; col++) {
+                  const structure = getStructureAt(newState.core, { row, col });
+                  const unit = getUnitAt(newState.core, { row, col });
+                  const isAllyStructure = (structure && structure.owner === sourceUnit.owner)
+                    || (unit && unit.owner === sourceUnit.owner && getUnitAbilities(unit, newState.core).includes('mobile_structure'));
+                  if (!isAllyStructure) continue;
+                  const dist = manhattanDistance(sourcePosition, { row, col });
+                  if (dist > 0 && dist <= 3) {
+                    structures.push({ row, col });
+                  }
+                }
+              }
+              if (structures.length === 0) continue;
+              const options: PromptOption<SwInteractionValue>[] = [
+                ...buildPositionOptions(structures, (pos) => ({
+                  action: 'after_move_structure_shift_target',
+                  targetPosition: pos,
+                })),
+                {
+                  id: 'skip',
+                  label: '跳过',
+                  labelKey: 'actions.skip',
+                  value: { skip: true },
+                },
+              ];
+              const interaction = createSimpleChoice(
+                `sw-structure-shift-${event.timestamp ?? 0}-${sourceUnitId}`,
+                sourceUnit.owner,
+                'interaction.sw.structureShift',
+                options,
+                { sourceId: 'structure_shift', targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'after_move_structure_shift_target',
+                  sourceUnitId,
+                  sourcePosition,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
+
+            if (abilityId === 'frost_axe') {
+              const options: PromptOption<SwInteractionValue>[] = [
+                {
+                  id: 'self',
+                  label: '充能自身',
+                  labelKey: 'actions.chargeSelf',
+                  value: { action: 'after_move_frost_axe', choice: 'self' },
+                },
+              ];
+              if ((sourceUnit.boosts ?? 0) >= 1) {
+                const targets = getPlayerUnits(newState.core, sourceUnit.owner)
+                  .filter((unit) => unit.instanceId !== sourceUnitId
+                    && unit.card.unitClass === 'common'
+                    && manhattanDistance(sourcePosition, unit.position) <= 3)
+                  .map((unit) => unit.position);
+                options.push(...buildPositionOptions(targets, (pos) => ({
+                  action: 'after_move_frost_axe',
+                  choice: 'attach',
+                  targetPosition: pos,
+                })));
+              }
+              options.push({
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              });
+              const interaction = createSimpleChoice(
+                `sw-frost-axe-${event.timestamp ?? 0}-${sourceUnitId}`,
+                sourceUnit.owner,
+                'interaction.sw.frostAxe',
+                options,
+                { sourceId: 'frost_axe', targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'after_move_frost_axe',
+                  sourceUnitId,
+                  sourcePosition,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
           }
         }
 
@@ -1696,6 +2677,627 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                 },
               }));
             }
+          }
+
+          if (sw.type === 'before_attack_life_drain') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'before_attack_life_drain') as
+              { action: 'before_attack_life_drain'; targetUnitId: string } | undefined;
+            if (!picked || hasSkip) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  skipBeforeAttack: true,
+                  _noSnapshot: true,
+                },
+              }));
+            } else {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  beforeAttack: { abilityId: 'life_drain', targetUnitId: picked.targetUnitId },
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'before_attack_holy_arrow') {
+            const discardCardIds = values
+              .filter((item) => item.action === 'before_attack_holy_arrow')
+              .map((item) => item.cardId)
+              .filter((id): id is string => typeof id === 'string');
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            if (hasSkip) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  skipBeforeAttack: true,
+                  _noSnapshot: true,
+                },
+              }));
+            } else {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  beforeAttack: { abilityId: 'holy_arrow', discardCardIds },
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'before_attack_healing') {
+            const picked = values.find((item) => item.action === 'before_attack_healing') as
+              { action: 'before_attack_healing'; cardId: string } | undefined;
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            if (!picked || hasSkip) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  skipBeforeAttack: true,
+                  _noSnapshot: true,
+                },
+              }));
+            } else {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DECLARE_ATTACK,
+                payload: {
+                  attacker: sw.attackerPosition,
+                  target: sw.targetPosition,
+                  beforeAttack: { abilityId: 'healing', targetCardId: picked.cardId },
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'after_attack_telekinesis_target') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_attack_telekinesis_target') as
+              { action: 'after_attack_telekinesis_target'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) {
+              continue;
+            }
+            const destinations = getForceDestinations(newState.core, picked.targetPosition, 1);
+            if (destinations.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...destinations.map((dest) => ({
+                id: `pos:${dest.position.row},${dest.position.col}`,
+                label: `(${dest.position.row},${dest.position.col})`,
+                value: {
+                  action: 'after_attack_telekinesis_direction',
+                  targetPosition: picked.targetPosition,
+                  moveRow: dest.moveRow,
+                  moveCol: dest.moveCol,
+                },
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-telekinesis-direction-${event.timestamp ?? 0}-${sw.sourceUnitId}`,
+              payload.playerId,
+              'interaction.sw.telekinesisDirection',
+              options,
+              { sourceId: sw.abilityId, targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_telekinesis_direction',
+                abilityId: sw.abilityId,
+                sourceUnitId: sw.sourceUnitId,
+                sourcePosition: sw.sourcePosition,
+                targetPosition: picked.targetPosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (sw.type === 'after_attack_telekinesis_direction') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_attack_telekinesis_direction') as
+              { action: 'after_attack_telekinesis_direction'; moveRow: number; moveCol: number } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: sw.abilityId,
+                sourceUnitId: sw.sourceUnitId,
+                targetPosition: sw.targetPosition,
+                moveRow: picked.moveRow,
+                moveCol: picked.moveCol,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'after_attack_mind_transmission') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_attack_mind_transmission') as
+              { action: 'after_attack_mind_transmission'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'mind_transmission',
+                sourceUnitId: sw.sourceUnitId,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'after_attack_rapid_fire') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            if (hasSkip) continue;
+            if (value && value.action === 'after_attack_rapid_fire') {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'rapid_fire',
+                  sourceUnitId: sw.sourceUnitId,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'after_attack_withdraw_cost') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_attack_withdraw_cost') as
+              { action: 'after_attack_withdraw_cost'; costType: 'charge' | 'magic' } | undefined;
+            if (!picked || hasSkip) continue;
+            const destinations = getWithdrawDestinations(newState.core, sw.sourcePosition);
+            if (destinations.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(destinations, (pos) => ({
+                action: 'after_attack_withdraw_position',
+                targetPosition: pos,
+                costType: picked.costType,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-withdraw-position-${event.timestamp ?? 0}-${sw.sourceUnitId}`,
+              payload.playerId,
+              'interaction.sw.withdrawPosition',
+              options,
+              { sourceId: 'withdraw', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_attack_withdraw_position',
+                sourceUnitId: sw.sourceUnitId,
+                sourcePosition: sw.sourcePosition,
+                costType: picked.costType,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (sw.type === 'after_attack_withdraw_position') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_attack_withdraw_position') as
+              { action: 'after_attack_withdraw_position'; targetPosition: CellCoord; costType: 'charge' | 'magic' } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'withdraw',
+                sourceUnitId: sw.sourceUnitId,
+                costType: picked.costType,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'on_phase_start_illusion') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'on_phase_start_illusion') as
+              { action: 'on_phase_start_illusion'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'illusion',
+                sourceUnitId: sw.sourceUnitId,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'on_phase_start_blood_rune') {
+            if (value && value.action === 'on_phase_start_blood_rune') {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'blood_rune',
+                  sourceUnitId: sw.sourceUnitId,
+                  choice: value.choice,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'after_move_spirit_bond') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_move_spirit_bond') as
+              { action: 'after_move_spirit_bond'; choice: 'self' | 'transfer'; targetPosition?: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'spirit_bond',
+                sourceUnitId: sw.sourceUnitId,
+                choice: picked.choice,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'after_move_ancestral_bond') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_move_ancestral_bond') as
+              { action: 'after_move_ancestral_bond'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'ancestral_bond',
+                sourceUnitId: sw.sourceUnitId,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'after_move_structure_shift_target') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_move_structure_shift_target') as
+              { action: 'after_move_structure_shift_target'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            const adj = getAdjacentCells(picked.targetPosition).filter((pos) => isCellEmpty(newState.core, pos));
+            if (adj.length === 0) continue;
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(adj, (pos) => ({
+                action: 'after_move_structure_shift_direction',
+                targetPosition: picked.targetPosition,
+                newPosition: pos,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-structure-shift-direction-${event.timestamp ?? 0}-${sw.sourceUnitId}`,
+              payload.playerId,
+              'interaction.sw.structureShiftDirection',
+              options,
+              { sourceId: 'structure_shift', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'after_move_structure_shift_direction',
+                sourceUnitId: sw.sourceUnitId,
+                sourcePosition: sw.sourcePosition,
+                targetPosition: picked.targetPosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (sw.type === 'after_move_structure_shift_direction') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_move_structure_shift_direction') as
+              { action: 'after_move_structure_shift_direction'; targetPosition: CellCoord; newPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'structure_shift',
+                sourceUnitId: sw.sourceUnitId,
+                targetPosition: picked.targetPosition,
+                newPosition: picked.newPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'after_move_frost_axe') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'after_move_frost_axe') as
+              { action: 'after_move_frost_axe'; choice: 'self' | 'attach'; targetPosition?: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'frost_axe',
+                sourceUnitId: sw.sourceUnitId,
+                choice: picked.choice,
+                targetPosition: picked.targetPosition,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'activated_ability_target') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            if (hasSkip) continue;
+
+            if (sw.abilityId === 'revive_undead' && sw.step === 'selectCard') {
+              const picked = values.find((item) => item.action === 'activated_ability_target') as
+                { action: 'activated_ability_target'; targetCardId?: string } | undefined;
+              if (!picked?.targetCardId) continue;
+              const adj = getAdjacentCells(sw.sourcePosition).filter((pos) => isCellEmpty(newState.core, pos));
+              if (adj.length === 0) continue;
+              const options: PromptOption<SwInteractionValue>[] = buildPositionOptions(adj, (pos) => ({
+                action: 'activated_ability_target',
+                abilityId: 'revive_undead',
+                targetPosition: pos,
+                targetCardId: picked.targetCardId,
+              }));
+              const interaction = createSimpleChoice(
+                `sw-revive-undead-position-${event.timestamp ?? 0}-${sw.sourceUnitId}`,
+                payload.playerId,
+                'interaction.sw.reviveUndeadPosition',
+                options,
+                { sourceId: 'revive_undead', targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'activated_ability_target',
+                  abilityId: 'revive_undead',
+                  sourceUnitId: sw.sourceUnitId,
+                  sourcePosition: sw.sourcePosition,
+                  step: 'selectPosition',
+                  targetCardId: picked.targetCardId,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
+
+            if (sw.abilityId === 'revive_undead' && sw.step === 'selectPosition') {
+              const picked = values.find((item) => item.action === 'activated_ability_target') as
+                { action: 'activated_ability_target'; targetPosition?: CellCoord; targetCardId?: string } | undefined;
+              const targetCardId = picked?.targetCardId ?? sw.targetCardId;
+              if (!picked?.targetPosition || !targetCardId) continue;
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'revive_undead',
+                  sourceUnitId: sw.sourceUnitId,
+                  targetCardId,
+                  targetPosition: picked.targetPosition,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+
+            if (sw.abilityId === 'fortress_power' && sw.step === 'selectCard') {
+              const picked = values.find((item) => item.action === 'activated_ability_target') as
+                { action: 'activated_ability_target'; targetCardId?: string } | undefined;
+              if (!picked?.targetCardId) continue;
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'fortress_power',
+                  sourceUnitId: sw.sourceUnitId,
+                  targetCardId: picked.targetCardId,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+
+            if (sw.abilityId === 'vanish' && sw.step === 'selectUnit') {
+              const picked = values.find((item) => item.action === 'activated_ability_target') as
+                { action: 'activated_ability_target'; targetPosition?: CellCoord } | undefined;
+              if (!picked?.targetPosition) continue;
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'vanish',
+                  sourceUnitId: sw.sourceUnitId,
+                  targetPosition: picked.targetPosition,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+
+            if ((sw.abilityId === 'telekinesis_instead' || sw.abilityId === 'high_telekinesis_instead')
+              && sw.step === 'selectUnit') {
+              const picked = values.find((item) => item.action === 'after_attack_telekinesis_target') as
+                { action: 'after_attack_telekinesis_target'; targetPosition: CellCoord } | undefined;
+              if (!picked?.targetPosition) continue;
+              const destinations = getForceDestinations(newState.core, picked.targetPosition, 1);
+              if (destinations.length === 0) continue;
+              const options: PromptOption<SwInteractionValue>[] = [
+                ...destinations.map((dest) => ({
+                  id: `pos:${dest.position.row},${dest.position.col}`,
+                  label: `(${dest.position.row},${dest.position.col})`,
+                  value: {
+                    action: 'after_attack_telekinesis_direction',
+                    targetPosition: picked.targetPosition,
+                    moveRow: dest.moveRow,
+                    moveCol: dest.moveCol,
+                  },
+                })),
+                {
+                  id: 'skip',
+                  label: '跳过',
+                  labelKey: 'actions.skip',
+                  value: { skip: true },
+                },
+              ];
+              const interaction = createSimpleChoice(
+                `sw-telekinesis-instead-dir-${event.timestamp ?? 0}-${sw.sourceUnitId}`,
+                payload.playerId,
+                'interaction.sw.telekinesisDirection',
+                options,
+                { sourceId: sw.abilityId, targetType: 'minion', autoResolveIfSingle: false },
+              );
+              const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+              interaction.data = {
+                ...interactionData,
+                sw: {
+                  type: 'activated_ability_target',
+                  abilityId: sw.abilityId,
+                  sourceUnitId: sw.sourceUnitId,
+                  sourcePosition: sw.sourcePosition,
+                  step: 'selectDirection',
+                  targetPosition: picked.targetPosition,
+                } satisfies SwInteractionMeta,
+              };
+              newState = queueInteraction(newState, interaction);
+            }
+
+            if ((sw.abilityId === 'telekinesis_instead' || sw.abilityId === 'high_telekinesis_instead')
+              && sw.step === 'selectDirection') {
+              const picked = values.find((item) => item.action === 'after_attack_telekinesis_direction') as
+                { action: 'after_attack_telekinesis_direction'; moveRow: number; moveCol: number } | undefined;
+              if (!picked || !sw.targetPosition) continue;
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: sw.abilityId,
+                  sourceUnitId: sw.sourceUnitId,
+                  targetPosition: sw.targetPosition,
+                  moveRow: picked.moveRow,
+                  moveCol: picked.moveCol,
+                  _noSnapshot: true,
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'fire_sacrifice_summon') {
+            const picked = values.find((item) => item.action === 'fire_sacrifice_summon') as
+              { action: 'fire_sacrifice_summon'; sacrificeUnitId: string } | undefined;
+            if (!picked) continue;
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.SUMMON_UNIT,
+              payload: {
+                cardId: sw.cardId,
+                position: sw.summonPosition,
+                sacrificeUnitId: picked.sacrificeUnitId,
+                _noSnapshot: true,
+              },
+            }));
+          }
+
+          if (sw.type === 'ice_ram_target') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'ice_ram_target') as
+              { action: 'ice_ram_target'; targetPosition: CellCoord } | undefined;
+            if (!picked || hasSkip) continue;
+            const adj = getAdjacentCells(picked.targetPosition).filter((pos) => isCellEmpty(newState.core, pos));
+            if (adj.length === 0) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'ice_ram',
+                  sourceUnitId: 'ice_ram',
+                  targetPosition: picked.targetPosition,
+                  structurePosition: sw.structurePosition,
+                  _noSnapshot: true,
+                },
+              }));
+              continue;
+            }
+            const options: PromptOption<SwInteractionValue>[] = [
+              ...buildPositionOptions(adj, (pos) => ({
+                action: 'ice_ram_push',
+                targetPosition: picked.targetPosition,
+                pushNewPosition: pos,
+              })),
+              {
+                id: 'skip',
+                label: '跳过',
+                labelKey: 'actions.skip',
+                value: { skip: true },
+              },
+            ];
+            const interaction = createSimpleChoice(
+              `sw-ice-ram-push-${event.timestamp ?? 0}-${sw.ownerId}`,
+              sw.ownerId,
+              'interaction.sw.iceRamPush',
+              options,
+              { sourceId: 'ice_ram', targetType: 'minion', autoResolveIfSingle: false },
+            );
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'ice_ram_push',
+                structurePosition: sw.structurePosition,
+                targetPosition: picked.targetPosition,
+              } satisfies SwInteractionMeta,
+            };
+            newState = queueInteraction(newState, interaction);
+          }
+
+          if (sw.type === 'ice_ram_push') {
+            const hasSkip = isSkipValue(value) || values.some((item) => isSkipValue(item));
+            const picked = values.find((item) => item.action === 'ice_ram_push') as
+              { action: 'ice_ram_push'; targetPosition: CellCoord; pushNewPosition?: CellCoord } | undefined;
+            if (!picked || hasSkip) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.ACTIVATE_ABILITY,
+                payload: {
+                  abilityId: 'ice_ram',
+                  sourceUnitId: 'ice_ram',
+                  targetPosition: sw.targetPosition,
+                  structurePosition: sw.structurePosition,
+                  _noSnapshot: true,
+                },
+              }));
+              continue;
+            }
+            nextEvents.push(...executeSwCommand(newState, random, {
+              type: SW_COMMANDS.ACTIVATE_ABILITY,
+              payload: {
+                abilityId: 'ice_ram',
+                sourceUnitId: 'ice_ram',
+                targetPosition: picked.targetPosition,
+                structurePosition: sw.structurePosition,
+                pushNewPosition: picked.pushNewPosition,
+                _noSnapshot: true,
+              },
+            }));
           }
         }
       }

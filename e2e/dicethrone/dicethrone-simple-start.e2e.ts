@@ -43,7 +43,12 @@ registerDiceThroneConditions();
 const MONK_FIST_ATTACK_ID = 'fist-technique-5';
 const RESPONSE_WINDOW_CARD_ID = 'card-surprise';
 const TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID = 'response-2p-inst';
+const TWO_PLAYER_AFTER_CARD_RESPONSE_CARD_INSTANCE_ID = 'response-2p-after-card';
+const TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID = 'response-2p-after-card-playable';
+const ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID = 'online-ai-trigger-after-card';
+const AFTER_CARD_PLAYABLE_RESPONSE_CARD_ID = 'card-boss-generous';
 const RESPONSE_WINDOW_CARD = COMMON_CARDS.find((card) => card.id === RESPONSE_WINDOW_CARD_ID);
+const AFTER_CARD_PLAYABLE_RESPONSE_CARD = COMMON_CARDS.find((card) => card.id === AFTER_CARD_PLAYABLE_RESPONSE_CARD_ID);
 const REMOVE_SINGLE_STATUS_CARD_ID = 'card-get-away';
 const REMOVE_SINGLE_STATUS_CARD = COMMON_CARDS.find((card) => card.id === REMOVE_SINGLE_STATUS_CARD_ID);
 const REMOVE_ALL_STATUS_CARD_ID = 'card-what-status';
@@ -1085,7 +1090,14 @@ const buildTwoPlayerAfterCardResponseState = (state: any) => {
     next.sys.flowHalted = false;
     next.core.pendingAttack = null;
     next.core.rollConfirmed = false;
-    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: 'response-after-card' }];
+    for (const player of Object.values<any>(next.core.players ?? {})) {
+        if (!player) continue;
+        player.resources = {
+            ...(player.resources ?? {}),
+            [RESOURCE_IDS.HP]: 50,
+        };
+    }
+    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: TWO_PLAYER_AFTER_CARD_RESPONSE_CARD_INSTANCE_ID }];
     next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
     next.sys.responseWindow = {
         ...next.sys.responseWindow,
@@ -1100,6 +1112,37 @@ const buildTwoPlayerAfterCardResponseState = (state: any) => {
     };
 
     return next;
+};
+
+const buildOnlineAiAfterCardResponseTriggerState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const triggerCard = TRANSFER_STATUS_CARD;
+    const responseCard = AFTER_CARD_PLAYABLE_RESPONSE_CARD;
+    if (!triggerCard) {
+        throw new Error(`未找到稳定转移卡 ${TRANSFER_STATUS_CARD_ID}，无法构造在线 AI afterCardPlayed 真实触发场景`);
+    }
+    if (!responseCard) {
+        throw new Error(`未找到稳定可用响应卡 ${AFTER_CARD_PLAYABLE_RESPONSE_CARD_ID}，无法构造在线 AI afterCardPlayed 真实触发场景`);
+    }
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'main1';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = null;
+    next.core.selectedAbilityId = undefined;
+    next.core.rollConfirmed = false;
+    next.core.players['0'].hand = [{
+        ...structuredClone(triggerCard),
+        id: ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID,
+    }];
+    next.core.players['0'].resources.cp = Math.max(next.core.players['0'].resources.cp ?? 0, triggerCard.cpCost ?? 0);
+    next.core.players['1'].hand = [{
+        ...structuredClone(responseCard),
+        id: TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID,
+    }];
+    next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, responseCard.cpCost ?? 0);
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-after-card-trigger', next);
 };
 
 const buildTwoPlayerResponseLoopState = (
@@ -2108,6 +2151,119 @@ test.describe('DiceThrone Simple Start', () => {
                 message: 'AI 响应收口后不应立刻再次重开 afterRollConfirmed 响应窗口',
             }).toBe(false);
             await saveEvidenceScreenshot(hostPage, testInfo, '04d-online-ai-after-roll-response-stable-no-reopen');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI afterCardPlayed: 对手真实打牌触发响应窗口后，AI 当前 responder 应打出响应牌并收口不卡死', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成 afterCardPlayed 真实触发测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiAfterCardResponseTriggerState);
+            await waitForPhase(hostPage, 'main1', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            const injectedState = await getMatchState(matchId, hostPage);
+            expect(injectedState.sys?.responseWindow?.current).toBeUndefined();
+            expect(
+                injectedState.core?.players?.['0']?.hand?.some(
+                    (card: any) => card.id === ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID,
+                ),
+            ).toBe(true);
+            expect(
+                injectedState.core?.players?.['1']?.hand?.some(
+                    (card: any) => card.id === TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID,
+                ),
+            ).toBe(true);
+
+            await dispatchHarnessCommand(hostPage, 'PLAY_CARD', '0', {
+                cardId: ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID,
+            });
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    windowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                    sourceId: state.sys?.responseWindow?.current?.sourceId ?? null,
+                    responderQueue: state.sys?.responseWindow?.current?.responderQueue ?? [],
+                };
+            }, {
+                timeout: 10000,
+                message: '等待 host 真实打牌后打开 afterCardPlayed 响应窗口',
+            }).toEqual({
+                windowType: 'afterCardPlayed',
+                sourceId: TRANSFER_STATUS_CARD_ID,
+                responderQueue: ['1'],
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '05e-online-ai-after-card-trigger-open');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostHand = state.core?.players?.['0']?.hand ?? [];
+                const hostDiscard = state.core?.players?.['0']?.discard ?? [];
+                const aiHand = state.core?.players?.['1']?.hand ?? [];
+                const aiDiscard = state.core?.players?.['1']?.discard ?? [];
+                return {
+                    windowOpen: Boolean(state.sys?.responseWindow?.current),
+                    hostHasTriggerInHand: hostHand.some((card: any) => card.id === ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID),
+                    hostHasTriggerInDiscard: hostDiscard.some((card: any) => card.id === ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID),
+                    aiHasCardInHand: aiHand.some((card: any) => card.id === TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID),
+                    aiHasCardInDiscard: aiDiscard.some((card: any) => card.id === TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID),
+                };
+            }, {
+                timeout: 15000,
+                message: '等待 AI 在对手真实打牌触发的 afterCardPlayed 窗口中完成响应并收口',
+            }).toEqual({
+                windowOpen: false,
+                hostHasTriggerInHand: false,
+                hostHasTriggerInDiscard: true,
+                aiHasCardInHand: false,
+                aiHasCardInDiscard: true,
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '05f-online-ai-after-card-trigger-resolved');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return Boolean(state.sys?.responseWindow?.current);
+            }, {
+                timeout: 3000,
+                message: 'AI 在对手真实打牌触发的 afterCardPlayed 窗口收口后不应立刻重开',
+            }).toBe(false);
+            await saveEvidenceScreenshot(hostPage, testInfo, '05g-online-ai-after-card-trigger-stable-no-reopen');
         } finally {
             await setup.hostContext.close();
         }

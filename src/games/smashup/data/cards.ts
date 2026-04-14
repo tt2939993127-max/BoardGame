@@ -1059,13 +1059,13 @@ const POD_BASE_OVERRIDES_EXTENDED: BaseCardDef[] = [
 
     // Miskatonic University POD
     buildPodBaseOverrideFromRegistry('base_miskatonic_university_base_pod', {
-        nameEn: 'Arkham University',
+        nameEn: 'Miskatonic University',
         breakpoint: 24,
         vpAwards: [4, 3, 2],
         faction: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD,
     }),
     buildPodBaseOverrideFromRegistry('base_the_asylum_pod', {
-        nameEn: 'Asylum',
+        nameEn: 'The Asylum',
         breakpoint: 16,
         vpAwards: [3, 1, 1],
         faction: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD,

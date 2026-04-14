@@ -593,7 +593,9 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                 nextEvents.push(...bodyShopReconcile.events as GameEvent[]);
             }
 
-            if (!newState.sys.interaction?.current) {
+            const hasPendingDomainEvents = nextEvents.length > 0;
+
+            if (!hasPendingDomainEvents && !newState.sys.interaction?.current) {
                 const reactionQueueResult = maybeResolveReactionQueue(newState as MatchState<SmashUpCore>, random, latestTimestamp);
                 if (reactionQueueResult) {
                     newState = reactionQueueResult.state;

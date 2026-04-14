@@ -98,9 +98,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `.windsurf/skills/create-new-game/SKILL.md` — 创建/添加新游戏时必读，且必须先开 `feat/game-<gameId>` 分支。
 - `docs/deploy.md` — 部署、构建产物、环境变量注入、线上/本地差异、CDN/R2 资源问题时必读。
   - **生产部署操作规范（强制）**：生产环境更新必须使用 `bash scripts/deploy/deploy-image.sh update`（基于 `docker-compose.prod.yml`）。**禁止在生产服务器上直接运行 `docker compose up -d`**（会使用默认的 `docker-compose.yml`，端口映射和环境变量与生产不同）。排查生产问题时，必须先读 `docs/deploy.md` 了解部署架构，禁止凭猜测给出服务器操作命令。
+  - **Git 工作区变更控制（强制）**：未经用户当轮明确许可，不得执行会改变工作区状态或文件内容的操作（例如 `git stash`、`git clean`、`git restore`）。如确需隔离/清理未提交改动，必须先说明目的与影响，再等用户确认。
   - **Android OTA 包体规范（强制）**：Android OTA 只允许承载 H5 bundle 与轻量静态文件，**禁止**把 `public/assets/i18n/**`、大图集、大卡图或其他应走 R2 / 游戏包链路的资源打进 OTA zip。发布 Android OTA 时必须使用 `scripts/mobile/publish-android-ota.mjs` 这条受门禁保护的链路；若产物异常超过轻量包体阈值（当前脚本门禁 `20MB`）必须直接失败，禁止继续发布。
   - **Android OTA 版本门禁规范（强制）**：当前项目规则是“所有已安装版本默认都必须更新 OTA”。禁止再通过 `targetNativeVersion`、`minNativeVersion`、`maxNativeVersion`、`allow-legacy-shells` 等方式把 OTA 只发给某个原生版本或版本区间；发布脚本与 GitHub Actions 都必须保持这一禁令，若误传相关参数必须直接失败，不能静默带着错误门禁发出去。
   - **Android OTA 版本命名规范（强制）**：正式 OTA 的用户可见 bundle 版本必须继续沿用项目既有口径 `package.json.version-ota-UTC时间戳`。未经老板明确要求，不得因为切换发布入口（本地脚本 / GitHub Actions / 手工补发）而擅自改成 `gha-*`、run number、临时别名或其他展示格式。
+  - **Android 发布前 TypeScript 门禁（强制）**：发布 Android OTA / Native / Full 前必须通过一次 TypeScript `typecheck`（避免仅在移动端分支触发的漏 import / 漏导出在构建期被放过）。推荐统一使用 `node scripts/mobile/release-android.mjs <ota|native|full>`（该入口已内置 typecheck）；如因特殊原因绕过该入口，必须在发布前显式执行 `npm run typecheck` 并确保通过。
 
 ---
 
@@ -262,6 +264,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **并发改动默认存在**：默认假设工作区里始终有其他 AI 或用户并发改动，禁止把“工作区干净”当作前提；看到陌生改动时，不得擅自回滚、清空、隐藏或覆盖。
 - **Git 回退和 stash 默认禁止**：未经用户明确许可，禁止执行 `git stash*`、历史回滚、`git restore`、`git checkout --` 等会影响现有工作区状态的命令；修 bug 必须通过编辑工具直接改代码。
 - **merge / push 要走项目门禁**：`git merge` 前必须读 `docs/git-merge-checklist.md`；`--no-verify` 默认禁止，仅在文档/配置/样式且无逻辑变更，或用户明确要求无校验推进时才可例外。
+- **高风险 UI/规则文件合并不得只看静态门禁（强制）**：`Board.tsx`、游戏 `ui/`、共享交互组件、规则文档、agent 规则文件、关键测试断言文件，一旦在 merge 中发生冲突或大幅 diff，必须做语义对比与关键交互验证；禁止仅凭 `merge:audit` / lint / typecheck / 页面可打开收口。
 - **每次 push 前必须同步主分支**：每次 `git push` 前必须先 `git fetch origin`，再把 `origin/main` 合并进当前分支；禁止为此擅自切换到 `main`，若需要 `rebase/squash` 仍需用户明确确认。
 - **Push 阻塞先分辨来源**：如果 `pre-push` 或强制校验失败来自工作区未提交改动而不是待推送提交本身，不得直接卡死整次 push；应先定位来源，再决定是否隔离。
 - **命令超时统一按 30 分钟上限**：shell/脚本/测试/推送命令默认最长 30 分钟，用户明确要求 `push` 时不要先用短超时试错。
@@ -277,6 +280,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **调用链逐层检查三件事**：存在性、契约、返回值。不得只查“我改的那一层”，也不得看到一个定义就假设唯一。
 - **代码审查优先于日志**：先审查调用链、early return、数据流和消费链；代码审查仍找不到问题，才在关键决策点补日志。
 - **回归问题先找最后正常证据**：优先用 `git log`、`git show`、历史截图、evidence、测试产物定位最后正常版本；找到后默认优先恢复历史正确行为，而不是另造新方案。
+- **合并后回归默认先查 merge commit 与冲突裁决记录**：优先判断是否发生了目标外回退、旧实现回补、单边覆盖或共享 UI 误合并，不要直接把表象当成独立新 bug 修。
 - **方案前先列事实 / 未知 / 假设**：证据不足时不得直接改代码试错，也不得靠放开限制、扩大白名单、关闭校验来“绕过去”。
 - **必要时沿完整数据流排查**：按写入-消费时间线、`API → Context → UI` 或其他真实消费链路一路查到底。
 - **修完单点必须横向扩审**：基于根因关键词、状态字段、事件类型、调用模式，用 `rg` 扫同模块 / 同游戏 / 同类共享实现，确认是否有同类问题。

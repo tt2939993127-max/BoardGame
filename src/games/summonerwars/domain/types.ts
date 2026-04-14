@@ -260,6 +260,7 @@ export interface SummonUnitCommand {
   type: typeof SW_COMMANDS.SUMMON_UNIT;
   cardId: string;
   position: CellCoord;
+  sacrificeUnitId?: string;
 }
 
 /** 选择单位命令 */
@@ -287,6 +288,10 @@ export interface DeclareAttackCommand {
   type: typeof SW_COMMANDS.DECLARE_ATTACK;
   attacker: CellCoord;
   target: CellCoord;
+  beforeAttack?:
+    | { abilityId: string; targetUnitId?: string; targetCardId?: string; discardCardIds?: string[] }
+    | Array<{ abilityId: string; targetUnitId?: string; targetCardId?: string; discardCardIds?: string[] }>;
+  skipBeforeAttack?: boolean;
 }
 
 /**

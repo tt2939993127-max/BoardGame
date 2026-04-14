@@ -1,14 +1,14 @@
 import type { MatchState } from '../types';
 import type { GameEngineConfig } from '../transport/server';
 import { applyPlayerViewToState } from './playerView';
-import { buildAiDecisionContext, resolveAiActionDecision } from './context';
+import { buildAiDecisionContext, createAiLegalActionId, resolveAiActionDecision } from './context';
 import {
     getGameAiRuntime,
     getRemoteAiProvider,
     resolveLocalAiPolicy,
     resolveLocalAiPolicyByPreference,
 } from './registry';
-import type { AiLegalAction, AiSeatController } from './types';
+import type { AiLegalAction, AiResponseWindowSnapshot, AiSeatController } from './types';
 
 const DEFAULT_REMOTE_AI_TIMEOUT_MS = 3000;
 
@@ -149,6 +149,44 @@ async function resolveRemoteFallbackAction(args: {
     return args.context.legalActions[0] ?? null;
 }
 
+function buildResponsePassFallbackAction(args: {
+    playerId: string;
+    responseWindow: AiResponseWindowSnapshot;
+}): AiLegalAction {
+    return {
+        actionId: createAiLegalActionId(
+            'response-pass',
+            args.responseWindow.windowType ?? 'unknown',
+            'fallback',
+            args.playerId,
+        ),
+        kind: 'response-pass',
+        label: '跳过响应',
+        commands: [{ type: 'RESPONSE_PASS', payload: {} }],
+        metadata: {
+            windowType: args.responseWindow.windowType,
+            fallback: true,
+        },
+    };
+}
+
+function resolveResponsePassFallback(context: ReturnType<typeof buildAiDecisionContext>): AiLegalAction | null {
+    if (context.interaction) return null;
+    const responseWindow = context.responseWindow;
+    if (!responseWindow || !Array.isArray(responseWindow.responderQueue)) return null;
+    const responderIndex = typeof responseWindow.currentResponderIndex === 'number'
+        ? responseWindow.currentResponderIndex
+        : 0;
+    const responderId = responseWindow.responderQueue[responderIndex];
+    if (responderId !== context.playerId) {
+        return null;
+    }
+    return buildResponsePassFallbackAction({
+        playerId: context.playerId,
+        responseWindow,
+    });
+}
+
 async function resolveRemoteAction(args: {
     runtimeGameId: string;
     seatController: Extract<AiSeatController, { type: 'remote-ai' }>;
@@ -234,7 +272,26 @@ export async function resolveNextAiAction(
         });
 
         console.log(`[resolveNextAiAction] Player ${playerId} legal actions:`, context.legalActions.length);
-        if (context.legalActions.length === 0) continue;
+        if (context.legalActions.length === 0) {
+            const fallbackAction = resolveResponsePassFallback(context);
+            if (fallbackAction) {
+                const attemptKey = buildAttemptKey({
+                    state: args.state,
+                    playerId,
+                    controller: seatController,
+                    legalActions: [fallbackAction],
+                    interactionId: context.interaction?.id ?? null,
+                    responderIndex: context.responseWindow?.currentResponderIndex ?? null,
+                });
+                return {
+                    playerId,
+                    action: fallbackAction,
+                    attemptKey,
+                    source: seatController.type === 'remote-ai' ? 'remote-ai-fallback' : 'local-ai',
+                };
+            }
+            continue;
+        }
 
         const attemptKey = buildAttemptKey({
             state: args.state,

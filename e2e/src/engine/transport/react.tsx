@@ -820,6 +820,20 @@ export function LocalGameProvider({
         [config.gameId, localPlayerId, seatControllers, state],
     );
 
+    useEffect(() => {
+        return onAppVisible(() => {
+            const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+            if (!hasAiSeat) {
+                return;
+            }
+            if (localPregameControlledPlayerId) {
+                return;
+            }
+            lastAiAttemptKeyRef.current = null;
+            setAiRetryVersion((version) => version + 1);
+        });
+    }, [localPregameControlledPlayerId, seatControllers]);
+
     const dispatch = useCallback((type: string, payload: unknown) => {
         setState((prev) => {
             const payloadRecord = payload && typeof payload === 'object'

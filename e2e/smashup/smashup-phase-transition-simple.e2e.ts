@@ -862,6 +862,141 @@ function buildOnlineAiPassTurnState(baseState: any) {
     return nextState;
 }
 
+function buildOnlineAiResponseWindowPlayableState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+    const existingBases = Array.isArray(nextState.core?.bases) ? nextState.core.bases : [];
+    const turnOrder = Array.isArray(nextState.core?.turnOrder) && nextState.core.turnOrder.length > 0
+        ? [...nextState.core.turnOrder]
+        : ['0', '1'];
+    const primaryBase = existingBases[0] ?? { defId: 'base_the_mothership', minions: [], ongoingActions: [] };
+    const secondaryBase = existingBases[1] ?? { defId: 'base_tortuga', minions: [], ongoingActions: [] };
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 0,
+        phase: 'playCards',
+        turnNumber: 4,
+        turnOrder,
+        factionSelection: undefined,
+        players: {
+            ...existingPlayers,
+            '0': {
+                ...(existingPlayers['0'] ?? {}),
+                hand: [
+                    { uid: 'host-hold-1', defId: 'pirates_first_mate', type: 'minion', owner: '0' },
+                ],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 4,
+            },
+            '1': {
+                ...(existingPlayers['1'] ?? {}),
+                hand: [
+                    { uid: 'ai-under-pressure-card', defId: 'giant_ant_under_pressure', type: 'action', owner: '1' },
+                ],
+                deck: [],
+                discard: [],
+                factions: ['giant_ants', 'pirates'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 3,
+            },
+        },
+        bases: [
+            {
+                ...primaryBase,
+                defId: primaryBase.defId ?? 'base_the_mothership',
+                minions: [
+                    {
+                        uid: 'ai-under-pressure-source',
+                        defId: 'giant_ant_soldier',
+                        controller: '1',
+                        owner: '1',
+                        basePower: 3,
+                        powerCounters: 1,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                    ...Array.from({ length: 4 }, (_, index) => ({
+                        uid: `host-pressure-enemy-${index}`,
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '0',
+                        basePower: 5,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    })),
+                ],
+                ongoingActions: Array.isArray(primaryBase.ongoingActions) ? primaryBase.ongoingActions : [],
+            },
+            {
+                ...secondaryBase,
+                defId: secondaryBase.defId ?? 'base_tortuga',
+                minions: [
+                    {
+                        uid: 'ai-under-pressure-target',
+                        defId: 'pirates_first_mate',
+                        controller: '1',
+                        owner: '1',
+                        basePower: 2,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: Array.isArray(secondaryBase.ongoingActions) ? secondaryBase.ongoingActions : [],
+            },
+        ],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder,
+        currentPlayerIndex: 0,
+        phase: 'playCards',
+        turnNumber: 4,
+        flowHalted: false,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return nextState;
+}
+
 async function installUiRefreshMonitor(page: Page): Promise<void> {
     await page.evaluate(() => {
         const selectors = {
@@ -1750,6 +1885,113 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
         await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-after-resolve');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
+test('在线 AI 持有真实响应牌时，应在 meFirst 响应窗口内自动响应而不卡死', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiResponseWindowPlayableState);
+        await waitForSmashUpUI(hostPage);
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        const injectedAiHand = injectedState.core?.players?.['1']?.hand as Array<{ defId?: string }> | undefined;
+        const injectedPrimaryBaseMinions = injectedState.core?.bases?.[0]?.minions as Array<{ uid?: string; powerCounters?: number }> | undefined;
+        const injectedSecondaryBaseMinions = injectedState.core?.bases?.[1]?.minions as Array<{ uid?: string; powerCounters?: number }> | undefined;
+        expect(injectedState.core?.currentPlayerIndex).toBe(0);
+        expect(injectedState.sys?.phase).toBe('playCards');
+        expect(injectedState.sys?.responseWindow?.current ?? null).toBeNull();
+        expect(injectedAiHand?.map((card) => card.defId)).toEqual(['giant_ant_under_pressure']);
+        expect(injectedPrimaryBaseMinions?.find((minion) => minion.uid === 'ai-under-pressure-source')?.powerCounters).toBe(1);
+        expect(injectedSecondaryBaseMinions?.find((minion) => minion.uid === 'ai-under-pressure-target')?.powerCounters).toBe(0);
+
+        await dispatchHarnessCommand(hostPage, '0', 'ADVANCE_PHASE', {});
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const responseWindow = state.sys?.responseWindow?.current ?? null;
+            return {
+                windowType: responseWindow?.windowType ?? null,
+                currentResponder: responseWindow?.responderQueue?.[responseWindow.currentResponderIndex] ?? null,
+            };
+        }, {
+            timeout: 10000,
+            message: '等待真实推进到计分阶段后打开 meFirst 响应窗口',
+        }).toEqual({
+            windowType: 'meFirst',
+            currentResponder: '0',
+        });
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-response-window-playable-host-first');
+
+        await dispatchHarnessCommand(hostPage, '0', 'RESPONSE_PASS', {});
+
+        await expect.poll(async () => {
+            const responseWindow = (await getMatchState(matchId, hostPage)).sys?.responseWindow?.current ?? null;
+            return responseWindow?.responderQueue?.[responseWindow.currentResponderIndex] ?? null;
+        }, {
+            timeout: 8000,
+            message: '等待房主 pass 后 AI 成为当前 responder',
+        }).toBe('1');
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-response-window-playable-before-resolve');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const responseWindow = state.sys?.responseWindow?.current ?? null;
+            const currentResponder = responseWindow?.responderQueue?.[responseWindow.currentResponderIndex] ?? null;
+            const aiHand = state.core?.players?.['1']?.hand as Array<{ defId?: string }> | undefined;
+            const aiDiscard = state.core?.players?.['1']?.discard as Array<{ defId?: string }> | undefined;
+            const primaryBaseMinions = state.core?.bases?.[0]?.minions as Array<{ uid?: string; powerCounters?: number }> | undefined;
+            const secondaryBaseMinions = state.core?.bases?.[1]?.minions as Array<{ uid?: string; powerCounters?: number }> | undefined;
+            const aiHandDefIds = aiHand?.map((card) => card.defId).filter(Boolean) ?? [];
+            const aiDiscardDefIds = aiDiscard?.map((card) => card.defId).filter(Boolean) ?? [];
+            const sourceCounters = primaryBaseMinions?.find((minion) => minion.uid === 'ai-under-pressure-source')?.powerCounters ?? null;
+            const targetCounters = secondaryBaseMinions?.find((minion) => minion.uid === 'ai-under-pressure-target')?.powerCounters ?? null;
+            return {
+                currentPlayerIndex: state.core?.currentPlayerIndex ?? null,
+                responseWindowId: responseWindow?.id ?? null,
+                currentResponder,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                aiHandDefIds,
+                aiDiscardDefIds,
+                sourceCounters,
+                targetCounters,
+            };
+        }, {
+            timeout: 12000,
+            message: '等待在线 AI 在响应窗口打出承受压力并完成后续选择',
+        }).toEqual({
+            currentPlayerIndex: 0,
+            responseWindowId: null,
+            currentResponder: null,
+            interactionSourceId: null,
+            interactionPlayerId: null,
+            aiHandDefIds: [],
+            aiDiscardDefIds: ['giant_ant_under_pressure'],
+            sourceCounters: 0,
+            targetCounters: 1,
+        });
+
+        await expect(hostPage.getByTestId('me-first-overlay')).toHaveCount(0);
+        await expect(hostPage.getByText('AI 响应超时')).toHaveCount(0);
+        await expect(hostPage.getByText('AI 自动跳过。')).toHaveCount(0);
+        await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-response-window-playable-after-resolve');
     } finally {
         await setup.hostContext.close();
     }

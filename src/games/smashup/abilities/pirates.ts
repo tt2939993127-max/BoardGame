@@ -968,8 +968,18 @@ export function registerPirateInteractionHandlers(): void {
         const hasNextInteraction =
             !!state.sys.interaction?.current
             || (state.sys.interaction?.queue?.length ?? 0) > 0;
+        const reactionSys = state.sys as any;
+        const hasPendingReactionWork =
+            (state.core.triggerQueue?.length ?? 0) > 0
+            || Boolean(reactionSys?.smashupReactionSession)
+            || (reactionSys?.smashupReactionStack?.length ?? 0) > 0;
         const legacyPendingActions = state.core.pendingPostScoringActions ?? [];
-        const shouldFlushDeferred = !!(deferredEvents && deferredEvents.length > 0 && !hasNextInteraction);
+        const shouldFlushDeferred = !!(
+            deferredEvents
+            && deferredEvents.length > 0
+            && !hasNextInteraction
+            && !hasPendingReactionWork
+        );
         
         if (selected.skip) {
             // 跳过时，如果这是最后一个交互，补发延迟事件

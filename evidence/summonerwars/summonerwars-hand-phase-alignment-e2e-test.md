@@ -7,7 +7,7 @@
 ## 执行命令
 
 ```bash
-npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机可达"
+BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/summonerwars/summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机可达"
 BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/summonerwars/summonerwars.e2e.ts "移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌"
 ```
 
@@ -25,8 +25,8 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
 
 ### 1）基础流程起始主态
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-start.png`
-- 我实际看到：底部手牌整体停在棋盘下沿中央，最右侧卡牌已经停在右侧 HUD rail 左边，没有再压进“结束阶段/弃牌堆”区域；右侧阶段列表与结束阶段按钮分成上下两块，彼此没有重叠；棋盘仍在画面中心，不是缩在左上角。
-- 判定：达到本轮“手牌不再压 controls、阶段区与按钮分离、主画面保持同一视觉中心”的验收标准。
+- 我实际看到：底部手牌已经回到棋盘下沿中央，不再像上一版那样整体偏左；最右侧卡牌停在右侧 HUD rail 左边，没有再压进“结束阶段/弃牌堆”区域；右侧阶段列表与结束阶段按钮分成上下两块，彼此没有重叠；棋盘仍在画面中心，不是缩在左上角。
+- 判定：达到本轮“恢复移动端居中基线 + 手牌不再压 controls + 阶段区与按钮分离”的验收标准。
 
 ### 2）攻击后主态
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-after-attack.png`
@@ -40,8 +40,8 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
 
 ### 4）手机横屏主态（长按/阶段说明用例）
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\10-phone-landscape-board.png`
-- 我实际看到：阶段列表完整落在右上黑边区，结束阶段按钮在其下方；底部手牌已经收窄，不再顶到右侧 controls。
-- 判定：主态有效，可作为本轮手机横屏证据。
+- 我实际看到：阶段列表完整落在右上黑边区，结束阶段按钮在其下方；底部手牌重新对齐到整屏中心锚，视觉上与棋盘中线一致，不再像上一版那样往左偏一截，也没有再顶到右侧 controls。
+- 判定：主态有效，可作为本轮“移动端中心已拉回”的直接证据。
 
 ### 5）长按手牌放大
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\11-phone-hand-magnify-open.png`
@@ -56,6 +56,7 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
 ## 本轮结论
 
 - 已修住的点：
+  - 移动端手牌中心已拉回到旧版的整屏中心锚，不再出现“整体往左偏一点”。
   - 手牌右边界不再压进右侧 controls。
   - 阶段列表与结束阶段按钮重新分层，不再彼此打架。
   - 阶段说明面板可见，且位置回到右侧 HUD 内。

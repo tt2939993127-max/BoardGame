@@ -14,6 +14,7 @@ import type {
   CellCoord,
 } from './types';
 import { SW_COMMANDS, SW_EVENTS, SW_SELECTION_EVENTS } from './types';
+import { abilityRegistry } from './abilities';
 import {
   BOARD_ROWS,
   BOARD_COLS,
@@ -37,6 +38,7 @@ import {
   findUnitPositionByInstanceId,
   HAND_SIZE,
 } from './helpers';
+import { buildUsageKey } from './utils';
 import { rollDice, countHits } from '../config/dice';
 import { createDeckByFactionId } from '../config/factions';
 import { buildGameDeckFromCustom } from '../config/deckBuilder';
@@ -179,6 +181,7 @@ export function executeCommand(
       const from = payload.from as CellCoord;
       const to = payload.to as CellCoord;
       const unit = getUnitAt(core, from);
+      const unitAbilities = unit ? getUnitAbilities(unit, core) : [];
       if (unit) {
         // 缠斗检查：离开时相邻敌方有缠斗技能的单位造成1点伤害
         const entangleUnits = getEntangleUnits(core, from, unit.owner);
@@ -213,7 +216,6 @@ export function executeCommand(
         });
 
         // 冲锋加成：直线移动3+格时获得+1战力（通过 boosts 标记）
-        const unitAbilities = getUnitAbilities(unit, core);
         if (unitAbilities.includes('charge')) {
           const moveDist = manhattanDistance(from, to);
           if (moveDist >= 3 && (from.row === to.row || from.col === to.col)) {
@@ -696,6 +698,24 @@ export function executeCommand(
         // afterAttack 技能需要玩家选择目标（推拉方向、额外攻击目标等）
         // 生成请求事件，由 UI 处理
         events.push(...afterAttackEvents);
+        const afterAttackChoiceAbilities = ['telekinesis', 'high_telekinesis', 'mind_transmission'];
+        for (const abilityId of afterAttackChoiceAbilities) {
+          if (!attackerAbilities.includes(abilityId)) continue;
+          const def = abilityRegistry.get(abilityId);
+          if (!def) continue;
+          // afterAttack 技能触发发生在 attack 阶段；如果 def 显式要求其它阶段，则跳过。
+          if (def.trigger !== 'onPhaseEnd' && def.validation?.requiredPhase && def.validation.requiredPhase !== core.phase) {
+            continue;
+          }
+          if (def.usesPerTurn !== undefined) {
+            const usageKey = buildUsageKey(attackerUnit.instanceId, abilityId);
+            const usageCount = (core.abilityUsageCount ?? {})[usageKey] ?? 0;
+            if (usageCount >= def.usesPerTurn) continue;
+          }
+          events.push(createAbilityTriggeredEvent(abilityId, attackerUnit.instanceId, attacker, timestamp, {
+            skipUsageCount: true,
+          }));
+        }
         // 连续射击（rapid_fire）：ABILITY_TRIGGERED 事件由 UI 检测，
         // 玩家确认后通过 ACTIVATE_ABILITY 命令执行消耗充能+授予额外攻击
       }

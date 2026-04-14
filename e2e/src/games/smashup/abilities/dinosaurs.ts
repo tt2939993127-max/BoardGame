@@ -29,6 +29,7 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState } from '../../../engine/types';
 import { matchesDefId } from '../domain/utils';
+import { queueFortTitanosaurusOngoingChoice } from './titans';
 
 /** 注册恐龙派系所有能力 */
 export function registerDinosaurAbilities(): void {
@@ -189,14 +190,22 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
 /** 嚎叫 onPlay：你的全部随从+1力量（直到回合结束） */
 function dinoHowl(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
+    const affectedMinionUids: string[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
             if (m.controller === ctx.playerId) {
+                affectedMinionUids.push(m.uid);
                 events.push(addTempPower(m.uid, i, 1, 'dino_howl', ctx.now));
             }
         }
     }
-    return { events };
+    const nextMatchState = queueFortTitanosaurusOngoingChoice(
+        ctx.matchState,
+        ctx.playerId,
+        affectedMinionUids,
+        ctx.now,
+    );
+    return nextMatchState ? { events, matchState: nextMatchState } : { events };
 }
 
 /** 物竞天择 onPlay：选择你的一个随从，消灭该基地一个力量低于它的随从 */
@@ -402,7 +411,11 @@ export function registerDinosaurInteractionHandlers(): void {
     // 增强：选择目标后加临时力量（回合结束清零）
     registerInteractionHandler('dino_augmentation', (state, _playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
-        return { state, events: [addTempPower(minionUid, baseIndex, 4, 'dino_augmentation', timestamp)] };
+        const nextState = queueFortTitanosaurusOngoingChoice(state, _playerId, [minionUid], timestamp);
+        return {
+            state: nextState ?? state,
+            events: [addTempPower(minionUid, baseIndex, 4, 'dino_augmentation', timestamp)],
+        };
     });
 
     // 物竞天择第一步：选择己方随从后，链式选择目标

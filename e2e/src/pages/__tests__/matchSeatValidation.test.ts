@@ -738,6 +738,58 @@ describe('resolveNextAiAction 在线视角', () => {
         expect(first?.attemptKey).not.toBe(reopened?.attemptKey);
     });
 
+    it('响应窗口当前 responder 为 AI 但 legal actions 为空时，应回退 RESPONSE_PASS 防止卡死', async () => {
+        const gameId = '__test_online_ai_response_window_empty_actions__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: () => [],
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: () => null,
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const state = {
+            core: {},
+            sys: {
+                turnNumber: 9,
+                phase: 'afterRollConfirmed',
+                eventStream: { nextId: 101 },
+                interaction: { current: null, queue: [] },
+                responseWindow: {
+                    current: {
+                        id: 'rw-empty-1',
+                        sourceId: 'roll-signature-empty',
+                        windowType: 'afterRollConfirmed',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state,
+            matchId: 'match-online-ai-response-window-empty',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('response-pass');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'RESPONSE_PASS', payload: {} },
+        ]);
+    });
+
     it('其他 seat 仅看到 isBlocked=true 时，不应继续生成普通动作抢跑', async () => {
         const gameId = '__test_online_ai_hidden_interaction_blocked_guard__';
         registerGameAiRuntime({
@@ -1086,7 +1138,54 @@ describe('applyAiAutoRecoveryRejection', () => {
 });
 
 describe('resolveForceSkippableHiddenAiInteraction', () => {
-    it('隐藏的 AI simple-choice 带 skip 选项时，应返回强制跳过 resolution', () => {
+    it('隐藏的 AI simple-choice 只剩控制选项时，应返回强制跳过 resolution', () => {
+        const candidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'hoverbot-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    sourceId: 'robot_hoverbot',
+                                    title: '盘旋机器人',
+                                    options: [
+                                        { id: 'skip', label: '跳过', value: { skip: true } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(candidate?.playerId).toBe('1');
+        expect(candidate?.interactionId).toBe('hoverbot-hidden');
+        expect(candidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'skip' },
+        });
+    });
+
+    it('隐藏交互包含可执行选项时，不应返回强制跳过 resolution', () => {
         const candidate = resolveForceSkippableHiddenAiInteraction({
             sharedState: {
                 core: {},
@@ -1126,14 +1225,8 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
             },
         });
 
-        expect(candidate?.playerId).toBe('1');
-        expect(candidate?.interactionId).toBe('hoverbot-hidden');
-        expect(candidate?.resolution.action.commands[0]).toEqual({
-            type: 'SYS_INTERACTION_RESPOND',
-            payload: { optionId: 'skip' },
-        });
+        expect(candidate).toBeNull();
     });
-
     it('隐藏交互只剩 __emergency_skip__ 或 done 时，也应返回自动收口 resolution', () => {
         const emergencyCandidate = resolveForceSkippableHiddenAiInteraction({
             sharedState: {
@@ -1220,7 +1313,7 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
         });
     });
 
-    it('可空选的隐藏 AI multi 交互时，应返回空选择的强制跳过 resolution', () => {
+    it('可空选但仍有可执行选项的隐藏 AI multi 交互时，不应返回强制跳过 resolution', () => {
         const candidate = resolveForceSkippableHiddenAiInteraction({
             sharedState: {
                 core: {},
@@ -1258,10 +1351,7 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
             },
         });
 
-        expect(candidate?.resolution.action.commands[0]).toEqual({
-            type: 'SYS_INTERACTION_RESPOND',
-            payload: { optionIds: [] },
-        });
+        expect(candidate).toBeNull();
     });
 
     it('非阻塞态或不可跳过的交互时，不应返回强制跳过 resolution', () => {
