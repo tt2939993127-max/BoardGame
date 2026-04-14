@@ -22,9 +22,9 @@
 - 策略：保留 `ResolvedGameMobileSupport.mobileBattlefieldZoom` 为必填，同时维持 manifest entry 输入侧可选。
 - 原因：`resolveGameMobileSupport()` 已统一补默认值 `'none'`，resolved 契约必须稳定输出该字段。
 
-### src/assets/audio/registry-slim.json
-- 策略：以当前分支生成结果为准，并重新运行 `node scripts/audio/generate-slim-registry.mjs --force` 校验生成物。
-- 原因：冲突来自生成产物差异，正确做法是回到生成链路验证，而不是手工拼接冲突标记。
+### src/assets/audio/registry-slim.json / e2e/src/assets/audio/registry-slim.json
+- 策略：以当前分支重新生成的 `src` slim registry 为单次真源，并同步覆盖 `e2e/src` 镜像文件。
+- 原因：冲突来自生成产物差异，正确做法是回到生成链路验证；同时 `src` 与 `e2e/src` 都有运行时导入点，必须保持镜像一致。
 
 ### src/games/smashup/abilities/tricksters.ts
 - 策略：保留单次 `emitSpecialLimitUsed` + `limitEvents` 聚合返回。
@@ -40,11 +40,12 @@
   - `node scripts/infra/vitest-cli-safe.mjs run src/games/__tests__/mobileSupport.test.ts src/games/smashup/__tests__/factionAbilities.test.ts --configLoader native`
   - `npx eslint e2e/src/games/mobileSupport.ts src/games/mobileSupport.ts src/games/smashup/__tests__/factionAbilities.test.ts src/games/smashup/abilities/tricksters.ts`（仅 warning）
   - `node scripts/audio/generate-slim-registry.mjs --force`
+  - `Copy-Item src\assets\audio\registry-slim.json e2e\src\assets\audio\registry-slim.json -Force`
   - `npm run quality:changed:pre-commit`
 - 验证结果：
   - mobileSupport / factionAbilities 目标测试通过（55 tests passed）
   - ESLint：0 errors，仅既有 warning
-  - slim registry 重新生成成功（303 条）
+  - slim registry 重新生成成功，并已同步 `e2e/src` 镜像（两侧均 303 条）
   - `quality:changed:pre-commit` 全量通过
 
 ## 5. 回归与行为变化登记
