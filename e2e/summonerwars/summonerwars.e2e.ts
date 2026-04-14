@@ -2214,6 +2214,41 @@ test.describe('SummonerWars', () => {
         message: 'AI seat 凭据不应在本用例中被自动领取',
       }).toBeNull();
 
+      const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+      await expect(actionLogPanel).toBeVisible({ timeout: 5000 });
+      const fabOrderMetrics = await waitForExpandedFabLayoutStable(hostPage);
+      const orderedButtons = fabOrderMetrics.visibleButtons
+        .filter((button) => button.id !== 'exit')
+        .map((button) => ({
+          ...button,
+          distanceToMain: Math.abs(
+            ((button.rect.top + button.rect.bottom) / 2)
+            - (((fabOrderMetrics.mainVisualRect?.top ?? 0) + (fabOrderMetrics.mainVisualRect?.bottom ?? 0)) / 2),
+          ),
+        }))
+        .sort((a, b) => a.distanceToMain - b.distanceToMain)
+        .map((button) => button.id);
+      expect(orderedButtons).toContain('force-end-ai-phase');
+      const undoButtonId = orderedButtons.find((id) => id.startsWith('undo-'));
+      const forceEndButtonIndex = orderedButtons.indexOf('force-end-ai-phase');
+      const undoButtonIndex = undoButtonId ? orderedButtons.indexOf(undoButtonId) : -1;
+      expect(undoButtonIndex, '展开后的 FAB 必须能看到撤回按钮').toBeGreaterThanOrEqual(0);
+      expect(
+        forceEndButtonIndex,
+        '展开后的 FAB 必须能看到“强制结束 AI 阶段”按钮',
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        forceEndButtonIndex,
+        '“强制结束 AI 阶段”应位于撤回按钮上方（离主球更远）',
+      ).toBeGreaterThan(undoButtonIndex);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'online-ai-watchdog-fab-force-end-order', {
+          filename: 'watchdog-fab-force-end-order.png',
+        }),
+        fullPage: false,
+      });
+
       const liveState = await getMatchState(matchId!, hostPage);
       const aiTurnState = buildSummonerWarsOnlineAiWatchdogState(liveState);
       await injectMatchState(matchId!, aiTurnState as never, hostPage);
@@ -3584,8 +3619,10 @@ test.describe('SummonerWars', () => {
       const body = document.body;
       const endPhase = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
       const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      const phaseControls = document.querySelector('[data-testid="sw-phase-controls"]') as HTMLElement | null;
       const endPhaseRect = endPhase?.getBoundingClientRect();
       const handAreaRect = handArea?.getBoundingClientRect();
+      const phaseControlsRect = phaseControls?.getBoundingClientRect();
       return {
         rootScrollWidth: root.scrollWidth,
         bodyScrollWidth: body.scrollWidth,
@@ -3593,6 +3630,7 @@ test.describe('SummonerWars', () => {
         innerHeight: window.innerHeight,
         endPhaseRect,
         handAreaRect,
+        phaseControlsRect,
       };
     });
     expect(finalLayout.rootScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
@@ -3600,7 +3638,9 @@ test.describe('SummonerWars', () => {
     expect(finalLayout.endPhaseRect?.right ?? 9999).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
     expect(finalLayout.endPhaseRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
     expect(finalLayout.handAreaRect).not.toBeNull();
+    expect(finalLayout.phaseControlsRect).not.toBeNull();
     expect(finalLayout.handAreaRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+    expect((finalLayout.handAreaRect?.right ?? 9999) + 4).toBeLessThanOrEqual(finalLayout.phaseControlsRect?.left ?? 0);
 
     await hostContext.close();
   });
@@ -3731,12 +3771,16 @@ test.describe('SummonerWars', () => {
       const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
       const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
       const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
+      const phaseControls = document.querySelector('[data-testid="sw-phase-controls"]') as HTMLElement | null;
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
       const mapContainer = document.querySelector('[data-testid="sw-map-container"]') as HTMLElement | null;
       const mapContent = document.querySelector('[data-testid="sw-map-content"]') as HTMLElement | null;
       const playerEnergy = document.querySelector('[data-testid="sw-energy-player"]') as HTMLElement | null;
       const pageRect = page?.getBoundingClientRect();
       const endPhaseRect = endPhaseButton?.getBoundingClientRect();
       const trackerRect = tracker?.getBoundingClientRect();
+      const phaseControlsRect = phaseControls?.getBoundingClientRect();
+      const handAreaRect = handArea?.getBoundingClientRect();
       const containerRect = mapContainer?.getBoundingClientRect();
       const contentRect = mapContent?.getBoundingClientRect();
       const playerEnergyRect = playerEnergy?.getBoundingClientRect();
@@ -3748,6 +3792,8 @@ test.describe('SummonerWars', () => {
         pageRect,
         endPhaseRect,
         trackerRect,
+        phaseControlsRect,
+        handAreaRect,
         containerRect,
         contentRect,
         playerEnergyRect,
@@ -3761,6 +3807,10 @@ test.describe('SummonerWars', () => {
     expect(phoneLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(phoneLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
     expect(phoneLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.phaseControlsRect).not.toBeNull();
+    expect(phoneLayout.handAreaRect).not.toBeNull();
+    expect((phoneLayout.handAreaRect?.right ?? 99999) + 4).toBeLessThanOrEqual(phoneLayout.phaseControlsRect?.left ?? 0);
+    expect((phoneLayout.trackerRect?.bottom ?? 99999) + 4).toBeLessThanOrEqual(phoneLayout.phaseControlsRect?.top ?? 0);
     expect(phoneLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(0);
     expect(phoneLayout.playerEnergyRect?.height ?? 0).toBeGreaterThan(0);
 

@@ -42,6 +42,7 @@ registerDiceThroneConditions();
 
 const MONK_FIST_ATTACK_ID = 'fist-technique-5';
 const RESPONSE_WINDOW_CARD_ID = 'card-surprise';
+const TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID = 'response-2p-inst';
 const RESPONSE_WINDOW_CARD = COMMON_CARDS.find((card) => card.id === RESPONSE_WINDOW_CARD_ID);
 const REMOVE_SINGLE_STATUS_CARD_ID = 'card-get-away';
 const REMOVE_SINGLE_STATUS_CARD = COMMON_CARDS.find((card) => card.id === REMOVE_SINGLE_STATUS_CARD_ID);
@@ -1013,7 +1014,7 @@ const buildTwoPlayerAfterRollResponseState = (state: any) => {
     next.core.rollCount = 1;
     next.core.rollLimit = 3;
     next.core.rollDiceCount = 5;
-    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: 'response-2p-inst' }];
+    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID }];
     next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
 
     const fallbackCharacterId = typeof next.core?.players?.['0']?.characterId === 'string'
@@ -1950,6 +1951,103 @@ test.describe('DiceThrone Simple Start', () => {
         await saveEvidenceScreenshot(hostPage, testInfo, '05-two-player-after-roll-response-closed');
 
         await cleanupDTMatch(setup);
+    });
+
+    test('Online AI afterRollConfirmed: real confirm should let AI打出响应牌并关闭窗口且不重开', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成真实响应链测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerAfterRollResponseState);
+            await waitForPhase(hostPage, 'offensiveRoll', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            const injectedState = await getMatchState(matchId, hostPage);
+            expect(injectedState.sys?.responseWindow?.current).toBeUndefined();
+            expect(
+                injectedState.core?.players?.['1']?.hand?.some(
+                    (card: any) => card.id === TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID,
+                ),
+            ).toBe(true);
+
+            await dispatchHarnessCommand(hostPage, 'CONFIRM_ROLL', '0');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    windowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                    responderQueue: state.sys?.responseWindow?.current?.responderQueue ?? [],
+                };
+            }, {
+                timeout: 10000,
+                message: '等待真人确认骰面后真实打开 afterRollConfirmed 响应窗口',
+            }).toEqual({
+                windowType: 'afterRollConfirmed',
+                responderQueue: ['1'],
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '04b-online-ai-after-roll-response-open');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const aiHand = state.core?.players?.['1']?.hand ?? [];
+                const aiDiscard = state.core?.players?.['1']?.discard ?? [];
+                return {
+                    windowOpen: Boolean(state.sys?.responseWindow?.current),
+                    aiHasCardInHand: aiHand.some((card: any) => card.id === TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID),
+                    aiHasCardInDiscard: aiDiscard.some((card: any) => card.id === TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID),
+                };
+            }, {
+                timeout: 15000,
+                message: '等待 AI 真实打出响应牌并关闭响应窗口',
+            }).toEqual({
+                windowOpen: false,
+                aiHasCardInHand: false,
+                aiHasCardInDiscard: true,
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '04c-online-ai-after-roll-response-resolved');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return Boolean(state.sys?.responseWindow?.current);
+            }, {
+                timeout: 3000,
+                message: 'AI 响应收口后不应立刻再次重开 afterRollConfirmed 响应窗口',
+            }).toBe(false);
+        } finally {
+            await setup.hostContext.close();
+        }
     });
 
     test('Online 2-player afterAttackResolved: response pass should close and not reopen', async ({ browser }, testInfo) => {

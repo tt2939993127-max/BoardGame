@@ -4,7 +4,7 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
@@ -55,14 +55,15 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   const { t, i18n } = useTranslation('game-summonerwars');
   const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
+  const [selectedPhaseState, setSelectedPhaseState] = useState<{
+    scope: string;
+    id: Exclude<GamePhase, 'factionSelect'>;
+  } | null>(null);
   const phaseCursor: Exclude<GamePhase, 'factionSelect'> = currentPhase === 'factionSelect'
     ? PHASE_ORDER[0]
     : currentPhase;
-
-  useEffect(() => {
-    setSelectedPhaseId(null);
-  }, [currentPhase, isCoarsePointer]);
+  const selectionScope = `${currentPhase}:${isCoarsePointer ? 'coarse' : 'fine'}`;
+  const selectedPhaseId = selectedPhaseState?.scope === selectionScope ? selectedPhaseState.id : null;
 
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
@@ -86,19 +87,19 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     ? phasesWithCount.find(phase => phase.id === detailPhaseId) ?? null
     : null;
   const turnHeaderClass = compact
-    ? 'text-center mb-1.5 pb-1.5 border-b border-slate-600/50'
+    ? 'text-center mb-1 pb-1 border-b border-slate-600/50'
     : 'text-center mb-2 pb-2 border-b border-slate-600/50';
   const turnLabelClass = compact
-    ? 'text-sm text-amber-400 font-bold'
+    ? 'text-[13px] text-amber-400 font-bold'
     : 'text-base text-amber-400 font-bold';
-  const listClass = compact ? 'flex flex-col gap-1' : 'flex flex-col gap-1.5';
+  const listClass = compact ? 'flex flex-col gap-0.5' : 'flex flex-col gap-1.5';
   const itemClass = compact
-    ? 'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all'
+    ? 'flex items-center justify-between px-2 py-1 rounded-lg text-[11px] transition-all'
     : 'flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all';
   const countBadgeClass = compact
-    ? 'px-1.5 py-0.5 rounded text-[10px] font-bold min-w-[1.25rem] text-center'
+    ? 'px-1 py-0.5 rounded text-[9px] font-bold min-w-[1.1rem] text-center'
     : 'px-2 py-0.5 rounded text-xs font-bold min-w-[1.5rem] text-center';
-  const currentDotClass = compact ? 'w-2 h-2 rounded-full bg-green-400 animate-pulse' : 'w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse';
+  const currentDotClass = compact ? 'h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse' : 'w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse';
 
   return (
     <div className={`relative flex flex-col gap-1.5 ${className}`}>
@@ -133,13 +134,18 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                 role={isCoarsePointer ? 'button' : undefined}
                 tabIndex={isCoarsePointer ? 0 : undefined}
                 onClick={() => {
-                  if (isCoarsePointer) setSelectedPhaseId(phase.id);
+                  if (!isCoarsePointer) return;
+                  setSelectedPhaseState((prev) => (
+                    prev?.scope === selectionScope && prev.id === phase.id
+                      ? null
+                      : { scope: selectionScope, id: phase.id }
+                  ));
                 }}
                 onKeyDown={(event) => {
                   if (!isCoarsePointer) return;
                   if (event.key !== 'Enter' && event.key !== ' ') return;
                   event.preventDefault();
-                  setSelectedPhaseId(phase.id);
+                  setSelectedPhaseState({ scope: selectionScope, id: phase.id });
                 }}
                 className={`
                   ${itemClass}
@@ -194,15 +200,17 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
 
       {isCoarsePointer && detailPhase && (
         <div
-          className="absolute right-[calc(100%+0.5rem)] top-1/2 z-10 w-[11rem] -translate-y-1/2 rounded-lg border border-amber-500/30 bg-slate-950/92 px-3 py-2 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          className={compact
+            ? 'relative z-10 mt-1 w-[9.5rem] rounded-lg border border-amber-500/30 bg-slate-950/96 px-2 py-1.5 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)]'
+            : 'rounded-lg border border-amber-500/30 bg-slate-950/92 px-3 py-2 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)]'}
           data-testid="sw-phase-detail-panel"
         >
-          <div className="mb-1 text-xs font-bold tracking-wide text-amber-300">
+          <div className={compact ? 'mb-1 text-[10px] font-bold tracking-wide text-amber-300' : 'mb-1 text-xs font-bold tracking-wide text-amber-300'}>
             {detailPhase.label}
           </div>
-          <div className="flex flex-col gap-1">
+          <div className={compact ? 'flex flex-col gap-0.5' : 'flex flex-col gap-1'}>
             {detailPhase.desc.map((line, index) => (
-              <div key={`${detailPhase.id}-${index}`} className="text-[11px] leading-relaxed text-slate-200">
+              <div key={`${detailPhase.id}-${index}`} className={compact ? 'text-[9px] leading-snug text-slate-200' : 'text-[11px] leading-relaxed text-slate-200'}>
                 {line}
               </div>
             ))}

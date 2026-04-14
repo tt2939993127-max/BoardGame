@@ -38,6 +38,8 @@ interface BonusDieOverlayProps {
     autoCloseDelay?: number;
     /** 强制自动关闭延迟（毫秒），用于教程等场景 */
     forceAutoCloseDelay?: number;
+    /** 手动关闭模式（仅点关闭/点击背景，不自动关闭） */
+    manualCloseOnly?: boolean;
     
     // ===== 重掷交互模式 =====
     /** 奖励骰列表（多颗重掷模式） */
@@ -76,6 +78,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     locale,
     autoCloseDelay = 3000,
     forceAutoCloseDelay,
+    manualCloseOnly,
     bonusDice,
     canReroll,
     rerollLimitReached,
@@ -102,6 +105,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         return resolveBonusDieText(summaryEffectKey, { t, i18n }, summaryEffectParams);
     }, [summaryEffectKey, summaryEffectParams, i18n, t]);
     const hasForceAutoClose = typeof forceAutoCloseDelay === 'number' && forceAutoCloseDelay > 0;
+    const isManualCloseOnly = manualCloseOnly === true && !hasForceAutoClose;
     const resolvedAutoCloseDelay = hasForceAutoClose
         ? forceAutoCloseDelay
         : (displayOnly ? 8000 : autoCloseDelay);
@@ -141,6 +145,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 : '1.2vw';
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
+        const shouldDisableAutoClose = isManualCloseOnly || isInteractive;
 
         bonusDieOverlayLogger.info('render-reroll', {
             total,
@@ -157,7 +162,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 id="bonus-dice-reroll"
                 isVisible={isVisible}
                 onClose={onClose}
-                disableAutoClose={isInteractive && !hasForceAutoClose}
+                disableAutoClose={shouldDisableAutoClose && !hasForceAutoClose}
                 disableBackdropClose={isInteractive}
                 blockPointerEvents={isInteractive}
                 autoCloseDelay={resolvedAutoCloseDelay}
@@ -295,6 +300,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             id={`bonus-die-${value}`}
             isVisible={isVisible}
             onClose={onClose}
+            disableAutoClose={isManualCloseOnly && !hasForceAutoClose}
             autoCloseDelay={resolvedAutoCloseDelay}
             zIndex={UI_Z_INDEX.overlayRaised + 100}
         >

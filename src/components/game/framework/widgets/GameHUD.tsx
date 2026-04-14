@@ -6,6 +6,7 @@ import {
     Monitor,
     Copy,
     Check,
+    AlertTriangle,
     MessageSquare,
     Send,
     Undo2,
@@ -57,6 +58,8 @@ interface GameHUDProps {
     onLeave?: () => void;
     onDestroy?: () => void;
     onForceExit?: () => void;
+    showForceEndAiPhase?: boolean;
+    onForceEndAiPhase?: () => void;
     isLoading?: boolean;
 }
 
@@ -106,6 +109,8 @@ export const GameHUD = ({
     onLeave,
     onDestroy,
     onForceExit,
+    showForceEndAiPhase,
+    onForceEndAiPhase,
     isLoading = false,
 }: GameHUDProps) => {
     const navigate = useNavigate();
@@ -435,6 +440,7 @@ export const GameHUD = ({
     // 在线/教程模式：聊天为主按钮
     // 本地模式：无聊天主按钮，设置按钮应作为离主球最近的第一个卫星按钮
     const useChatAsMain = isOnline || isTutorial;
+    const canForceEndAiPhase = Boolean(showForceEndAiPhase && onForceEndAiPhase);
 
     if (useChatAsMain) {
         // [0] 聊天（主按钮）
@@ -647,8 +653,10 @@ export const GameHUD = ({
         )
     };
 
-    // ===== 联机模式卫星按钮顺序（push 顺序 = 从上到下显示顺序） =====
-    // 目标：退出 → 反馈 → 社交 → 全屏 → 撤回 → 操作日志 → 设置 → 聊天(主按钮)
+    // ===== 联机模式卫星按钮顺序 =====
+    // 注意：FabMenu 会 reverse(items.slice(1)) 后再渲染卫星按钮，
+    // 所以这里的 push 顺序与最终视觉顺序相反。
+    // 目标视觉顺序：退出 → 反馈 → 社交 → 全屏 → 强制结束 AI 当前阶段 → 撤回 → 操作日志 → 设置 → 聊天(主按钮)
 
     const exitAction: FabAction = {
         id: 'exit',
@@ -870,6 +878,32 @@ export const GameHUD = ({
                 )
             });
         }
+    }
+
+    // 5.5 强制结束 AI 当前阶段（仅房主且 AI 在场）
+    // 注意：这里要放在撤回之后 push，反转渲染后才会出现在“撤回上面”。
+    if (canForceEndAiPhase) {
+        items.push({
+            id: 'force-end-ai-phase',
+            icon: <AlertTriangle size={20} />,
+            label: t('hud.ai.forceEndPhase'),
+            color: 'text-amber-400',
+            content: (
+                <div className="space-y-3">
+                    <p className="text-xs text-white/70">
+                        {t('hud.ai.forceEndPhaseHint')}
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => onForceEndAiPhase?.()}
+                        className="w-full rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/25"
+                        data-testid="hud-force-end-ai-phase"
+                    >
+                        {t('hud.ai.forceEndPhaseConfirm')}
+                    </button>
+                </div>
+            ),
+        });
     }
 
     // 6. 操作日志
