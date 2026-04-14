@@ -7,7 +7,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolveForceEndTurnForStalledAi, resolveForceAdvancePhaseAfterRecovery } from '../onlineAiRecovery';
+import {
+    resolveForceAdvancePhaseAfterRecovery,
+    resolveForceEndTurnForStalledAi,
+    resolveManualForceEndAiPhase,
+} from '../onlineAiRecovery';
 import type { MatchState } from '../../types';
 import type { AiSeatController } from '../../ai';
 
@@ -238,5 +242,52 @@ describe('resolveForceAdvancePhaseAfterRecovery - 游戏结束检查', () => {
         expect(result).not.toBeNull();
         expect(result?.playerId).toBe('1');
         expect(result?.action.commands[0]?.type).toBe('ADVANCE_PHASE');
+    });
+});
+
+describe('resolveManualForceEndAiPhase - human 响应窗口场景', () => {
+    it('AI 当前阶段里若 human 正在响应，手动强制结束应优先强制关闭响应窗口', () => {
+        const sharedState: MatchState<unknown> = {
+            core: {
+                activePlayerId: '1',
+                phase: 'main1',
+            },
+            sys: {
+                gameover: undefined,
+                interaction: {
+                    current: null,
+                    isBlocked: false,
+                },
+                responseWindow: {
+                    current: {
+                        id: 'rw-human-response',
+                        windowType: 'afterCardPlayed',
+                        sourceId: 'card-surprise',
+                        responderQueue: ['0'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            },
+        };
+
+        const seatControllers: Record<string, AiSeatController> = {
+            '0': { type: 'human' },
+            '1': { type: 'local-ai', policyId: 'baseline' },
+        };
+
+        const result = resolveManualForceEndAiPhase({
+            sharedState,
+            seatControllers,
+            seatStates: {},
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.playerId).toBe('1');
+        expect(result?.reason).toBe('response-window');
+        expect(result?.requiresConfirmedAdvancePhase).toBe(true);
+        expect(result?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_RESPONSE_WINDOW_FORCE_CLOSE',
+            payload: {},
+        });
     });
 });

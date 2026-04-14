@@ -1631,6 +1631,7 @@ test('bonus die spotlight should close on backdrop click before confirm interact
 
 test('bonus die spotlight should close on content click in display mode', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+    await clearEvidenceScreenshotsForTest(testInfo);
 
     await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
 
@@ -1681,13 +1682,29 @@ test('bonus die spotlight should close on content click in display mode', async 
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
-    await game.screenshot('05-bonus-die-spotlight-visible-before-click-close', testInfo);
+    await saveLocatorEvidenceScreenshot(
+        bonusDieOverlay,
+        testInfo,
+        'bonus-die-spotlight-should-close-on-content-click-in-display-mode',
+        '05-bonus-die-spotlight-overlay-visible-before-click-close.png',
+    );
+    await savePageEvidenceScreenshot(
+        page,
+        testInfo,
+        'bonus-die-spotlight-should-close-on-content-click-in-display-mode',
+        '05-bonus-die-spotlight-visible-before-click-close.png',
+    );
 
     await page.waitForTimeout(250);
     await bonusDieOverlay.click();
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 
-    await game.screenshot('06-bonus-die-spotlight-click-close', testInfo);
+    await savePageEvidenceScreenshot(
+        page,
+        testInfo,
+        'bonus-die-spotlight-should-close-on-content-click-in-display-mode',
+        '06-bonus-die-spotlight-click-close.png',
+    );
 });
 
 test('crit bonus damage should not show attack-modifier badge', async ({ page, game }, testInfo) => {

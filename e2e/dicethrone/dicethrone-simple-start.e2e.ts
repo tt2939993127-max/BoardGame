@@ -1014,6 +1014,12 @@ const buildTwoPlayerAfterRollResponseState = (state: any) => {
     next.core.rollCount = 1;
     next.core.rollLimit = 3;
     next.core.rollDiceCount = 5;
+    for (const pid of ['0', '1']) {
+        next.core.players[pid].resources = {
+            ...(next.core.players[pid].resources ?? {}),
+            [RESOURCE_IDS.HP]: 50,
+        };
+    }
     next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: TWO_PLAYER_AFTER_ROLL_RESPONSE_CARD_INSTANCE_ID }];
     next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
 
@@ -1146,6 +1152,62 @@ const buildTwoPlayerResponseLoopState = (
         },
     };
     return next;
+};
+
+const buildOnlineAiHumanResponseWindowState = (state: any) => {
+    const next = buildTwoPlayerAfterCardResponseState(state);
+    const responseCard = RESPONSE_WINDOW_CARD;
+    if (!responseCard) {
+        throw new Error(`未找到稳定响应卡 ${RESPONSE_WINDOW_CARD_ID}，无法构造 human 响应窗口场景`);
+    }
+
+    const fallbackTurnOrder = Array.isArray(next.sys?.turnOrder)
+        ? [...next.sys.turnOrder]
+        : ['0', '1'];
+
+    next.core = {
+        ...next.core,
+        activePlayerId: '1',
+        phase: 'main1',
+        pendingAttack: null,
+        rollConfirmed: false,
+        players: {
+            ...next.core.players,
+            '0': {
+                ...next.core.players['0'],
+                hand: [{ ...structuredClone(responseCard), id: 'human-response-after-card', cardId: RESPONSE_WINDOW_CARD_ID }],
+                resources: {
+                    ...next.core.players['0']?.resources,
+                    cp: Math.max(next.core.players['0']?.resources?.cp ?? 0, 10),
+                },
+            },
+            '1': {
+                ...next.core.players['1'],
+                hand: [],
+            },
+        },
+    };
+
+    next.sys = {
+        ...next.sys,
+        phase: 'main1',
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex: 1,
+        responseWindow: {
+            ...next.sys.responseWindow,
+            current: {
+                ...(next.sys.responseWindow?.current ?? {}),
+                id: 'manual-force-end-human-response',
+                windowType: 'afterCardPlayed',
+                sourceId: TRANSFER_STATUS_CARD_ID,
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        },
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-human-response', next);
 };
 
 const buildFourPlayerTransferTokenState = (state: any) => {
@@ -2045,6 +2107,7 @@ test.describe('DiceThrone Simple Start', () => {
                 timeout: 3000,
                 message: 'AI 响应收口后不应立刻再次重开 afterRollConfirmed 响应窗口',
             }).toBe(false);
+            await saveEvidenceScreenshot(hostPage, testInfo, '04d-online-ai-after-roll-response-stable-no-reopen');
         } finally {
             await setup.hostContext.close();
         }
@@ -2698,6 +2761,88 @@ test.describe('DiceThrone Simple Start', () => {
 
             await expect(hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 10000 });
             await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-main2-stalled-after-watchdog');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 当前阶段遇到 human 可响应卡时，悬浮球强制结束应先关闭响应窗口再推进阶段', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForTestHarness(hostPage, 15000);
+
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHumanResponseWindowState);
+            await waitForGameBoard(hostPage, 30000);
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    phase: state.sys?.phase ?? null,
+                    responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                    currentResponderId: (() => {
+                        const current = state.sys?.responseWindow?.current;
+                        const queue = Array.isArray(current?.responderQueue) ? current.responderQueue : [];
+                        const index = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
+                        return typeof queue[index] === 'string' ? queue[index] : null;
+                    })(),
+                    hostHandCount: Array.isArray(state.core?.players?.['0']?.hand)
+                        ? state.core.players['0'].hand.length
+                        : 0,
+                };
+            }, {
+                timeout: 10000,
+                message: '等待注入“AI 当前阶段 + human 可响应卡”场景完成',
+            }).toEqual({
+                activePlayerId: '1',
+                phase: 'main1',
+                responseWindowType: 'afterCardPlayed',
+                currentResponderId: '0',
+                hostHandCount: 1,
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-manual-force-end-human-response-before');
+
+            const mainFabButton = hostPage.locator('[data-fab-id="chat"]');
+            await expect(mainFabButton).toBeVisible({ timeout: 10000 });
+            await mainFabButton.click();
+
+            const forceEndAction = hostPage.locator('[data-fab-id="force-end-ai-phase"]');
+            await expect(forceEndAction).toBeVisible({ timeout: 5000 });
+            await forceEndAction.click();
+
+            const forceEndPanel = hostPage.getByTestId('fab-panel-force-end-ai-phase');
+            await expect(forceEndPanel).toBeVisible({ timeout: 5000 });
+            await hostPage.getByTestId('hud-force-end-ai-phase').click();
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    phase: state.sys?.phase ?? null,
+                    hasResponseWindow: Boolean(state.sys?.responseWindow?.current),
+                };
+            }, {
+                timeout: 15000,
+                message: '等待手动强制结束先关闭 human 响应窗口，再把 AI 阶段推进离开 main1',
+            }).toEqual({
+                activePlayerId: '1',
+                phase: 'main2',
+                hasResponseWindow: false,
+            });
+
+            await expect(hostPage.getByText(/AI 强制结束失败|强制结束 AI 回合未成功/i)).toHaveCount(0);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-manual-force-end-human-response-after');
         } finally {
             await setup.hostContext.close();
         }

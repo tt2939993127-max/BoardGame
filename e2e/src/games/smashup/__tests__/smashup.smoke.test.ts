@@ -5704,6 +5704,54 @@ describe('smashup', () => {
         expect(core.players['0'].hand.length).toBe(5);
     });
 
+    it('The Bride 开始回合 special 应提供跳过，并显示可读的分支文案', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('hand-minion', 'frankenstein_igor', 'minion', '0')],
+                    discard: [makeCard('discard-minion', 'frankenstein_lab_assistant', 'minion', '0')],
+                    factions: [SMASHUP_FACTION_IDS.FRANKENSTEIN, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_the_factory',
+                minions: [{
+                    ...makeMinion('ally-1', 'frankenstein_igor', '0', 2),
+                    powerCounters: 1,
+                }],
+                ongoingActions: [],
+            })],
+            titans: [{
+                uid: 'bride-1',
+                defId: 'frankenstein_the_bride',
+                faction: SMASHUP_FACTION_IDS.FRANKENSTEIN,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            } satisfies TitanState],
+        });
+
+        const triggerResult = fireTriggers(core, 'onTurnStart', {
+            state: core,
+            matchState: makeMatchState(core, 'startTurn', '0'),
+            playerId: '0',
+            random: FIXED_RANDOM,
+            now: 123,
+        });
+
+        const currentInteraction = triggerResult.matchState?.sys.interaction?.current as any;
+        expect(currentInteraction?.data?.sourceId).toBe('titan_frankenstein_the_bride_start_choose_branch');
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.skip === true)).toBe(true);
+        expect(currentInteraction?.data?.options.map((option: any) => option.label)).toEqual(expect.arrayContaining([
+            '放进盒中',
+            '消灭己方随从',
+            '移除 +1 指示物',
+        ]));
+    });
+
     it('pecos_bill 未进入决斗触发链时不应被当成可手动打出的泰坦', () => {
         const state = makeMatchState(makeState({
             players: {

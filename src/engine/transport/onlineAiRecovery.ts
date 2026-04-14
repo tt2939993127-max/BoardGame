@@ -1,5 +1,6 @@
 import type { AiResolution, AiSeatController } from '../ai';
 import type { MatchState } from '../types';
+import { RESPONSE_WINDOW_COMMANDS } from '../systems/ResponseWindowSystem';
 
 type HiddenSimpleChoiceOption = {
     id?: unknown;
@@ -43,6 +44,7 @@ export type ForceEndTurnStalledAiResolution = {
     playerId: string;
     reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
     requiresConfirmedAdvancePhase?: boolean;
+    fingerprintHint?: string;
     resolution: AiResolution;
 };
 
@@ -417,6 +419,55 @@ export function resolveForceEndTurnForStalledAi(args: {
     }
 
     return null;
+}
+
+export function resolveManualForceEndAiPhase(args: {
+    sharedState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+    seatStates: Record<string, MatchState<unknown> | null | undefined>;
+}): ForceEndTurnStalledAiResolution | null {
+    if (args.sharedState?.sys?.gameover) {
+        return null;
+    }
+
+    const currentPlayerId = resolveCurrentPlayerId(args.sharedState);
+    const currentController = currentPlayerId ? args.seatControllers[currentPlayerId] : null;
+    const currentWindow = (args.sharedState?.sys?.responseWindow as {
+        current?: {
+            id?: unknown;
+            windowType?: unknown;
+            sourceId?: unknown;
+            responderQueue?: unknown;
+            currentResponderIndex?: unknown;
+        };
+    } | undefined)?.current;
+
+    if (currentPlayerId && currentController?.type !== 'human' && currentWindow) {
+        const responderQueue = Array.isArray(currentWindow.responderQueue)
+            ? currentWindow.responderQueue.filter((value): value is string => typeof value === 'string')
+            : [];
+        const hasHumanResponder = responderQueue.some((responderId) => args.seatControllers[responderId]?.type === 'human');
+
+        if (hasHumanResponder) {
+            const windowId = typeof currentWindow.id === 'string' ? currentWindow.id : 'unknown-window';
+            const windowType = typeof currentWindow.windowType === 'string' ? currentWindow.windowType : 'unknown-type';
+            const sourceId = typeof currentWindow.sourceId === 'string' ? currentWindow.sourceId : 'unknown-source';
+            const fingerprintHint = `manual-force-close:${currentPlayerId}:${windowType}:${sourceId}`;
+            return {
+                playerId: currentPlayerId,
+                reason: 'response-window',
+                requiresConfirmedAdvancePhase: true,
+                fingerprintHint,
+                resolution: buildForceEndTurnResolution({
+                    playerId: currentPlayerId,
+                    suffix: `manual-response-window:${currentPlayerId}:${windowType}:${sourceId}:${windowId}`,
+                    commands: [{ type: RESPONSE_WINDOW_COMMANDS.FORCE_CLOSE, payload: {} }],
+                }),
+            };
+        }
+    }
+
+    return resolveForceEndTurnForStalledAi(args);
 }
 
 export function resolveForceEndTurnRecoveryStep(args: {

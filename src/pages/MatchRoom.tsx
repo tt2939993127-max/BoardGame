@@ -71,6 +71,7 @@ import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     applyAiAutoRecoveryRejection,
+    resolveManualForceEndAiPhase,
     resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
@@ -637,7 +638,7 @@ const OnlineAiSeatBridge = ({
             }),
         );
 
-        const candidate = resolveForceEndTurnForStalledAi({
+        const candidate = resolveManualForceEndAiPhase({
             sharedState: state as MatchState<unknown>,
             seatControllers,
             seatStates,

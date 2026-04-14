@@ -1054,6 +1054,17 @@ export class GameTransportServer {
             }
 
             const markerAfterRecovery = buildAiProgressMarker(match.state);
+            if (!this.hasOnlineAiRecoveryResolved(match, candidate, seatControllers)) {
+                await this.handleOnlineAiRecoveryFailure(
+                    match,
+                    tracker,
+                    candidate,
+                    phaseLabel,
+                    progressMarkerBeforeRecovery,
+                    'blocker_persisted',
+                );
+                return;
+            }
             if (markerAfterRecovery === progressMarkerBeforeRecovery) {
                 await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'no_progress');
                 return;
@@ -1323,6 +1334,59 @@ export class GameTransportServer {
         }
 
         return progressMarker;
+    }
+
+    private hasOnlineAiRecoveryResolved(
+        match: ActiveMatch,
+        candidate: ForceEndTurnStalledAiResolution,
+        seatControllers: Record<string, { type: 'human' | 'local-ai' | 'remote-ai' }>,
+    ): boolean {
+        if (candidate.reason === 'visible-interaction') {
+            const current = (match.state.sys?.interaction as { current?: { playerId?: unknown } } | undefined)?.current;
+            return String(current?.playerId ?? '') !== candidate.playerId;
+        }
+
+        if (candidate.reason === 'hidden-interaction') {
+            const sharedInteraction = match.state.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
+            const seatView = this.applyPlayerView(match, candidate.playerId) as MatchState<unknown>;
+            const seatInteraction = seatView.sys?.interaction as { current?: { playerId?: unknown }; isBlocked?: unknown } | undefined;
+
+            if (sharedInteraction?.current) {
+                const sharedCurrent = sharedInteraction.current as { playerId?: unknown } | undefined;
+                if (String(sharedCurrent?.playerId ?? '') === candidate.playerId) {
+                    return false;
+                }
+            }
+
+            if (seatInteraction?.current) {
+                return String(seatInteraction.current.playerId ?? '') !== candidate.playerId;
+            }
+
+            return seatInteraction?.isBlocked !== true;
+        }
+
+        if (candidate.reason === 'response-window' || candidate.reason === 'response-loop') {
+            const current = (match.state.sys?.responseWindow as {
+                current?: {
+                    responderQueue?: unknown;
+                    currentResponderIndex?: unknown;
+                };
+            } | undefined)?.current;
+            if (!current) {
+                return true;
+            }
+
+            const responderQueue = Array.isArray(current.responderQueue) ? current.responderQueue : [];
+            const responderIndex = typeof current.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
+            const responderId = typeof responderQueue[responderIndex] === 'string' ? responderQueue[responderIndex] : '';
+            if (!responderId) {
+                return false;
+            }
+
+            return responderId !== candidate.playerId || seatControllers[responderId]?.type === 'human';
+        }
+
+        return true;
     }
 
     private buildUnsatisfiableInteractionStateSnapshot(args: {

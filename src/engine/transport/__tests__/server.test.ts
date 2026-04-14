@@ -1985,6 +1985,106 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(executed).toContain('SYS_RESPONSE_WINDOW_FORCE_CLOSE');
     });
 
+    it('online AI watchdog 不得把“事件流有变化但同一 AI 响应窗口立刻重开”误判为恢复成功', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+
+        await storage.createMatch('match-watchdog-response-reopen-progress', {
+            initialState: createOnlineAiRecoveryState({
+                responseWindow: {
+                    current: {
+                        id: 'response-reopen-1',
+                        windowType: 'afterRollConfirmed',
+                        sourceId: 'card-surprise-1',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiRecoveryMaxAdvanceSteps: 1,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-response-reopen-progress');
+
+        const executed: string[] = [];
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (match, _playerID, commandType) => {
+            executed.push(commandType);
+
+            if (commandType === 'RESPONSE_PASS') {
+                match.state = {
+                    ...match.state,
+                    sys: {
+                        ...match.state.sys,
+                        eventStream: {
+                            ...(match.state.sys?.eventStream ?? {}),
+                            nextId: (match.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        responseWindow: {
+                            ...(match.state.sys?.responseWindow ?? {}),
+                            current: {
+                                id: 'response-reopen-2',
+                                windowType: 'afterRollConfirmed',
+                                sourceId: 'card-surprise-2',
+                                responderQueue: ['1'],
+                                currentResponderIndex: 0,
+                            },
+                        },
+                    },
+                };
+                return true;
+            }
+
+            if (commandType === 'SYS_RESPONSE_WINDOW_FORCE_CLOSE') {
+                match.state = {
+                    ...match.state,
+                    sys: {
+                        ...match.state.sys,
+                        eventStream: {
+                            ...(match.state.sys?.eventStream ?? {}),
+                            nextId: (match.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        responseWindow: {
+                            ...(match.state.sys?.responseWindow ?? {}),
+                            current: undefined,
+                        },
+                    },
+                };
+                return true;
+            }
+
+            return true;
+        });
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(executed[0]).toBe('RESPONSE_PASS');
+        expect(executed).toContain('SYS_RESPONSE_WINDOW_FORCE_CLOSE');
+    });
+
     it('AI 走无解交互 emergency skip 时，服务端应立即自动反馈', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();

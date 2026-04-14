@@ -5,6 +5,7 @@ import type { AiResolution } from '../engine/ai';
 export {
     applyAiAutoRecoveryRejection,
     buildAiProgressMarker,
+    resolveManualForceEndAiPhase,
     resolveCurrentPlayerId,
     resolveForceAdvancePhaseAfterRecovery,
     resolveForceEndTurnRecoveryStep,

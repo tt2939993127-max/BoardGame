@@ -24,6 +24,7 @@ import {
     buildPlayerTargetOptions,
     buildStandardDrawEvents,
     buildMinionTargetOptions,
+    createSkipOption,
     changeMinionController,
     drawMadnessCards,
     grantExtraAction,
@@ -3066,13 +3067,16 @@ function buildTheBrideStartBranchOptions(
     const options: Array<{ id: string; label: string; value: { kind: BrideEffectKind }; displayMode: 'button' }> = [];
     const requireSecondChoice = usedKinds.length === 0;
     if (!usedKinds.includes('box') && buildTheBrideStartTargetOptions(state, playerId, 'box', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'box', label: '鏀捐繘鐩掍腑', value: { kind: 'box' }, displayMode: 'button' });
+        options.push({ id: 'box', label: '放进盒中', value: { kind: 'box' }, displayMode: 'button' });
     }
     if (!usedKinds.includes('destroy') && buildTheBrideStartTargetOptions(state, playerId, 'destroy', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'destroy', label: '娑堢伃宸辨柟闅忎粠', value: { kind: 'destroy' }, displayMode: 'button' });
+        options.push({ id: 'destroy', label: '消灭己方随从', value: { kind: 'destroy' }, displayMode: 'button' });
     }
     if (!usedKinds.includes('removeCounter') && buildTheBrideStartTargetOptions(state, playerId, 'removeCounter', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'removeCounter', label: '绉婚櫎 +1 鏍囪', value: { kind: 'removeCounter' }, displayMode: 'button' });
+        options.push({ id: 'removeCounter', label: '移除 +1 指示物', value: { kind: 'removeCounter' }, displayMode: 'button' });
+    }
+    if (usedKinds.length === 0) {
+        options.push(createSkipOption('跳过（本回合不让 The Bride 进场）'));
     }
     return options;
 }
@@ -4036,7 +4040,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_start_choose_target_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨鏁堟灉鐩爣',
+            'The Bride：选择效果目标',
             options,
             { sourceId: 'titan_frankenstein_the_bride_start_choose_target', targetType: 'generic' },
         );
@@ -4103,7 +4107,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_start_choose_base_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨瑕佹墦鍑虹殑鍩哄湴',
+            'The Bride：选择要打出的基地',
             getAllBaseOptions(state.core),
             { sourceId: 'titan_frankenstein_the_bride_start_choose_base', targetType: 'base' },
         );
@@ -4157,7 +4161,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_talent_extra_action_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨瑕佺Щ闄ょ殑鏍囪缁勫悎',
+            'The Bride：选择要移除的指示物组合',
             buildTheBrideExtraActionOptions(state.core, playerId),
             { sourceId: 'titan_frankenstein_the_bride_talent_extra_action', targetType: 'generic' },
         );
