@@ -2,16 +2,20 @@
 
 - 用例 1：移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌
 - 用例 2：移动横屏：长按放大与阶段说明在手机可达
-- 最近复跑时间：2026-04-14
+- 用例 3：在线对局流程：召唤、移动、建造、攻击与弃牌（PC 视口 + 布局断言）
+- 最近复跑时间：2026-04-14（移动横屏截图 23:24-00:03；PC 在线对局截图 23:36）
 
 ## 执行命令
 
 ```bash
-BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/summonerwars/summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机可达"
-BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/summonerwars/summonerwars.e2e.ts "移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌"
+npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌"
+npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机可达"
+npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "在线对局流程：召唤、移动、建造、攻击与弃牌"
 ```
 
-结果：两条用例均通过，且几何断言已确认：
+结果：三条用例均通过。
+
+其中 **用例 2（移动横屏长按/阶段说明）** 包含几何断言，已确认：
 
 - `handAreaRect.right + 4 <= phaseControlsRect.left`
 - `trackerRect.bottom + 4 <= phaseControlsRect.top`
@@ -22,6 +26,11 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\00-pc-reference-board.png`
 - 我实际看到：PC 视口下棋盘仍居中，右侧阶段列表和底部手牌沿用桌面基线，没有被本轮移动端 HUD rail 改窄，也没有缩在左上角。
 - 判定：达到“PC 不被手机横屏修复牵连”的验收标准。
+
+### 0.1）PC 在线对局 - 起始布局（更贴近用户真实路径）
+- 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\在线对局流程：召唤、移动、建造、攻击与弃牌\50-pc-online-layout-start.png`
+- 我实际看到：棋盘主区在画面中心；底部手牌居中且未侵入右侧 controls；右侧阶段条位于 controls 上方，不与“结束阶段/弃牌堆”重叠。
+- 判定：PC 在线对局下布局稳定，可作为“PC 也修住了”的证据。
 
 ### 1）基础流程起始主态
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-start.png`
@@ -49,9 +58,10 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
 - 判定：移动端长按看大图可正常进入和收口。
 
 ### 6）阶段说明面板
-- 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\12-phone-phase-detail-open.png`
-- 我实际看到：阶段说明面板现在出现在右侧 HUD rail 下半区，停在结束阶段按钮上方，没有再向左伸进棋盘；面板本身可见，没有被底部手牌遮住。当前文案仍显示为 `phaseDesc.build.*` key，说明这是文案缺失问题，不是布局问题。
-- 判定：本轮“阶段说明可见且不再侵入棋盘主区”的布局目标达成；文案缺 key 需另行处理。
+- 路径（全图）：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\12-phone-phase-detail-open.png`
+- 路径（面板特写，确保肉眼可见本体）：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\12-phone-phase-detail-open-clip.png`
+- 我实际看到：阶段说明面板在右侧 HUD rail 内可见，且没有被“结束阶段/弃牌堆”遮住；特写截图里能清晰看到标题“建造”，但正文仍显示为 `phaseDesc.build.*` key（文案缺失问题，不是布局问题）。
+- 判定：本轮“阶段说明可见且不被遮挡”的布局目标达成；文案缺 key 需另行处理。
 
 ## 本轮结论
 
@@ -60,5 +70,6 @@ BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 node scripts/infra/run-e2e-single.mjs ci e2e/s
   - 手牌右边界不再压进右侧 controls。
   - 阶段列表与结束阶段按钮重新分层，不再彼此打架。
   - 阶段说明面板可见，且位置回到右侧 HUD 内。
+  - 攻击后不再触发 `ReferenceError: unitAbilities is not defined`（此前会导致页面渲染失败）。
 - 尚未在本轮处理的点：
   - 阶段说明文案缺失，截图里仍出现 `phaseDesc.*` key。
