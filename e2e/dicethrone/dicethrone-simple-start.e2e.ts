@@ -2913,10 +2913,10 @@ test.describe('DiceThrone Simple Start', () => {
                 };
             }, {
                 timeout: 40000,
-                message: '等待服务端 watchdog 自动关闭 human 响应窗口并把 AI 阶段推进到 main2',
+                message: '等待服务端 watchdog 自动关闭 human 响应窗口并把控制权交还给真人',
             }).toEqual({
-                activePlayerId: '1',
-                phase: 'main2',
+                activePlayerId: '0',
+                phase: 'main1',
                 hasResponseWindow: false,
                 failureToastVisible: false,
             });

@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { execute, reduce } from '../domain/reducer';
 import { validate } from '../domain/commands';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
-import type { SmashUpCore, OngoingActionOnBase } from '../domain/types';
+import type { OngoingActionOnBase } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { grantExtraMinion } from '../domain/abilityHelpers';
 import { clearRegistry } from '../domain/abilityRegistry';
