@@ -14,6 +14,7 @@ import { validate } from '../domain/commands';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpCore, OngoingActionOnBase } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
+import { grantExtraMinion } from '../domain/abilityHelpers';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -602,6 +603,92 @@ describe('innsmouth_sacred_circle（宗教圆环 ongoing talent）', () => {
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
         expect(types).toContain(SU_EVENTS.ABILITY_FEEDBACK);
+    });
+
+    it('只有宗教圆环额度时，非同名随从不能使用该基地限定额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('h1', 'pirate_first_mate', 'minion', '0')],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('m1', 'innsmouth_deep_one', '0', 2, { powerModifier: 0 })],
+                ongoingActions: [makeOngoing('oa1', 'innsmouth_sacred_circle', '0')],
+            }],
+        });
+
+        const granted = applyEvents(core, [
+            grantExtraMinion('0', 'innsmouth_sacred_circle', 1, 0, { sameNameOnly: true }),
+        ]);
+        const ms = makeMatchState(granted);
+        const result = validate(ms, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 0 },
+        } as any);
+
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('同名');
+    });
+
+    it('宗教圆环额度被消费后，不应继续把后续大衮额度误判成同名限定', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('h-locals', 'innsmouth_the_locals', 'minion', '0'),
+                        makeCard('h-zap', 'robot_zapbot_pod', 'minion', '0'),
+                    ],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    factions: ['innsmouth_pod', 'robots_pod'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('m1', 'innsmouth_the_locals', '0', 2, { powerModifier: 0 })],
+                ongoingActions: [makeOngoing('oa1', 'innsmouth_sacred_circle', '0')],
+            }],
+        });
+
+        const afterSacredCircleGrant = applyEvents(core, [
+            grantExtraMinion('0', 'innsmouth_sacred_circle', 1, 0, { sameNameOnly: true }),
+        ]);
+        const afterSacredCirclePlay = applyEvents(afterSacredCircleGrant, [
+            {
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: {
+                    playerId: '0',
+                    cardUid: 'h-locals',
+                    defId: 'innsmouth_the_locals',
+                    baseIndex: 0,
+                    power: 2,
+                    consumesNormalLimit: true,
+                },
+                timestamp: 2,
+            } as any,
+        ]);
+
+        expect(afterSacredCirclePlay.players['0'].baseLimitedSameNameRequired?.[0]).toBeUndefined();
+
+        const afterDagonGrant = applyEvents(afterSacredCirclePlay, [
+            grantExtraMinion('0', 'innsmouth_dagon', 3, 0),
+        ]);
+        const ms = makeMatchState(afterDagonGrant);
+        const result = validate(ms, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h-zap', baseIndex: 0 },
+        } as any);
+
+        expect(afterDagonGrant.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
+        expect(result.valid).toBe(true);
     });
 });
 
