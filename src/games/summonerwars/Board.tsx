@@ -63,7 +63,10 @@ import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
 import { PathTrailEffect } from './ui/PathTrailEffect';
 import { useMovementTrails } from './ui/useMovementTrails';
-import { BOARD_SHELL_REFERENCE_WIDTH } from './ui/layoutConstants';
+import {
+  BOARD_SHELL_REFERENCE_WIDTH,
+  SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX,
+} from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
@@ -79,7 +82,7 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.32;
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.18;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
@@ -101,6 +104,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const useCompactHandLayout = isLandscapeMobileViewport;
   const mapInitialScale = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
   const mapSideRatio = DEFAULT_MAP_SIDE_RATIO;
+  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
+  const mapContainerPaddingBlock = '0px';
   const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
@@ -112,21 +117,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseControlsClass = isLandscapeMobileViewport
-    ? 'absolute right-3 bottom-3 z-30 pointer-events-auto flex flex-col items-end gap-3'
+    ? 'absolute right-3 bottom-[6.5rem] z-30 pointer-events-none'
     : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
   const phaseTrackerClass = isLandscapeMobileViewport
-    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6rem] max-w-[6rem]'
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-slate-700/20 min-w-[5.75rem] max-w-[5.75rem]'
     : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = isLandscapeMobileViewport
-    ? 'absolute top-[20%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
+    ? 'absolute top-[23%] right-[6.25rem] z-40 -translate-y-1/2 pointer-events-auto'
     : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
-  const boardShellVars = isLandscapeMobileViewport
-    ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties
-    : undefined;
-  const boardReferenceVars = { '--sw-board-reference-width': '100vw' } as React.CSSProperties;
-  const boardShellStyle = boardShellVars
-    ? { ...boardReferenceVars, ...boardShellVars }
-    : boardReferenceVars;
+  const boardReferenceWidthCss = isLandscapeMobileViewport
+    ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
+    : '100vw';
+  const boardShellStyle = {
+    '--sw-board-reference-width': boardReferenceWidthCss,
+    ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.145' } : {}),
+  } as React.CSSProperties;
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -839,6 +844,46 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     </GameDebugPanel>
   ) : null;
 
+  const phaseControlsNode = (
+    <div className="pointer-events-auto flex flex-col items-end gap-3">
+      <div className="flex gap-2">
+        {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
+          <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
+            {t('action.discardSelected', { count: interaction.selectedCardsForDiscard.length })}
+          </GameButton>
+        )}
+        <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn || interaction.isMandatoryAbilityActive} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
+          {interaction.endPhaseConfirmPending
+            ? t(currentPhase === 'move' ? 'action.confirmEndMove' : 'action.confirmEndAttack', {
+              count: currentPhase === 'move'
+                ? MAX_MOVES_PER_TURN - (core.players[myPlayerId]?.moveCount ?? 0)
+                : MAX_ATTACKS_PER_TURN - (core.players[myPlayerId]?.attackCount ?? 0),
+            })
+            : t('action.endPhase')}
+        </GameButton>
+      </div>
+      <div data-tutorial-id="sw-discard-pile">
+        <DeckPile
+          type="discard" count={myDiscardCount} position="right"
+          topCard={myDiscard[myDiscard.length - 1] ?? null}
+          onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+        />
+      </div>
+    </div>
+  );
+
+  const phaseTrackerNode = (
+    <PhaseTracker
+      currentPhase={currentPhase}
+      turnNumber={core.turnNumber}
+      isMyTurn={isMyTurn}
+      moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
+      attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
+      compact={isLandscapeMobileViewport}
+      className={phaseTrackerClass}
+    />
+  );
+
   return (
     <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
       <div
@@ -896,7 +941,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   {/* 地图层 */}
                   <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
-                  className="w-full h-full flex items-center justify-center px-[10vw]"
+                  className="w-full h-full flex items-center justify-center"
                   initialScale={mapInitialScale}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
@@ -906,7 +951,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div className="relative inline-block">
+                  <div
+                    className="relative inline-block"
+                    style={{ paddingInline: mapContainerPadding, paddingBlock: mapContainerPaddingBlock }}
+                  >
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -1095,44 +1143,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   </div>
                 </div>
 
-                  {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
+                {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
                 <div className={phaseControlsClass} data-testid="sw-phase-controls">
-                  <div className="flex gap-2">
-                    {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
-                      <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
-                        {t('action.discardSelected', { count: interaction.selectedCardsForDiscard.length })}
-                      </GameButton>
-                    )}
-                    <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn || interaction.isMandatoryAbilityActive} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
-                      {interaction.endPhaseConfirmPending
-                        ? t(currentPhase === 'move' ? 'action.confirmEndMove' : 'action.confirmEndAttack', {
-                          count: currentPhase === 'move'
-                            ? MAX_MOVES_PER_TURN - (core.players[myPlayerId]?.moveCount ?? 0)
-                            : MAX_ATTACKS_PER_TURN - (core.players[myPlayerId]?.attackCount ?? 0),
-                        })
-                        : t('action.endPhase')}
-                    </GameButton>
-                  </div>
-                  <div data-tutorial-id="sw-discard-pile">
-                    <DeckPile
-                      type="discard" count={myDiscardCount} position="right"
-                      topCard={myDiscard[myDiscard.length - 1] ?? null}
-                      onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
-                    />
-                  </div>
+                  {phaseControlsNode}
                 </div>
 
                 {/* 右侧：阶段指示器 */}
                 <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
-                  <PhaseTracker
-                    currentPhase={currentPhase}
-                    turnNumber={core.turnNumber}
-                    isMyTurn={isMyTurn}
-                    moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
-                    attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
-                    compact={isLandscapeMobileViewport}
-                    className={phaseTrackerClass}
-                  />
+                  {phaseTrackerNode}
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
@@ -1205,7 +1223,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
                   {/* 底部：手牌区 */}
                   <div
-                    className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30"
+                    className="absolute bottom-0 left-1/2 z-30 -translate-x-1/2 pointer-events-auto"
                     data-tutorial-id="sw-hand-area"
                   >
                     <HandArea

@@ -8,7 +8,14 @@ import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAi
 import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
-import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
+import {
+    buildAiProgressMarker,
+    LocalGameProvider,
+    releaseAiAttemptKeyIfMatches,
+    shouldRetryLocalAiAttemptAfterDispatch,
+    tryReserveAiAttemptKey,
+    useGameClient,
+} from '../../engine/transport/react';
 import {
     applyAiAutoRecoveryRejection,
     resolveForceAdvancePhaseAfterRecovery,
@@ -269,6 +276,42 @@ describe('onlineAiSeats', () => {
             claimMissingSeatCredential,
         });
 
+        expect(claimMissingSeatCredential).toHaveBeenCalledWith('2');
+        expect(state.seatCredentials).toEqual({
+            '1': 'existing-ai-1',
+            '2': 'claimed-2',
+        });
+    });
+
+    it('回归：matchInfo.players 暂未列出后续空座时，仍应从显式 seatControllers 恢复第二个 AI 座位', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `claimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-missing-empty-seat',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    enableAi: true,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'hard' },
+                        '2': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers).toEqual({
+            '0': { type: 'human' },
+            '1': { type: 'local-ai', difficulty: 'hard' },
+            '2': { type: 'local-ai', difficulty: 'normal' },
+        });
         expect(claimMissingSeatCredential).toHaveBeenCalledWith('2');
         expect(state.seatCredentials).toEqual({
             '1': 'existing-ai-1',
@@ -606,6 +649,93 @@ describe('resolveNextAiAction 在线视角', () => {
         expect(resolution?.action.commands).toEqual([
             { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-2' } },
         ]);
+    });
+
+    it('在线 AI 的 response window reopening 即使 legal actions 不变，也应生成新的 attemptKey', async () => {
+        const gameId = '__test_online_ai_response_window_attempt_key__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const responseWindow = (state.sys as {
+                    responseWindow?: {
+                        current?: {
+                            responderQueue?: string[];
+                            currentResponderIndex?: number;
+                        };
+                    };
+                })?.responseWindow?.current;
+                const currentResponderId = responseWindow?.responderQueue?.[responseWindow.currentResponderIndex ?? 0];
+                if (currentResponderId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: 'response-pass',
+                    kind: 'response-pass',
+                    label: '跳过响应',
+                    commands: [{ type: 'RESPONSE_PASS', payload: {} }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const buildState = (windowId: string, sourceId: string): MatchState<unknown> => ({
+            core: {},
+            sys: {
+                turnNumber: 7,
+                phase: 'offensiveRoll',
+                eventStream: { nextId: 42 },
+                interaction: { current: null, queue: [] },
+                responseWindow: {
+                    current: {
+                        id: windowId,
+                        sourceId,
+                        windowType: 'afterRollConfirmed',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            },
+        } as MatchState<unknown>);
+
+        const first = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: buildState('rw-after-roll-1', 'roll-signature-1'),
+            matchId: 'match-online-ai-response-window',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        const reopened = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: buildState('rw-after-roll-2', 'roll-signature-2'),
+            matchId: 'match-online-ai-response-window',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(first?.action.kind).toBe('response-pass');
+        expect(reopened?.action.kind).toBe('response-pass');
+        expect(first?.attemptKey).not.toBe(reopened?.attemptKey);
     });
 
     it('其他 seat 仅看到 isBlocked=true 时，不应继续生成普通动作抢跑', async () => {
@@ -1440,6 +1570,31 @@ describe('本地 AI 无进展重试判定', () => {
             markerBeforeDispatch: buildAiProgressMarker(previousState),
             nextState: previousState,
         })).toBe(false);
+    });
+});
+
+describe('AI attemptKey 预占位', () => {
+    it('同一个 attemptKey 在发送前只应保留一次，避免延迟窗口内重复调度', () => {
+        const ref = { current: null as string | null };
+
+        expect(tryReserveAiAttemptKey(ref, 'attempt-1')).toBe(true);
+        expect(ref.current).toBe('attempt-1');
+
+        expect(tryReserveAiAttemptKey(ref, 'attempt-1')).toBe(false);
+        expect(ref.current).toBe('attempt-1');
+
+        expect(tryReserveAiAttemptKey(ref, 'attempt-2')).toBe(true);
+        expect(ref.current).toBe('attempt-2');
+    });
+
+    it('仅当当前 key 仍匹配时才释放预占位，避免误清空后续新 attempt', () => {
+        const ref = { current: 'attempt-2' as string | null };
+
+        releaseAiAttemptKeyIfMatches(ref, 'attempt-1');
+        expect(ref.current).toBe('attempt-2');
+
+        releaseAiAttemptKeyIfMatches(ref, 'attempt-2');
+        expect(ref.current).toBeNull();
     });
 });
 

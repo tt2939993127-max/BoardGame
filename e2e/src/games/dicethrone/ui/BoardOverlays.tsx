@@ -151,6 +151,8 @@ export interface BoardOverlaysProps {
 
     /** 教程模式下特写强制自动关闭延迟（毫秒） */
     tutorialSpotlightAutoCloseDelayMs?: number;
+    /** 奖励骰特写手动关闭模式（仅游戏态启用） */
+    bonusDieManualCloseOnly?: boolean;
 }
 
 /**
@@ -426,6 +428,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 : props.bonusDie.characterId
                         }
                         forceAutoCloseDelay={props.tutorialSpotlightAutoCloseDelayMs}
+                        manualCloseOnly={props.bonusDieManualCloseOnly}
                     />
                 )}
 

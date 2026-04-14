@@ -70,6 +70,20 @@ function buildAttemptKey(args: {
     const eventStreamNextId = typeof args.state.sys?.eventStream?.nextId === 'number'
         ? args.state.sys.eventStream.nextId
         : '';
+    const responseWindow = args.state.sys?.responseWindow?.current as {
+        id?: unknown;
+        sourceId?: unknown;
+        windowType?: unknown;
+    } | undefined;
+    const responseWindowId = typeof responseWindow?.id === 'string'
+        ? responseWindow.id
+        : '';
+    const responseWindowSourceId = typeof responseWindow?.sourceId === 'string'
+        ? responseWindow.sourceId
+        : '';
+    const responseWindowType = typeof responseWindow?.windowType === 'string'
+        ? responseWindow.windowType
+        : '';
     const controllerKey = args.controller.type === 'remote-ai'
         ? `${args.controller.type}:${args.controller.providerId}:${args.controller.fallbackPolicyId ?? ''}`
         : `${args.controller.type}:${args.controller.policyId ?? ''}:${args.controller.fallbackPolicyId ?? ''}`;
@@ -81,6 +95,9 @@ function buildAttemptKey(args: {
         statePhase,
         eventStreamNextId,
         args.interactionId ?? '',
+        responseWindowType,
+        responseWindowId,
+        responseWindowSourceId,
         args.responderIndex ?? '',
         legalActionIds,
     ].join('|');

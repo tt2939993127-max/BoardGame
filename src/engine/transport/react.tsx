@@ -104,6 +104,26 @@ export function shouldRetryLocalAiAttemptAfterDispatch(args: {
     return buildAiProgressMarker(args.nextState) === args.markerBeforeDispatch;
 }
 
+export function tryReserveAiAttemptKey(
+    ref: { current: string | null },
+    attemptKey: string,
+): boolean {
+    if (ref.current === attemptKey) {
+        return false;
+    }
+    ref.current = attemptKey;
+    return true;
+}
+
+export function releaseAiAttemptKeyIfMatches(
+    ref: { current: string | null },
+    attemptKey: string,
+): void {
+    if (ref.current === attemptKey) {
+        ref.current = null;
+    }
+}
+
 // ============================================================================
 // useGameClient Hook
 // ============================================================================
@@ -933,14 +953,13 @@ export function LocalGameProvider({
                 return;
             }
 
-            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+            if (!tryReserveAiAttemptKey(lastAiAttemptKeyRef, resolution.attemptKey)) {
                 return;
             }
 
-            lastAiAttemptKeyRef.current = resolution.attemptKey;
-
             const controller = seatControllers[resolution.playerId];
             if (!controller || controller.type === 'human') {
+                releaseAiAttemptKeyIfMatches(lastAiAttemptKeyRef, resolution.attemptKey);
                 return;
             }
 
@@ -958,7 +977,10 @@ export function LocalGameProvider({
                 });
             }
 
-            if (cancelled) return;
+            if (cancelled) {
+                releaseAiAttemptKeyIfMatches(lastAiAttemptKeyRef, resolution.attemptKey);
+                return;
+            }
 
             for (const command of resolution.action.commands) {
                 const normalizedPayload = command.payload && typeof command.payload === 'object'

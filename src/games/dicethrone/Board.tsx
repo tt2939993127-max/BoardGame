@@ -1608,6 +1608,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     selectedCharacters={G.selectedCharacters}
                     hostPlayerId={G.hostPlayerId}
                     tutorialSpotlightAutoCloseDelayMs={isTutorialMode ? 3000 : undefined}
+                    bonusDieManualCloseOnly={!isTutorialMode}
                 />
 
                 {/* 同一 slot 多 variant 选择弹窗：点击 slot 时该 slot 有多个 variant 满足条件 */}

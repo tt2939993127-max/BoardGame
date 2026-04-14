@@ -1681,12 +1681,13 @@ test('bonus die spotlight should close on content click in display mode', async 
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
+    await game.screenshot('05-bonus-die-spotlight-visible-before-click-close', testInfo);
 
     await page.waitForTimeout(250);
     await bonusDieOverlay.click();
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 
-    await game.screenshot('05-bonus-die-spotlight-click-close', testInfo);
+    await game.screenshot('06-bonus-die-spotlight-click-close', testInfo);
 });
 
 test('crit bonus damage should not show attack-modifier badge', async ({ page, game }, testInfo) => {

@@ -4,7 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
 import { getGameImplementation, resolveGameTutorialManifest } from '../games/registry';
-import { GameProvider, LocalGameProvider, BoardBridge, buildAiProgressMarker, useGameClient } from '../engine/transport/react';
+import {
+    GameProvider,
+    LocalGameProvider,
+    BoardBridge,
+    buildAiProgressMarker,
+    releaseAiAttemptKeyIfMatches,
+    tryReserveAiAttemptKey,
+    useGameClient,
+} from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { GameBoardProps } from '../engine/transport/protocol';
@@ -150,15 +158,18 @@ const OnlineAiSeatBridge = ({
     engineConfig,
     seatControllers,
     seatCredentials,
+    onForceEndAiPhaseReady,
 }: {
     server: string;
     matchId: string;
     engineConfig: GameEngineConfig;
     seatControllers: Record<string, AiSeatController>;
     seatCredentials: Record<string, string>;
+    onForceEndAiPhaseReady?: (handler: (() => void) | null) => void;
 }) => {
     const { state } = useGameClient();
     const toast = useToast();
+    const { t } = useTranslation('game');
     const clientsRef = useRef<Record<string, GameTransportClient>>({});
     const [connectionVersion, setConnectionVersion] = useState(0);
     const [aiRetryVersion, setAiRetryVersion] = useState(0);
@@ -295,13 +306,14 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
-            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+            if (!tryReserveAiAttemptKey(lastAiAttemptKeyRef, resolution.attemptKey)) {
                 return;
             }
 
             const controller = seatControllers[resolution.playerId];
             const client = clientsRef.current[resolution.playerId];
             if (!controller || controller.type === 'human' || !client?.isConnected) {
+                releaseAiAttemptKeyIfMatches(lastAiAttemptKeyRef, resolution.attemptKey);
                 return;
             }
 
@@ -320,6 +332,7 @@ const OnlineAiSeatBridge = ({
             }
 
             if (cancelled || !client.isConnected) {
+                releaseAiAttemptKeyIfMatches(lastAiAttemptKeyRef, resolution.attemptKey);
                 return;
             }
 
@@ -611,6 +624,83 @@ const OnlineAiSeatBridge = ({
         };
     }, [aiRetryVersion, connectionVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
+    const forceEndAiPhase = useCallback(() => {
+        if (!state) {
+            toast.info(t('hud.ai.forceEndPhaseNotReady', { ns: 'game' }));
+            return;
+        }
+
+        const seatStates = Object.fromEntries(
+            Object.entries(clientsRef.current).map(([playerId, client]) => {
+                const latestState = client.latestState;
+                return [playerId, latestState && typeof latestState === 'object' ? latestState as MatchState<unknown> : null];
+            }),
+        );
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: state as MatchState<unknown>,
+            seatControllers,
+            seatStates,
+        });
+
+        if (!candidate) {
+            toast.info(t('hud.ai.forceEndPhaseUnavailable', { ns: 'game' }));
+            return;
+        }
+
+        const targetClient = clientsRef.current[candidate.playerId];
+        if (!targetClient?.isConnected) {
+            toast.warning(t('hud.ai.forceEndPhaseSeatOffline', { ns: 'game' }));
+            return;
+        }
+
+        const attemptKey = candidate.resolution.attemptKey;
+        toast.info(t('hud.ai.forceEndPhaseSubmitting', { ns: 'game' }), undefined, {
+            dedupeKey: `game.ai-force-end-turn.manual.submitting.${attemptKey}`,
+        });
+
+        submitOnlineAiResolutionSequence({
+            client: targetClient,
+            initialResolution: candidate.resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry: () => {
+                setAiRetryVersion((version) => version + 1);
+            },
+            maxSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS + 1,
+            resolveNextResolution: ({ authoritativeState, stepIndex }) => {
+                if (stepIndex >= MAX_FORCE_END_TURN_FOLLOW_UP_STEPS) {
+                    return null;
+                }
+                return resolveForceEndTurnRecoveryStep({
+                    authoritativeState,
+                    seatControllers,
+                    playerId: candidate.playerId,
+                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && stepIndex === 0,
+                });
+            },
+            onCompleted: () => {
+                toast.warning(
+                    t('hud.ai.forceEndPhaseSuccess', { ns: 'game' }),
+                    t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                    { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}` },
+                );
+            },
+            onRejected: (reason) => {
+                toast.warning(
+                    t('hud.ai.forceEndPhaseFailed', { ns: 'game', reason }),
+                    t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                    { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}.${reason}` },
+                );
+            },
+        });
+    }, [seatControllers, state, t, toast]);
+
+    useEffect(() => {
+        if (!onForceEndAiPhaseReady) return;
+        onForceEndAiPhaseReady(forceEndAiPhase);
+        return () => onForceEndAiPhaseReady(null);
+    }, [forceEndAiPhase, onForceEndAiPhaseReady]);
+
     return null;
 };
 
@@ -719,6 +809,8 @@ const OnlineGameHudBridge = ({
     onLeave,
     onDestroy,
     onForceExit,
+    onForceEndAiPhase,
+    showForceEndAiPhase,
     isLoading,
     seatControllers,
 }: {
@@ -732,6 +824,8 @@ const OnlineGameHudBridge = ({
     onLeave?: () => void;
     onDestroy?: () => void;
     onForceExit?: () => void;
+    onForceEndAiPhase?: () => void;
+    showForceEndAiPhase?: boolean;
     isLoading?: boolean;
     seatControllers: Record<string, AiSeatController>;
 }) => {
@@ -743,6 +837,7 @@ const OnlineGameHudBridge = ({
         myPlayerId,
         seatControllers,
     }), [fallbackPlayers, isConnected, matchPlayers, myPlayerId, seatControllers]);
+    const canForceEndAiPhase = Boolean(showForceEndAiPhase && onForceEndAiPhase);
 
     return (
         <GameHUD
@@ -759,6 +854,8 @@ const OnlineGameHudBridge = ({
             onLeave={onLeave}
             onDestroy={onDestroy}
             onForceExit={onForceExit}
+            showForceEndAiPhase={canForceEndAiPhase}
+            onForceEndAiPhase={canForceEndAiPhase ? onForceEndAiPhase : undefined}
             isLoading={isLoading}
         />
     );
@@ -975,11 +1072,19 @@ export const MatchRoom = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [onlineAiSeatControllers, setOnlineAiSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [onlineAiSeatCredentials, setOnlineAiSeatCredentials] = useState<Record<string, string>>({});
+    const [forceEndAiPhaseHandler, setForceEndAiPhaseHandler] = useState<(() => void) | null>(null);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
     const errorToastRef = useRef<{ key: string; timestamp: number } | null>(null);
     const handledMissingMatchRef = useRef<string | null>(null);
+    const hasOnlineAiSeat = useMemo(
+        () => Object.values(onlineAiSeatControllers).some((controller) => controller.type !== 'human'),
+        [onlineAiSeatControllers],
+    );
+    const handleForceEndAiPhaseReady = useCallback((handler: (() => void) | null) => {
+        setForceEndAiPhaseHandler(() => handler);
+    }, []);
 
     // 大厅阶段只预热 resolver 标记为 critical 的基础资源。
     // warm 资源保留到真正进入对局、拿到玩家视角后再排队，避免无关素材抢占连接池，
@@ -1912,6 +2017,8 @@ export const MatchRoom = () => {
                                                     onLeave={handleLeaveRoom}
                                                     onDestroy={handleDestroyRoom}
                                                     onForceExit={handleForceExitLocal}
+                                                    onForceEndAiPhase={forceEndAiPhaseHandler ?? undefined}
+                                                    showForceEndAiPhase={matchStatus.isHost && hasOnlineAiSeat}
                                                     isLoading={isLeaving}
                                                     seatControllers={onlineAiSeatControllers}
                                                 />
@@ -1922,6 +2029,7 @@ export const MatchRoom = () => {
                                                         engineConfig={engineConfig}
                                                         seatControllers={onlineAiSeatControllers}
                                                         seatCredentials={onlineAiSeatCredentials}
+                                                        onForceEndAiPhaseReady={handleForceEndAiPhaseReady}
                                                     />
                                                 )}
                                                 <BoardBridge
