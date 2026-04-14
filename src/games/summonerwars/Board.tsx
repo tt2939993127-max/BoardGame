@@ -84,7 +84,6 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.18;
 const MOBILE_LANDSCAPE_HUD_RAIL_WIDTH = '9.75rem';
-const MOBILE_LANDSCAPE_HAND_SAFE_WIDTH = '7.75rem';
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
@@ -131,15 +130,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const mobileHudRailStyle = isLandscapeMobileViewport
     ? { width: MOBILE_LANDSCAPE_HUD_RAIL_WIDTH } as React.CSSProperties
     : undefined;
-  const mobileHandWrapperStyle = isLandscapeMobileViewport
-    ? { right: MOBILE_LANDSCAPE_HAND_SAFE_WIDTH } as React.CSSProperties
-    : undefined;
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
     : '100vw';
   const boardShellStyle = {
     '--sw-board-reference-width': boardReferenceWidthCss,
-    ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.13' } : {}),
+    ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.1' } : {}),
   } as React.CSSProperties;
 
   // 阵营选择状态
@@ -1250,30 +1246,27 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   {/* 底部：手牌区 */}
                   {isLandscapeMobileViewport ? (
                     <div
-                      className="absolute bottom-0 left-0 z-30 flex justify-center pointer-events-none"
-                      style={mobileHandWrapperStyle}
+                      className="absolute bottom-0 left-1/2 z-30 -translate-x-1/2 pointer-events-auto"
                       data-tutorial-id="sw-hand-area"
                     >
-                      <div className="pointer-events-auto">
-                        <HandArea
-                          cards={myHand}
-                          phase={currentPhase}
-                          isMyTurn={isMyTurn}
-                          currentMagic={myMagic}
-                          selectedCardId={interaction.selectedHandCardId}
-                          selectedCardIds={abilityMode?.step === 'selectCards'
-                            ? interaction.abilitySelectedCardIds
-                            : interaction.selectedCardsForDiscard}
-                          onCardClick={interaction.handleCardClick}
-                          onCardSelect={interaction.handleCardSelect}
-                          onPlayEvent={interaction.handlePlayEvent}
-                          onMagnifyCard={handleMagnifyCard}
-                          bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
-                          abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                          interactionBusy={handInteractionBusy}
-                          compactLayout={useCompactHandLayout}
-                        />
-                      </div>
+                      <HandArea
+                        cards={myHand}
+                        phase={currentPhase}
+                        isMyTurn={isMyTurn}
+                        currentMagic={myMagic}
+                        selectedCardId={interaction.selectedHandCardId}
+                        selectedCardIds={abilityMode?.step === 'selectCards'
+                          ? interaction.abilitySelectedCardIds
+                          : interaction.selectedCardsForDiscard}
+                        onCardClick={interaction.handleCardClick}
+                        onCardSelect={interaction.handleCardSelect}
+                        onPlayEvent={interaction.handlePlayEvent}
+                        onMagnifyCard={handleMagnifyCard}
+                        bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
+                        abilitySelectingCards={abilityMode?.step === 'selectCards'}
+                        interactionBusy={handInteractionBusy}
+                        compactLayout={useCompactHandLayout}
+                      />
                     </div>
                   ) : (
                     <div

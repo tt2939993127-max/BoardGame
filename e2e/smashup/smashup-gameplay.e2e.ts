@@ -24,6 +24,14 @@ const WEREWOLF_STANDING_STONES_QUERY = {
     seed: 24680,
 };
 
+const INNSMOUTH_DAGON_QUERY = {
+    p0: 'innsmouth,robots',
+    p1: 'wizards,aliens',
+    skipFactionSelect: true,
+    skipInitialization: false,
+    seed: 13579,
+};
+
 test.describe('SmashUp - 核心流程与交互稳定性', () => {
     test('主流程：打出随从到基地后结束回合，应切到对手的出牌阶段', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
@@ -155,6 +163,123 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         expect(finalState.core.players['0'].minionsPlayed).toBe(0);
 
         await game.screenshot('ninja-acolyte-after-direct-click', testInfo);
+    });
+
+    test('大衮额外随从在宗教圆环已消费后，仍可把非同名随从打到所在基地', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await game.openTestGame('smashup', INNSMOUTH_DAGON_QUERY, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'hand-zapbot', defId: 'robot_zapbot_pod', type: 'minion' },
+                ],
+                factions: ['innsmouth_pod', 'robots_pod'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                factions: ['wizards', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                {
+                    defId: 'base_ritual_site',
+                    minions: [
+                        { uid: 'locals-a', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', basePower: 2 },
+                        { uid: 'locals-b', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', basePower: 2 },
+                    ],
+                    ongoingActions: [
+                        { uid: 'oa-sacred-circle', defId: 'innsmouth_sacred_circle_pod', ownerId: '0', talentUsed: true },
+                    ],
+                },
+                { defId: 'base_the_mothership', minions: [], ongoingActions: [] },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+            extra: {
+                core: {
+                    enabledExpansions: ['titans'],
+                    titans: [
+                        {
+                            uid: 'titan-dagon',
+                            defId: 'innsmouth_dagon',
+                            faction: 'innsmouth',
+                            ownerId: '0',
+                            controllerId: '0',
+                            powerCounters: 0,
+                            talentUsed: true,
+                            location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+                        },
+                    ],
+                },
+            },
+        });
+
+        await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            if (!harness?.state?.patch || !state?.core?.players?.['0']) {
+                throw new Error('测试工具未就绪，无法补丁大衮额外随从额度');
+            }
+            harness.state.patch({
+                core: {
+                    players: {
+                        ...state.core.players,
+                        '0': {
+                            ...state.core.players['0'],
+                            baseLimitedMinionQuota: { 0: 1 },
+                            baseLimitedSameNameRequired: undefined,
+                            baseLimitedSameNameDefId: undefined,
+                        },
+                    },
+                },
+            });
+        });
+        await page.waitForTimeout(500);
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+
+        const initialState = await game.getState();
+        expect(initialState.core.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
+        expect(initialState.core.players['0'].baseLimitedSameNameRequired?.[0]).toBeUndefined();
+
+        const handCard = page.locator('[data-card-uid="hand-zapbot"]');
+        const targetBase = page.locator('[data-base-index="0"]');
+
+        await expect(handCard).toBeVisible();
+        await expect(targetBase).toBeVisible();
+
+        await handCard.click();
+        await page.waitForTimeout(300);
+        await game.screenshot('dagon-extra-minion-before-base-select', testInfo);
+
+        await targetBase.click();
+
+        await page.waitForFunction(
+            (cardUid) => {
+                const harness = (window as any).__BG_TEST_HARNESS__;
+                const state = harness?.state?.get?.();
+                return state?.core?.bases?.[0]?.minions?.some((minion: any) => minion.uid === cardUid) === true;
+            },
+            'hand-zapbot',
+            { timeout: 5000, polling: 200 },
+        );
+
+        const finalState = await game.getState();
+        expect(finalState.core.bases[0].minions.some((minion: any) => minion.uid === 'hand-zapbot')).toBe(true);
+        expect(finalState.core.players['0'].hand.some((card: any) => card.uid === 'hand-zapbot')).toBe(false);
+        expect(finalState.core.players['0'].baseLimitedMinionQuota?.[0] ?? 0).toBe(0);
+
+        await game.screenshot('dagon-extra-minion-after-play', testInfo);
     });
 
     test('巨石阵应允许己方随从上的附着天赋第2次发动，并占用基地双才能名额', async ({ page, game }, testInfo) => {

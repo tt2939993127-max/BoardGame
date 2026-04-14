@@ -3839,7 +3839,7 @@ test.describe('SummonerWars', () => {
     }
     const affordableHandCard = hostPage
       .locator('[data-testid="sw-hand-area"] [data-card-id][data-can-afford="true"]')
-      .first();
+      .last();
     await expect(affordableHandCard).toBeVisible({ timeout: 5000 });
     await affordableHandCard.click();
     const selectedHandCard = hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').first();

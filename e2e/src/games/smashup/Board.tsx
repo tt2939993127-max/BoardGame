@@ -83,6 +83,7 @@ import { RevealOverlay } from './ui/RevealOverlay';
 import { useSmashUpOverlay } from './ui/SmashUpOverlayContext';
 import { resolveSmashUpHandInteractionMode, resolveSmashUpHandPromptUiMode } from './ui/interactionMode';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import { getSmashUpReactionWindowPresentation } from './domain/reactionWindowState';
 
 type Props = GameBoardProps<SmashUpCore>;
@@ -928,7 +929,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
         }
         return disabled.size > 0 ? disabled : undefined;
-    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isHandDiscardPrompt, reactionWindow?.windowType]);
+    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isDirectHandSelectPrompt, reactionWindow?.windowType]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
     // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）
@@ -1620,9 +1621,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const isSpecialAction = card.type === 'fusion'
             ? cardDef?.actionSubtype === 'special'
             : cardDef?.subtype === 'special';
-        const isResponseWindowAction = !!responseWindow
+        const isResponseWindowAction = !!reactionWindow
             && !!cardDef
-            && isActionLikeRespondableInWindow(cardDef, responseWindow.windowType);
+            && isActionLikeRespondableInWindow(cardDef, reactionWindow.windowType);
         if (!isSpecialAction && !isResponseWindowAction && myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
             playDeniedSound();
             toast(t('ui.action_limit_reached', { defaultValue: '本回合战术额度已用完' }));
@@ -1635,7 +1636,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardUid(null);
         setSelectedCardMode(null);
         return true;
-    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, responseWindow, t, validateImmediateActionPlay]);
+    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, reactionWindow, t, validateImmediateActionPlay, toastCommandFeedback]);
 
     const enterActionTargetSelection = useCallback((card: CardInstance, cardMode: 'action' | 'ongoing' | 'ongoing-minion' | 'action-minion') => {
         if (cardMode !== 'action') {
@@ -1653,6 +1654,22 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardMode(cardMode);
         return true;
     }, [getCardPlayTargetState, t]);
+
+    const handleSetAsideTitanSelect = useCallback((titanUid: string) => {
+        if (shouldLockNormalHandInteraction) {
+            playDeniedSound();
+            return;
+        }
+        if (!selectableSetAsideTitanUids.has(titanUid)) {
+            playDeniedSound();
+            return;
+        }
+        setSelectedCardUid(null);
+        setSelectedCardMode(null);
+        setPendingFusionChoiceUid(null);
+        setMeFirstPendingCard(null);
+        setSelectedSetAsideTitanUid((prev) => (prev === titanUid ? null : titanUid));
+    }, [selectableSetAsideTitanUids, shouldLockNormalHandInteraction]);
 
     // VIEWING STATE
     const [viewingCard, setViewingCard] = useState<CardMagnifyTarget | null>(null);
@@ -1947,7 +1964,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             return;
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, reactionWindow]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, reactionWindow, activeSelectedSetAsideTitanUid, shouldLockNormalHandInteraction, isDirectHandSelectPrompt, selectedCardMode, handlePlayActionWithoutTarget, validateImmediateActionPlay, toastCommandFeedback, core, pendingFusionChoiceUid, enterActionTargetSelection]);
 
     const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
         if (!pendingFusionChoiceUid || !myPlayer) return;

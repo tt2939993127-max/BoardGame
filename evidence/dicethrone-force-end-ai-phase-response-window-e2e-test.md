@@ -2,7 +2,7 @@
 
 ## 范围
 
-- 目标：验证当 **AI 当前阶段** 打开了 **human 对手的响应窗口** 时，悬浮球里的“强制结束 AI 阶段”不再卡死。
+- 目标：验证当 **AI 当前阶段** 打开了 **human 对手的响应窗口** 时，悬浮球里的“强制结束 AI 阶段”不再卡死，并且**成功后确认面板会自动收起**。
 - 真实链路要求：
   1. E2E 先注入 **可触发响应的稳定牌**（`card-surprise`）到 human 手牌；
   2. 再构造 `afterCardPlayed` 响应窗口，当前响应者为 human；
@@ -13,7 +13,7 @@
 ### 静态检查
 
 ```bash
-npx eslint src/engine/transport/onlineAiRecovery.ts src/engine/transport/__tests__/onlineAiRecovery-gameover.test.ts src/pages/onlineAiForceSkip.ts src/pages/MatchRoom.tsx e2e/dicethrone/dicethrone-simple-start.e2e.ts e2e/src/engine/transport/onlineAiRecovery.ts e2e/src/pages/onlineAiForceSkip.ts e2e/src/pages/MatchRoom.tsx
+npx eslint src/components/system/FabMenu.tsx src/components/game/framework/widgets/GameHUD.tsx src/pages/MatchRoom.tsx src/engine/transport/server.ts src/engine/transport/__tests__/server.test.ts src/engine/transport/onlineAiRecovery.ts src/engine/transport/__tests__/onlineAiRecovery-gameover.test.ts src/pages/onlineAiForceSkip.ts e2e/dicethrone/dicethrone-simple-start.e2e.ts
 ```
 
 结果：0 errors，仅既有 warnings。
@@ -62,16 +62,18 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Onlin
 1. 左侧阶段条已经从 **主赛阶段(1)** 推进到 **主赛阶段(2)**，说明 AI 阶段确实被推进了。
 2. 前一张图中的 **“可以响应 / 跳过”** 按钮已经消失，说明响应窗口已被关闭，不再卡在 human 响应。
 3. 右上角出现 **“AI 已强制结束回合”** toast，说明手动入口链路确实执行成功。
-4. 悬浮球确认面板还开着，但这不影响主棋盘已经离开响应卡死态；它更像是当前 FAB 面板的既有展示行为，而不是响应没关掉。
+4. 右侧只剩悬浮球按钮列，**看不到“强制结束 AI 阶段”的确认面板**，说明本轮新增的“成功后自动收起”已经生效。
 
 #### 是否达到验收标准
 
 - **达到。**
 - 能证明两件事：
   1. human 响应窗口已被手动强制关闭；
-  2. AI 阶段已继续推进，不再停在原来的卡死点。
+  2. AI 阶段已继续推进，不再停在原来的卡死点；
+  3. 成功后悬浮确认面板会自动收起，不会再残留在画面上。
 
 ## 结论
 
 - 本轮已把“手动强制结束 AI 阶段”扩展到 **AI 当前阶段 + human 正在响应** 的真实场景。
 - 修复口径不是再用 `ADVANCE_PHASE` 去硬撞打开中的响应窗口，而是先走 `SYS_RESPONSE_WINDOW_FORCE_CLOSE`，再做一步后续推进。
+- UI 收口也已补齐：手动成功后，悬浮球确认面板会自动收起。
