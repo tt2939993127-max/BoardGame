@@ -126,7 +126,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-slate-700/20 min-w-[5.75rem] max-w-[5.75rem] pointer-events-auto'
     : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem] pointer-events-auto';
   const phaseTrackerWrapperClass = isLandscapeMobileViewport
-    ? 'absolute top-3 right-3 z-30 pointer-events-auto'
+    ? 'absolute top-3 right-3 z-60 pointer-events-auto'
     : 'absolute top-[40%] right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
