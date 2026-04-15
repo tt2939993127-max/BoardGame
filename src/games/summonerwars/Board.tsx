@@ -381,6 +381,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       options: (data.options ?? []) as PromptOption[],
     };
   }, [currentInteraction, myPlayerId]);
+  const previousSwInteractionTypeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!swInteraction) {
+      const previousType = previousSwInteractionTypeRef.current;
+      if (previousType === 'after_attack_mind_transmission' || previousType === 'after_attack_telekinesis_target') {
+        setAfterAttackAbilityMode(null);
+      }
+      previousSwInteractionTypeRef.current = null;
+      return;
+    }
+    previousSwInteractionTypeRef.current = swInteraction.type;
+  }, [setAfterAttackAbilityMode, swInteraction]);
 
   const findInteractionOptionId = useCallback(
     (matcher: (option: PromptOption) => boolean): string | null => {

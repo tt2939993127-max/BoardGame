@@ -1157,6 +1157,41 @@ const captureEvidenceClipAroundLocators = async (
   });
 };
 
+const expandLocatorMatches = async (locator: Locator): Promise<Locator[]> => {
+  const count = await locator.count();
+  return Array.from({ length: count }, (_, index) => locator.nth(index));
+};
+
+const getHighlightMetrics = async (page: Page, selector: string) => (
+  page.evaluate((currentSelector) => {
+    const nodes = Array.from(document.querySelectorAll(currentSelector)) as HTMLElement[];
+    return {
+      count: nodes.length,
+      samples: nodes.slice(0, 4).map((node) => {
+        const rect = node.getBoundingClientRect();
+        const styles = window.getComputedStyle(node);
+        return {
+          row: node.getAttribute('data-row'),
+          col: node.getAttribute('data-col'),
+          borderTopColor: styles.borderTopColor,
+          backgroundColor: styles.backgroundColor,
+          borderTopWidth: styles.borderTopWidth,
+          boxShadow: styles.boxShadow,
+          opacity: styles.opacity,
+          rect: {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+          },
+        };
+      }),
+    };
+  }, selector)
+);
+
 const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
   await expect.poll(async () => page.evaluate(({ testId, target }) => {
     const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
@@ -3633,29 +3668,46 @@ test.describe('SummonerWars', () => {
     }).toBeGreaterThan(0);
     await assertReachableHandCards(hostPage, 'mobile-basic-flow-card-selected', 3);
 
-    const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
-    await expect(summonCell).toBeVisible({ timeout: 8000 });
+    const summonTargets = hostPage.locator('[data-valid-summon="true"]');
+    await expect(summonTargets.first()).toBeVisible({ timeout: 8000 });
+    await hostPage.waitForTimeout(220);
+    const summonTargetLocators = await expandLocatorMatches(summonTargets);
+    expect(summonTargetLocators.length).toBeGreaterThan(0);
+    const summonHighlightMetrics = await getHighlightMetrics(hostPage, '[data-valid-summon="true"]');
+    expect(summonHighlightMetrics.count).toBeGreaterThan(0);
+    expect(summonHighlightMetrics.samples[0]?.borderTopWidth).toBe('2px');
+    expect(summonHighlightMetrics.samples[0]?.borderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(summonHighlightMetrics.samples[0]?.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    const summonCell = summonTargets.first();
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight', {
         filename: '40-mobile-basic-flow-summon-highlight.png',
       }),
       fullPage: false,
     });
-    await captureEvidenceClipAroundLocators(hostPage, [summonCell], {
+    await captureEvidenceClipAroundLocators(hostPage, [unitCard, ...summonTargetLocators], {
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight-clip', {
         filename: '40-mobile-basic-flow-summon-highlight-clip.png',
       }),
-      padding: 28,
+      padding: 32,
     });
     const summonDefaultScaleText = await getMapScaleText(hostPage);
     await zoomMap(hostPage, -300);
     await expect.poll(async () => getMapScaleText(hostPage)).not.toBe(summonDefaultScaleText);
-    await captureEvidenceClipAroundLocators(hostPage, [summonCell], {
+    await dragMap(hostPage, 0, -110);
+    await captureEvidenceClipAroundLocators(hostPage, summonTargetLocators, {
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight-zoom-clip', {
         filename: '40-mobile-basic-flow-summon-highlight-zoom-clip.png',
       }),
-      padding: 40,
+      padding: 64,
     });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight-zoom-context', {
+        filename: '40-mobile-basic-flow-summon-highlight-zoom-context.png',
+      }),
+      fullPage: false,
+    });
+    await dragMap(hostPage, 0, 110);
     await zoomMap(hostPage, 300);
     await expect.poll(async () => getMapScaleText(hostPage)).toBe(summonDefaultScaleText);
     const summonRow = await summonCell.getAttribute('data-row');
@@ -3687,29 +3739,46 @@ test.describe('SummonerWars', () => {
     }
     await clickBoardElement(hostPage, `[data-testid="${movableUnitTestId}"]`);
 
-    const moveCell = hostPage.locator('[data-valid-move="true"]').first();
-    await expect(moveCell).toBeVisible({ timeout: 8000 });
+    const moveTargets = hostPage.locator('[data-valid-move="true"]');
+    await expect(moveTargets.first()).toBeVisible({ timeout: 8000 });
+    await hostPage.waitForTimeout(220);
+    const moveTargetLocators = await expandLocatorMatches(moveTargets);
+    expect(moveTargetLocators.length).toBeGreaterThan(0);
+    const moveHighlightMetrics = await getHighlightMetrics(hostPage, '[data-valid-move="true"]');
+    expect(moveHighlightMetrics.count).toBeGreaterThan(0);
+    expect(moveHighlightMetrics.samples[0]?.borderTopWidth).toBe('2px');
+    expect(moveHighlightMetrics.samples[0]?.borderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(moveHighlightMetrics.samples[0]?.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    const moveCell = moveTargets.first();
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight', {
         filename: '40-mobile-basic-flow-move-highlight.png',
       }),
       fullPage: false,
     });
-    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, moveCell], {
+    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, ...moveTargetLocators], {
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight-clip', {
         filename: '40-mobile-basic-flow-move-highlight-clip.png',
       }),
-      padding: 28,
+      padding: 32,
     });
     const moveDefaultScaleText = await getMapScaleText(hostPage);
     await zoomMap(hostPage, -300);
     await expect.poll(async () => getMapScaleText(hostPage)).not.toBe(moveDefaultScaleText);
-    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, moveCell], {
+    await dragMap(hostPage, 0, -80);
+    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, ...moveTargetLocators], {
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight-zoom-clip', {
         filename: '40-mobile-basic-flow-move-highlight-zoom-clip.png',
       }),
-      padding: 40,
+      padding: 64,
     });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight-zoom-context', {
+        filename: '40-mobile-basic-flow-move-highlight-zoom-context.png',
+      }),
+      fullPage: false,
+    });
+    await dragMap(hostPage, 0, 80);
     await zoomMap(hostPage, 300);
     await expect.poll(async () => getMapScaleText(hostPage)).toBe(moveDefaultScaleText);
     const moveRow = await moveCell.getAttribute('data-row');

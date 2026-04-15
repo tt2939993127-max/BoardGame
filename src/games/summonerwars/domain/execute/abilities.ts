@@ -58,8 +58,11 @@ export function executeActivateAbility(
   const sourceUnit = found.unit;
   const sourcePosition = found.position;
 
-  // 触发事件（UI 消费）
-  events.push(createAbilityTriggeredEvent(abilityId, sourceUnitId, sourcePosition, timestamp));
+  // 实际执行也会保留一条 ABILITY_TRIGGERED 记录用于日志/usageCount，
+  // 但 interactionResolved=true 表示 UI / InteractionSystem 不应再次打开选择交互。
+  events.push(createAbilityTriggeredEvent(abilityId, sourceUnitId, sourcePosition, timestamp, {
+    interactionResolved: true,
+  }));
 
   // 注册表分发
   const executor = abilityExecutorRegistry.resolve(abilityId);

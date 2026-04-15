@@ -11,9 +11,9 @@
 
 ## 本轮新增验证
 ### 1. 单测
-- 命令：`npx vitest run src/engine/transport/__tests__/onlineAiRecovery-gameover.test.ts`
-- 结果：8 passed
-- 新增断言：`factionSelect` 阶段即使当前玩家是 AI，也不应返回 `active-turn` 强制推进方案。
+- 命令：`npx vitest run src/pages/__tests__/matchSeatValidation.test.ts`
+- 结果：58 passed
+- 新增断言：`factionSelect` 阶段即使当前玩家是 AI，`resolveForceEndTurnForStalledAi()` 也不应返回 `active-turn` 强制推进方案。
 
 ### 2. 真实联机 E2E
 - 命令：`npm run test:e2e:ci:file -- e2e/smashup/smashup-phase-transition-simple.e2e.ts "在线 AI seat 建连延迟超过 8 秒时，factionSelect 不应被 watchdog 误推进到空牌 playCards"`

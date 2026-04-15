@@ -3,7 +3,7 @@
 - 用例 1：移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌
 - 用例 2：移动横屏：长按放大与阶段说明在手机可达
 - 用例 3：在线对局流程：召唤、移动、建造、攻击与弃牌（PC 视口 + 布局断言）
-- 最近复跑时间：2026-04-15（移动横屏基础流程截图 08:36；移动横屏长按/阶段说明截图 08:36；PC 在线对局截图 08:37）
+- 最近复跑时间：2026-04-15（移动横屏基础流程高亮修复验证 02:16；移动横屏长按/阶段说明回归验证 02:24；PC 在线对局截图沿用前次证据）
 
 ## 执行命令
 
@@ -38,13 +38,15 @@ npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "在线对局�
 
 ### 1.1）召唤高亮
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-summon-highlight.png`
+- 路径（放大取证）：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-summon-highlight-zoom-context.png`
 - 我实际看到：点击手牌进入选中态后，城门旁的可召唤空格出现亮绿色描边和内发光，亮框本体在手牌上方直接可见，不是只靠 DOM 属性或断言推断；高亮格与右侧 HUD、底部手牌之间仍有清晰分区，没有被遮住。
-- 判定：达到“选中手牌后，基地可召唤区域必须肉眼可见高亮”的验收标准。
+- 判定：达到“选中手牌后，基地可召唤区域必须肉眼可见高亮”的验收标准；E2E 同时校验了目标格 `borderTopWidth = 2px` 且 `backgroundColor != transparent`，不是只拍到过渡起始帧。
 
 ### 1.2）移动高亮
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-move-highlight.png`
+- 路径（放大取证）：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-move-highlight-zoom-context.png`
 - 我实际看到：选中单位后，周围可移动空格出现一圈亮蓝色方框，至少 5 个目标格能直接看见边框和发光；高亮不是缩在棋盘纹理里，而是明显浮在可移动格边界上。
-- 判定：达到“选中单位后，可移动区域必须肉眼可见高亮”的验收标准。
+- 判定：达到“选中单位后，可移动区域必须肉眼可见高亮”的验收标准；E2E 同时校验了目标格 `borderTopWidth = 2px` 且 `backgroundColor != transparent`。
 
 ### 2）攻击后主态
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-after-attack.png`
@@ -79,6 +81,7 @@ npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "在线对局�
   - 手牌右边界不再压进右侧 controls。
   - 阶段列表与结束阶段按钮重新分层，不再彼此打架。
   - 阶段说明面板可见，且位置回到右侧 HUD 内。
+  - 召唤/移动的空格高亮重新恢复为肉眼可见，不再只剩极细边线或只能靠 DOM 属性判断。
   - 攻击后不再触发 `ReferenceError: unitAbilities is not defined`（此前会导致页面渲染失败）。
 - 尚未在本轮处理的点：
   - 阶段说明文案缺失，截图里仍出现 `phaseDesc.*` key。

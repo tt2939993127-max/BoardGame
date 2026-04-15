@@ -19,6 +19,8 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { BaseInPlay, CardInstance, MinionOnBase, PlayerState, SmashUpCore, TitanState } from '../domain/types';
+import { ALIEN_ACTIONS } from '../data/factions/aliens';
+import { ALIEN_POD_ACTIONS } from '../data/factions/aliens_pod';
 import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 
@@ -85,6 +87,20 @@ beforeAll(() => {
 });
 
 describe('Aliens 审计修复回归（新 ID）', () => {
+  it('D8: 外星人目标型行动卡应声明 playNeedsBase/playNeedsMinion，确保 Board 进入直点模式', () => {
+    expect(ALIEN_ACTIONS.find(card => card.id === 'alien_terraform')?.playNeedsBase).toBe(true);
+    expect(ALIEN_ACTIONS.find(card => card.id === 'alien_invasion')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_ACTIONS.find(card => card.id === 'alien_disintegrator')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_ACTIONS.find(card => card.id === 'alien_beam_up')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_ACTIONS.find(card => card.id === 'alien_abduction')?.playNeedsMinion).toBe(true);
+
+    expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_terraform_pod')?.playNeedsBase).toBe(true);
+    expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_invasion_pod')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_disintegrator_pod')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_beam_up_pod')?.playNeedsMinion).toBe(true);
+    expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_abduction_pod')?.playNeedsMinion).toBe(true);
+  });
+
   it('alien_disintegrator: 结算为 CARD_TO_DECK_BOTTOM', () => {
     const handler = getInteractionHandler('alien_disintegrator');
     expect(handler).toBeDefined();

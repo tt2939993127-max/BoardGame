@@ -165,7 +165,7 @@ const GridLayer: React.FC<{
         const cellKey = `${gameCoord.row}-${gameCoord.col}`;
         const isSelected = core.selectedUnit?.row === gameCoord.row && core.selectedUnit?.col === gameCoord.col;
 
-        const cellStyle = getCellStyle(gameCoord, isSelected, props);
+        const cellVisual = getCellStyle(gameCoord, isSelected, props);
 
         return (
           <div
@@ -181,10 +181,11 @@ const GridLayer: React.FC<{
             data-valid-move={props.validMovePositions.some(p => p.row === gameCoord.row && p.col === gameCoord.col) ? 'true' : 'false'}
             data-valid-attack={props.validAttackPositions.some(p => p.row === gameCoord.row && p.col === gameCoord.col) ? 'true' : 'false'}
             data-valid-event-target={props.validEventTargets.some(p => p.row === gameCoord.row && p.col === gameCoord.col) ? 'true' : 'false'}
-            className={`absolute bg-transparent border transition-colors cursor-pointer ${cellStyle}`}
+            className={`absolute transition-colors cursor-pointer ${cellVisual.className}`}
             style={{
               left: `${pos.left}%`, top: `${pos.top}%`,
               width: `${pos.width}%`, height: `${pos.height}%`,
+              ...cellVisual.style,
             }}
           />
         );
@@ -239,8 +240,27 @@ function getCardTargetHighlight(row: number, col: number, props: BoardGridProps)
   return '';
 }
 
+type CellVisualStyle = {
+  className: string;
+  style: React.CSSProperties;
+};
+
+const baseCellVisualStyle = (
+  borderColor: string,
+  backgroundColor: string,
+  className = '',
+): CellVisualStyle => ({
+  className,
+  style: {
+    borderStyle: 'solid',
+    borderWidth: '2px',
+    borderColor,
+    backgroundColor,
+  },
+});
+
 /** 计算格子高亮样式 */
-function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGridProps): string {
+function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGridProps): CellVisualStyle {
   const { row, col } = gameCoord;
   const isAnnihilateSelected = props.annihilateMode?.selectedTargets.some(p => p.row === row && p.col === col);
   const isAnnihilateTarget = props.annihilateHighlights.some(p => p.row === row && p.col === col);
@@ -266,28 +286,36 @@ function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGr
   const isAfterAttackAbilityTarget = props.afterAttackAbilityHighlights.some(p => p.row === row && p.col === col);
   const isTelekinesisTarget = props.telekinesisHighlights.some(p => p.row === row && p.col === col);
 
-  if (isAnnihilateSelected) return 'border-purple-400 bg-purple-400/50 border-2 ring-2 ring-purple-300';
-  if (isAnnihilateTarget) return 'border-purple-500 bg-purple-500/30 border-2 animate-pulse';
-  if (isMindControlSelected) return 'border-cyan-400 bg-cyan-400/50 border-2 ring-2 ring-cyan-300';
-  if (isMindControlTarget) return 'border-cyan-500 bg-cyan-500/30 border-2 animate-pulse';
-  if (isEntanglementSelected) return 'border-emerald-400 bg-emerald-400/50 border-2 ring-2 ring-emerald-300';
-  if (isEntanglementTarget) return 'border-emerald-500 bg-emerald-500/30 border-2 animate-pulse';
-  if (isSneakTarget) return 'border-lime-400 bg-lime-400/30 border-2 animate-pulse';
-  if (isGlacialShiftTarget) return 'border-sky-400 bg-sky-400/30 border-2 animate-pulse';
-  if (isWithdrawTarget) return 'border-amber-400 bg-amber-400/30 border-2 animate-pulse';
-  if (isStunTarget) return 'border-yellow-400 bg-yellow-400/30 border-2 animate-pulse';
-  if (isHypnoticLureTarget) return 'border-pink-400 bg-pink-400/30 border-2 animate-pulse';
-  if (isAfterAttackAbilityTarget) return 'border-teal-400 bg-teal-400/30 border-2 animate-pulse';
-  if (isTelekinesisTarget) return 'border-teal-300 bg-teal-300/30 border-2 animate-pulse';
-  if (isBloodSummonTarget) return 'border-rose-500 bg-rose-500/30 border-2 animate-pulse';
-  if (isValidEventTarget) return 'border-orange-400 bg-orange-400/30 border-2 animate-pulse';
-  if (isValidSummon) return 'border-green-400 bg-green-400/30 border-2';
-  if (isValidBuild) return 'border-purple-400 bg-purple-400/30 border-2';
-  if (isAbilityPos) return 'border-green-400 bg-green-400/50 border-2 animate-pulse';
-  if (isAbilityUnit) return 'border-amber-400 bg-amber-400/40 border-2 animate-pulse';
-  if (isValidMove) return 'border-blue-400 bg-blue-400/25 border-2';
-  if (isValidAttack) return 'border-red-400 bg-red-400/30 border-2';
-  return 'border-transparent';
+  if (isAnnihilateSelected) return baseCellVisualStyle('rgba(192,132,252,1)', 'rgba(192,132,252,0.5)', 'ring-2 ring-purple-300');
+  if (isAnnihilateTarget) return baseCellVisualStyle('rgba(168,85,247,1)', 'rgba(168,85,247,0.3)', 'animate-pulse');
+  if (isMindControlSelected) return baseCellVisualStyle('rgba(34,211,238,1)', 'rgba(34,211,238,0.5)', 'ring-2 ring-cyan-300');
+  if (isMindControlTarget) return baseCellVisualStyle('rgba(6,182,212,1)', 'rgba(6,182,212,0.3)', 'animate-pulse');
+  if (isEntanglementSelected) return baseCellVisualStyle('rgba(52,211,153,1)', 'rgba(52,211,153,0.5)', 'ring-2 ring-emerald-300');
+  if (isEntanglementTarget) return baseCellVisualStyle('rgba(16,185,129,1)', 'rgba(16,185,129,0.3)', 'animate-pulse');
+  if (isSneakTarget) return baseCellVisualStyle('rgba(163,230,53,1)', 'rgba(163,230,53,0.3)', 'animate-pulse');
+  if (isGlacialShiftTarget) return baseCellVisualStyle('rgba(56,189,248,1)', 'rgba(56,189,248,0.3)', 'animate-pulse');
+  if (isWithdrawTarget) return baseCellVisualStyle('rgba(251,191,36,1)', 'rgba(251,191,36,0.3)', 'animate-pulse');
+  if (isStunTarget) return baseCellVisualStyle('rgba(250,204,21,1)', 'rgba(250,204,21,0.3)', 'animate-pulse');
+  if (isHypnoticLureTarget) return baseCellVisualStyle('rgba(244,114,182,1)', 'rgba(244,114,182,0.3)', 'animate-pulse');
+  if (isAfterAttackAbilityTarget) return baseCellVisualStyle('rgba(45,212,191,1)', 'rgba(45,212,191,0.3)', 'animate-pulse');
+  if (isTelekinesisTarget) return baseCellVisualStyle('rgba(94,234,212,1)', 'rgba(94,234,212,0.3)', 'animate-pulse');
+  if (isBloodSummonTarget) return baseCellVisualStyle('rgba(244,63,94,1)', 'rgba(244,63,94,0.3)', 'animate-pulse');
+  if (isValidEventTarget) return baseCellVisualStyle('rgba(251,146,60,1)', 'rgba(251,146,60,0.3)', 'animate-pulse');
+  if (isValidSummon) return baseCellVisualStyle('rgba(74,222,128,1)', 'rgba(74,222,128,0.3)');
+  if (isValidBuild) return baseCellVisualStyle('rgba(192,132,252,1)', 'rgba(192,132,252,0.3)');
+  if (isAbilityPos) return baseCellVisualStyle('rgba(74,222,128,1)', 'rgba(74,222,128,0.5)', 'animate-pulse');
+  if (isAbilityUnit) return baseCellVisualStyle('rgba(251,191,36,1)', 'rgba(251,191,36,0.4)', 'animate-pulse');
+  if (isValidMove) return baseCellVisualStyle('rgba(96,165,250,1)', 'rgba(96,165,250,0.25)');
+  if (isValidAttack) return baseCellVisualStyle('rgba(248,113,113,1)', 'rgba(248,113,113,0.3)');
+  return {
+    className: '',
+    style: {
+      borderStyle: 'solid',
+      borderWidth: '1px',
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+    },
+  };
 }
 
 // ============================================================================

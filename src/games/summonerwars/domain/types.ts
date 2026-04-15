@@ -485,6 +485,8 @@ export interface AbilityTriggeredPayload {
   abilityName?: string;
   /** custom action 的原始 actionId（区别于父技能 abilityId，UI 层用此字段匹配交互） */
   actionId?: string;
+  /** 本次事件仅用于记录实际执行，UI/InteractionSystem 不应再次打开选择交互 */
+  interactionResolved?: boolean;
   /** 效果类型标识（如 preventMagicGain / extraMove） */
   effectType?: string;
   /** 自定义参数 */

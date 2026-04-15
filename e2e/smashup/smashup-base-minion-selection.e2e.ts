@@ -136,6 +136,7 @@ async function injectSteampunkTricksterPacketState(matchId: string, page: Page):
         sys: {
             ...state.sys,
             phase: 'playCards',
+            interaction: { current: undefined, queue: [] },
         },
     }));
     await page.waitForSelector('[data-card-uid="c4"]', { timeout: 5000 });
@@ -186,28 +187,162 @@ async function injectMiskatonicPodBaseState(matchId: string, page: Page): Promis
         sys: {
             ...state.sys,
             phase: 'playCards',
+            interaction: { current: undefined, queue: [] },
         },
     }));
     await page.waitForSelector('[data-testid="base-zone-0"]', { timeout: 5000 });
 }
 
-function updatePlayer(core: any, playerId: string, patch: Record<string, unknown>): Record<string, unknown> {
+function makeInjectedCard(uid: string, defId: string, type: 'minion' | 'action', owner: string) {
+    return { uid, defId, type, owner };
+}
+
+function makeInjectedMinion(
+    uid: string,
+    defId: string,
+    controller: string,
+    owner: string,
+    basePower: number,
+) {
     return {
-        ...(core.players ?? {}),
-        [playerId]: {
-            ...(core.players?.[playerId] ?? {}),
-            ...patch,
-        },
+        uid,
+        defId,
+        controller,
+        owner,
+        basePower,
+        powerCounters: 0,
+        powerModifier: 0,
+        tempPowerModifier: 0,
+        talentUsed: false,
+        attachedActions: [],
     };
 }
 
-function updateBase(core: any, index: number, patch: Record<string, unknown>): Array<Record<string, unknown>> {
-    const bases = [...(core.bases ?? [])];
-    bases[index] = {
-        ...(bases[index] ?? {}),
-        ...patch,
-    };
-    return bases;
+async function injectAlienInteractionState(
+    matchId: string,
+    page: Page,
+    config: {
+        hostHand: Array<{ uid: string; defId: string; type: 'minion' | 'action'; owner: string }>;
+        bases: Array<{ defId: string; minions: any[]; ongoingActions: any[] }>;
+        baseDeck?: string[];
+    },
+): Promise<void> {
+    await applySmashUpStatePatch(matchId, page, (state) => ({
+        ...state,
+        core: {
+            ...state.core,
+            players: {
+                ...(state.core?.players ?? {}),
+                '0': {
+                    ...(state.core?.players?.['0'] ?? {}),
+                    id: '0',
+                    vp: 0,
+                    hand: config.hostHand,
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['aliens', 'pirates'],
+                    sameNameMinionDefId: null,
+                },
+                '1': {
+                    ...(state.core?.players?.['1'] ?? {}),
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['ninjas', 'robots'],
+                    sameNameMinionDefId: null,
+                },
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            phase: 'playCards',
+            bases: config.bases,
+            titans: [],
+            enabledExpansions: [],
+            baseDeck: config.baseDeck ?? [],
+            baseDiscard: [],
+            turnNumber: 1,
+            nextUid: 500,
+            cardsPlayedThisTurn: 0,
+            powerCountersPlacedOnMinionsThisTurn: 0,
+            turnDestroyedMinions: [],
+        },
+        sys: {
+            ...state.sys,
+            phase: 'playCards',
+            interaction: { current: undefined, queue: [] },
+        },
+    }));
+}
+
+function getInteractionSourceId(state: any): string | null {
+    return state?.sys?.interaction?.current?.data?.sourceId ?? null;
+}
+
+async function waitForSelectableBase(page: Page, baseIndex: number, timeout = 5000): Promise<void> {
+    void baseIndex;
+    await page.waitForFunction(
+        () => {
+            const selectors = ['[class*="ring-purple-300"]', '[class*="ring-purple-400"]'];
+            return selectors.some((selector) => document.querySelectorAll(selector).length > 0);
+        },
+        { timeout },
+    );
+}
+
+async function waitForSelectableMinion(page: Page, minionUid: string, timeout = 5000): Promise<void> {
+    await page.waitForFunction((targetUid) => {
+        const minion = document.querySelector(`[data-minion-uid="${targetUid}"]`);
+        if (!minion) return false;
+        const highlightedFrame = minion.querySelector('[class*="ring-purple-400"], [class*="ring-purple-300"]');
+        return !!highlightedFrame;
+    }, minionUid, { timeout });
+}
+
+async function isMinionSelectable(page: Page, minionUid: string): Promise<boolean> {
+    return await page.evaluate((targetUid) => {
+        const minion = document.querySelector(`[data-minion-uid="${targetUid}"]`);
+        if (!minion) return false;
+        return !!minion.querySelector('[class*="ring-purple-400"], [class*="ring-purple-300"]');
+    }, minionUid);
+}
+
+async function clickBaseZone(page: Page, baseIndex: number): Promise<void> {
+    await page.evaluate((targetIndex) => {
+        const allBases = document.querySelectorAll('.group\\/base');
+        const selectableCards: HTMLElement[] = [];
+        for (const base of allBases) {
+            const baseCard = (
+                base.querySelector('[class*="ring-purple-300"]')
+                ?? base.querySelector('[class*="ring-purple-400"]')
+            ) as HTMLElement | null;
+            if (baseCard) selectableCards.push(baseCard);
+        }
+        if (selectableCards[targetIndex]) {
+            selectableCards[targetIndex].click();
+            return;
+        }
+        const fallbackZone = document.querySelector<HTMLElement>(`[data-testid="base-zone-${targetIndex}"]`);
+        fallbackZone?.click();
+    }, baseIndex);
+    await page.waitForTimeout(300);
+}
+
+async function clickMinion(page: Page, minionUid: string): Promise<void> {
+    await page.evaluate((targetUid) => {
+        const minion = document.querySelector<HTMLElement>(`[data-minion-uid="${targetUid}"]`);
+        minion?.click();
+    }, minionUid);
+    await page.waitForTimeout(300);
 }
 
 test.describe('SmashUp Base/Minion Selection', () => {
@@ -219,21 +354,14 @@ test.describe('SmashUp Base/Minion Selection', () => {
         // 等待测试工具就绪
         await waitForTestHarness(page);
 
-        // 注入状态：玩家1手牌中有地形改造卡
-        await applySmashUpStatePatch(matchId, page, (state) => {
-            const core = state.core ?? {};
-            const players = updatePlayer(core, HOST_PLAYER_ID, {
-                hand: [{ uid: 'terraform-1', defId: 'alien_terraform', type: 'action', owner: HOST_PLAYER_ID }],
-                actionsPlayed: 0,
-                actionLimit: 1,
-            });
-            return {
-                ...state,
-                core: {
-                    ...core,
-                    players,
-                },
-            };
+        await injectAlienInteractionState(matchId, page, {
+            hostHand: [makeInjectedCard('terraform-1', 'alien_terraform', 'action', HOST_PLAYER_ID)],
+            baseDeck: ['base_central_brain', 'base_pirate_cove'],
+            bases: [
+                { defId: 'base_the_homeworld', minions: [], ongoingActions: [] },
+                { defId: 'base_tar_pits', minions: [], ongoingActions: [] },
+                { defId: 'base_great_library', minions: [], ongoingActions: [] },
+            ],
         });
 
         // 等待手牌渲染
@@ -242,26 +370,27 @@ test.describe('SmashUp Base/Minion Selection', () => {
         // 点击地形改造卡
         await page.click('[data-card-uid="terraform-1"]');
 
-        // 等待交互标题横幅出现
-        await page.waitForSelector('text=地形改造：选择要替换的基地', { timeout: 5000 });
-
-        // 验证：不应该弹出 PromptOverlay 窗口
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
         await expect(promptOverlay).not.toBeVisible();
+        await waitForSelectableBase(page, 0);
+        await clickBaseZone(page, 0);
 
-        // 验证：基地应该高亮（可点击）
-        const bases = page.locator('[data-testid^="base-zone-"]');
-        const baseCount = await bases.count();
-        expect(baseCount).toBeGreaterThan(0);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return getInteractionSourceId(state);
+        }, { timeout: 5000 }).toBe('alien_terraform');
+        await expect(promptOverlay).not.toBeVisible();
 
-        // 点击第一个基地
-        await bases.first().click();
+        await waitForSelectableBase(page, 0);
+        await clickBaseZone(page, 0);
 
-        // 等待基地牌库选择交互（第二步）
-        await page.waitForSelector('text=地形改造：从基地牌库中选择一张基地进行替换', { timeout: 5000 });
-
-        // 验证：第二步应该弹出 PromptOverlay（选择基地牌库中的卡牌）
-        await expect(promptOverlay).toBeVisible();
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return getInteractionSourceId(state);
+        }, { timeout: 5000 }).toBe('alien_terraform_choose_replacement');
+        await expect(
+            page.getByRole('heading', { name: '地形改造：从基地牌库中选择一张基地进行替换' }),
+        ).toBeVisible();
     });
 
     test('随从选择：外星人至高霸主 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
@@ -269,60 +398,40 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         await waitForTestHarness(page);
 
-        // 注入状态：场上有随从，玩家1手牌中有至高霸主
-        await applySmashUpStatePatch(matchId, page, (state) => {
-            const core = state.core ?? {};
-            const bases = updateBase(core, 0, {
-                minions: [
-                    { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] },
-                    { uid: 'minion-2', defId: 'pirate_buccaneer', owner: '1', controller: '1', attachedActions: [] },
-                ],
-            });
-            const players = updatePlayer(core, HOST_PLAYER_ID, {
-                hand: [{ uid: 'overlord-1', defId: 'alien_supreme_overlord', type: 'minion', owner: HOST_PLAYER_ID }],
-                minionsPlayed: 0,
-                minionLimit: 1,
-            });
-            return {
-                ...state,
-                core: {
-                    ...core,
-                    bases,
-                    players,
+        await injectAlienInteractionState(matchId, page, {
+            hostHand: [makeInjectedCard('overlord-1', 'alien_supreme_overlord', 'minion', HOST_PLAYER_ID)],
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [makeInjectedMinion('minion-1', 'ninja_shinobi', '1', '1', 2)],
+                    ongoingActions: [],
                 },
-            };
+                { defId: 'base_tar_pits', minions: [], ongoingActions: [] },
+                { defId: 'base_great_library', minions: [], ongoingActions: [] },
+            ],
         });
 
-        // 等待手牌渲染
         await page.waitForSelector('[data-card-uid="overlord-1"]', { timeout: 5000 });
-
-        // 点击至高霸主卡
         await page.click('[data-card-uid="overlord-1"]');
-
-        // 点击基地打出随从
-        const bases = page.locator('[data-testid^="base-zone-"]');
-        await bases.first().click();
-
-        // 等待至高霸主能力触发的交互标题
-        await page.waitForSelector('text=你可以将一个随从返回到其拥有者的手上', { timeout: 5000 });
-
-        // 验证：不应该弹出 PromptOverlay 窗口
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
+        await waitForSelectableBase(page, 0);
+        await clickBaseZone(page, 0);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[0].minions.some((minion: any) => minion.uid === 'overlord-1');
+        }, { timeout: 5000 }).toBe(true);
         await expect(promptOverlay).not.toBeVisible();
+        await waitForSelectableMinion(page, 'minion-1');
+        await clickMinion(page, 'minion-1');
 
-        // 验证：随从应该高亮（可点击）
-        const minions = page.locator('[data-minion-uid]');
-        const minionCount = await minions.count();
-        expect(minionCount).toBeGreaterThan(0);
-
-        // 点击第一个随从
-        await minions.first().click();
-
-        // 验证：随从应该被返回手牌（交互完成）
-        await page.waitForTimeout(1000);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[0].minions.some((minion: any) => minion.uid === 'minion-1');
+        }, { timeout: 5000 }).toBe(false);
         const state = await getMatchState(matchId, page);
         const base0Minions = state.core.bases[0].minions;
-        expect(base0Minions.length).toBeLessThan(2); // 至少有一个随从被返回
+        expect(base0Minions).toHaveLength(1);
+        expect(base0Minions[0].uid).toBe('overlord-1');
     });
 
     test('随从选择：外星人收集者 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
@@ -330,56 +439,45 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         await waitForTestHarness(page);
 
-        // 注入状态：场上有力量≤3的随从，玩家1手牌中有收集者
-        await applySmashUpStatePatch(matchId, page, (state) => {
-            const core = state.core ?? {};
-            const bases = updateBase(core, 0, {
-                minions: [
-                    { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] }, // 力量2
-                    { uid: 'minion-2', defId: 'pirate_first_mate', owner: '1', controller: '1', attachedActions: [] }, // 力量4
-                ],
-            });
-            const players = updatePlayer(core, HOST_PLAYER_ID, {
-                hand: [{ uid: 'collector-1', defId: 'alien_collector', type: 'minion', owner: HOST_PLAYER_ID }],
-                minionsPlayed: 0,
-                minionLimit: 1,
-            });
-            return {
-                ...state,
-                core: {
-                    ...core,
-                    bases,
-                    players,
+        await injectAlienInteractionState(matchId, page, {
+            hostHand: [makeInjectedCard('collector-1', 'alien_collector', 'minion', HOST_PLAYER_ID)],
+            bases: [
+                {
+                    defId: 'base_pirate_cove',
+                    minions: [
+                        makeInjectedMinion('minion-1', 'ninja_shinobi', '1', '1', 2),
+                        makeInjectedMinion('minion-2', 'dino_king_rex', '1', '1', 7),
+                    ],
+                    ongoingActions: [],
                 },
-            };
+                { defId: 'base_the_homeworld', minions: [], ongoingActions: [] },
+                { defId: 'base_tar_pits', minions: [], ongoingActions: [] },
+            ],
         });
 
         await page.waitForSelector('[data-card-uid="collector-1"]', { timeout: 5000 });
-
-        // 点击收集者卡
         await page.click('[data-card-uid="collector-1"]');
-
-        // 点击基地打出随从
-        const bases = page.locator('[data-testid^="base-zone-"]');
-        await bases.first().click();
-
-        // 等待收集者能力触发的交互标题
-        await page.waitForSelector('text=你可以将这个基地的一个力量≤3的随从返回其拥有者的手上', { timeout: 5000 });
-
-        // 验证：不应该弹出 PromptOverlay 窗口
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
+        await waitForSelectableBase(page, 0);
+        await clickBaseZone(page, 0);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[0].minions.some((minion: any) => minion.uid === 'collector-1');
+        }, { timeout: 5000 }).toBe(true);
         await expect(promptOverlay).not.toBeVisible();
+        await waitForSelectableMinion(page, 'minion-1');
+        await expect.poll(async () => await isMinionSelectable(page, 'minion-2')).toBe(false);
+        await clickMinion(page, 'minion-1');
 
-        // 验证：只有力量≤3的随从高亮（可点击）
-        // 这里我们通过点击第一个随从来验证交互工作正常
-        const minions = page.locator('[data-minion-uid="minion-1"]');
-        await minions.click();
-
-        // 验证：随从应该被返回手牌
-        await page.waitForTimeout(1000);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[0].minions.some((minion: any) => minion.uid === 'minion-1');
+        }, { timeout: 5000 }).toBe(false);
         const state = await getMatchState(matchId, page);
         const base0Minions = state.core.bases[0].minions;
         expect(base0Minions.some((m: any) => m.uid === 'minion-1')).toBe(false);
+        expect(base0Minions.some((m: any) => m.uid === 'collector-1')).toBe(true);
+        expect(base0Minions.some((m: any) => m.uid === 'minion-2')).toBe(true);
     });
 
     test('基地选择：外星人入侵（第二步）- 不弹窗，直接点击基地', async ({ smashupMatch }) => {
@@ -387,58 +485,36 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         await waitForTestHarness(page);
 
-        // 注入状态：场上有随从，玩家1手牌中有入侵卡
-        await applySmashUpStatePatch(matchId, page, (state) => {
-            const core = state.core ?? {};
-            let bases = updateBase(core, 0, {
-                minions: [
-                    { uid: 'minion-1', defId: 'ninja_shinobi', owner: '1', controller: '1', attachedActions: [] },
-                ],
-            });
-            bases = updateBase({ ...core, bases }, 1, { minions: [] });
-            const players = updatePlayer(core, HOST_PLAYER_ID, {
-                hand: [{ uid: 'invasion-1', defId: 'alien_invasion', type: 'action', owner: HOST_PLAYER_ID }],
-                actionsPlayed: 0,
-                actionLimit: 1,
-            });
-            return {
-                ...state,
-                core: {
-                    ...core,
-                    bases,
-                    players,
+        await injectAlienInteractionState(matchId, page, {
+            hostHand: [makeInjectedCard('invasion-1', 'alien_invasion', 'action', HOST_PLAYER_ID)],
+            bases: [
+                {
+                    defId: 'base_ninja_dojo',
+                    minions: [makeInjectedMinion('minion-1', 'ninja_shinobi', '1', '1', 2)],
+                    ongoingActions: [],
                 },
-            };
+                { defId: 'base_temple_of_goju', minions: [], ongoingActions: [] },
+                { defId: 'base_tortuga', minions: [], ongoingActions: [] },
+            ],
         });
 
         await page.waitForSelector('[data-card-uid="invasion-1"]', { timeout: 5000 });
-
-        // 点击入侵卡
         await page.click('[data-card-uid="invasion-1"]');
-
-        // 等待第一步交互：选择要移动的随从
-        await page.waitForSelector('text=选择要移动的随从', { timeout: 5000 });
-
-        // 第一步应该不弹窗（随从选择）
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
         await expect(promptOverlay).not.toBeVisible();
-
-        // 点击随从
-        const minions = page.locator('[data-minion-uid="minion-1"]');
-        await minions.click();
-
-        // 等待第二步交互：选择目标基地
-        await page.waitForSelector('text=选择要移动到的基地', { timeout: 5000 });
-
-        // 第二步也不应该弹窗（基地选择）
+        await waitForSelectableMinion(page, 'minion-1');
+        await clickMinion(page, 'minion-1');
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return getInteractionSourceId(state);
+        }, { timeout: 5000 }).toBe('alien_invasion_choose_base');
         await expect(promptOverlay).not.toBeVisible();
-
-        // 点击第二个基地
-        const bases = page.locator('[data-testid^="base-zone-"]');
-        await bases.nth(1).click();
-
-        // 验证：随从应该被移动到第二个基地
-        await page.waitForTimeout(1000);
+        await waitForSelectableBase(page, 1);
+        await clickBaseZone(page, 1);
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[1].minions.some((minion: any) => minion.uid === 'minion-1');
+        }, { timeout: 5000 }).toBe(true);
         const state = await getMatchState(matchId, page);
         expect(state.core.bases[1].minions.some((m: any) => m.uid === 'minion-1')).toBe(true);
     });

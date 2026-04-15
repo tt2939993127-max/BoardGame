@@ -487,9 +487,6 @@ export const completeFactionSelection = async (hostPage: Page, guestPage: Page) 
 export const clickBoardElement = async (page: Page, selector: string) => {
   const locator = page.locator(selector).first();
   try {
-    await locator.click({ force: true, timeout: 3000 });
-    return;
-  } catch {
     const clicked = await page.evaluate((sel) => {
       const candidates = Array.from(document.querySelectorAll<HTMLElement>(sel));
       const el = candidates.find((node) => {
@@ -498,10 +495,18 @@ export const clickBoardElement = async (page: Page, selector: string) => {
         return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
       }) ?? candidates[0];
       if (!el) return false;
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
       return true;
     }, selector);
     if (!clicked) throw new Error(`无法点击元素: ${selector}`);
+    await locator.evaluate((el) => {
+      if (el instanceof HTMLElement) el.focus?.();
+    }).catch(() => {});
+    return;
+  } catch {
+    await locator.click({ force: true, timeout: 3000 });
   }
 };
 

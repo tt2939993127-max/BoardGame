@@ -78,13 +78,10 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
       } else if (ui.activationType === 'withdrawMode') {
         setWithdrawMode({ sourceUnitId: unit.instanceId, step: 'selectCost' });
       } else {
-        // 默认：进入 abilityMode
-        setAbilityMode({
+        // 交给 domain 决定是直接执行还是先进入 InteractionSystem。
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId,
-          step: ui.activationStep ?? 'selectUnit',
           sourceUnitId: unit.instanceId,
-          context: ui.activationContext,
-          selectedCardIds: ui.activationStep === 'selectCards' ? [] : undefined,
         });
       }
     };

@@ -17,6 +17,7 @@ import type {
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
+import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { queueImmediateExtraPlayInteractions } from '../domain/extraPlay';
  
@@ -1138,7 +1139,7 @@ describe('外星人派系能力', () => {
         expect(current?.data?.sourceId).toBe('alien_collector');
     });
 
-    it('alien_disintegrator: 单个力量≤3随从时创建 Prompt', () => {
+    it('alien_disintegrator: 缺少 targetMinionUid 时应校验失败；提供目标后正常结算', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1153,10 +1154,20 @@ describe('外星人派系能力', () => {
             }],
         });
 
-        const { matchState } = execPlayAction(state, '0', 'a1');
-        const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('alien_disintegrator');
+        const missingTarget = execPlayAction(state, '0', 'a1');
+        expect((missingTarget.matchState.sys as any).interaction?.current).toBeUndefined();
+        expect(missingTarget.matchState.core.players['0'].hand.some(card => card.uid === 'a1')).toBe(true);
+
+        const handler = getInteractionHandler('alien_disintegrator');
+        expect(handler).toBeDefined();
+        const resolved = handler!(makeMatchState(state), '0', { minionUid: 'm1', baseIndex: 0 }, undefined, defaultRandom, 1000);
+        expect(resolved).toBeDefined();
+        expect(resolved!.events).toHaveLength(1);
+        expect(resolved!.events[0].type).toBe(SU_EVENTS.CARD_TO_DECK_BOTTOM);
+        expect((resolved!.events[0] as any).payload).toMatchObject({
+            cardUid: 'm1',
+            reason: 'alien_disintegrator',
+        });
     });
 
     it('alien_crop_circles: 单个基地有随从时创建 Prompt', () => {

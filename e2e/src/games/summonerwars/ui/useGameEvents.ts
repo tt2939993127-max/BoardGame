@@ -493,8 +493,11 @@ export function useGameEvents({
       // 攻击后技能触发（念力/高阶念力/读心传念）
       if (event.type === SW_EVENTS.ABILITY_TRIGGERED) {
         const p = event.payload as {
-          abilityId: string; actionId?: string; sourceUnitId: string; sourcePosition: CellCoord;
+          abilityId: string; actionId?: string; sourceUnitId: string; sourcePosition: CellCoord; interactionResolved?: boolean;
         };
+        if (p.interactionResolved) {
+          continue;
+        }
         // custom action else 分支产生的事件用 actionId 匹配（abilityId 为父技能 ID，用于 ActionLog 国际化）
         const matchId = p.actionId ?? p.abilityId;
         if (['telekinesis', 'high_telekinesis', 'mind_transmission'].includes(p.abilityId)) {

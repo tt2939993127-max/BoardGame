@@ -528,7 +528,13 @@ export function useEventCardModes({
     if (afterAttackAbilityMode) {
       const isValid = afterAttackAbilityHighlights.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        if (afterAttackAbilityMode.abilityId === 'mind_transmission') {
+        if (swInteraction?.type === 'after_attack_mind_transmission') {
+          respondPositionOption({ row: gameRow, col: gameCol });
+          setAfterAttackAbilityMode(null);
+        } else if (swInteraction?.type === 'after_attack_telekinesis_target') {
+          respondPositionOption({ row: gameRow, col: gameCol });
+          setAfterAttackAbilityMode(null);
+        } else if (afterAttackAbilityMode.abilityId === 'mind_transmission') {
           dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
             abilityId: 'mind_transmission',
             sourceUnitId: afterAttackAbilityMode.sourceUnitId,
@@ -558,14 +564,23 @@ export function useEventCardModes({
         d => d.position.row === gameRow && d.position.col === gameCol
       );
       if (dest) {
-        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-          abilityId: telekinesisTargetMode.abilityId,
-          sourceUnitId: telekinesisTargetMode.sourceUnitId,
-          targetPosition: telekinesisTargetMode.targetPosition,
-          moveRow: dest.moveRow,
-          moveCol: dest.moveCol,
-          _noSnapshot: true,
-        });
+        if (
+          swInteraction?.type === 'after_attack_telekinesis_direction'
+          || (swInteraction?.type === 'activated_ability_target'
+            && (swInteraction.meta.step === 'selectDirection'))
+        ) {
+          const optionId = findInteractionOptionId((option) => option.id === `pos:${gameRow},${gameCol}`);
+          respondInteractionOption(optionId);
+        } else {
+          dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+            abilityId: telekinesisTargetMode.abilityId,
+            sourceUnitId: telekinesisTargetMode.sourceUnitId,
+            targetPosition: telekinesisTargetMode.targetPosition,
+            moveRow: dest.moveRow,
+            moveCol: dest.moveCol,
+            _noSnapshot: true,
+          });
+        }
         setTelekinesisTargetMode(null);
       }
       return true;
@@ -654,13 +669,18 @@ export function useEventCardModes({
     if (withdrawMode && withdrawMode.step === 'selectPosition') {
       const isValid = withdrawHighlights.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-          abilityId: 'withdraw',
-          sourceUnitId: withdrawMode.sourceUnitId,
-          costType: withdrawMode.costType,
-          targetPosition: { row: gameRow, col: gameCol },
-          _noSnapshot: true,
-        });
+        if (swInteraction?.type === 'after_attack_withdraw_position') {
+          const optionId = findInteractionOptionId((option) => option.id === `pos:${gameRow},${gameCol}`);
+          respondInteractionOption(optionId);
+        } else {
+          dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+            abilityId: 'withdraw',
+            sourceUnitId: withdrawMode.sourceUnitId,
+            costType: withdrawMode.costType,
+            targetPosition: { row: gameRow, col: gameCol },
+            _noSnapshot: true,
+          });
+        }
         setWithdrawMode(null);
       }
       return true;

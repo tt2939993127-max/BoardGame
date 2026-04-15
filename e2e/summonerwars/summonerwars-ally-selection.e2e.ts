@@ -8,6 +8,8 @@
  */
 
 import { test, expect } from '../framework';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   applyCoreState,
   clickBoardElement,
@@ -17,6 +19,9 @@ import {
   setupSWOnlineMatch,
   waitForPhase,
 } from '../helpers/summonerwars';
+
+const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'evidence-screenshots', '_shared', 'summonerwars-ally-selection');
+mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 const clearBoardCell = (board: any[][], row: number, col: number) => {
   board[row][col].unit = null;
@@ -146,27 +151,24 @@ test.describe('召唤师战争 - 攻击后选择友方单位', () => {
 
       const diceResult = hostPage.getByTestId('sw-dice-result-overlay');
       await expect(diceResult).toBeVisible({ timeout: 8000 });
+      await hostPage.screenshot({ path: join(EVIDENCE_DIR, 'mind-transmission-dice-overlay.png'), fullPage: false });
 
-      const closeButton = diceResult.locator('button').filter({ hasText: /Close|Confirm/i });
-      await expect(closeButton).toBeVisible({ timeout: 3000 });
-      await closeButton.click();
+      await diceResult.click();
       await expect(diceResult).toBeHidden({ timeout: 5000 });
 
-      const allySelectionPrompt = hostPage.locator('[data-testid="sw-ability-prompt"]').or(
-        hostPage.locator('[class*="prompt"]').filter({ hasText: /Select ally|Extra attack/i }),
-      );
+      const allySelectionPrompt = hostPage.getByText(/读心传念：选择目标|Mind Transmission: Select target/i).first();
       await expect(allySelectionPrompt).toBeVisible({ timeout: 8000 });
 
       await clickBoardElement(hostPage, '[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="Mind Soldier"]');
-      await expect(allySelectionPrompt).toBeHidden({ timeout: 5000 });
 
       await expect.poll(async () => {
-        const soldierState = await hostPage.evaluate(() => {
-          const soldier = document.querySelector('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="Mind Soldier"]');
-          return soldier?.getAttribute('data-extra-attacks') || soldier?.getAttribute('data-has-extra-attack');
-        });
-        return soldierState !== null && soldierState !== '0';
+        const latestCore = await readCoreState(hostPage);
+        return (latestCore.board?.[6]?.[4]?.unit?.extraAttacks ?? 0) > 0;
       }, { timeout: 5000 }).toBe(true);
+
+      await expect(allySelectionPrompt).toBeHidden({ timeout: 5000 });
+      await closeDebugPanelIfOpen(hostPage);
+      await hostPage.screenshot({ path: join(EVIDENCE_DIR, 'mind-transmission-extra-attack-granted.png'), fullPage: false });
     } finally {
       await hostContext.close();
       await guestContext.close();

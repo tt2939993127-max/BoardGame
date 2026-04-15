@@ -1373,9 +1373,11 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             abilityId?: string;
             sourceUnitId?: string;
             sourcePosition?: CellCoord;
+            interactionResolved?: boolean;
             iceRamOwner?: PlayerId;
             structurePosition?: CellCoord;
           };
+          if (payload.interactionResolved) continue;
           const actionId = payload.actionId ?? payload.abilityId;
           const sourceUnitId = payload.sourceUnitId;
           const sourcePosition = payload.sourcePosition;
