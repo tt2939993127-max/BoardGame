@@ -10,10 +10,11 @@ import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
 import { SMASHUP_CARD_BACK } from '../domain/ids';
 import { getTotalEffectivePowerOnBase, getEffectivePower, getEffectivePowerBreakdown, getEffectiveBreakpoint, getOngoingCardPowerContribution, getBasePowerModifiers } from '../domain/ongoingModifiers';
-import { getBaseDef, getMinionDef, getCardDef, getTitanDef, resolveCardName, resolveCardText } from '../data/cards';
+import { getBaseDef, getBasePodVariantId, getMinionDef, getCardDef, getTitanDef, resolveCardName, resolveCardText } from '../data/cards';
 import { getTitansOnBase } from '../domain/abilityHelpers';
 import { getBaseRestrictions } from '../domain/ongoingEffects';
 import { getFactionMeta } from './factionMeta';
+import { useSmashUpOverlay } from './SmashUpOverlayContext';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
@@ -77,6 +78,7 @@ export const BaseZone: React.FC<{
     tokenRef?: (el: HTMLDivElement | null) => void;
 }> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, duelParticipantMinionUids, isBuriedSelectMode, selectableBuriedCardUids, multiSelectedBuriedCardUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onBuriedCardSelect, onViewMinion, onViewAction, onViewBase, onViewTitan, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, usableTitanTalentUids, usableTitanOngoingUids, canUseBaseAbility = false, tokenRef }) => {
     const { t } = useTranslation('game-smashup');
+    const { selectedFactions } = useSmashUpOverlay();
     const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
     // 响应式布局配置
@@ -84,7 +86,9 @@ export const BaseZone: React.FC<{
     const layout = getLayoutConfig(playerCount, { isMobileViewport });
     
     const baseDef = getBaseDef(base.defId);
-    const baseName = resolveCardName(baseDef, t) || base.defId;
+    const resolvedBaseDefId = baseDef ? getBasePodVariantId(baseDef, selectedFactions) : base.defId;
+    const localizedBaseDef = getBaseDef(resolvedBaseDefId) ?? baseDef;
+    const baseName = localizedBaseDef ? (resolveCardName(localizedBaseDef, t) || resolvedBaseDefId) : base.defId;
     const totalPower = getTotalEffectivePowerOnBase(core, base, baseIndex);
     const breakpoint = getEffectiveBreakpoint(core, baseIndex);
     const ratio = totalPower / breakpoint;
@@ -589,7 +593,7 @@ export const BaseZone: React.FC<{
                             transition={{ duration: 0.4, ease: 'easeInOut' }}
                         >
                         <CardPreview
-                            previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }}
+                            previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: resolvedBaseDefId } }}
                             className="w-full h-full"
                             title={baseName}
                         />

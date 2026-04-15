@@ -86,6 +86,35 @@ describe('onlineAiRecovery - 游戏结束检查', () => {
         expect(result?.reason).toBe('active-turn');
     });
 
+    it('factionSelect 阶段即使当前玩家是 AI，也不应走 active-turn 强制推进', () => {
+        const sharedState: MatchState<unknown> = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                gameover: undefined,
+                phase: 'factionSelect',
+                interaction: {
+                    current: null,
+                    isBlocked: false,
+                },
+            },
+        };
+
+        const seatControllers: Record<string, AiSeatController> = {
+            '0': { type: 'human' },
+            '1': { type: 'local-ai', policyId: 'baseline' },
+        };
+
+        const result = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers,
+            seatStates: {},
+        });
+
+        expect(result).toBeNull();
+    });
+
     it('游戏结束后即使有交互也应该返回 null', () => {
         // 构造一个游戏已结束且有交互的状态
         const sharedState: MatchState<unknown> = {

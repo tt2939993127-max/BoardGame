@@ -389,6 +389,60 @@ describe('onlineAiSeats', () => {
         ]);
     });
 
+    it('回归：factionSelect 阶段 AI seat 未就绪时，watchdog 不得用 ADVANCE_PHASE 跳过派系选择', async () => {
+        const onlineAiState = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-faction-select-stall',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    enableAi: true,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'expert' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+        });
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                    turnOrder: ['0', '1'],
+                    currentPlayerIndex: 1,
+                    factionSelection: {
+                        takenFactions: ['steampunks_pod'],
+                        playerSelections: {
+                            '0': ['steampunks_pod'],
+                            '1': [],
+                        },
+                        completedPlayers: [],
+                    },
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 1,
+                    phase: 'factionSelect',
+                },
+            } as MatchState<unknown>,
+            seatControllers: onlineAiState.seatControllers,
+            seatStates: {},
+        });
+
+        expect(candidate).toBeNull();
+    });
+
     it('仅凭据有变化时才触发持久化', () => {
         expect(haveAiSeatCredentialsChanged({}, {})).toBe(false);
         expect(haveAiSeatCredentialsChanged({ '1': 'same' }, { '1': 'same' })).toBe(false);
@@ -787,6 +841,53 @@ describe('resolveNextAiAction 在线视角', () => {
         expect(resolution?.action.kind).toBe('response-pass');
         expect(resolution?.action.commands).toEqual([
             { type: 'RESPONSE_PASS', payload: {} },
+        ]);
+    });
+
+    it('local-ai policy 抛错时，应回退到首个合法动作，避免 watchdog 直接推进空回合', async () => {
+        const gameId = '__test_online_ai_local_policy_throw_fallback__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId }) => [{
+                actionId: `select-faction-${playerId}`,
+                kind: 'select-faction',
+                label: `由 ${playerId} 选择派系`,
+                commands: [{ type: 'su:select_faction', payload: { factionId: 'aliens' } }],
+            }],
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: () => {
+                        throw new Error('policy_crashed');
+                    },
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: {
+                core: {},
+                sys: {
+                    interaction: { current: null, queue: [] },
+                    responseWindow: {},
+                },
+            } as MatchState<unknown>,
+            matchId: 'match-online-ai-local-policy-throw',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('select-faction');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'su:select_faction', payload: { factionId: 'aliens' } },
         ]);
     });
 

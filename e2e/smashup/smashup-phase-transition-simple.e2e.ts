@@ -7,7 +7,7 @@ import { dirname } from 'node:path';
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { test, expect } from '../framework';
 import { getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { waitForSmashUpUI } from '../helpers/smashup';
+import { selectFaction, waitForSmashUpUI } from '../helpers/smashup';
 import { setupSmashUpMatchSkipSetup } from '../helpers/smashup-skip-setup';
 import {
     ensureGameServerAvailable,
@@ -17,6 +17,7 @@ import {
     waitForMatchAvailable,
 } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
+import { SMASHUP_FACTION_IDS } from '../../src/games/smashup/domain/ids';
 
 async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
     const path = getEvidenceScreenshotPath(testInfo, name);
@@ -38,6 +39,10 @@ async function applyOnlineMatchState(
 async function setupSmashUpOnlineAiRoom(
     browser: Browser,
     baseURL: string | undefined,
+    options?: {
+        seatControllers?: Record<string, unknown>;
+        beforeEnterMatch?: (args: { hostPage: Page; matchId: string }) => Promise<void> | void;
+    },
 ): Promise<{
     hostPage: Page;
     hostContext: BrowserContext;
@@ -74,7 +79,7 @@ async function setupSmashUpOnlineAiRoom(
                 ownerKey: `guest:${guestId}`,
                 ownerType: 'guest',
                 enableAi: true,
-                seatControllers: {
+                seatControllers: options?.seatControllers ?? {
                     '1': {
                         type: 'local-ai',
                         minimumActionDelayMs: 2000,
@@ -117,6 +122,7 @@ async function setupSmashUpOnlineAiRoom(
         return null;
     }
 
+    await options?.beforeEnterMatch?.({ hostPage, matchId });
     await hostPage.goto(`/play/smashup/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
     return { hostPage, hostContext, matchId };
 }
@@ -143,6 +149,70 @@ async function waitForAiSeatCredential(
     }).not.toBeNull();
 
     await page.waitForTimeout(1200);
+}
+
+async function installDelayedAiClientConnectPatch(
+    page: Page,
+    options: {
+        targetPlayerId?: string;
+        delayMs: number;
+    },
+): Promise<void> {
+    const {
+        targetPlayerId = '1',
+        delayMs,
+    } = options;
+
+    await page.addInitScript(({ aiPlayerId, connectDelayMs }) => {
+        const globalWindow = window as Window & {
+            __SU_DELAY_AI_CONNECT_PATCH__?: {
+                installed: boolean;
+                aiPlayerId: string;
+                connectDelayMs: number;
+                delayedCalls: number;
+            };
+        };
+
+        globalWindow.__SU_DELAY_AI_CONNECT_PATCH__ = {
+            installed: true,
+            aiPlayerId,
+            connectDelayMs,
+            delayedCalls: 0,
+        };
+
+        const applyPatch = async () => {
+            const transportModule = await import('/src/engine/transport/client.ts');
+            const proto = transportModule.GameTransportClient?.prototype as {
+                connect?: (this: { config?: { playerID?: string | null } }, ...args: unknown[]) => unknown;
+                __SU_DELAY_AI_CONNECT_PATCHED__?: boolean;
+            } | undefined;
+            if (!proto?.connect || proto.__SU_DELAY_AI_CONNECT_PATCHED__) {
+                return;
+            }
+
+            const originalConnect = proto.connect;
+            proto.connect = function patchedConnect(this: { config?: { playerID?: string | null } }, ...args: unknown[]) {
+                const tracker = globalWindow.__SU_DELAY_AI_CONNECT_PATCH__;
+                const playerId = this?.config?.playerID ?? null;
+                if (
+                    tracker
+                    && playerId === tracker.aiPlayerId
+                    && tracker.delayedCalls === 0
+                ) {
+                    tracker.delayedCalls += 1;
+                    window.setTimeout(() => {
+                        void originalConnect.apply(this, args);
+                    }, tracker.connectDelayMs);
+                    return;
+                }
+
+                return originalConnect.apply(this, args);
+            };
+            proto.__SU_DELAY_AI_CONNECT_PATCHED__ = true;
+        };
+
+        void applyPatch();
+    }, { aiPlayerId: targetPlayerId, connectDelayMs: delayMs });
 }
 
 async function installSmashUpAiChoiceRejectPatch(
@@ -1722,6 +1792,126 @@ test('在线模式对手打出行动卡时应显示特写', async ({ browser }, 
     }
 });
 
+test('在线 AI seat 建连延迟超过 8 秒时，factionSelect 不应被 watchdog 误推进到空牌 playCards', async ({ browser }, testInfo) => {
+    test.setTimeout(180000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    let delayedAiClaimCount = 0;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL, {
+        seatControllers: {
+            '1': {
+                type: 'local-ai',
+                difficulty: 'expert',
+                minimumActionDelayMs: 150,
+            },
+        },
+        beforeEnterMatch: async ({ hostPage, matchId }) => {
+            await hostPage.route(`**/games/smashup/${matchId}/claim-seat`, async (route) => {
+                const postData = route.request().postDataJSON?.() as { playerID?: string } | undefined;
+                if (route.request().method() === 'POST' && postData?.playerID === '1') {
+                    delayedAiClaimCount += 1;
+                    await new Promise((resolve) => setTimeout(resolve, 10_000));
+                }
+                await route.continue();
+            });
+        },
+    });
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        const factionHeading = hostPage.getByText('选择你的派系');
+        await expect(factionHeading).toBeVisible({ timeout: 15000 });
+
+        await selectFaction(hostPage, 0);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-host-picked-first');
+
+        await hostPage.waitForTimeout(8800);
+
+        const stalledState = await getMatchState(matchId, hostPage);
+        expect(delayedAiClaimCount).toBeGreaterThan(0);
+        expect(stalledState.sys?.phase).toBe('factionSelect');
+        expect(stalledState.core?.factionSelection).toBeTruthy();
+        expect(stalledState.core?.factionSelection?.playerSelections?.['0']?.length ?? 0).toBe(1);
+        expect(stalledState.core?.players?.['0']?.factions ?? []).toEqual(['', '']);
+        expect(stalledState.core?.players?.['1']?.factions ?? []).toEqual(['', '']);
+        expect(stalledState.core?.players?.['0']?.hand?.length ?? 0).toBe(0);
+        expect(stalledState.core?.players?.['1']?.hand?.length ?? 0).toBe(0);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-still-waiting-after-watchdog-window');
+
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                phase: state.sys?.phase ?? null,
+                currentPlayerIndex: state.core?.currentPlayerIndex ?? null,
+                hostPicks: state.core?.factionSelection?.playerSelections?.['0']?.length ?? 0,
+                aiPicks: state.core?.factionSelection?.playerSelections?.['1']?.length ?? 0,
+            };
+        }, {
+            timeout: 30000,
+            message: '等待 AI 在 seat 建连后补完两次派系选择并把选秀权交还房主',
+        }).toEqual({
+            phase: 'factionSelect',
+            currentPlayerIndex: 0,
+            hostPicks: 1,
+            aiPicks: 2,
+        });
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-ai-picked-twice');
+
+        const stateBeforeHostSecondPick = await getMatchState(matchId, hostPage);
+        const takenFactions = new Set(stateBeforeHostSecondPick.core?.factionSelection?.takenFactions ?? []);
+        const hostSecondFactionId = Object.values(SMASHUP_FACTION_IDS).find((factionId) => (
+            factionId !== SMASHUP_FACTION_IDS.MADNESS && !takenFactions.has(factionId)
+        ));
+        expect(hostSecondFactionId).toBeTruthy();
+        await hostPage.evaluate(async ({ factionId }) => {
+            await window.__BG_TEST_HARNESS__!.command.dispatch({
+                type: 'su:select_faction',
+                playerId: '0',
+                payload: { factionId },
+            });
+        }, { factionId: hostSecondFactionId! });
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const hostFactions = state.core?.players?.['0']?.factions ?? [];
+            const aiFactions = state.core?.players?.['1']?.factions ?? [];
+            return {
+                phase: state.sys?.phase ?? null,
+                factionSelection: state.core?.factionSelection ?? null,
+                hostFactionsFilled: hostFactions.every((item: string) => Boolean(item)),
+                aiFactionsFilled: aiFactions.every((item: string) => Boolean(item)),
+                hostHand: state.core?.players?.['0']?.hand?.length ?? 0,
+                aiHand: state.core?.players?.['1']?.hand?.length ?? 0,
+                hostDeck: state.core?.players?.['0']?.deck?.length ?? 0,
+                aiDeck: state.core?.players?.['1']?.deck?.length ?? 0,
+            };
+        }, {
+            timeout: 30000,
+            message: '等待选秀完成后正常进入对局并初始化双方牌组',
+        }).toEqual({
+            phase: 'playCards',
+            factionSelection: null,
+            hostFactionsFilled: true,
+            aiFactionsFilled: true,
+            hostHand: 5,
+            aiHand: 5,
+            hostDeck: 35,
+            aiDeck: 35,
+        });
+
+        await waitForSmashUpUI(hostPage);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-final-playcards');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
 test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
 
@@ -1772,6 +1962,130 @@ test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', asy
         }, { timeout: 8000 }).toBe(0);
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hidden-choice-after-resolve');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
+test('回归：在线 AI 在 factionSelect 阶段 seat state 延迟就绪时，不得被 watchdog 跳过到空牌对局', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL, {
+        beforeEnterMatch: async ({ hostPage }) => {
+            await installDelayedAiClientConnectPatch(hostPage, {
+                targetPlayerId: '1',
+                delayMs: 12000,
+            });
+        },
+    });
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        const factionHeading = hostPage.locator('h1').filter({ hasText: /Draft Your Factions|选择你的派系/i });
+        await expect(factionHeading).toBeVisible({ timeout: 15000 });
+
+        const steampunksCard = hostPage.getByTestId('faction-option-steampunks');
+        await expect(steampunksCard).toBeVisible({ timeout: 10000 });
+        await steampunksCard.click();
+
+        const podVariantButton = hostPage.getByTestId('faction-variant-pod');
+        if (await podVariantButton.count() > 0) {
+            await podVariantButton.click();
+        }
+
+        const confirmButton = hostPage.getByTestId('faction-confirm-button');
+        await expect(confirmButton).toBeVisible({ timeout: 5000 });
+        await confirmButton.click();
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return state.core?.factionSelection?.playerSelections?.['0']?.length ?? 0;
+        }, {
+            timeout: 5000,
+            message: '等待房主的首个派系选择写入服务器状态',
+        }).toBe(1);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-after-host-pick');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                phase: state.sys?.phase ?? null,
+                player0Selections: state.core?.factionSelection?.playerSelections?.['0'] ?? [],
+                player1Selections: state.core?.factionSelection?.playerSelections?.['1'] ?? [],
+                player0Factions: state.core?.players?.['0']?.factions ?? [],
+                player1Factions: state.core?.players?.['1']?.factions ?? [],
+                player0HandSize: state.core?.players?.['0']?.hand?.length ?? -1,
+                player1HandSize: state.core?.players?.['1']?.hand?.length ?? -1,
+            };
+        }, {
+            timeout: 10000,
+            message: '等待超过 watchdog 触发窗口后仍停留在合法的 factionSelect 状态',
+        }).toEqual({
+            phase: 'factionSelect',
+            player0Selections: ['steampunks_pod'],
+            player1Selections: [],
+            player0Factions: [],
+            player1Factions: [],
+            player0HandSize: 0,
+            player1HandSize: 0,
+        });
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-still-waiting-before-ai-connect');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const player0 = state.core?.players?.['0'];
+            const player1 = state.core?.players?.['1'];
+            return {
+                phase: state.sys?.phase ?? null,
+                factionSelectionCleared: state.core?.factionSelection == null,
+                player0Factions: player0?.factions?.filter(Boolean) ?? [],
+                player1Factions: player1?.factions?.filter(Boolean) ?? [],
+                player0HandSize: player0?.hand?.length ?? -1,
+                player1HandSize: player1?.hand?.length ?? -1,
+                player0DeckSize: player0?.deck?.length ?? -1,
+                player1DeckSize: player1?.deck?.length ?? -1,
+            };
+        }, {
+            timeout: 30000,
+            message: '等待 AI seat 连上后完成派系选择并正常初始化对局',
+        }).toMatchObject({
+            factionSelectionCleared: true,
+            player0Factions: ['steampunks_pod', expect.any(String)],
+            player1Factions: [expect.any(String), expect.any(String)],
+            player0HandSize: 5,
+            player1HandSize: 5,
+            player0DeckSize: expect.any(Number),
+            player1DeckSize: expect.any(Number),
+        });
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const player0DeckSize = state.core?.players?.['0']?.deck?.length ?? -1;
+            const player1DeckSize = state.core?.players?.['1']?.deck?.length ?? -1;
+            return {
+                phase: state.sys?.phase ?? null,
+                player0DeckSize,
+                player1DeckSize,
+            };
+        }, {
+            timeout: 5000,
+            message: '等待双方牌库完成初始化（不应为空牌进入对局）',
+        }).toEqual({
+            phase: 'playCards',
+            player0DeckSize: 35,
+            player1DeckSize: 35,
+        });
+
+        await waitForSmashUpUI(hostPage);
+        await hostPage.waitForTimeout(1500);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-faction-select-recovered-game-start');
     } finally {
         await setup.hostContext.close();
     }

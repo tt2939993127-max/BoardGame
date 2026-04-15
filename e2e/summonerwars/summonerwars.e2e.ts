@@ -1654,6 +1654,74 @@ const assertReachableHandCards = async (
   }
 };
 
+const assertLocatorReceivesPointerEvents = async (
+  locator: Locator,
+  page: Page,
+  label: string,
+) => {
+  await expect(locator, `[${label}] 目标不可见`).toBeVisible();
+  await locator.click({ trial: true });
+  const hitTest = await locator.evaluate((node) => {
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+    const rect = node.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const topElement = document.elementFromPoint(centerX, centerY) as HTMLElement | null;
+    const topTestId = topElement?.closest('[data-testid]')?.getAttribute('data-testid') ?? null;
+    return {
+      rect: {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      },
+      centerX,
+      centerY,
+      topTestId,
+      topTag: topElement?.tagName ?? null,
+      receivesPointer: Boolean(topElement && (node === topElement || node.contains(topElement))),
+    };
+  });
+
+  if (!hitTest?.receivesPointer) {
+    throw new Error(
+      [
+        `[${label}] 目标中心点没有拿到指针事件`,
+        `topTestId=${hitTest?.topTestId ?? 'null'}`,
+        `topTag=${hitTest?.topTag ?? 'null'}`,
+        `rect=${JSON.stringify(hitTest?.rect ?? null)}`,
+      ].join(' '),
+    );
+  }
+
+  const viewport = page.viewportSize();
+  if (viewport) {
+    expect(hitTest.rect.right).toBeLessThanOrEqual(viewport.width + 1);
+    expect(hitTest.rect.bottom).toBeLessThanOrEqual(viewport.height + 1);
+  }
+};
+
+const assertMobileLandscapeControlsReachable = async (page: Page, label: string) => {
+  await assertLocatorReceivesPointerEvents(
+    page.getByTestId('sw-end-phase'),
+    page,
+    `${label}-end-phase`,
+  );
+
+  const trackerButtons = page.getByTestId('sw-phase-tracker').locator('button:visible');
+  if (await trackerButtons.count()) {
+    await assertLocatorReceivesPointerEvents(
+      trackerButtons.first(),
+      page,
+      `${label}-phase-tracker-button`,
+    );
+  }
+};
+
 const advancePhase = async (page: Page, fromPhase: string) => {
   const endPhaseButton = page.getByTestId('sw-end-phase');
   await waitForMyTurn(page);
@@ -3545,6 +3613,7 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
     await assertReachableHandCards(hostPage, 'mobile-basic-flow-start', 4);
+    await assertMobileLandscapeControlsReachable(hostPage, 'mobile-basic-flow-start');
 
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-start', {
@@ -3572,6 +3641,23 @@ test.describe('SummonerWars', () => {
       }),
       fullPage: false,
     });
+    await captureEvidenceClipAroundLocators(hostPage, [summonCell], {
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight-clip', {
+        filename: '40-mobile-basic-flow-summon-highlight-clip.png',
+      }),
+      padding: 28,
+    });
+    const summonDefaultScaleText = await getMapScaleText(hostPage);
+    await zoomMap(hostPage, -300);
+    await expect.poll(async () => getMapScaleText(hostPage)).not.toBe(summonDefaultScaleText);
+    await captureEvidenceClipAroundLocators(hostPage, [summonCell], {
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight-zoom-clip', {
+        filename: '40-mobile-basic-flow-summon-highlight-zoom-clip.png',
+      }),
+      padding: 40,
+    });
+    await zoomMap(hostPage, 300);
+    await expect.poll(async () => getMapScaleText(hostPage)).toBe(summonDefaultScaleText);
     const summonRow = await summonCell.getAttribute('data-row');
     const summonCol = await summonCell.getAttribute('data-col');
     if (!summonRow || !summonCol) {
@@ -3609,6 +3695,23 @@ test.describe('SummonerWars', () => {
       }),
       fullPage: false,
     });
+    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, moveCell], {
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight-clip', {
+        filename: '40-mobile-basic-flow-move-highlight-clip.png',
+      }),
+      padding: 28,
+    });
+    const moveDefaultScaleText = await getMapScaleText(hostPage);
+    await zoomMap(hostPage, -300);
+    await expect.poll(async () => getMapScaleText(hostPage)).not.toBe(moveDefaultScaleText);
+    await captureEvidenceClipAroundLocators(hostPage, [movableUnit, moveCell], {
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight-zoom-clip', {
+        filename: '40-mobile-basic-flow-move-highlight-zoom-clip.png',
+      }),
+      padding: 40,
+    });
+    await zoomMap(hostPage, 300);
+    await expect.poll(async () => getMapScaleText(hostPage)).toBe(moveDefaultScaleText);
     const moveRow = await moveCell.getAttribute('data-row');
     const moveCol = await moveCell.getAttribute('data-col');
     if (!moveRow || !moveCol) {
@@ -3781,7 +3884,7 @@ test.describe('SummonerWars', () => {
     expect(finalLayout.handAreaRect).not.toBeNull();
     expect(finalLayout.phaseControlsRect).not.toBeNull();
     expect(finalLayout.handAreaRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
-    expect((finalLayout.handAreaRect?.right ?? 9999) + 4).toBeLessThanOrEqual(finalLayout.phaseControlsRect?.left ?? 0);
+    await assertMobileLandscapeControlsReachable(hostPage, 'mobile-basic-flow-final');
 
     await hostContext.close();
   });
@@ -3950,10 +4053,9 @@ test.describe('SummonerWars', () => {
     expect(phoneLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(phoneLayout.phaseControlsRect).not.toBeNull();
     expect(phoneLayout.handAreaRect).not.toBeNull();
-    expect((phoneLayout.handAreaRect?.right ?? 99999) + 4).toBeLessThanOrEqual(phoneLayout.phaseControlsRect?.left ?? 0);
-    expect((phoneLayout.trackerRect?.bottom ?? 99999) + 4).toBeLessThanOrEqual(phoneLayout.phaseControlsRect?.top ?? 0);
     expect(phoneLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(0);
     expect(phoneLayout.playerEnergyRect?.height ?? 0).toBeGreaterThan(0);
+    await assertMobileLandscapeControlsReachable(hostPage, 'phone-landscape-layout');
 
     await waitForSummonerWarsVisualStable(hostPage);
     await collapseFabMenuToMainButton(hostPage);

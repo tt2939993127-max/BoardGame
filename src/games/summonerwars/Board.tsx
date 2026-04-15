@@ -83,7 +83,6 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.18;
-const MOBILE_LANDSCAPE_HUD_RAIL_WIDTH = '9.75rem';
 const MOBILE_LANDSCAPE_MAP_PADDING = '4vw';
 const DESKTOP_MAP_PADDING = '10vw';
 const MAP_INTERNAL_TARGETS = new Set([
@@ -106,9 +105,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const useCompactHandLayout = isLandscapeMobileViewport;
   const mapInitialScale = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
   const mapPaddingLeft = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
-  const mapPaddingRight = isLandscapeMobileViewport
-    ? `calc(${MOBILE_LANDSCAPE_MAP_PADDING} + ${MOBILE_LANDSCAPE_HUD_RAIL_WIDTH})`
-    : DESKTOP_MAP_PADDING;
+  const mapPaddingRight = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
   const mapShadeWidth = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
@@ -131,18 +128,34 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
     : '100vw';
+  const mobileLandscapeCenteredContentWidth = `calc(100vw - (${MOBILE_LANDSCAPE_MAP_PADDING} * 2))`;
+  const handReferenceWidthCss = isLandscapeMobileViewport
+    ? mobileLandscapeCenteredContentWidth
+    : '100vw';
   const boardShellStyle = {
     '--sw-board-reference-width': boardReferenceWidthCss,
-    '--sw-hand-reference-width': '100vw',
+    '--sw-hand-reference-width': handReferenceWidthCss,
     ...(isLandscapeMobileViewport ? { '--sw-hand-card-width-ratio': '0.145' } : {}),
   } as React.CSSProperties;
 
   const handAreaStyle: React.CSSProperties = {
-    left: isLandscapeMobileViewport
-      ? `calc(50% - (${MOBILE_LANDSCAPE_HUD_RAIL_WIDTH} / 2))`
-      : '50%',
+    left: '50%',
     transform: 'translateX(-50%)',
+    ...(isLandscapeMobileViewport
+      ? {
+          width: mobileLandscapeCenteredContentWidth,
+          maxWidth: mobileLandscapeCenteredContentWidth,
+        }
+      : {}),
   };
+  const statusBannersWrapperStyle: React.CSSProperties | undefined = isLandscapeMobileViewport
+    ? {
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: `min(${mobileLandscapeCenteredContentWidth}, 34rem)`,
+        maxWidth: mobileLandscapeCenteredContentWidth,
+      }
+    : undefined;
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -1163,7 +1176,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
-                <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2 pointer-events-auto" data-tutorial-id="sw-action-banner">
+                <div
+                  className={`absolute top-3 z-30 pointer-events-auto ${isLandscapeMobileViewport ? '' : 'left-1/2 -translate-x-1/2'}`}
+                  style={statusBannersWrapperStyle}
+                  data-tutorial-id="sw-action-banner"
+                >
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}

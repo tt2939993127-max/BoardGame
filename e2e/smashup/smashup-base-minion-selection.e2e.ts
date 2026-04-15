@@ -13,8 +13,80 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { waitForTestHarness } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
+import {
+    setupTwoPlayerMatch as setupOnlineMatch,
+    cleanupTwoPlayerMatch,
+    completeFactionSelectionCustom,
+    waitForHandArea,
+    FACTION,
+} from './smashup-helpers';
 
 const HOST_PLAYER_ID = '0';
+const MISKATONIC_BASE_LEGACY_TEXT = '在这个基地计分后，冠军可以搜寻他的手牌和弃牌堆中任意数量的疯狂卡，然后返回到疯狂卡牌库。';
+const MISKATONIC_BASE_POD_TEXT = '每回合一次，在你于此打出一个随从后，你可以抽两张疯狂卡，或从你的手牌弃置一张疯狂卡来额外打出一张战术。';
+const STEAMPUNK_TRICKSTER_PACKET_CORE = {
+    players: {
+        '0': {
+            id: '0',
+            vp: 0,
+            hand: [
+                { uid: 'c22', defId: 'trickster_brownie_pod', type: 'minion', owner: '0' },
+                { uid: 'c35', defId: 'trickster_hideout_pod', type: 'action', owner: '0' },
+                { uid: 'c4', defId: 'steampunk_steam_man_pod', type: 'minion', owner: '0' },
+                { uid: 'c12', defId: 'steampunk_aggromotive_pod', type: 'action', owner: '0' },
+                { uid: 'c16', defId: 'steampunk_change_of_venue_pod', type: 'action', owner: '0' },
+            ],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            factions: ['steampunks_pod', 'tricksters_pod'],
+            sameNameMinionDefId: null,
+        },
+        '1': {
+            id: '1',
+            vp: 0,
+            hand: [],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            factions: ['robots', 'wizards'],
+        },
+    },
+    turnOrder: ['0', '1'],
+    currentPlayerIndex: 0,
+    bases: [
+        { defId: 'base_mushroom_kingdom', minions: [], ongoingActions: [] },
+        { defId: 'base_the_factory', minions: [], ongoingActions: [] },
+        { defId: 'base_great_library', minions: [], ongoingActions: [] },
+    ],
+    titans: [
+        {
+            uid: 'titan_0_tricksters_big_funny_giant',
+            defId: 'tricksters_big_funny_giant',
+            faction: 'tricksters',
+            ownerId: '0',
+            controllerId: '0',
+            powerCounters: 0,
+            talentUsed: false,
+            location: { zone: 'setaside' },
+        },
+    ],
+    enabledExpansions: ['titans'],
+    baseDeck: [],
+    baseDiscard: [],
+    turnNumber: 1,
+    nextUid: 81,
+    cardsPlayedThisTurn: 0,
+    powerCountersPlacedOnMinionsThisTurn: 0,
+    turnDestroyedMinions: [],
+};
 
 async function applySmashUpStatePatch(
     matchId: string,
@@ -52,6 +124,71 @@ function normalizeInjectedMatchState(matchId: string, state: any): any {
         phase: typeof next.core?.phase === 'string' ? next.core.phase : next.sys.phase,
     };
     return next;
+}
+
+async function injectSteampunkTricksterPacketState(matchId: string, page: Page): Promise<void> {
+    await applySmashUpStatePatch(matchId, page, (state) => ({
+        ...state,
+        core: {
+            ...state.core,
+            ...structuredClone(STEAMPUNK_TRICKSTER_PACKET_CORE),
+        },
+        sys: {
+            ...state.sys,
+            phase: 'playCards',
+        },
+    }));
+    await page.waitForSelector('[data-card-uid="c4"]', { timeout: 5000 });
+    await page.waitForSelector('[data-testid="su-rail-titan-titan_0_tricksters_big_funny_giant"]', { timeout: 5000 });
+}
+
+async function injectMiskatonicPodBaseState(matchId: string, page: Page): Promise<void> {
+    await applySmashUpStatePatch(matchId, page, (state) => ({
+        ...state,
+        core: {
+            ...state.core,
+            players: {
+                ...(state.core?.players ?? {}),
+                '0': {
+                    ...(state.core?.players?.['0'] ?? {}),
+                    id: '0',
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['miskatonic_university_pod', 'ghosts_pod'],
+                },
+                '1': {
+                    ...(state.core?.players?.['1'] ?? {}),
+                    id: '1',
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['aliens', 'robots'],
+                },
+            },
+            bases: [
+                { defId: 'base_miskatonic_university_base', minions: [], ongoingActions: [] },
+                { defId: 'base_the_factory', minions: [], ongoingActions: [] },
+                { defId: 'base_great_library', minions: [], ongoingActions: [] },
+            ],
+            titans: [],
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        },
+        sys: {
+            ...state.sys,
+            phase: 'playCards',
+        },
+    }));
+    await page.waitForSelector('[data-testid="base-zone-0"]', { timeout: 5000 });
 }
 
 function updatePlayer(core: any, playerId: string, patch: Record<string, unknown>): Record<string, unknown> {
@@ -304,5 +441,150 @@ test.describe('SmashUp Base/Minion Selection', () => {
         await page.waitForTimeout(1000);
         const state = await getMatchState(matchId, page);
         expect(state.core.bases[1].minions.some((m: any) => m.uid === 'minion-1')).toBe(true);
+    });
+
+    test('反馈复现：蒸汽朋克 + 魔法妖精在空基地局面下，随从/持续行动/泰坦都应能进入并完成打出链路', async ({ smashupMatch }) => {
+        const { hostPage: page, matchId } = smashupMatch;
+
+        await waitForTestHarness(page);
+
+        await injectSteampunkTricksterPacketState(matchId, page);
+
+        await page.click('[data-card-uid="c4"]');
+        await page.click('[data-testid="base-zone-1"]');
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[1].minions.some((m: any) => m.uid === 'c4');
+        }, { timeout: 5000 }).toBe(true);
+
+        await injectSteampunkTricksterPacketState(matchId, page);
+
+        await page.click('[data-card-uid="c12"]');
+        await page.click('[data-testid="base-zone-0"]');
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            return state.core.bases[0].ongoingActions.some((card: any) => card.defId === 'steampunk_aggromotive_pod');
+        }, { timeout: 5000 }).toBe(true);
+
+        await injectSteampunkTricksterPacketState(matchId, page);
+
+        await page.click('[data-testid="su-rail-titan-titan_0_tricksters_big_funny_giant"]');
+        await page.click('[data-testid="base-zone-2"]');
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, page);
+            const titan = state.core.titans.find((candidate: any) => candidate.uid === 'titan_0_tricksters_big_funny_giant');
+            return titan?.location?.zone === 'base' && titan?.location?.baseIndex === 2;
+        }, { timeout: 5000 }).toBe(true);
+    });
+
+    test('反馈复现（移动端横屏）："点击无反应"场景下，随从/持续行动/泰坦都应能完成点击打出', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+        await clearEvidenceScreenshotsForTest(testInfo);
+        const setup = await setupOnlineMatch(browser, baseURL, {
+            contextOptions: {
+                viewport: { width: 1280, height: 720 },
+                isMobile: true,
+                hasTouch: true,
+            },
+        });
+
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage: page, guestPage, hostContext, guestContext, matchId } = setup;
+
+        try {
+            await completeFactionSelectionCustom(
+                page,
+                guestPage,
+                [FACTION.PIRATES, FACTION.NINJAS],
+                [FACTION.ALIENS, FACTION.ZOMBIES],
+            );
+            await waitForHandArea(page);
+            await injectSteampunkTricksterPacketState(matchId, page);
+
+            await page.locator('[data-card-uid="c4"]').tap();
+            await page.locator('[data-testid="base-zone-1"]').tap();
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, page);
+                return state.core.bases[1].minions.some((m: any) => m.uid === 'c4');
+            }, { timeout: 5000 }).toBe(true);
+            const minionShot = getEvidenceScreenshotPath(testInfo, 'mobile-minion-played', {
+                filename: 'smashup-steampunks-tricksters-mobile-minion-played.png',
+            });
+            await page.screenshot({ path: minionShot, fullPage: false });
+
+            await injectSteampunkTricksterPacketState(matchId, page);
+
+            await page.locator('[data-card-uid="c12"]').tap();
+            await page.locator('[data-testid="base-zone-0"]').tap();
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, page);
+                return state.core.bases[0].ongoingActions.some((card: any) => card.defId === 'steampunk_aggromotive_pod');
+            }, { timeout: 5000 }).toBe(true);
+            const actionShot = getEvidenceScreenshotPath(testInfo, 'mobile-ongoing-played', {
+                filename: 'smashup-steampunks-tricksters-mobile-ongoing-played.png',
+            });
+            await page.screenshot({ path: actionShot, fullPage: false });
+
+            await injectSteampunkTricksterPacketState(matchId, page);
+
+            await page.locator('[data-testid="su-rail-titan-titan_0_tricksters_big_funny_giant"]').tap();
+            await page.locator('[data-testid="base-zone-2"]').tap();
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, page);
+                const titan = state.core.titans.find((candidate: any) => candidate.uid === 'titan_0_tricksters_big_funny_giant');
+                return titan?.location?.zone === 'base' && titan?.location?.baseIndex === 2;
+            }, { timeout: 5000 }).toBe(true);
+            const titanShot = getEvidenceScreenshotPath(testInfo, 'mobile-titan-played', {
+                filename: 'smashup-steampunks-tricksters-mobile-titan-played.png',
+            });
+            await page.screenshot({ path: titanShot, fullPage: false });
+        } finally {
+            await cleanupTwoPlayerMatch({ hostPage: page, guestPage, hostContext, guestContext, matchId });
+        }
+    });
+
+    test('POD 版米斯卡塔尼克大学：基地悬浮文案和放大预览都应跟随 POD 版本文本', async ({ smashupMatch }, testInfo) => {
+        const { hostPage: page, matchId } = smashupMatch;
+        await clearEvidenceScreenshotsForTest(testInfo);
+
+        await waitForTestHarness(page);
+        await injectMiskatonicPodBaseState(matchId, page);
+
+        const baseZone = page.getByTestId('base-zone-0');
+        await expect(baseZone).toBeVisible();
+        await baseZone.hover();
+
+        const podTextOnBoard = page.getByText(MISKATONIC_BASE_POD_TEXT, { exact: true });
+        await expect(podTextOnBoard).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(MISKATONIC_BASE_LEGACY_TEXT, { exact: true })).toHaveCount(0);
+
+        const boardShot = getEvidenceScreenshotPath(testInfo, 'miskatonic-pod-base-hover', {
+            filename: 'smashup-miskatonic-pod-base-hover.png',
+        });
+        await page.screenshot({ path: boardShot, fullPage: false });
+
+        const inspectButton = baseZone.locator('button.cursor-zoom-in').first();
+        await expect(inspectButton).toBeVisible({ timeout: 5000 });
+        await inspectButton.click({ force: true });
+
+        const magnifyOverlay = page.getByTestId('su-card-magnify-overlay');
+        const magnifyContent = page.getByTestId('su-card-magnify-content');
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await expect(magnifyContent).toHaveAttribute('data-card-type', 'base');
+        await magnifyContent.hover();
+
+        const podTextInMagnify = magnifyContent.getByText(MISKATONIC_BASE_POD_TEXT, { exact: true });
+        await expect(podTextInMagnify).toBeVisible({ timeout: 5000 });
+        await expect(magnifyContent.getByText(MISKATONIC_BASE_LEGACY_TEXT, { exact: true })).toHaveCount(0);
+
+        const magnifyShot = getEvidenceScreenshotPath(testInfo, 'miskatonic-pod-base-magnify', {
+            filename: 'smashup-miskatonic-pod-base-magnify.png',
+        });
+        await page.screenshot({ path: magnifyShot, fullPage: false });
     });
 });

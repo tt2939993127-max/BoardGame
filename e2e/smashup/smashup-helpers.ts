@@ -4,7 +4,7 @@
  * 通用函数从 ./helpers/common 导入，本文件只保留 SmashUp 专用逻辑。
  */
 
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
 // 从通用 helpers re-export，保持现有调用方兼容
 export {
     setEnglishLocale,
@@ -311,11 +311,11 @@ export const createMatchViaAPI = async (page: Page, guestId: string): Promise<st
 };
 
 export const setupTwoPlayerMatch = async (
-    browser: { newContext: (opts?: { baseURL?: string }) => Promise<BrowserContext> },
+    browser: { newContext: (opts?: BrowserContextOptions) => Promise<BrowserContext> },
     baseURL: string | undefined,
-    options?: { enableE2EDebug?: boolean },
+    options?: { enableE2EDebug?: boolean; contextOptions?: BrowserContextOptions },
 ): Promise<TwoPlayerSetup | null> => {
-    const hostContext = await browser.newContext({ baseURL });
+    const hostContext = await browser.newContext({ baseURL, ...(options?.contextOptions ?? {}) });
     
     // 如果启用 E2E 调试模式，注入标志
     if (options?.enableE2EDebug) {
@@ -342,7 +342,7 @@ export const setupTwoPlayerMatch = async (
     await hostPage.goto(`/play/smashup/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
     await waitForFactionSelection(hostPage);
 
-    const guestContext = await browser.newContext({ baseURL });
+    const guestContext = await browser.newContext({ baseURL, ...(options?.contextOptions ?? {}) });
     
     // Guest context 也需要设置
     if (options?.enableE2EDebug) {

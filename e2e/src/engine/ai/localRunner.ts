@@ -306,8 +306,17 @@ export async function resolveNextAiAction(
             const policy = resolveLocalAiPolicy(runtime, seatController);
             if (!policy) continue;
 
-            const decision = await policy.decide(context);
-            const action = resolveAiActionDecision(context, decision);
+            let action: AiLegalAction | null = null;
+            try {
+                const decision = await policy.decide(context);
+                action = resolveAiActionDecision(context, decision);
+            } catch {
+                action = null;
+            }
+
+            if (!action) {
+                action = context.legalActions[0] ?? null;
+            }
             if (!action) continue;
 
             return {

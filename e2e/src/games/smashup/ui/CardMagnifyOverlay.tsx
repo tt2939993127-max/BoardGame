@@ -9,7 +9,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from '../data/cards';
+import { getCardDef, getBaseDef, getBasePodVariantId, resolveCardName, resolveCardText } from '../data/cards';
+import { useSmashUpOverlay } from './SmashUpOverlayContext';
 
 export interface CardMagnifyTarget {
     defId: string;
@@ -23,12 +24,18 @@ interface Props {
 
 export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     const { t } = useTranslation('game-smashup');
+    const { selectedFactions } = useSmashUpOverlay();
     if (!target) return null;
 
-    const def = target.type === 'base' ? getBaseDef(target.defId) : getCardDef(target.defId);
+    const baseDef = target.type === 'base' ? getBaseDef(target.defId) : undefined;
+    const resolvedBaseDefId = baseDef ? getBasePodVariantId(baseDef, selectedFactions) : target.defId;
+    const def = target.type === 'base'
+        ? (getBaseDef(resolvedBaseDefId) ?? baseDef)
+        : getCardDef(target.defId);
     if (!def) return null;
 
-    const resolvedName = resolveCardName(def, t) || target.defId;
+    const previewDefId = target.type === 'base' ? resolvedBaseDefId : target.defId;
+    const resolvedName = resolveCardName(def, t) || previewDefId;
     const resolvedText = resolveCardText(def, t);
     const isBase = target.type === 'base';
 
@@ -48,7 +55,7 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
                 </button>
                 <CardPreview
                     previewRef={def.previewRef
-                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: target.defId } }
+                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: previewDefId } }
                         : undefined}
                     className="w-full h-full rounded-xl shadow-2xl"
                     title={resolvedName}
