@@ -234,26 +234,16 @@ async function resolveRemoteAction(args: {
 export async function resolveNextAiAction(
     args: ResolveNextAiActionArgs,
 ): Promise<AiResolution | null> {
-    console.log('[resolveNextAiAction] Called with gameId:', args.engineConfig.gameId);
-    console.log('[resolveNextAiAction] State phase:', (args.state as any).core?.phase);
-    console.log('[resolveNextAiAction] Current player:', (args.state as any).core?.currentPlayerId);
-    console.log('[resolveNextAiAction] Seat controllers:', Object.keys(args.seatControllers));
-    
     const runtime = getGameAiRuntime(args.engineConfig.gameId);
-    if (!runtime) {
-        console.log('[resolveNextAiAction] No AI runtime found for game:', args.engineConfig.gameId);
-        return null;
-    }
+    if (!runtime) return null;
 
     const decisionBudgetMs = args.decisionBudgetMs ?? 250;
     const rulesVersion = args.rulesVersion ?? null;
 
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
-        console.log(`[resolveNextAiAction] Checking player ${playerId}, controller type: ${seatController.type}`);
         if (seatController.type === 'human') continue;
 
         const resolvedSeatState = args.visibleStateResolver?.(playerId);
-        console.log(`[resolveNextAiAction] Player ${playerId} resolved state:`, resolvedSeatState ? 'found' : 'null');
         if (resolvedSeatState === null) {
             continue;
         }
@@ -271,7 +261,6 @@ export async function resolveNextAiAction(
             seatController,
         });
 
-        console.log(`[resolveNextAiAction] Player ${playerId} legal actions:`, context.legalActions.length);
         if (context.legalActions.length === 0) {
             const fallbackAction = resolveResponsePassFallback(context);
             if (fallbackAction) {

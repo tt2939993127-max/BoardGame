@@ -815,7 +815,7 @@ describe('P2: pirate_cannon（加农炮）2步链', () => {
 });
 
 describe('P2: alien_invasion（入侵）2步链', () => {
-    it('选随从 → 选基地 → 随从移动', () => {
+    it('直点随从 → 选基地 → 随从移动', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -836,29 +836,93 @@ describe('P2: alien_invasion（入侵）2步链', () => {
 
         const r1 = runCommand(state, {
             type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
-            payload: { cardUid: 'inv1' },
+            payload: { cardUid: 'inv1', targetBaseIndex: 0, targetMinionUid: 'm1' },
         }, 'invasion step1');
 
         expect(r1.steps[0]?.success).toBe(true);
         const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
-        expect(choice1.sourceId).toBe('alien_invasion_choose_minion');
+        expect(choice1.sourceId).toBe('alien_invasion_choose_base');
 
-        const mOpt = findOption(choice1, (o: any) => o.value?.minionUid === 'm1');
-        const r2 = respond(r1.finalState, '0', mOpt, 'invasion step2: 选随从');
+        const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 1);
+        const r2 = respond(r1.finalState, '0', baseOpt, 'invasion step2: 选基地');
 
         expect(r2.steps[0]?.success).toBe(true);
-        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
-        expect(choice2.sourceId).toBe('alien_invasion_choose_base');
+        expect(r2.finalState.sys.interaction.current).toBeUndefined();
 
-        const baseOpt = findOption(choice2, (o: any) => o.value?.baseIndex === 1);
-        const r3 = respond(r2.finalState, '0', baseOpt, 'invasion step3: 选基地');
-
-        expect(r3.steps[0]?.success).toBe(true);
-        expect(r3.finalState.sys.interaction.current).toBeUndefined();
-
-        const fc = r3.finalState.core;
+        const fc = r2.finalState.core;
         expect(fc.bases[0].minions.find(m => m.uid === 'm1')).toBeUndefined();
         expect(fc.bases[1].minions.some(m => m.uid === 'm1')).toBe(true);
+    });
+
+    it('直点随从打出时应直接进入选基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('inv1', 'alien_invasion', '0', 'action')],
+                    factions: ['aliens', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [
+                    makeMinion('m1', 'alien_scout', '0', 2),
+                ]),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+
+        const result = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'inv1', targetBaseIndex: 0, targetMinionUid: 'm1' },
+        }, 'invasion targeted play');
+
+        expect(result.steps[0]?.success).toBe(true);
+        const choice = asSimpleChoice(result.finalState.sys.interaction.current)!;
+        expect(choice.sourceId).toBe('alien_invasion_choose_base');
+    });
+
+    it('受 action 保护的直点随从不能绕过第一步过滤进入第二步', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('inv1', 'alien_invasion', '0', 'action')],
+                    factions: ['aliens', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1', {
+                    factions: ['dinosaurs', 'pirates'] as [string, string],
+                }),
+            },
+            bases: [
+                makeBase(
+                    'test_base_1',
+                    [makeMinion('protected-m', 'test_minion', '1', 3)],
+                    [{ uid: 'wp1', defId: 'dino_wildlife_preserve', ownerId: '1' } as any],
+                ),
+                makeBase('test_base_2'),
+                makeBase('test_base_3', [
+                    makeMinion('legal-m', 'alien_scout', '0', 2),
+                ]),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+
+        const result = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'inv1', targetBaseIndex: 0, targetMinionUid: 'protected-m' },
+        }, 'invasion protected targeted play');
+
+        expect(result.steps[0]?.success).toBe(true);
+        const choice = asSimpleChoice(result.finalState.sys.interaction.current)!;
+        expect(choice.sourceId).toBe('alien_invasion_choose_minion');
+
+        const optionUids = choice.options.map((option: any) => option.value?.minionUid);
+        expect(optionUids).toContain('legal-m');
+        expect(optionUids).not.toContain('protected-m');
     });
 });
 
@@ -2057,7 +2121,7 @@ describe('P3: alien_probe（探测）2步链（多对手时）', () => {
 });
 
 describe('P3: alien_terraform（地形改造）3步链', () => {
-    it('选基地 → 选替换基地 → 可选打随从 → 基地替换', () => {
+    it('直点基地 → 确认被替换基地 → 选替换基地 → 可选打随从 → 基地替换', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -2080,19 +2144,19 @@ describe('P3: alien_terraform（地形改造）3步链', () => {
 
         const state = makeFullMatchState(core);
 
-        // Step 1: 打出 terraform → 选基地
+        // Step 1: 打出 terraform 并直点基地 → 进入“确认被替换基地”
         const r1 = runCommand(state, {
             type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
-            payload: { cardUid: 'tf1' },
+            payload: { cardUid: 'tf1', targetBaseIndex: 0 },
         }, 'terraform step1');
 
         expect(r1.steps[0]?.success).toBe(true);
         const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
         expect(choice1.sourceId).toBe('alien_terraform');
 
-        // Step 2: 选 base0 → 选替换基地
+        // Step 2: 确认被替换基地 → 进入“选替换基地”
         const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 0);
-        const r2 = respond(r1.finalState, '0', baseOpt, 'terraform step2: 选基地');
+        const r2 = respond(r1.finalState, '0', baseOpt, 'terraform step2: 选被替换基地');
 
         expect(r2.steps[0]?.success).toBe(true);
         const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
@@ -2103,19 +2167,22 @@ describe('P3: alien_terraform（地形改造）3步链', () => {
         const r3 = respond(r2.finalState, '0', replOpt, 'terraform step3: 选替换');
 
         expect(r3.steps[0]?.success).toBe(true);
-        // 可能有第三步（选是否打随从），也可能直接结束
+
+        // 可能有第四步（选是否打随从），也可能直接结束
         const choice3 = asSimpleChoice(r3.finalState.sys.interaction.current);
+        let finalState = r3.finalState;
         if (choice3) {
             expect(choice3.sourceId).toBe('alien_terraform_play_minion');
             // 跳过打随从
             const r4 = respond(r3.finalState, '0', 'skip', 'terraform step4: 跳过打随从');
             expect(r4.steps[0]?.success).toBe(true);
             expect(r4.finalState.sys.interaction.current).toBeUndefined();
+            finalState = r4.finalState;
         }
 
         // 验证：base0 被替换为 base_ninja_dojo
-        const fc = (choice3 ? r3 : r2).finalState.core;
-        // 基地替换后 defId 应该变了
+        const fc = finalState.core;
+        expect(fc.bases[0]?.defId).toBe('base_ninja_dojo');
     });
 });
 

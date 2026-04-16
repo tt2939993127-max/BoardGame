@@ -15,6 +15,11 @@ import { FactionSelection } from '../FactionSelectionAdapter';
 import type { SavedDeckSummary } from '../../../../api/custom-deck';
 import type { TFunction } from 'i18next';
 
+const setViewportSize = (width: number, height: number) => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height });
+};
+
 // Mock dependencies
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -101,6 +106,15 @@ vi.mock('../helpers/customDeckHelpers', () => ({
   getSummonerAtlasIdByFaction: vi.fn((factionId: string) => `sw:${factionId}:hero`),
 }));
 
+vi.mock('../../../../hooks/ui/useRuntimeViewport', () => ({
+  useRuntimeViewport: vi.fn(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+    keyboardInsetBottom: 0,
+  })),
+}));
+
 // Mock API
 const mockListCustomDecks = vi.fn();
 const mockGetCustomDeck = vi.fn();
@@ -126,6 +140,7 @@ describe('FactionSelection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setViewportSize(1280, 720);
     mockListCustomDecks.mockResolvedValue([]);
     mockGetCustomDeck.mockResolvedValue({
       id: 'deck-1',
@@ -318,5 +333,16 @@ describe('FactionSelection', () => {
     );
 
     expect(screen.getByText('factionSelection.ready')).toBeInTheDocument();
+  });
+
+  it('手机横屏命中 900px cap 时 inline unit 应与舞台宽度一致', () => {
+    setViewportSize(1000, 500);
+
+    render(<FactionSelection {...defaultProps} />);
+
+    const stage = screen.getByTestId('sw-faction-stage');
+    expect(stage).toHaveStyle({ width: '900px' });
+    expect(stage).toHaveStyle({ height: '468px' });
+    expect(stage.style.getPropertyValue('--sw-selection-inline-unit')).toBe('9px');
   });
 });

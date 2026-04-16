@@ -133,11 +133,11 @@ export const BaseZone: React.FC<{
             : 'cursor-pointer rotate-1 hover:rotate-0';
     const baseCardFrameClassName = `relative w-full h-full bg-white p-[0.4vw] rounded-sm transition-[box-shadow] duration-300
         ${isSelectable
-            ? 'shadow-[0_0_2.5vw_rgba(168,85,247,0.58)] ring-4 ring-purple-400'
+            ? 'shadow-[0_0_2.5vw_rgba(74,222,128,0.58)] ring-4 ring-green-400'
             : canUseBaseAbility
-            ? 'shadow-[0_0_2vw_rgba(74,222,128,0.45)] ring-4 ring-green-400'
+            ? 'shadow-[0_0_2vw_rgba(251,191,36,0.45)] ring-4 ring-amber-300'
             : isDeployMode && !isMinionSelectMode
-            ? 'shadow-[0_0_1.8vw_rgba(196,181,253,0.4)] ring-4 ring-purple-300'
+            ? 'shadow-[0_0_1.8vw_rgba(134,239,172,0.4)] ring-4 ring-green-300'
             : 'shadow-sm group-hover/base:shadow-xl'
         }`;
 
@@ -287,11 +287,11 @@ export const BaseZone: React.FC<{
                     border-[0.12vw] ${isDimmedOngoing
                         ? 'opacity-40 grayscale cursor-not-allowed'
                         : isSelectableOngoing
-                        ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.52)]'
+                        ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.52)]'
                         : isOngoingActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                         : canUseOngoingTalent
-                        ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6)]'
+                        ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]'
                         : showUsedOngoingState
                         ? USED_STATE_CLASS
                         : `${pConf.border} ${pConf.shadow}`}`}
@@ -409,7 +409,7 @@ export const BaseZone: React.FC<{
                     ${isTitanActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                         : canActivateTitan
-                        ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6)]'
+                        ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]'
                         : showUsedTitanState
                         ? USED_STATE_CLASS
                         : `${pConf.border} ${pConf.shadow}`}`}
@@ -1128,19 +1128,19 @@ const MinionCard: React.FC<{
     const minionFrameClassName = `relative w-full h-full bg-white p-[0.2vw] rounded-[0.2vw] border-[0.15vw] transition-shadow duration-200
         ${isDimmed ? 'opacity-40 grayscale' : 'hover:scale-110'}
         ${isMultiSelected
-            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.58),0_0_30px_rgba(168,85,247,0.26)]'
+            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.58),0_0_30px_rgba(74,222,128,0.26)]'
             : isSelectableMinion
-            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.52),0_0_30px_rgba(168,85,247,0.22)]'
+            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.52),0_0_30px_rgba(74,222,128,0.22)]'
             : isExpanded
             ? isMinionActivationArmed
                 ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
                 : canActivate
-                ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
+                ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
                 : showUsedMinionState
                 ? USED_STATE_CLASS
-                : 'border-purple-300 ring-2 ring-purple-300/90 shadow-[0_0_14px_rgba(216,180,254,0.4),0_0_28px_rgba(216,180,254,0.18)]'
+                : 'border-green-300 ring-2 ring-green-300/90 shadow-[0_0_14px_rgba(134,239,172,0.4),0_0_28px_rgba(134,239,172,0.18)]'
             : canActivate
-            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
+            ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
             : showUsedMinionState
             ? USED_STATE_CLASS
             : `${conf.border} ${conf.shadow}`
@@ -1212,7 +1212,7 @@ const MinionCard: React.FC<{
 
                 {/* 多选已选中勾选标记 */}
                 {isMultiSelected && (
-                    <div className="absolute top-[0.15vw] left-[0.15vw] w-[1.4vw] h-[1.4vw] bg-purple-500 rounded-full flex items-center justify-center shadow-lg border-[0.1vw] border-white z-30">
+                    <div className="absolute top-[0.15vw] left-[0.15vw] w-[1.4vw] h-[1.4vw] bg-green-500 rounded-full flex items-center justify-center shadow-lg border-[0.1vw] border-white z-30">
                         <svg className="w-[0.8vw] h-[0.8vw] text-white" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
@@ -1349,14 +1349,14 @@ const MinionCard: React.FC<{
                                         border-[0.08vw] ${isDimmedAA
                                             ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
                                             : isSelectableAA
-                                            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.55)]'
+                                            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_10px_rgba(74,222,128,0.55)]'
                                             : isAttachedActivationArmed
                                             ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.75)]'
                                             : canUseAATalent
-                                            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_10px_rgba(74,222,128,0.6)]'
+                                            ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]'
                                             : showUsedAttachedState
                                             ? USED_STATE_CLASS
-                                            : 'border-purple-300 ring-1 ring-purple-300/65 shadow-[0_0_10px_rgba(216,180,254,0.18)]'
+                                            : 'border-green-300 ring-1 ring-green-300/65 shadow-[0_0_10px_rgba(134,239,172,0.18)]'
                                         }`}
                                     title={actionTitle}
                                 >

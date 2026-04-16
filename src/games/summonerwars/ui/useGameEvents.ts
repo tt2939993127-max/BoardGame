@@ -21,7 +21,6 @@ import { playSound } from '../../../lib/audio/useGameAudio';
 import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
-import type { RapidFireModeState, WithdrawModeState } from './modeTypes';
 import { useEventStreamCursor } from '../../../engine/hooks';
 
 const isCellCoord = (value: unknown): value is CellCoord => {
@@ -71,6 +70,7 @@ export interface AbilityModeState {
   sourceUnitId: string;
   selectedCardId?: string;
   selectedCardIds?: string[];
+  selectableCardIds?: string[];
   selectedUnitId?: string;
   targetPosition?: CellCoord;
   context?: AbilityActivationContext;
@@ -199,12 +199,6 @@ export function useGameEvents({
   // 攻击后技能模式（念力/高阶念力/读心传念）
   const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
 
-  // 连续射击确认模式
-  const [rapidFireMode, setRapidFireMode] = useState<RapidFireModeState | null>(null);
-
-  // 撤退触发状态（afterAttack 自动触发，由 Board.tsx 桥接到 useEventCardModes.setWithdrawMode）
-  const [withdrawTrigger, setWithdrawTrigger] = useState<WithdrawModeState | null>(null);
-
   // 阶段切换时清理技能模式
   useEffect(() => {
     // 移动后技能（ancestral_bond, spirit_bond, structure_shift, frost_axe）只在移动阶段有效
@@ -252,6 +246,18 @@ export function useGameEvents({
   // 通用游标（同步处理首次挂载跳过 + Undo 重置）
   const entries = getEventStreamEntries(G);
   const { consumeNew } = useEventStreamCursor({ entries });
+  const activeSwInteractionType = (() => {
+    const currentInteraction = G.sys.interaction?.current as {
+      kind?: string;
+      playerId?: string;
+      data?: { sw?: { type?: string } };
+    } | undefined;
+    if (!currentInteraction || currentInteraction.kind !== 'simple-choice' || currentInteraction.playerId !== myPlayerId) {
+      return null;
+    }
+    const sw = currentInteraction.data?.sw;
+    return sw && typeof sw === 'object' && typeof sw.type === 'string' ? sw.type : null;
+  })();
 
   // ============================================================================
   // 刷新恢复：首次挂载时扫描 EventStream 历史，恢复未完成的交互型阶段技能
@@ -265,6 +271,7 @@ export function useGameEvents({
     if (hasRecoveredRef.current) return;
     hasRecoveredRef.current = true;
     if (entries.length === 0) return;
+    if (activeSwInteractionType === 'on_phase_start_illusion' || activeSwInteractionType === 'on_phase_start_blood_rune') return;
 
     // 可恢复的阶段技能映射：eventStream 中的 abilityId → UI 恢复配置
     // 只包含阶段开始/结束触发的交互型技能，不包含攻击后/移动后技能
@@ -337,8 +344,6 @@ export function useGameEvents({
       // 防止撤回后残留的技能按钮仍可点击（如锻造师 frost_axe 充能）
       setAbilityMode(null);
       setAfterAttackAbilityMode(null);
-      setRapidFireMode(null);
-      setWithdrawTrigger(null);
       gateRef.current.reset();
     }
 
@@ -500,51 +505,11 @@ export function useGameEvents({
         }
         // custom action else 分支产生的事件用 actionId 匹配（abilityId 为父技能 ID，用于 ActionLog 国际化）
         const matchId = p.actionId ?? p.abilityId;
-        if (['telekinesis', 'high_telekinesis', 'mind_transmission'].includes(p.abilityId)) {
-          // 检查是否是我的单位
-          const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
-          if (unit && unit.owner === myPlayerId) {
-            const captured = {
-              abilityId: p.abilityId as 'telekinesis' | 'high_telekinesis' | 'mind_transmission',
-              sourceUnitId: p.sourceUnitId,
-              sourcePosition: p.sourcePosition,
-            };
-            gateRef.current.scheduleInteraction(() => {
-              setAfterAttackAbilityMode(captured);
-            });
-          }
-        }
-        // 连续射击：攻击后可选消耗充能进行额外攻击
-        if (matchId === 'rapid_fire_extra_attack') {
-          const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
-          if (unit && unit.owner === myPlayerId && (unit.boosts ?? 0) >= 1) {
-            const captured = {
-              sourceUnitId: p.sourceUnitId,
-              sourcePosition: p.sourcePosition,
-            };
-            gateRef.current.scheduleInteraction(() => {
-              setRapidFireMode(captured);
-            });
-          }
-        }
-        // 撤退：攻击后可选消耗充能/魔力推拉自身1-2格
-        if (matchId === 'withdraw') {
-          const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
-          if (unit && unit.owner === myPlayerId) {
-            const hasCharge = (unit.boosts ?? 0) >= 1;
-            const hasMagic = core.players[myPlayerId as '0' | '1']?.magic >= 1;
-            if (hasCharge || hasMagic) {
-              const captured = { sourceUnitId: p.sourceUnitId };
-              gateRef.current.scheduleInteraction(() => {
-                setWithdrawTrigger({ sourceUnitId: captured.sourceUnitId, step: 'selectCost' });
-              });
-            }
-          }
-        }
         // 幻化：移动阶段开始时自动进入目标选择模式
         if (matchId === 'illusion_copy') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (activeSwInteractionType === 'on_phase_start_illusion') continue;
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -560,6 +525,7 @@ export function useGameEvents({
         if (matchId === 'blood_rune_choice') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (activeSwInteractionType === 'on_phase_start_blood_rune') continue;
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -577,6 +543,7 @@ export function useGameEvents({
         if (matchId === 'afterMove:spirit_bond') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (activeSwInteractionType === 'after_move_spirit_bond') continue;
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -591,6 +558,7 @@ export function useGameEvents({
         if (matchId === 'afterMove:ancestral_bond') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (activeSwInteractionType === 'after_move_ancestral_bond') continue;
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -605,6 +573,12 @@ export function useGameEvents({
         if (matchId === 'afterMove:structure_shift') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (
+              activeSwInteractionType === 'after_move_structure_shift_target'
+              || activeSwInteractionType === 'after_move_structure_shift_direction'
+            ) {
+              continue;
+            }
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -619,6 +593,7 @@ export function useGameEvents({
         if (matchId === 'afterMove:frost_axe') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
+            if (activeSwInteractionType === 'after_move_frost_axe') continue;
             const captured = { sourceUnitId: p.sourceUnitId };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -634,6 +609,7 @@ export function useGameEvents({
           const iceRamOwner = (event.payload as Record<string, unknown>).iceRamOwner as string;
           const structurePosition = (event.payload as Record<string, unknown>).structurePosition as CellCoord;
           if (iceRamOwner === myPlayerId && structurePosition) {
+            if (activeSwInteractionType === 'ice_ram_target' || activeSwInteractionType === 'ice_ram_push') continue;
             const captured = { structurePosition };
             gateRef.current.scheduleInteraction(() => {
               setAbilityMode({
@@ -649,7 +625,7 @@ export function useGameEvents({
     }
   // 依赖数组不包含回调函数，回调通过 ref 访问，避免因回调引用变化导致 effect 重复执行
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [G, core, myPlayerId, consumeNew]);
+  }, [G, activeSwInteractionType, core, myPlayerId, consumeNew]);
 
   /** 查找被摧毁的卡牌（弃牌堆/手牌兜底） */
   const resolveDestroyedCard = (owner: PlayerId, cardId?: string) => {
@@ -761,10 +737,6 @@ export function useGameEvents({
     setAbilityMode,
     afterAttackAbilityMode,
     setAfterAttackAbilityMode,
-    rapidFireMode,
-    setRapidFireMode,
-    withdrawTrigger,
-    setWithdrawTrigger,
     pendingAttackRef,
     handleCloseDiceResult,
     clearPendingAttack,

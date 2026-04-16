@@ -37,6 +37,7 @@ interface HandAreaProps {
   currentMagic: number;
   selectedCardId?: string | null;
   selectedCardIds?: string[];
+  abilitySelectableCardIds?: string[];
   onCardClick?: (cardId: string) => void;
   onCardSelect?: (cardId: string | null) => void;
   onPlayEvent?: (cardId: string) => void;
@@ -235,6 +236,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
   currentMagic,
   selectedCardId,
   selectedCardIds = [],
+  abilitySelectableCardIds = [],
   onCardClick,
   onCardSelect,
   onPlayEvent,
@@ -284,6 +286,9 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
   const canPlayCard = useCallback((card: Card): boolean => {
     if (!isMyTurn) return false;
+    if (abilitySelectingCards) {
+      return abilitySelectableCardIds.length === 0 || abilitySelectableCardIds.includes(card.id);
+    }
     if (phase === 'magic') return true;
 
     const cost = getCardCost(card);
@@ -295,7 +300,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
       return event.playPhase === phase || event.playPhase === 'any';
     }
     return false;
-  }, [phase, isMyTurn, currentMagic]);
+  }, [abilitySelectableCardIds, abilitySelectingCards, phase, isMyTurn, currentMagic]);
 
   const shouldUseClickForMagnify = useCallback((card: Card) => {
     if (!onMagnifyCard) return false;
@@ -338,6 +343,9 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     if (abilitySelectingCards) {
+      if (abilitySelectableCardIds.length > 0 && !abilitySelectableCardIds.includes(cardId)) {
+        return;
+      }
       onCardClick?.(cardId);
       return;
     }
@@ -417,6 +425,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     canPlayCard,
     bloodSummonSelectingCard,
     abilitySelectingCards,
+    abilitySelectableCardIds,
     interactionBusy,
     showToast,
     t,

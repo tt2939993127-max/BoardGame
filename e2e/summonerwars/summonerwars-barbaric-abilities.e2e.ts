@@ -12,9 +12,9 @@ import {
   setupSWOnlineMatch,
   readCoreState,
   applyCoreState,
+  clickBoardElement,
   closeDebugPanelIfOpen,
   waitForPhase,
-  advanceToPhase,
   cloneState,
 } from '../helpers/summonerwars';
 
@@ -25,8 +25,12 @@ import {
 const preparePrepareState = (coreState: any) => {
   const next = cloneState(coreState);
   next.currentPlayer = '0';
+  next.phase = 'move';
   next.selectedUnit = undefined;
   next.abilityUsage = {};
+  if (next.players?.['0']) {
+    next.players['0'].moveCount = 0;
+  }
   const board = next.board;
   let prepareUnitPos: { row: number; col: number } | null = null;
   for (let row = 0; row < 8; row++) {
@@ -66,6 +70,7 @@ const preparePrepareState = (coreState: any) => {
 const prepareWithdrawState = (coreState: any) => {
   const next = cloneState(coreState);
   next.currentPlayer = '0';
+  next.phase = 'attack';
   next.selectedUnit = undefined;
   next.abilityUsage = {};
   const player = next.players?.['0'];
@@ -144,7 +149,6 @@ test.describe('炽原精灵阵营特色交互', () => {
     if (!match) { test.skip(true, 'Game server unavailable or room creation failed.'); return; }
     const { hostPage, hostContext, guestContext } = match;
     try {
-      await advanceToPhase(hostPage, 'move');
       const coreState = await readCoreState(hostPage);
       const { state: prepareCore, prepareUnitPos } = preparePrepareState(coreState);
       await applyCoreState(hostPage, prepareCore);
@@ -154,12 +158,8 @@ test.describe('炽原精灵阵营特色交互', () => {
       const beforeState = await readCoreState(hostPage);
       const unitBefore = beforeState.board[prepareUnitPos.row][prepareUnitPos.col]?.unit;
       const initialBoosts = unitBefore?.boosts ?? 0;
-      // 通过调试面板设置 selectedUnit
-      const selectState = await readCoreState(hostPage);
-      selectState.selectedUnit = prepareUnitPos;
-      await applyCoreState(hostPage, selectState);
-      await closeDebugPanelIfOpen(hostPage);
-      await hostPage.waitForTimeout(1000);
+      await clickBoardElement(hostPage, `[data-testid="sw-unit-${prepareUnitPos.row}-${prepareUnitPos.col}"][data-owner="0"]`);
+      await hostPage.waitForTimeout(800);
       const prepareButton = hostPage.locator('button').filter({ hasText: /预备|Prepare/i });
       await expect(prepareButton).toBeVisible({ timeout: 8000 });
       await prepareButton.click();
@@ -169,8 +169,8 @@ test.describe('炽原精灵阵营特色交互', () => {
       expect(unitAfter).toBeTruthy();
       expect(unitAfter.boosts).toBe(initialBoosts + 1);
     } finally {
-      await hostContext.close();
-      await guestContext.close();
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
   });
 
@@ -179,15 +179,14 @@ test.describe('炽原精灵阵营特色交互', () => {
   });
 
   test('撤退：攻击后消耗充能移动', async ({ browser }, testInfo) => {
-    test.setTimeout(120000);
+    test.setTimeout(300000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     const match = await setupSWOnlineMatch(browser, baseURL, 'barbaric', 'necromancer');
     if (!match) { test.skip(true, 'Game server unavailable or room creation failed.'); return; }
     const { hostPage, hostContext, guestContext } = match;
     try {
-      await advanceToPhase(hostPage, 'attack');
       const coreState = await readCoreState(hostPage);
-      const { state: withdrawCore, kairuPos } = prepareWithdrawState(coreState);
+      const { state: withdrawCore, kairuPos, emptyPos } = prepareWithdrawState(coreState);
       await applyCoreState(hostPage, withdrawCore);
       await closeDebugPanelIfOpen(hostPage);
       await waitForPhase(hostPage, 'attack');
@@ -227,29 +226,62 @@ test.describe('炽原精灵阵营特色交互', () => {
       await closeDebugPanelIfOpen(hostPage);
       await hostPage.waitForTimeout(500);
       // 选中凯鲁尊者
-      const kairuUnit = hostPage.locator(`[data-testid="sw-unit-${kairuPos.row}-${kairuPos.col}"][data-owner="0"]`).first();
-      await expect(kairuUnit).toBeVisible({ timeout: 5000 });
-      await kairuUnit.dispatchEvent('click');
+      await clickBoardElement(hostPage, `[data-testid="sw-unit-${kairuPos.row}-${kairuPos.col}"][data-owner="0"]`);
       await hostPage.waitForTimeout(1000);
       // 点击敌方单位进行攻击
-      const enemy = hostPage.locator(`[data-testid="sw-unit-${enemyPos.row}-${enemyPos.col}"][data-owner="1"]`).first();
-      await expect(enemy).toBeVisible({ timeout: 5000 });
-      await enemy.dispatchEvent('click');
-      await hostPage.waitForTimeout(2000);
-      // 攻击后应该出现 withdraw 横幅
-      const spendChargeButton = hostPage.locator('button').filter({ hasText: /Spend Charge|消耗充能/i });
-      const withdrawVisible = await spendChargeButton.isVisible({ timeout: 8000 }).catch(() => false);
-      if (withdrawVisible) {
-        await spendChargeButton.click();
-        await hostPage.waitForTimeout(1500);
-      } else {
-        // withdraw 横幅未出现，验证攻击至少成功执行
-        const afterAttack = await readCoreState(hostPage);
-        expect(afterAttack.players['0'].attackCount).toBeGreaterThan(0);
-      }
+      await clickBoardElement(hostPage, `[data-testid="sw-unit-${enemyPos.row}-${enemyPos.col}"][data-owner="1"]`);
+      console.log('[withdraw-e2e] 攻击命令已发出');
+      // 攻击后必须先进入 withdraw 费用选择
+      console.log('[withdraw-e2e] 开始等待 withdraw 费用按钮');
+      await expect.poll(async () => {
+        return await hostPage.evaluate(() => {
+          return Array.from(document.querySelectorAll('button')).some((button) =>
+            /Spend Charge|消耗充能/i.test(button.textContent ?? '')
+          );
+        });
+      }, { timeout: 15000 }).toBe(true);
+      console.log('[withdraw-e2e] withdraw 费用横幅已出现');
+      const clickedWithdrawCost = await hostPage.evaluate(() => {
+        const button = Array.from(document.querySelectorAll('button')).find((node) =>
+          /Spend Charge|消耗充能/i.test(node.textContent ?? '')
+        ) as HTMLButtonElement | undefined;
+        button?.click();
+        return Boolean(button);
+      });
+      expect(clickedWithdrawCost).toBe(true);
+      console.log('[withdraw-e2e] 已点击消耗充能');
+      await expect.poll(async () => {
+        return await hostPage.evaluate(() => {
+          return document.body.textContent?.includes('撤退：选择移动目标位置') ?? false;
+        });
+      }, { timeout: 10000 }).toBe(true);
+      const targetCell = hostPage.getByTestId(`sw-cell-${emptyPos.row}-${emptyPos.col}`);
+      await expect(targetCell).toBeVisible({ timeout: 10000 });
+      await expect.poll(async () => {
+        return await targetCell.evaluate((node) => {
+          const style = window.getComputedStyle(node as HTMLElement);
+          return style.borderColor !== 'transparent' || style.backgroundColor !== 'transparent';
+        });
+      }, { timeout: 10000 }).toBe(true);
+      await clickBoardElement(hostPage, `[data-testid="sw-cell-${emptyPos.row}-${emptyPos.col}"]`);
+      console.log('[withdraw-e2e] 已点击撤退目标格');
+      await expect.poll(async () => {
+        return await hostPage.evaluate(() => {
+          return Array.from(document.querySelectorAll('button')).some((button) =>
+            /Spend Charge|消耗充能/i.test(button.textContent ?? '')
+          );
+        });
+      }, { timeout: 10000 }).toBe(false);
+      await hostPage.waitForTimeout(1200);
+      const afterWithdraw = await readCoreState(hostPage);
+      const movedUnit = afterWithdraw.board[emptyPos.row][emptyPos.col]?.unit;
+      expect(movedUnit?.instanceId).toBe(kairu.instanceId);
+      expect(movedUnit?.boosts ?? 0).toBeLessThan(kairu.boosts ?? 0);
+      expect(afterWithdraw.board[kairuPos.row][kairuPos.col]?.unit?.instanceId ?? null).not.toBe(kairu.instanceId);
+      console.log('[withdraw-e2e] 核心状态已确认撤退成功');
     } finally {
-      await hostContext.close();
-      await guestContext.close();
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
   });
 });

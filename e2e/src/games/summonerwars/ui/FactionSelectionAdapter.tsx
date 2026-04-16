@@ -30,6 +30,12 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 import { CustomDeckCard } from './CustomDeckCard';
 import { getSummonerAtlasIdByFaction } from './helpers/customDeckHelpers';
+import { useRuntimeViewport } from '../../../hooks/ui/useRuntimeViewport';
+import { SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX } from './layoutConstants';
+
+const FACTION_SELECTION_REFERENCE_WIDTH_PX = 1280;
+const FACTION_SELECTION_REFERENCE_HEIGHT_PX = 720;
+const FACTION_SELECTION_MOBILE_REFERENCE_HEIGHT_PX = 620;
 
 // 玩家配色
 const PLAYER_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
@@ -82,6 +88,11 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   const { t, i18n } = useTranslation('game-summonerwars');
   const { token } = useAuth();
   const toast = useToast();
+  const viewport = useRuntimeViewport();
+  const layoutViewportWidth = typeof window !== 'undefined' ? window.innerWidth : viewport.width;
+  const layoutViewportHeight = typeof window !== 'undefined' ? window.innerHeight : viewport.height;
+  const isMobileViewport = layoutViewportWidth <= 1023;
+  const isLandscapeMobileViewport = isMobileViewport && layoutViewportWidth > layoutViewportHeight;
   
   // 确保精灵图注册表已初始化（使用当前语言）
   useEffect(() => {
@@ -158,7 +169,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
     
     try {
       const decks = await listCustomDecks(token);
-      setSavedDecks(decks);
+      setRemoteSavedDecks(decks);
     } catch (err) {
       console.warn('[FactionSelection] 刷新自定义牌组列表失败:', err);
       toast.error(
@@ -208,6 +219,90 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   // 当前玩家已选阵营（包括自定义牌组的情况）
   const myFaction = selectedFactions[currentPlayerId];
   const hasSelected = myFaction && myFaction !== 'unselected';
+
+  const selectionReferenceHeightPx = isLandscapeMobileViewport
+    ? FACTION_SELECTION_MOBILE_REFERENCE_HEIGHT_PX
+    : FACTION_SELECTION_REFERENCE_HEIGHT_PX;
+  const selectionStageScale = isLandscapeMobileViewport
+    ? Math.min(
+      Math.max((layoutViewportWidth - 16) / FACTION_SELECTION_REFERENCE_WIDTH_PX, 0),
+      Math.max((layoutViewportHeight - 32) / selectionReferenceHeightPx, 0),
+      1
+    )
+    : 1;
+  const selectionStageLogicalWidth = isLandscapeMobileViewport
+    ? Math.min(
+      SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX,
+      Math.round(FACTION_SELECTION_REFERENCE_WIDTH_PX * selectionStageScale)
+    )
+    : null;
+  const selectionStageLogicalHeight = isLandscapeMobileViewport
+    ? Math.round(selectionReferenceHeightPx * selectionStageScale)
+    : null;
+  const selectionStageWidth = isLandscapeMobileViewport
+    ? `${selectionStageLogicalWidth}px`
+    : '100%';
+  const selectionStageHeight = isLandscapeMobileViewport
+    ? `${selectionStageLogicalHeight}px`
+    : '100%';
+  const selectionStageInlineReferenceWidthPx = isLandscapeMobileViewport
+    ? selectionStageLogicalWidth ?? Math.round(FACTION_SELECTION_REFERENCE_WIDTH_PX * selectionStageScale)
+    : null;
+  const inlineUnit = (value: number) => `calc(var(--sw-selection-inline-unit) * ${value})`;
+  const blockUnit = (value: number) => `calc(var(--sw-selection-block-unit) * ${value})`;
+  const selectionStageStyle = {
+    width: selectionStageWidth,
+    height: selectionStageHeight,
+    '--sw-selection-inline-unit': isLandscapeMobileViewport
+      ? `${((selectionStageInlineReferenceWidthPx ?? FACTION_SELECTION_REFERENCE_WIDTH_PX) / 100)}px`
+      : '1vw',
+    '--sw-selection-block-unit': isLandscapeMobileViewport
+      ? `${((selectionStageLogicalHeight ?? selectionReferenceHeightPx) / 100)}px`
+      : '1vh',
+  } as React.CSSProperties;
+  const stageFrameStyle = isLandscapeMobileViewport
+    ? { paddingInline: '6px', paddingBlock: '2px' } as React.CSSProperties
+    : undefined;
+  const titleSectionStyle = {
+    paddingTop: isLandscapeMobileViewport ? blockUnit(2.2) : blockUnit(3),
+    paddingBottom: isLandscapeMobileViewport ? blockUnit(1.2) : blockUnit(2),
+  } as React.CSSProperties;
+  const titleTopLineStyle = {
+    width: inlineUnit(30),
+    height: '1px',
+  } as React.CSSProperties;
+  const titleBottomLineStyle = {
+    width: inlineUnit(15),
+    height: '1px',
+  } as React.CSSProperties;
+  const mainContentStyle = {
+    paddingInline: inlineUnit(4),
+  } as React.CSSProperties;
+  const gridStyle = {
+    gap: inlineUnit(0.8),
+    maxWidth: inlineUnit(72),
+  } as React.CSSProperties;
+  const lowerStageStyle = {
+    paddingTop: isLandscapeMobileViewport ? blockUnit(0.6) : blockUnit(1.5),
+    paddingBottom: isLandscapeMobileViewport ? 0 : blockUnit(1),
+  } as React.CSSProperties;
+  const lowerStageInnerStyle = {
+    gap: isLandscapeMobileViewport ? inlineUnit(2) : inlineUnit(3),
+    maxHeight: isLandscapeMobileViewport ? blockUnit(28) : blockUnit(32),
+  } as React.CSSProperties;
+  const previewPanelStyle = {
+    width: isLandscapeMobileViewport ? inlineUnit(24) : inlineUnit(28),
+  } as React.CSSProperties;
+  const playerRailStyle = {
+    gap: isLandscapeMobileViewport ? blockUnit(0.8) : blockUnit(1.2),
+    minWidth: isLandscapeMobileViewport ? inlineUnit(13) : inlineUnit(14),
+  } as React.CSSProperties;
+  const actionSlotStyle = {
+    height: isLandscapeMobileViewport ? blockUnit(4.4) : blockUnit(5),
+  } as React.CSSProperties;
+  const lowerStageAlignStyle = isLandscapeMobileViewport
+    ? { alignItems: 'flex-start' } as React.CSSProperties
+    : undefined;
 
   // 全员就绪判定
   const everyoneReady = playerIds.every(pid => {
@@ -374,28 +469,48 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
         }} />
       </div>
 
-      {/* 标题区 - 装饰强化 */}
-      <div className="relative z-10 text-center pt-[3vh] pb-[2vh]">
-        <div className="absolute top-[2vh] left-1/2 -translate-x-1/2 w-[30vw] h-[1px] bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
-        <motion.h1
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="text-[clamp(24px,2.2vw,42px)] font-black tracking-[0.3em] text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-500 to-amber-700"
-          style={{ filter: 'drop-shadow(0 0 15px rgba(245,158,11,0.4))' }}
+      <div className="relative z-10 flex h-full w-full items-center justify-center" style={stageFrameStyle}>
+        <div
+          data-testid="sw-faction-stage"
+          className="relative flex h-full w-full max-w-full min-w-0 flex-col overflow-hidden"
+          style={selectionStageStyle}
         >
-          {t('factionSelection.title')}
-        </motion.h1>
-        <p className="text-[clamp(12px,0.75vw,16px)] text-amber-100/40 mt-[0.5vh] tracking-[0.5em] font-light uppercase">
-          {t('factionSelection.subtitle')}
-        </p>
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[15vw] h-[1px] bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
-      </div>
+          {/* 标题区 - 装饰强化 */}
+          <div className="relative text-center" style={titleSectionStyle}>
+            <div
+              className="absolute left-1/2 -translate-x-1/2 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"
+              style={{ ...titleTopLineStyle, top: blockUnit(2) }}
+            />
+            <motion.h1
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              data-testid="sw-faction-title"
+              className="text-[clamp(24px,2.2vw,42px)] font-black tracking-[0.3em] text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-500 to-amber-700"
+              style={{ filter: 'drop-shadow(0 0 15px rgba(245,158,11,0.4))' }}
+            >
+              {t('factionSelection.title')}
+            </motion.h1>
+            <p
+              className="text-[clamp(12px,0.75vw,16px)] font-light uppercase tracking-[0.5em] text-amber-100/40"
+              style={{ marginTop: blockUnit(0.5) }}
+            >
+              {t('factionSelection.subtitle')}
+            </p>
+            <div
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent"
+              style={titleBottomLineStyle}
+            />
+          </div>
 
-      {/* 主内容区 */}
-      <div className="relative z-10 flex-1 flex flex-col min-h-0 px-[4vw]">
-        {/* 阵营卡片网格（两排三列） */}
-        <div className="flex-shrink-0">
-          <div className="grid grid-cols-4 gap-[0.8vw] max-w-[72vw] mx-auto">
+          {/* 主内容区 */}
+          <div className="relative flex min-h-0 flex-1 flex-col" style={mainContentStyle}>
+            {/* 阵营卡片网格（两排三列） */}
+            <div className="flex-shrink-0">
+              <div
+                data-testid="sw-faction-grid"
+                className="mx-auto grid grid-cols-4"
+                style={gridStyle}
+              >
             {availableFactions.map((faction, index) => {
               // 预设阵营卡片的选中判断：排除通过自定义牌组选择该阵营的情况
               const isSelectedByMe = selectedFactions[currentPlayerId] === faction.id 
@@ -474,14 +589,18 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                   : t('factionSelection.clickToBuild')}
               </div>
             </motion.div>
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {/* 下方：预览区（左） + 玩家状态区（右），用固定间距隔开 */}
-        <div className="flex-1 flex items-center justify-center min-h-0 pt-[1.5vh] pb-[1vh]">
-          <div className="flex items-stretch gap-[3vw] h-full max-h-[32vh]">
-            {/* Tip 图预览（固定宽度，不挤压右侧） */}
-            <div className="w-[28vw] flex items-center justify-center shrink-0">
+            {/* 下方：预览区（左） + 玩家状态区（右），用固定间距隔开 */}
+            <div className="flex min-h-0 flex-1 items-center justify-center" style={{ ...lowerStageStyle, ...lowerStageAlignStyle }}>
+              <div className="flex h-full items-stretch" style={lowerStageInnerStyle}>
+                {/* Tip 图预览（固定宽度，不挤压右侧） */}
+                <div
+                  data-testid="sw-faction-preview-panel"
+                  className="flex shrink-0 items-center justify-center"
+                  style={previewPanelStyle}
+                >
               <AnimatePresence mode="wait">
                 {previewEntry ? (
                   <motion.div
@@ -513,7 +632,8 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                     key="placeholder"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="h-[24vh] aspect-[4/3] rounded-lg border border-dashed border-white/10 flex items-center justify-center"
+                    className="aspect-[4/3] rounded-lg border border-dashed border-white/10 flex items-center justify-center"
+                    style={{ height: blockUnit(24) }}
                   >
                     <span className="text-[clamp(10px,0.7vw,14px)] text-white/20">
                       {t('factionSelection.hoverToPreview')}
@@ -521,10 +641,14 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+                </div>
 
-            {/* 玩家状态面板（固定宽度） */}
-            <div className="flex flex-col gap-[1.2vh] min-w-[14vw] justify-center">
+                {/* 玩家状态面板（固定宽度） */}
+                <div
+                  data-testid="sw-faction-player-rail"
+                  className="flex flex-col justify-center"
+                  style={playerRailStyle}
+                >
               {playerIds.map(pid => {
                 // 从游戏状态获取自定义牌组信息
                 const customDeck = customDeckData?.[pid as PlayerId];
@@ -550,7 +674,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
               })}
 
               {/* 操作按钮区（固定高度，避免布局跳动） */}
-              <div className="h-[5vh] flex items-center justify-center">
+              <div className="flex items-center justify-center" style={actionSlotStyle}>
                 <ActionButton
                   isHost={isHost}
                   hasSelected={!!hasSelected}
@@ -561,6 +685,8 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                   onStart={onStart}
                   t={t}
                 />
+              </div>
+                </div>
               </div>
             </div>
           </div>
@@ -781,12 +907,17 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
       data-faction-id={factionId ?? 'unselected'}
       data-ready={isReady ? 'true' : 'false'}
       className={clsx(
-        'relative flex items-center gap-[0.8vw] px-[1vw] py-[0.6vw] rounded-lg transition-all duration-300',
+        'relative flex items-center rounded-lg transition-all duration-300',
         'border backdrop-blur-md overflow-hidden',
         isMe
           ? 'bg-amber-900/10 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.1)]'
           : 'bg-white/5 border-white/10'
       )}
+      style={{
+        gap: 'calc(var(--sw-selection-inline-unit) * 0.65)',
+        paddingInline: 'calc(var(--sw-selection-inline-unit) * 0.72)',
+        paddingBlock: 'calc(var(--sw-selection-block-unit) * 0.5)',
+      }}
     >
       {/* 侧边装饰条 */}
       <div
@@ -800,9 +931,9 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
       <div
         className="rounded-full flex items-center justify-center font-black shrink-0"
         style={{
-          width: 'clamp(24px, 1.8vw, 36px)',
-          height: 'clamp(24px, 1.8vw, 36px)',
-          fontSize: 'clamp(10px, 0.6vw, 14px)',
+          width: 'clamp(24px, calc(var(--sw-selection-inline-unit) * 1.45), 36px)',
+          height: 'clamp(24px, calc(var(--sw-selection-inline-unit) * 1.45), 36px)',
+          fontSize: 'clamp(10px, calc(var(--sw-selection-inline-unit) * 0.5), 14px)',
           backgroundColor: colors.bg,
           color: colors.text,
           boxShadow: `0 0 10px ${colors.glow}`,
@@ -814,9 +945,9 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
       {/* 信息区 */}
       <div className="flex-1 min-w-0">
         <div className={clsx(
-          'text-[clamp(11px,0.7vw,15px)] font-bold leading-tight truncate flex items-center gap-1',
+          'font-bold leading-tight truncate flex items-center gap-1',
           (selected || isCustomDeck) ? 'text-amber-300' : 'text-white/40'
-        )}>
+        )} style={{ fontSize: 'clamp(11px, calc(var(--sw-selection-inline-unit) * 0.56), 15px)' }}>
           {displayName}
           {/* 自定义牌组标识徽章 */}
           {isCustomDeck && (
@@ -827,23 +958,42 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
         </div>
         {/* 自定义牌组时显示召唤师信息 */}
         {customDeckSubtext ? (
-          <div className="text-[clamp(9px,0.5vw,12px)] text-purple-300/60 truncate leading-tight mt-[0.1vw]">
+          <div
+            className="text-purple-300/60 truncate leading-tight"
+            style={{
+              fontSize: 'clamp(9px, calc(var(--sw-selection-inline-unit) * 0.42), 12px)',
+              marginTop: 'calc(var(--sw-selection-inline-unit) * 0.08)',
+            }}
+          >
             {customDeckSubtext}
           </div>
         ) : null}
-        <div className="text-[clamp(9px,0.5vw,12px)] text-white/40 truncate leading-tight mt-[0.1vw]">
+        <div
+          className="text-white/40 truncate leading-tight"
+          style={{
+            fontSize: 'clamp(9px, calc(var(--sw-selection-inline-unit) * 0.42), 12px)',
+            marginTop: 'calc(var(--sw-selection-inline-unit) * 0.08)',
+          }}
+        >
           {playerName}
           {isMe && <span className="ml-1 text-amber-400/70 font-bold">{t('player.youTag')}</span>}
         </div>
       </div>
 
       {/* 就绪状态（固定宽度占位） */}
-      <div className="w-[clamp(18px,1.2vw,24px)] shrink-0 flex items-center justify-center">
+      <div
+        className="shrink-0 flex items-center justify-center"
+        style={{ width: 'clamp(16px, calc(var(--sw-selection-inline-unit) * 1.0), 24px)' }}
+      >
         {isReady && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="w-[clamp(16px,1vw,22px)] h-[clamp(16px,1vw,22px)] rounded-full bg-emerald-500 flex items-center justify-center"
+            className="rounded-full bg-emerald-500 flex items-center justify-center"
+            style={{
+              width: 'clamp(14px, calc(var(--sw-selection-inline-unit) * 0.88), 22px)',
+              height: 'clamp(14px, calc(var(--sw-selection-inline-unit) * 0.88), 22px)',
+            }}
           >
             <Check size={12} className="text-white" strokeWidth={3} />
           </motion.div>

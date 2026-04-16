@@ -199,6 +199,121 @@ describe('onlineAiRecovery - 游戏结束检查', () => {
         // 验证：应该返回 null，不再尝试处理响应窗口
         expect(result).toBeNull();
     });
+
+    it('可见 simple-choice 只有 Pass 控制项时，watchdog 应返回 RESPOND pass 而不是 cancel', () => {
+        const sharedState: MatchState<unknown> = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                gameover: undefined,
+                phase: 'scoreBases',
+                interaction: {
+                    current: {
+                        id: 'reaction-order-choice',
+                        playerId: '1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'smashup_reaction_choose',
+                            title: '选择一个反应动作',
+                            options: [
+                                {
+                                    id: 'trigger:afterScoring:base_a:1:0',
+                                    label: '先结算触发 A',
+                                    value: { kind: 'trigger', triggerId: 'afterScoring:base_a:1:0' },
+                                },
+                                {
+                                    id: 'pass',
+                                    label: 'Pass',
+                                    value: { kind: 'pass' },
+                                },
+                            ],
+                        },
+                    },
+                    isBlocked: false,
+                },
+            },
+        };
+
+        const seatControllers: Record<string, AiSeatController> = {
+            '0': { type: 'human' },
+            '1': { type: 'local-ai', policyId: 'baseline' },
+        };
+
+        const result = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers,
+            seatStates: {},
+        });
+
+        expect(result?.reason).toBe('visible-interaction');
+        expect(result?.requiresConfirmedAdvancePhase).toBe(true);
+        expect(result?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'pass' },
+        });
+    });
+
+    it('隐藏 simple-choice 只有 Pass 控制项时，watchdog 应把 Pass 视为可跳过控制项', () => {
+        const sharedState: MatchState<unknown> = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                gameover: undefined,
+                phase: 'scoreBases',
+                interaction: {
+                    current: null,
+                    isBlocked: true,
+                },
+            },
+        };
+
+        const seatStateForAi: MatchState<unknown> = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                phase: 'scoreBases',
+                interaction: {
+                    current: {
+                        id: 'reaction-order-choice',
+                        playerId: '1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'smashup_reaction_choose',
+                            title: '选择一个反应动作',
+                            options: [
+                                {
+                                    id: 'pass',
+                                    label: 'Pass',
+                                    value: { kind: 'pass' },
+                                },
+                            ],
+                        },
+                    },
+                    isBlocked: false,
+                },
+            },
+        };
+
+        const seatControllers: Record<string, AiSeatController> = {
+            '0': { type: 'human' },
+            '1': { type: 'local-ai', policyId: 'baseline' },
+        };
+
+        const result = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers,
+            seatStates: { '1': seatStateForAi },
+        });
+
+        expect(result?.reason).toBe('hidden-interaction');
+        expect(result?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'pass' },
+        });
+    });
 });
 
 

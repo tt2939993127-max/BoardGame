@@ -214,6 +214,7 @@ function makeInjectedMinion(
         powerModifier: 0,
         tempPowerModifier: 0,
         talentUsed: false,
+        playedThisTurn: false,
         attachedActions: [],
     };
 }
@@ -288,51 +289,64 @@ function getInteractionSourceId(state: any): string | null {
     return state?.sys?.interaction?.current?.data?.sourceId ?? null;
 }
 
+async function waitForInteractionSourceId(
+    matchId: string,
+    page: Page,
+    sourceId: string,
+    timeout = 5000,
+): Promise<void> {
+    await expect.poll(async () => {
+        const state = await getMatchState(matchId, page);
+        return getInteractionSourceId(state);
+    }, { timeout }).toBe(sourceId);
+}
+
 async function waitForSelectableBase(page: Page, baseIndex: number, timeout = 5000): Promise<void> {
-    void baseIndex;
     await page.waitForFunction(
-        () => {
-            const selectors = ['[class*="ring-purple-300"]', '[class*="ring-purple-400"]'];
-            return selectors.some((selector) => document.querySelectorAll(selector).length > 0);
+        (targetIndex) => {
+            const zone = document.querySelector<HTMLElement>(`[data-testid="base-zone-${targetIndex}"]`);
+            if (!zone) return false;
+            const nodes = [zone, ...Array.from(zone.querySelectorAll<HTMLElement>('*'))];
+            return nodes.some((node) => {
+                const className = node.getAttribute('class') ?? '';
+                return className.includes('ring-green-300') || className.includes('ring-green-400');
+            });
         },
+        baseIndex,
         { timeout },
     );
 }
 
 async function waitForSelectableMinion(page: Page, minionUid: string, timeout = 5000): Promise<void> {
     await page.waitForFunction((targetUid) => {
-        const minion = document.querySelector(`[data-minion-uid="${targetUid}"]`);
+        const minion = document.querySelector<HTMLElement>(`[data-minion-uid="${targetUid}"]`);
         if (!minion) return false;
-        const highlightedFrame = minion.querySelector('[class*="ring-purple-400"], [class*="ring-purple-300"]');
-        return !!highlightedFrame;
+        const nodes = [minion, ...Array.from(minion.querySelectorAll<HTMLElement>('*'))];
+        return nodes.some((node) => {
+            const className = node.getAttribute('class') ?? '';
+            return className.includes('ring-green-400') || className.includes('ring-green-300');
+        });
     }, minionUid, { timeout });
 }
 
 async function isMinionSelectable(page: Page, minionUid: string): Promise<boolean> {
     return await page.evaluate((targetUid) => {
-        const minion = document.querySelector(`[data-minion-uid="${targetUid}"]`);
+        const minion = document.querySelector<HTMLElement>(`[data-minion-uid="${targetUid}"]`);
         if (!minion) return false;
-        return !!minion.querySelector('[class*="ring-purple-400"], [class*="ring-purple-300"]');
+        const nodes = [minion, ...Array.from(minion.querySelectorAll<HTMLElement>('*'))];
+        return nodes.some((node) => {
+            const className = node.getAttribute('class') ?? '';
+            return className.includes('ring-green-400') || className.includes('ring-green-300');
+        });
     }, minionUid);
 }
 
 async function clickBaseZone(page: Page, baseIndex: number): Promise<void> {
     await page.evaluate((targetIndex) => {
-        const allBases = document.querySelectorAll('.group\\/base');
-        const selectableCards: HTMLElement[] = [];
-        for (const base of allBases) {
-            const baseCard = (
-                base.querySelector('[class*="ring-purple-300"]')
-                ?? base.querySelector('[class*="ring-purple-400"]')
-            ) as HTMLElement | null;
-            if (baseCard) selectableCards.push(baseCard);
-        }
-        if (selectableCards[targetIndex]) {
-            selectableCards[targetIndex].click();
-            return;
-        }
-        const fallbackZone = document.querySelector<HTMLElement>(`[data-testid="base-zone-${targetIndex}"]`);
-        fallbackZone?.click();
+        const zone = document.querySelector<HTMLElement>(`[data-testid="base-zone-${targetIndex}"]`);
+        if (!zone) return;
+        const selectable = zone.querySelector<HTMLElement>('[class*="ring-green-300"], [class*="ring-green-400"]');
+        (selectable ?? zone).click();
     }, baseIndex);
     await page.waitForTimeout(300);
 }
@@ -348,8 +362,9 @@ async function clickMinion(page: Page, minionUid: string): Promise<void> {
 test.describe('SmashUp Base/Minion Selection', () => {
     test.describe.configure({ timeout: 90000 });
 
-    test('基地选择：外星人地形改造 - 不弹窗，直接点击基地', async ({ smashupMatch }) => {
+    test('基地选择：外星人地形改造 - 不弹窗，直接点击基地', async ({ smashupMatch }, testInfo) => {
         const { hostPage: page, matchId } = smashupMatch;
+        await clearEvidenceScreenshotsForTest(testInfo);
 
         // 等待测试工具就绪
         await waitForTestHarness(page);
@@ -369,32 +384,37 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         // 点击地形改造卡
         await page.click('[data-card-uid="terraform-1"]');
+        const selectedCardShot = getEvidenceScreenshotPath(testInfo, 'terraform-card-selected', {
+            filename: 'smashup-terraform-card-selected.png',
+        });
+        await page.locator('[data-card-uid="terraform-1"]').screenshot({ path: selectedCardShot });
 
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
         await expect(promptOverlay).not.toBeVisible();
         await waitForSelectableBase(page, 0);
+        const baseHighlightShot = getEvidenceScreenshotPath(testInfo, 'terraform-base-highlight', {
+            filename: 'smashup-terraform-base-highlight.png',
+        });
+        await page.screenshot({ path: baseHighlightShot, fullPage: false });
         await clickBaseZone(page, 0);
 
-        await expect.poll(async () => {
-            const state = await getMatchState(matchId, page);
-            return getInteractionSourceId(state);
-        }, { timeout: 5000 }).toBe('alien_terraform');
+        await waitForInteractionSourceId(matchId, page, 'alien_terraform');
         await expect(promptOverlay).not.toBeVisible();
 
         await waitForSelectableBase(page, 0);
         await clickBaseZone(page, 0);
 
-        await expect.poll(async () => {
-            const state = await getMatchState(matchId, page);
-            return getInteractionSourceId(state);
-        }, { timeout: 5000 }).toBe('alien_terraform_choose_replacement');
-        await expect(
-            page.getByRole('heading', { name: '地形改造：从基地牌库中选择一张基地进行替换' }),
-        ).toBeVisible();
+        await waitForInteractionSourceId(matchId, page, 'alien_terraform_choose_replacement');
+        await expect(page.getByText('地形改造：从基地牌库中选择一张基地进行替换', { exact: true })).toBeVisible();
+        const terraformReplacementShot = getEvidenceScreenshotPath(testInfo, 'terraform-replacement-prompt', {
+            filename: 'smashup-terraform-replacement-prompt.png',
+        });
+        await page.screenshot({ path: terraformReplacementShot, fullPage: false });
     });
 
-    test('随从选择：外星人至高霸主 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
+    test('随从选择：外星人至高霸主 - 不弹窗，直接点击随从', async ({ smashupMatch }, testInfo) => {
         const { hostPage: page, matchId } = smashupMatch;
+        await clearEvidenceScreenshotsForTest(testInfo);
 
         await waitForTestHarness(page);
 
@@ -421,7 +441,12 @@ test.describe('SmashUp Base/Minion Selection', () => {
             return state.core.bases[0].minions.some((minion: any) => minion.uid === 'overlord-1');
         }, { timeout: 5000 }).toBe(true);
         await expect(promptOverlay).not.toBeVisible();
+        await waitForInteractionSourceId(matchId, page, 'alien_supreme_overlord');
         await waitForSelectableMinion(page, 'minion-1');
+        const minionHighlightShot = getEvidenceScreenshotPath(testInfo, 'overlord-minion-highlight', {
+            filename: 'smashup-overlord-minion-highlight.png',
+        });
+        await page.screenshot({ path: minionHighlightShot, fullPage: false });
         await clickMinion(page, 'minion-1');
 
         await expect.poll(async () => {
@@ -432,10 +457,15 @@ test.describe('SmashUp Base/Minion Selection', () => {
         const base0Minions = state.core.bases[0].minions;
         expect(base0Minions).toHaveLength(1);
         expect(base0Minions[0].uid).toBe('overlord-1');
+        const overlordResolvedShot = getEvidenceScreenshotPath(testInfo, 'overlord-resolved', {
+            filename: 'smashup-overlord-resolved.png',
+        });
+        await page.screenshot({ path: overlordResolvedShot, fullPage: false });
     });
 
-    test('随从选择：外星人收集者 - 不弹窗，直接点击随从', async ({ smashupMatch }) => {
+    test('随从选择：外星人收集者 - 不弹窗，直接点击随从', async ({ smashupMatch }, testInfo) => {
         const { hostPage: page, matchId } = smashupMatch;
+        await clearEvidenceScreenshotsForTest(testInfo);
 
         await waitForTestHarness(page);
 
@@ -465,8 +495,13 @@ test.describe('SmashUp Base/Minion Selection', () => {
             return state.core.bases[0].minions.some((minion: any) => minion.uid === 'collector-1');
         }, { timeout: 5000 }).toBe(true);
         await expect(promptOverlay).not.toBeVisible();
+        await waitForInteractionSourceId(matchId, page, 'alien_collector');
         await waitForSelectableMinion(page, 'minion-1');
         await expect.poll(async () => await isMinionSelectable(page, 'minion-2')).toBe(false);
+        const collectorHighlightShot = getEvidenceScreenshotPath(testInfo, 'collector-minion-highlight', {
+            filename: 'smashup-collector-minion-highlight.png',
+        });
+        await page.screenshot({ path: collectorHighlightShot, fullPage: false });
         await clickMinion(page, 'minion-1');
 
         await expect.poll(async () => {
@@ -478,10 +513,15 @@ test.describe('SmashUp Base/Minion Selection', () => {
         expect(base0Minions.some((m: any) => m.uid === 'minion-1')).toBe(false);
         expect(base0Minions.some((m: any) => m.uid === 'collector-1')).toBe(true);
         expect(base0Minions.some((m: any) => m.uid === 'minion-2')).toBe(true);
+        const collectorResolvedShot = getEvidenceScreenshotPath(testInfo, 'collector-resolved', {
+            filename: 'smashup-collector-resolved.png',
+        });
+        await page.screenshot({ path: collectorResolvedShot, fullPage: false });
     });
 
-    test('基地选择：外星人入侵（第二步）- 不弹窗，直接点击基地', async ({ smashupMatch }) => {
+    test('基地选择：外星人入侵（第二步）- 不弹窗，直接点击基地', async ({ smashupMatch }, testInfo) => {
         const { hostPage: page, matchId } = smashupMatch;
+        await clearEvidenceScreenshotsForTest(testInfo);
 
         await waitForTestHarness(page);
 
@@ -503,13 +543,18 @@ test.describe('SmashUp Base/Minion Selection', () => {
         const promptOverlay = page.locator('[data-testid="prompt-overlay"]');
         await expect(promptOverlay).not.toBeVisible();
         await waitForSelectableMinion(page, 'minion-1');
+        const invasionMinionHighlightShot = getEvidenceScreenshotPath(testInfo, 'invasion-minion-highlight', {
+            filename: 'smashup-invasion-minion-highlight.png',
+        });
+        await page.screenshot({ path: invasionMinionHighlightShot, fullPage: false });
         await clickMinion(page, 'minion-1');
-        await expect.poll(async () => {
-            const state = await getMatchState(matchId, page);
-            return getInteractionSourceId(state);
-        }, { timeout: 5000 }).toBe('alien_invasion_choose_base');
+        await waitForInteractionSourceId(matchId, page, 'alien_invasion_choose_base');
         await expect(promptOverlay).not.toBeVisible();
         await waitForSelectableBase(page, 1);
+        const invasionBaseHighlightShot = getEvidenceScreenshotPath(testInfo, 'invasion-base-highlight', {
+            filename: 'smashup-invasion-base-highlight.png',
+        });
+        await page.screenshot({ path: invasionBaseHighlightShot, fullPage: false });
         await clickBaseZone(page, 1);
         await expect.poll(async () => {
             const state = await getMatchState(matchId, page);
@@ -517,6 +562,10 @@ test.describe('SmashUp Base/Minion Selection', () => {
         }, { timeout: 5000 }).toBe(true);
         const state = await getMatchState(matchId, page);
         expect(state.core.bases[1].minions.some((m: any) => m.uid === 'minion-1')).toBe(true);
+        const invasionResolvedShot = getEvidenceScreenshotPath(testInfo, 'invasion-resolved', {
+            filename: 'smashup-invasion-resolved.png',
+        });
+        await page.screenshot({ path: invasionResolvedShot, fullPage: false });
     });
 
     test('反馈复现：蒸汽朋克 + 魔法妖精在空基地局面下，随从/持续行动/泰坦都应能进入并完成打出链路', async ({ smashupMatch }) => {

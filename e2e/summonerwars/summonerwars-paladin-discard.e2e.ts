@@ -481,9 +481,140 @@ const prepareHolyArrowState = (coreState: any) => {
     }
   }
 
+  if (!archerPlaced) {
+    for (let row = 3; row < 6 && !archerPlaced; row++) {
+      for (let col = 1; col < 5 && !archerPlaced; col++) {
+        if (!board[row][col].unit && !board[row][col].structure) {
+          board[row][col].unit = {
+            instanceId: `paladin-archer-${row}-${col}`,
+            cardId: 'paladin-archer-test',
+            card: {
+              id: 'paladin-archer',
+              name: '城塞弓箭手',
+              cardType: 'unit',
+              faction: 'paladin',
+              cost: 2,
+              life: 2,
+              strength: 2,
+              attackType: 'ranged',
+              attackRange: 3,
+              unitClass: 'common',
+              deckSymbols: [],
+              abilities: ['holy_arrow'],
+            },
+            owner: '0',
+            position: { row, col },
+            damage: 0,
+            boosts: 0,
+            hasMoved: false,
+            hasAttacked: false,
+          };
+          archerPlaced = true;
+        }
+      }
+    }
+  }
+
+  if (archerPlaced && !enemyPlaced) {
+    for (let row = 0; row < 8 && !enemyPlaced; row++) {
+      for (let col = 0; col < 6 && !enemyPlaced; col++) {
+        const cell = board[row][col];
+        if (!cell.unit || cell.unit.owner !== '0' || !cell.unit.card.abilities?.includes('holy_arrow')) continue;
+        const adjPositions = [
+          { row: row - 1, col },
+          { row: row + 1, col },
+          { row, col: col - 1 },
+          { row, col: col + 1 },
+        ];
+        for (const adj of adjPositions) {
+          if (adj.row >= 0 && adj.row < 8 && adj.col >= 0 && adj.col < 6) {
+            if (!board[adj.row][adj.col].unit && !board[adj.row][adj.col].structure) {
+              board[adj.row][adj.col].unit = {
+                instanceId: `enemy-target-${adj.row}-${adj.col}`,
+                cardId: 'necro-enemy-1',
+                card: {
+                  id: 'necro-enemy',
+                  name: '敌方单位',
+                  cardType: 'unit',
+                  faction: 'necromancer',
+                  cost: 1,
+                  life: 3,
+                  strength: 2,
+                  attackType: 'melee',
+                  attackRange: 1,
+                  unitClass: 'common',
+                  deckSymbols: [],
+                },
+                owner: '1',
+                position: adj,
+                damage: 0,
+                boosts: 0,
+                hasMoved: false,
+                hasAttacked: false,
+              };
+              enemyPlaced = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (!archerPlaced || !enemyPlaced) {
     throw new Error('无法准备圣光箭测试状态：未找到城塞弓箭手或无法放置敌方单位');
   }
+
+  return next;
+};
+
+const prepareHolyArrowDuplicateNameState = (coreState: any) => {
+  const next = prepareHolyArrowState(coreState);
+  const player = next.players?.['0'];
+  if (!player) throw new Error('无法读取玩家0状态');
+
+  player.hand = [
+    {
+      id: 'paladin-dup-1',
+      name: '城塞骑士',
+      cardType: 'unit',
+      faction: 'paladin',
+      cost: 4,
+      life: 5,
+      strength: 2,
+      attackType: 'melee',
+      attackRange: 1,
+      unitClass: 'common',
+      deckSymbols: [],
+    },
+    {
+      id: 'paladin-dup-2',
+      name: '城塞骑士',
+      cardType: 'unit',
+      faction: 'paladin',
+      cost: 4,
+      life: 5,
+      strength: 2,
+      attackType: 'melee',
+      attackRange: 1,
+      unitClass: 'common',
+      deckSymbols: [],
+    },
+    {
+      id: 'paladin-unique-1',
+      name: '城塞圣武士',
+      cardType: 'unit',
+      faction: 'paladin',
+      cost: 6,
+      life: 4,
+      strength: 3,
+      attackType: 'melee',
+      attackRange: 1,
+      unitClass: 'common',
+      deckSymbols: [],
+    },
+    ...player.hand.filter((c: any) => c.cardType !== 'unit'),
+  ];
 
   return next;
 };
@@ -805,6 +936,88 @@ test.describe('圣堂骑士弃牌技能', () => {
     // 验证攻击正常进行
     const diceResult = hostPage.getByTestId('sw-dice-result-overlay');
     await expect(diceResult).toBeVisible({ timeout: 8000 });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
+  test('圣光箭：同名副本只允许选择真实 interaction option', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    await disableSummonerWarsAutoSkip(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    const matchId = await createSummonerWarsRoom(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    await disableSummonerWarsAutoSkip(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage);
+    await waitForSummonerWarsUI(guestPage);
+
+    const coreState = await readCoreState(hostPage);
+    const holyArrowCore = prepareHolyArrowDuplicateNameState(coreState);
+    await applyCoreState(hostPage, holyArrowCore);
+    await closeDebugPanelIfOpen(hostPage);
+    await waitForPhase(hostPage, 'attack');
+
+    const magicDisplay = hostPage.getByTestId('sw-player-magic-0');
+    const initialMagic = parseInt(await magicDisplay.innerText(), 10);
+
+    const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
+    await expect(archer).toBeVisible({ timeout: 5000 });
+    await archer.click();
+
+    const enemyUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="1"]').first();
+    await expect(enemyUnit).toBeVisible({ timeout: 5000 });
+    await enemyUnit.click();
+
+    const confirmDiscardBtn = hostPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i });
+    await expect(confirmDiscardBtn).toBeVisible({ timeout: 8000 });
+
+    const handArea = hostPage.getByTestId('sw-hand-area');
+    const duplicateCards = handArea.locator('[data-card-type="unit"][data-card-name="城塞骑士"]');
+    const uniqueCard = handArea.locator('[data-card-type="unit"][data-card-name="城塞圣武士"]').first();
+
+    await expect(duplicateCards).toHaveCount(2);
+    await duplicateCards.nth(0).click();
+    await expect(duplicateCards.nth(0)).toHaveAttribute('data-selected', 'true');
+
+    await duplicateCards.nth(1).click();
+    await expect(duplicateCards.nth(0)).toHaveAttribute('data-selected', 'true');
+    await expect(duplicateCards.nth(1)).toHaveAttribute('data-selected', 'false');
+
+    await uniqueCard.click();
+    await expect(uniqueCard).toHaveAttribute('data-selected', 'true');
+
+    await confirmDiscardBtn.click();
+    await expect(confirmDiscardBtn).toBeHidden({ timeout: 5000 });
+    await expect.poll(async () => parseInt(await magicDisplay.innerText(), 10), { timeout: 5000 }).toBe(initialMagic + 2);
+    await expect(hostPage.getByTestId('sw-dice-result-overlay')).toBeVisible({ timeout: 8000 });
 
     await hostContext.close();
     await guestContext.close();

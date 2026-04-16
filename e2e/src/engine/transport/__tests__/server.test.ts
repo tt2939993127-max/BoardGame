@@ -4,6 +4,7 @@ import { buildAiProgressMarker, resolveForceEndTurnForStalledAi } from '../onlin
 import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } from '../../systems/InteractionSystem';
 import { createSimpleChoiceSystem } from '../../systems/SimpleChoiceSystem';
 import { createResponseWindowSystem, RESPONSE_WINDOW_EVENTS } from '../../systems/ResponseWindowSystem';
+import * as aiModule from '../../ai';
 import type {
     CreateMatchData,
     FetchOpts,
@@ -644,6 +645,54 @@ describe('resolveForceEndTurnForStalledAi（action-loop）', () => {
 
         expect(candidate?.reason).toBe('active-turn');
         expect(candidate?.resolution.action.commands[0]?.type).toBe('ADVANCE_PHASE');
+    });
+
+    it('visible simple-choice 若存在 smashup reaction pass 选项，应优先 force pass 而不是 cancel', () => {
+        const sharedState = createOnlineAiRecoveryState({
+            activePlayerId: '1',
+            phase: 'scoreBases',
+            interaction: {
+                current: {
+                    id: 'reaction-order-choice',
+                    kind: 'simple-choice',
+                    playerId: '1',
+                    data: {
+                        sourceId: 'smashup_reaction_choose',
+                        title: '选择一个反应动作',
+                        options: [
+                            {
+                                id: 'trigger-a',
+                                label: '先结算触发 A',
+                                value: { kind: 'trigger', triggerId: 'afterScoring:base_a:1:0' },
+                            },
+                            {
+                                id: 'pass',
+                                label: 'Pass',
+                                value: { kind: 'pass' },
+                            },
+                        ],
+                    },
+                },
+                queue: [],
+                isBlocked: false,
+            },
+        }).G as any;
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('visible-interaction');
+        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
+        expect(candidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'pass' },
+        });
     });
 });
 
@@ -1751,6 +1800,264 @@ describe('GameTransportServer（离座与重连）', () => {
         }));
     });
 
+    it('online AI watchdog 应优先执行 AI 合法动作来解除可见交互阻塞，而不是直接 force-end-turn', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-visible-interaction-action', {
+            initialState: createOnlineAiRecoveryState({
+                phase: 'scoreBases',
+                interaction: {
+                    current: createSimpleChoice(
+                        'reaction-choice-1',
+                        '1',
+                        '选择一个反应动作',
+                        [
+                            {
+                                id: 'pass',
+                                label: 'Pass',
+                                value: { kind: 'pass' },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_reaction_choose',
+                            targetType: 'button',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction').mockResolvedValue({
+            playerId: '1',
+            action: {
+                actionId: 'interaction:reaction-choice-1:pass',
+                kind: 'interaction-choice',
+                label: 'Pass',
+                commands: [{
+                    type: INTERACTION_COMMANDS.RESPOND,
+                    payload: { optionId: 'pass' },
+                }],
+            },
+            attemptKey: 'watchdog-ai-action',
+            source: 'local-ai',
+        });
+
+        try {
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createInteractiveEngineConfig()],
+                onlineAiRecoveryTickMs: 0,
+                onlineAiRecoveryTimeoutMs: 0,
+                onlineAiRecoveryFailureReportThreshold: 1,
+                onlineAiFeedbackReporter: feedbackReporter,
+            });
+
+            const serverInternal = server as unknown as {
+                loadMatch: (matchID: string) => Promise<any>;
+                runOnlineAiRecoveryTick: () => Promise<void>;
+            };
+
+            const match = await serverInternal.loadMatch('match-watchdog-visible-interaction-action');
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+            await nextTick();
+
+            expect(resolutionSpy).toHaveBeenCalled();
+            expect(match.state.sys.interaction?.current).toBeUndefined();
+            expect(feedbackReporter).not.toHaveBeenCalled();
+        } finally {
+            resolutionSpy.mockRestore();
+        }
+    });
+
+    it('online AI watchdog 遇到同一 AI 的链式可见交互时，应在单次恢复序列内持续消费直到收口', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-visible-interaction-chain', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'scoreBases',
+                interaction: {
+                    current: createSimpleChoice(
+                        'reaction-choice-1',
+                        '1',
+                        '选择一个反应动作',
+                        [
+                            {
+                                id: 'pass',
+                                label: 'Pass',
+                                value: { kind: 'pass' },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_reaction_choose',
+                            targetType: 'button',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+                responseWindow: {
+                    current: {
+                        id: 'reaction-window',
+                        windowType: 'meFirst',
+                        responderQueue: ['0', '1'],
+                        currentResponderIndex: 1,
+                        passedPlayers: [],
+                    },
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction');
+        resolutionSpy
+            .mockResolvedValueOnce({
+                playerId: '1',
+                action: {
+                    actionId: 'interaction:reaction-choice-1:pass',
+                    kind: 'interaction-choice',
+                    label: 'Pass',
+                    commands: [{
+                        type: INTERACTION_COMMANDS.RESPOND,
+                        payload: { optionId: 'pass' },
+                    }],
+                },
+                attemptKey: 'watchdog-chain-step-1',
+                source: 'local-ai',
+            })
+            .mockResolvedValueOnce({
+                playerId: '1',
+                action: {
+                    actionId: 'interaction:reaction-choice-2:pass',
+                    kind: 'interaction-choice',
+                    label: 'Pass',
+                    commands: [{
+                        type: INTERACTION_COMMANDS.RESPOND,
+                        payload: { optionId: 'pass' },
+                    }],
+                },
+                attemptKey: 'watchdog-chain-step-2',
+                source: 'local-ai',
+            });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiRecoveryFailureReportThreshold: 1,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+                options?: { suppressBroadcast?: boolean },
+            ) => Promise<boolean>;
+        };
+
+        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (
+            activeMatch,
+            playerID,
+            commandType,
+            payload,
+        ) => {
+            expect(playerID).toBe('1');
+            expect(commandType).toBe('SYS_INTERACTION_RESPOND');
+
+            const currentInteractionId = (activeMatch.state.sys?.interaction?.current as { id?: string } | undefined)?.id;
+            if (currentInteractionId === 'reaction-choice-1') {
+                expect(payload).toEqual({ optionId: 'pass' });
+                activeMatch.state = createOnlineAiRecoveryState({
+                    activePlayerId: '1',
+                    phase: 'scoreBases',
+                    interaction: {
+                        current: createSimpleChoice(
+                            'reaction-choice-2',
+                            '1',
+                            '第二段反应动作',
+                            [
+                                {
+                                    id: 'pass',
+                                    label: 'Pass',
+                                    value: { kind: 'pass' },
+                                },
+                            ],
+                            {
+                                sourceId: 'smashup_reaction_choose',
+                                targetType: 'button',
+                            },
+                        ),
+                        queue: [],
+                        isBlocked: false,
+                    },
+                    responseWindow: {
+                        current: {
+                            id: 'reaction-window',
+                            windowType: 'meFirst',
+                            responderQueue: ['0', '1'],
+                            currentResponderIndex: 1,
+                            passedPlayers: [],
+                        },
+                    },
+                }).G as any;
+                return true;
+            }
+
+            if (currentInteractionId === 'reaction-choice-2') {
+                expect(payload).toEqual({ optionId: 'pass' });
+                activeMatch.state = createOnlineAiRecoveryState({
+                    activePlayerId: '0',
+                    phase: 'draw',
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: false,
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                }).G as any;
+                return true;
+            }
+
+            throw new Error(`Unexpected interaction id: ${String(currentInteractionId)}`);
+        });
+
+        try {
+            const match = await serverInternal.loadMatch('match-watchdog-visible-interaction-chain');
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+            await nextTick();
+
+            expect(executeSpy).toHaveBeenCalledTimes(2);
+            expect(resolutionSpy).toHaveBeenCalledTimes(2);
+            expect(buildAiProgressMarker(match.state)).toBe('4|draw|1|||0');
+            expect(match.state.sys.interaction?.current).toBeUndefined();
+            expect(feedbackReporter).not.toHaveBeenCalled();
+        } finally {
+            executeSpy.mockRestore();
+            resolutionSpy.mockRestore();
+        }
+    });
+
     it('online AI watchdog 失败反馈应按 incident key 去重冷却', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
@@ -1797,6 +2104,61 @@ describe('GameTransportServer（离座与重连）', () => {
             matchId: 'match-watchdog-failure',
             playerId: '1',
             incidentKind: 'force-end-turn-failed',
+        }));
+    });
+
+    it('online AI watchdog 自动反馈冷却期内应按 trackerKey 去重，即使 progressMarker 变化也不重复上报', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryFeedbackCooldownMs: 60_000,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            reportOnlineAiRecoveryFeedback: (payload: {
+                matchId: string;
+                gameId: string;
+                playerId: string;
+                incidentKind: 'force-end-turn-success' | 'force-end-turn-failed' | 'unsatisfiable-interaction-auto-skipped';
+                severity: 'medium' | 'high';
+                reason: string;
+                trackerKey: string;
+                progressMarker: string;
+                stateSnapshot: string;
+                actionLog?: string;
+            }) => Promise<void>;
+        };
+
+        const payload = {
+            matchId: 'match-watchdog-dedupe',
+            gameId: 'smashup',
+            playerId: '1',
+            incidentKind: 'force-end-turn-failed' as const,
+            severity: 'high' as const,
+            reason: 'visible-interaction:recover-interaction:blocker_persisted',
+            trackerKey: '1:visible-interaction:interaction:1:scoreBases:simple-choice:smashup_reaction_choose:选择一个反应动作::2',
+            progressMarker: 'marker-before-1',
+            stateSnapshot: '{"matchId":"match-watchdog-dedupe"}',
+        };
+
+        await serverInternal.reportOnlineAiRecoveryFeedback(payload);
+        await serverInternal.reportOnlineAiRecoveryFeedback({
+            ...payload,
+            progressMarker: 'marker-before-2',
+        });
+
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+            matchId: 'match-watchdog-dedupe',
+            trackerKey: payload.trackerKey,
+            progressMarker: 'marker-before-1',
         }));
     });
 

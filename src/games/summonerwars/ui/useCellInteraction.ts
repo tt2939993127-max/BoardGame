@@ -27,8 +27,6 @@ import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, Aft
 import { useToast } from '../../../contexts/ToastContext';
 import { useEventCardModes } from './useEventCardModes';
 import type { PendingBeforeAttack } from './modeTypes';
-import { abilityRegistry } from '../domain/abilities';
-import type { BoardUnit } from '../domain/types';
 import type { InteractionDescriptor, PromptOption } from '../../../engine/systems/InteractionSystem';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
@@ -42,30 +40,6 @@ export type {
 // ============================================================================
 // 辅助函数
 // ============================================================================
-
-/**
- * 检测单位是否有被动触发的 beforeAttack 能力
- */
-function getPassiveBeforeAttackAbilities(
-  unit: BoardUnit,
-  core: SummonerWarsCore
-): Array<{ abilityId: string; def: import('../domain/abilities').AbilityDef }> {
-  const abilities = getUnitAbilities(unit, core);
-  const passiveAbilities: Array<{ abilityId: string; def: import('../domain/abilities').AbilityDef }> = [];
-  
-  for (const abilityId of abilities) {
-    const def = abilityRegistry.get(abilityId);
-    if (
-      def &&
-      def.trigger === 'beforeAttack' &&
-      def.ui?.activationType === 'passiveTrigger'
-    ) {
-      passiveAbilities.push({ abilityId, def });
-    }
-  }
-  
-  return passiveAbilities;
-}
 
 // ============================================================================
 // 参数
@@ -580,6 +554,25 @@ export function useCellInteraction({
         const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
         if (targetUnit) {
           if (abilityMode.context === 'beforeAttack') {
+            if (swInteraction?.type === 'before_attack_life_drain') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; targetUnitId?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'before_attack_life_drain'
+                  && (
+                    value.targetUnitId === targetUnit.instanceId
+                    || (value.targetPosition?.row === gameRow && value.targetPosition?.col === gameCol)
+                  );
+              });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+              }
+              setAbilityMode(null);
+              setPendingBeforeAttack(null);
+              return;
+            }
             // ✅ 被动触发模式：选择目标后立即发送攻击命令
             if (abilityMode.pendingAttackTarget && core.selectedUnit) {
               dispatch(SW_COMMANDS.DECLARE_ATTACK, {
@@ -836,40 +829,7 @@ export function useCellInteraction({
         }
         const isValidAttack = validAttackPositions.some(p => p.row === gameRow && p.col === gameCol);
         if (isValidAttack) {
-          const attackerUnit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
-          
-          // ✅ 检测被动触发能力（仅当没有已激活的 beforeAttack 时）
-          if (attackerUnit && !activeBeforeAttack) {
-            const passiveAbilities = getPassiveBeforeAttackAbilities(attackerUnit, core);
-            
-            if (passiveAbilities.length > 0) {
-              // 自动进入被动触发模式（暂时只处理第一个能力）
-              const firstAbility = passiveAbilities[0];
-              
-              // 根据能力类型设置 abilityMode
-              if (firstAbility.abilityId === 'holy_arrow' || firstAbility.abilityId === 'healing') {
-                setAbilityMode({
-                  abilityId: firstAbility.abilityId,
-                  sourceUnitId: attackerUnit.instanceId,
-                  step: 'selectCards',
-                  context: 'beforeAttack',
-                  selectedCardIds: [],
-                  pendingAttackTarget: { row: gameRow, col: gameCol }, // ✅ 记住攻击目标
-                });
-              } else if (firstAbility.abilityId === 'life_drain') {
-                setAbilityMode({
-                  abilityId: firstAbility.abilityId,
-                  sourceUnitId: attackerUnit.instanceId,
-                  step: 'selectUnit',
-                  context: 'beforeAttack',
-                  pendingAttackTarget: { row: gameRow, col: gameCol }, // ✅ 记住攻击目标
-                });
-              }
-              return; // ✅ 不立即发送攻击命令
-            }
-          }
-          
-          // 没有被动触发能力，或已处理完毕，直接攻击
+          // 被动触发技能已迁移到 InteractionSystem：直接声明攻击，由 domain 决定是否先拦截成交互
           dispatch(SW_COMMANDS.DECLARE_ATTACK, {
             attacker: core.selectedUnit,
             target: { row: gameRow, col: gameCol },
@@ -933,6 +893,13 @@ export function useCellInteraction({
       if (!card) return;
       const selected = abilityMode.selectedCardIds ?? [];
       const isSelected = selected.includes(cardId);
+      if (
+        abilityMode.selectableCardIds
+        && abilityMode.selectableCardIds.length > 0
+        && !abilityMode.selectableCardIds.includes(cardId)
+      ) {
+        return;
+      }
       if (isSelected) {
         setAbilityMode({ ...abilityMode, selectedCardIds: selected.filter(id => id !== cardId) });
         return;
@@ -941,6 +908,15 @@ export function useCellInteraction({
         if (card.cardType !== 'unit') {
           showToast.warning(t('handArea.holyArrowUnitOnly'));
           return;
+        }
+        if (swInteraction?.type === 'before_attack_holy_arrow') {
+          const hasMatchingInteractionOption = swInteraction.options.some((opt) => {
+            const value = opt.value as { action?: string; cardId?: string } | undefined;
+            return value?.action === 'before_attack_holy_arrow' && value.cardId === cardId;
+          });
+          if (!hasMatchingInteractionOption) {
+            return;
+          }
         }
         const sourceUnit = core.board.flat().map(c => c.unit).find(u => u?.instanceId === abilityMode.sourceUnitId);
         if (sourceUnit && card.name === sourceUnit.card.name) {
@@ -972,7 +948,7 @@ export function useCellInteraction({
         prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]
       );
     }
-  }, [abilityMode, core, currentPhase, dispatch, isMyTurn, myHand, myPlayerId, setAbilityMode, showToast, t]);
+  }, [abilityMode, core, currentPhase, dispatch, isMyTurn, myHand, myPlayerId, setAbilityMode, showToast, swInteraction, t]);
 
   // 手牌选中（召唤/建造阶段单选）
   const handleCardSelect = (cardId: string | null) => {
@@ -1083,7 +1059,57 @@ export function useCellInteraction({
 
   const handleConfirmBeforeAttackCards = () => {
     if (!abilityMode || abilityMode.step !== 'selectCards') return;
-    const selected = abilityMode.selectedCardIds ?? [];
+    const selectableCardIds = new Set(abilityMode.selectableCardIds ?? []);
+    const selected = (abilityMode.selectedCardIds ?? []).filter((cardId) =>
+      selectableCardIds.size === 0 || selectableCardIds.has(cardId)
+    );
+
+    if (swInteraction?.type === 'before_attack_holy_arrow') {
+      const optionIds = selected
+        .map((cardId) => swInteraction.options.find((opt) => {
+          const value = opt.value as { action?: string; cardId?: string } | undefined;
+          return value?.action === 'before_attack_holy_arrow' && value.cardId === cardId;
+        })?.id ?? null)
+        .filter((id): id is string => !!id);
+      dispatch(INTERACTION_COMMANDS.RESPOND, {
+        interactionId: swInteraction.id,
+        optionIds,
+      });
+      setAbilityMode(null);
+      setPendingBeforeAttack(null);
+      return;
+    }
+
+    if (swInteraction?.type === 'before_attack_healing') {
+      const pickedCardId = selected[0];
+      if (!pickedCardId) {
+        const skipOption = swInteraction.options.find((opt) => {
+          const value = opt.value as { skip?: boolean } | undefined;
+          return opt.id === 'skip' || value?.skip === true;
+        });
+        if (skipOption) {
+          dispatch(INTERACTION_COMMANDS.RESPOND, {
+            interactionId: swInteraction.id,
+            optionId: skipOption.id,
+          });
+        }
+        setAbilityMode(null);
+        setPendingBeforeAttack(null);
+        return;
+      }
+      const option = swInteraction.options.find((opt) => {
+        const value = opt.value as { action?: string; cardId?: string } | undefined;
+        return value?.action === 'before_attack_healing' && value.cardId === pickedCardId;
+      });
+      if (!option) return;
+      dispatch(INTERACTION_COMMANDS.RESPOND, {
+        interactionId: swInteraction.id,
+        optionId: option.id,
+      });
+      setAbilityMode(null);
+      setPendingBeforeAttack(null);
+      return;
+    }
     
     if (abilityMode.abilityId === 'holy_arrow') {
       // "任意数量"包括 0，允许不选择任何卡直接确认
@@ -1145,6 +1171,27 @@ export function useCellInteraction({
   };
 
   const handleCancelBeforeAttack = () => {
+    if (
+      swInteraction?.type === 'before_attack_life_drain'
+      || swInteraction?.type === 'before_attack_holy_arrow'
+      || swInteraction?.type === 'before_attack_healing'
+    ) {
+      const skipOption = swInteraction.options.find((opt) => {
+        const value = opt.value as { skip?: boolean } | undefined;
+        return opt.id === 'skip' || value?.skip === true;
+      });
+      if (skipOption) {
+        dispatch(INTERACTION_COMMANDS.RESPOND, {
+          interactionId: swInteraction.id,
+          optionId: skipOption.id,
+        });
+      } else {
+        dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      }
+      setAbilityMode(null);
+      setPendingBeforeAttack(null);
+      return;
+    }
     // ✅ 如果是被动触发模式（有 pendingAttackTarget），跳过能力并直接攻击
     if (abilityMode && abilityMode.pendingAttackTarget && core.selectedUnit) {
       dispatch(SW_COMMANDS.DECLARE_ATTACK, {

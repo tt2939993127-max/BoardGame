@@ -381,7 +381,16 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         reason?: unknown;
                     };
                     const resolvedValue = isCancelled
-                        ? normalizeCancelledValue(payload.value, payload.reason, payload.interactionData)
+                        ? payload.sourceId === 'smashup_reaction_choose'
+                            ? {
+                                kind: 'pass',
+                                __cancel__: true,
+                                skip: true,
+                                ...(typeof payload.reason === 'string'
+                                    ? { __emergency_skip_reason__: payload.reason }
+                                    : {}),
+                            }
+                            : normalizeCancelledValue(payload.value, payload.reason, payload.interactionData)
                         : payload.value;
                     if (payload.sourceId === 'smashup_reaction_choose') {
                         reactionChoiceResolved = true;

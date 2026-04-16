@@ -5,7 +5,13 @@ import { RESPONSE_WINDOW_COMMANDS } from '../systems/ResponseWindowSystem';
 type HiddenSimpleChoiceOption = {
     id?: unknown;
     disabled?: unknown;
-    value?: { skip?: unknown; __cancel__?: unknown; done?: unknown; __emergency_skip__?: unknown };
+    value?: {
+        skip?: unknown;
+        __cancel__?: unknown;
+        done?: unknown;
+        __emergency_skip__?: unknown;
+        kind?: unknown;
+    };
 };
 
 type HiddenSimpleChoiceInteraction = {
@@ -232,11 +238,13 @@ export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
 function isControlChoiceOption(option: HiddenSimpleChoiceOption): boolean {
     const value = option.value;
     return option.id === 'skip'
+        || option.id === 'pass'
         || option.id === 'done'
         || option.id === 'cancel'
         || option.id === '__cancel__'
         || option.id === '__emergency_skip__'
         || value?.skip === true
+        || value?.kind === 'pass'
         || value?.done === true
         || value?.cancel === true
         || value?.__cancel__ === true
@@ -280,7 +288,9 @@ function buildForceSkipPayloadFromSeatState(
 
     const skipOption = enabledOptions.find((option) =>
         option.id === 'skip'
+        || option.id === 'pass'
         || option.value?.skip === true
+        || option.value?.kind === 'pass'
         || option.id === '__emergency_skip__'
         || option.value?.__emergency_skip__ === true,
     );

@@ -20,12 +20,75 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
     const { t } = useTranslation('game');
     const [offlineVisible, setOfflineVisible] = useState(false);
     const [elapsed, setElapsed] = useState(0);
+    const [anchorCenterX, setAnchorCenterX] = useState<number | null>(null);
     const disconnectTimeRef = useRef<number | null>(null);
     const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // 对手是否已加入房间（座位上有玩家）
     const hasJoined = !!name;
+
+    useEffect(() => {
+        if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+        const pickAnchor = () => {
+            const selectors = [
+                '[data-testid$="-faction-stage"]',
+                '[data-testid$="-selection-stage"]',
+                '[data-testid$="-map-content"]',
+                '[data-testid$="-map-container"]',
+                '[data-game-page="true"]',
+                '[data-game-page]',
+            ];
+            for (const selector of selectors) {
+                const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector));
+                const visible = candidates.find((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                });
+                if (visible) return visible;
+            }
+            return null;
+        };
+
+        const updateAnchorCenter = () => {
+            const anchor = pickAnchor();
+            if (!anchor) {
+                setAnchorCenterX(null);
+                return;
+            }
+            const rect = anchor.getBoundingClientRect();
+            setAnchorCenterX(rect.left + rect.width / 2);
+        };
+
+        updateAnchorCenter();
+
+        const resizeObserver = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(() => updateAnchorCenter())
+            : null;
+        resizeObserver?.observe(document.body);
+        const mutationObserver = typeof MutationObserver !== 'undefined'
+            ? new MutationObserver(() => updateAnchorCenter())
+            : null;
+        mutationObserver?.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+        });
+        window.addEventListener('resize', updateAnchorCenter);
+
+        return () => {
+            resizeObserver?.disconnect();
+            mutationObserver?.disconnect();
+            window.removeEventListener('resize', updateAnchorCenter);
+        };
+    }, [hasJoined, offlineVisible]);
+
+    const bannerPositionStyle = {
+        left: anchorCenterX !== null ? `${anchorCenterX}px` : '50%',
+        transform: 'translateX(-50%)',
+        zIndex: UI_Z_INDEX.overlayRaised,
+    } as const;
 
     // 离线倒计时逻辑（仅对手已加入时生效）
     useEffect(() => {
@@ -73,17 +136,22 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
     if (!hasJoined) {
         const content = (
             <div
-                className="fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg
-                    bg-yellow-900/80 backdrop-blur-sm border border-yellow-500/40
-                    text-yellow-200 text-sm font-medium shadow-lg
-                    animate-in fade-in slide-in-from-top-2 duration-300"
-                style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+                className="fixed top-[calc(env(safe-area-inset-top)+1rem)]"
+                style={bannerPositionStyle}
+                data-testid="opponent-offline-banner"
                 role="status"
                 aria-live="polite"
             >
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                    <span>{t('hud.offlineBanner.waitingOpponent')}</span>
+                <div
+                    className="px-4 py-2 rounded-lg
+                        bg-yellow-900/80 backdrop-blur-sm border border-yellow-500/40
+                        text-yellow-200 text-sm font-medium shadow-lg
+                        animate-in fade-in slide-in-from-top-2 duration-300"
+                >
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                        <span>{t('hud.offlineBanner.waitingOpponent')}</span>
+                    </div>
                 </div>
             </div>
         );
@@ -99,17 +167,22 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
 
     const content = (
         <div
-            className="fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg
-                bg-red-900/80 backdrop-blur-sm border border-red-500/40
-                text-red-200 text-sm font-medium shadow-lg
-                animate-in fade-in slide-in-from-top-2 duration-300"
-            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+            className="fixed top-[calc(env(safe-area-inset-top)+1rem)]"
+            style={bannerPositionStyle}
+            data-testid="opponent-offline-banner"
             role="status"
             aria-live="polite"
         >
-            <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span>{t('hud.offlineBanner.message', { name, time: timeText })}</span>
+            <div
+                className="px-4 py-2 rounded-lg
+                    bg-red-900/80 backdrop-blur-sm border border-red-500/40
+                    text-red-200 text-sm font-medium shadow-lg
+                    animate-in fade-in slide-in-from-top-2 duration-300"
+            >
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span>{t('hud.offlineBanner.message', { name, time: timeText })}</span>
+                </div>
             </div>
         </div>
     );

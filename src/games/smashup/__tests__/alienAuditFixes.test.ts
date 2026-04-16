@@ -21,6 +21,7 @@ import { clearInteractionHandlers, getInteractionHandler } from '../domain/abili
 import type { BaseInPlay, CardInstance, MinionOnBase, PlayerState, SmashUpCore, TitanState } from '../domain/types';
 import { ALIEN_ACTIONS } from '../data/factions/aliens';
 import { ALIEN_POD_ACTIONS } from '../data/factions/aliens_pod';
+import { actionLikeNeedsPlayBase, actionLikeNeedsPlayMinion } from '../domain/utils';
 import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 
@@ -99,6 +100,19 @@ describe('Aliens 审计修复回归（新 ID）', () => {
     expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_disintegrator_pod')?.playNeedsMinion).toBe(true);
     expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_beam_up_pod')?.playNeedsMinion).toBe(true);
     expect(ALIEN_POD_ACTIONS.find(card => card.id === 'alien_abduction_pod')?.playNeedsMinion).toBe(true);
+  });
+
+  it('D8: minion 目标行动卡不能再被误判成 base 目标模式', () => {
+    const invasion = ALIEN_ACTIONS.find(card => card.id === 'alien_invasion');
+    const disintegrator = ALIEN_ACTIONS.find(card => card.id === 'alien_disintegrator');
+    const beamUp = ALIEN_ACTIONS.find(card => card.id === 'alien_beam_up');
+    const abduction = ALIEN_ACTIONS.find(card => card.id === 'alien_abduction');
+
+    for (const card of [invasion, disintegrator, beamUp, abduction]) {
+      expect(card).toBeTruthy();
+      expect(actionLikeNeedsPlayMinion(card!)).toBe(true);
+      expect(actionLikeNeedsPlayBase(card!)).toBe(false);
+    }
   });
 
   it('alien_disintegrator: 结算为 CARD_TO_DECK_BOTTOM', () => {
@@ -376,6 +390,35 @@ describe('Aliens 审计修复回归（新 ID）', () => {
     expect(step2).toBeDefined();
     expect(step2!.events).toHaveLength(1);
     expect(step2!.events[0].type).toBe(SU_EVENTS.MINION_MOVED);
+  });
+
+  it('alien_invasion: 直点随从打出时应直接进入选基地第二步', () => {
+    const core = makeState({
+      players: {
+        '0': makePlayer('0', {
+          hand: [makeCard('inv1', 'alien_invasion', 'action', '0')],
+          factions: ['aliens', 'pirates'] as [string, string],
+        }),
+        '1': makePlayer('1'),
+      },
+      bases: [
+        makeBase('base_a', [makeMinion('m1', 'minion_a', '0', 3)]),
+        makeBase('base_b', []),
+      ],
+    });
+
+    const result = runCommand(
+      makeMatchState(core),
+      {
+        type: SU_COMMANDS.PLAY_ACTION,
+        playerId: '0',
+        payload: { cardUid: 'inv1', targetBaseIndex: 0, targetMinionUid: 'm1' },
+      },
+      'alien_invasion targeted play',
+    );
+
+    expect(result.steps[0]?.success).toBe(true);
+    expect((result.finalState.sys.interaction?.current?.data as any)?.sourceId).toBe('alien_invasion_choose_base');
   });
 
   it('alien_invasion: 第二步若目标已离开来源基地则不再移动', () => {

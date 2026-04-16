@@ -148,6 +148,68 @@ describe('响应窗口跳过逻辑', () => {
         expect(stateAfterFirstPass.sys.responseWindow?.current).toBeUndefined();
     });
 
+    it('smashup_reaction_choose 被 SYS_INTERACTION_CANCEL 收口时，应按 pass 处理并正常关闭 session', () => {
+        const runner = createRunner((playerIds, random) => {
+            const core = SmashUpDomain.setup(playerIds, random);
+            const sys = createInitialSystemState(playerIds, smashUpSystemsForTest, undefined);
+
+            core.factionSelection = undefined;
+            sys.phase = 'playCards';
+            core.bases[0] = {
+                defId: 'base_the_mothership',
+                minions: Array.from({ length: 5 }, (_, index) =>
+                    makeMinion(`fake-${index}`, 'test_minion', '0', '0', 5),
+                ),
+                ongoingActions: [],
+            };
+            core.players['0'].hand = [
+                { uid: 'card-1', defId: 'pirate_full_sail', type: 'action', owner: '0' },
+                { uid: 'card-3', defId: 'pirate_full_sail', type: 'action', owner: '0' },
+            ];
+            core.players['1'].hand = [
+                { uid: 'card-2', defId: 'robot_microbot_alpha', type: 'minion', owner: '1' },
+            ];
+
+            return { core, sys };
+        });
+
+        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanceResult.success).toBe(true);
+
+        const firstChoice = getCurrentChoice(runner.getState());
+        expect(firstChoice?.sourceId).toBe('smashup_reaction_choose');
+        expect(firstChoice?.playerId).toBe('0');
+
+        const playOptionId = findOptionId(
+            firstChoice!,
+            option => option.value?.kind === 'play_action' && option.value?.cardUid === 'card-1',
+            '找不到全速航行选项',
+        );
+        const playResult = runner.resolveInteraction('0', { optionId: playOptionId });
+        expect(playResult.success).toBe(true);
+
+        const fullSailChoice = getCurrentChoice(runner.getState());
+        expect(fullSailChoice?.sourceId).toBe('pirate_full_sail_choose_minion');
+
+        const finishFullSail = runner.resolveInteraction('0', { optionId: 'done' });
+        expect(finishFullSail.success).toBe(true);
+
+        const stateBeforeCancel = runner.getState();
+        expect(getReactionSession(stateBeforeCancel)?.activePlayerId).toBe('0');
+        expect(getCurrentChoice(stateBeforeCancel)?.sourceId).toBe('smashup_reaction_choose');
+
+        const cancelResult = runner.dispatch('SYS_INTERACTION_CANCEL', {
+            playerId: '0',
+            reason: 'watchdog-force-pass',
+        });
+        expect(cancelResult.success).toBe(true);
+
+        const finalState = runner.getState();
+        expect(getReactionSession(finalState)).toBeUndefined();
+        expect(getCurrentChoice(finalState)).toBeUndefined();
+        expect(finalState.sys.responseWindow?.current).toBeUndefined();
+    });
+
     it('所有玩家都没有可响应内容时，session 会直接关闭', () => {
         const runner = createRunner((playerIds, random) => {
             const core = SmashUpDomain.setup(playerIds, random);

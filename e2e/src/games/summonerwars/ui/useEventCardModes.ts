@@ -146,13 +146,17 @@ export function useEventCardModes({
     if (!swInteraction) {
       if (lastInteractionIdRef.current) {
         lastInteractionIdRef.current = null;
-        clearAllEventModes();
+        queueMicrotask(() => {
+          clearAllEventModes();
+        });
       }
       return;
     }
     if (swInteraction.id === lastInteractionIdRef.current) return;
     lastInteractionIdRef.current = swInteraction.id;
-    clearAllEventModes();
+    queueMicrotask(() => {
+      clearAllEventModes();
+    });
 
     const meta = swInteraction.meta ?? {};
     const cardId = typeof meta.cardId === 'string' ? meta.cardId : undefined;
@@ -161,6 +165,81 @@ export function useEventCardModes({
     }
 
     switch (swInteraction.type) {
+      case 'after_attack_mind_transmission':
+      case 'after_attack_telekinesis_target': {
+        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
+        const sourcePosition = meta.sourcePosition as CellCoord | undefined;
+        const abilityId = meta.abilityId as AfterAttackAbilityModeState['abilityId'] | undefined;
+        if (sourceUnitId && sourcePosition && abilityId) {
+          queueMicrotask(() => {
+            setAfterAttackAbilityMode({
+              abilityId,
+              sourceUnitId,
+              sourcePosition,
+            });
+          });
+        }
+        break;
+      }
+      case 'after_attack_telekinesis_direction': {
+        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
+        const sourcePosition = meta.sourcePosition as CellCoord | undefined;
+        const targetPosition = meta.targetPosition as CellCoord | undefined;
+        const abilityId = meta.abilityId as TelekinesisTargetModeState['abilityId'] | undefined;
+        if (!sourceUnitId || !targetPosition || !abilityId) break;
+        const destinations = swInteraction.options
+          .map((option) => {
+            const value = option.value as {
+              targetPosition?: CellCoord;
+              moveRow?: number;
+              moveCol?: number;
+            } | undefined;
+            const pos = value?.targetPosition;
+            if (!pos || typeof value?.moveRow !== 'number' || typeof value?.moveCol !== 'number') return null;
+            return {
+              position: pos,
+              moveRow: value.moveRow,
+              moveCol: value.moveCol,
+            };
+          })
+          .filter((item): item is { position: CellCoord; moveRow: number; moveCol: number } => !!item);
+        queueMicrotask(() => {
+          setTelekinesisTargetMode({
+            abilityId,
+            sourceUnitId,
+            sourcePosition,
+            targetPosition,
+            destinations,
+          });
+        });
+        break;
+      }
+      case 'after_attack_withdraw_cost': {
+        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
+        if (sourceUnitId) {
+          queueMicrotask(() => {
+            setWithdrawMode({
+              sourceUnitId,
+              step: 'selectCost',
+            });
+          });
+        }
+        break;
+      }
+      case 'after_attack_withdraw_position': {
+        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
+        const costType = meta.costType as WithdrawModeState['costType'] | undefined;
+        if (sourceUnitId && costType) {
+          queueMicrotask(() => {
+            setWithdrawMode({
+              sourceUnitId,
+              step: 'selectPosition',
+              costType,
+            });
+          });
+        }
+        break;
+      }
       case 'event_target': {
         const validTargets = swInteraction.options
           .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
@@ -347,7 +426,7 @@ export function useEventCardModes({
       default:
         break;
     }
-  }, [clearAllEventModes, myHand, setSelectedHandCardId, swInteraction]);
+  }, [clearAllEventModes, myHand, setAfterAttackAbilityMode, setSelectedHandCardId, swInteraction]);
 
   // 阶段切换时自动取消所有多步骤事件卡模式
   // eslint-disable-next-line react-hooks/set-state-in-effect -- phase change batch reset internal state
@@ -759,7 +838,7 @@ export function useEventCardModes({
 
     // 未匹配任何事件模式
     return false;
-  }, [core, dispatch, myPlayerId,
+  }, [core, dispatch,
     funeralPyreMode, soulTransferMode, mindCaptureMode,
     afterAttackAbilityMode, afterAttackAbilityHighlights, setAfterAttackAbilityMode,
     telekinesisTargetMode,
@@ -771,6 +850,7 @@ export function useEventCardModes({
     sneakMode, sneakHighlights,
     chantEntanglementMode, entanglementHighlights,
     hypnoticLureMode, eventTargetMode,
+    findInteractionOptionId, respondInteractionOption,
     respondPositionOption, swInteraction]);
 
   // ---------- 打出事件卡 ----------

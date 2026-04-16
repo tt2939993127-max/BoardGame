@@ -17,7 +17,7 @@ import type {
     CardOrTitanChoiceValue,
 } from '../domain/types';
 import {
-    buildBaseTargetOptions, buildMinionTargetOptions, buildPlayerTargetOptions, getMinionPower,
+    buildActionMinionTargetOptions, buildBaseTargetOptions, buildMinionTargetOptions, buildPlayerTargetOptions, getMinionPower,
     grantContextualExtraMinion, grantExtraMinion, moveMinion, shuffleBaseDeck,
     resolveOrPrompt, buildAbilityFeedback, getSetAsideTitansPlayableAs, playTitan,
 } from '../domain/abilityHelpers';
@@ -288,16 +288,56 @@ function alienInvasion(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    // 构建选项（自动过滤受保护的对手随从）
-    const options = buildMinionTargetOptions(
+    const options = buildActionMinionTargetOptions(
         targets,
         {
             state: ctx.state,
             sourcePlayerId: ctx.playerId,
-            effectType: 'affect',
+            effectType: 'move',
         }
     );
     if (options.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+
+    if (ctx.targetMinionUid) {
+        const selectedOption = options.find(option => {
+            const value = option.value as { minionUid?: string; baseIndex?: number } | undefined;
+            return value?.minionUid === ctx.targetMinionUid && value?.baseIndex === ctx.baseIndex;
+        });
+        const sourceBase = ctx.state.bases[ctx.baseIndex];
+        const target = sourceBase?.minions.find(minion => minion.uid === ctx.targetMinionUid);
+        if (selectedOption && target) {
+            const baseCandidates: { baseIndex: number; label: string }[] = [];
+            for (let i = 0; i < ctx.state.bases.length; i++) {
+                if (i === ctx.baseIndex) continue;
+                const baseDef = getBaseDef(ctx.state.bases[i].defId);
+                baseCandidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
+            }
+            if (baseCandidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+
+            const interaction = createSimpleChoice(
+                `alien_invasion_base_${ctx.now}`,
+                ctx.playerId,
+                '选择要移动到的基地',
+                buildBaseTargetOptions(baseCandidates, ctx.state),
+                { sourceId: 'alien_invasion_choose_base', targetType: 'base' },
+            );
+            return {
+                events: [],
+                matchState: queueInteraction(ctx.matchState, {
+                    ...interaction,
+                    data: {
+                        ...interaction.data,
+                        continuationContext: {
+                            minionUid: target.uid,
+                            minionDefId: target.defId,
+                            fromBaseIndex: ctx.baseIndex,
+                        },
+                    },
+                }),
+            };
+        }
+    }
+
     return {
         events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
             `alien_invasion_${ctx.now}`, ctx.playerId, '选择要移动的随从', options, { sourceId: 'alien_invasion_choose_minion', targetType: 'minion' },
