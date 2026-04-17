@@ -7,7 +7,7 @@ import { dirname } from 'node:path';
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { test, expect } from '../framework';
 import { getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { waitForSmashUpUI } from '../helpers/smashup';
+import { selectFaction, waitForSmashUpUI } from '../helpers/smashup';
 import { setupSmashUpMatchSkipSetup } from '../helpers/smashup-skip-setup';
 import {
     ensureGameServerAvailable,
