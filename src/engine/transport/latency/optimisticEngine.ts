@@ -643,6 +643,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             let firstCommandConfirmed = false;
 
             const firstPending = pendingCommands[0];
+            let firstCommandSettledByMeta = false;
             if (
                 meta?.stateID !== undefined &&
                 firstPending.predictedStateID !== undefined
@@ -654,21 +655,17 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 const playerMatch = meta.lastCommandPlayerId === undefined
                     || meta.lastCommandPlayerId === firstPending.playerId;
                 const coreMatch = isCoreStateEqual(firstPending.predictedState.core, serverState.core);
+                firstCommandSettledByMeta = stateIDMatch && playerMatch;
 
-                if (stateIDMatch && playerMatch && !coreMatch) {
+                if (firstCommandSettledByMeta && !coreMatch) {
                     if (process.env.NODE_ENV === 'development') {
                         console.warn(
-                            '[OptimisticEngine] 命中 stateID/playerId 确认条件，但服务端 core 与本地预测不一致，忽略这次可疑确认并保留乐观状态',
+                            '[OptimisticEngine] 命中 stateID/playerId 确认条件，但服务端 core 与本地预测不一致，回滚到权威状态并丢弃本地预测',
                             { serverStateID: meta.stateID, commandType: firstPending.type, playerId: firstPending.playerId },
                         );
                     }
-                    return {
-                        stateToRender: pendingCommands[pendingCommands.length - 1].predictedState,
-                        didRollback: false,
-                        optimisticEventWatermark: null,
-                    };
                 }
-                firstCommandConfirmed = stateIDMatch && playerMatch && coreMatch;
+                firstCommandConfirmed = firstCommandSettledByMeta && coreMatch;
 
                 // 开发环境诊断：stateID 匹配但 playerId 不匹配 → 对手命令，非自己的确认
                 if (process.env.NODE_ENV === 'development' && stateIDMatch && !playerMatch) {
@@ -697,8 +694,11 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 randomProbe = createRandomProbe(localRandom);
             }
 
-            if (firstCommandConfirmed) {
-                // 服务端确认了 pending[0]，丢弃它，基于服务端状态重放剩余
+            if (firstCommandSettledByMeta || firstCommandConfirmed) {
+                // 服务端已结算 pending[0]：
+                // - coreMatch=true：本地预测准确，正常确认
+                // - coreMatch=false：本地预测错误，但服务端 stateID / playerId 已表明这条命令被权威执行
+                // 两种情况都必须消费掉这条 pending，避免在权威状态上重复回放同一命令。
                 commandsToReplay = pendingCommands.slice(1);
             }
 

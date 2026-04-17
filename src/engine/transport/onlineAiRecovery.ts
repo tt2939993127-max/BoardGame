@@ -48,8 +48,9 @@ export type ForceSkippableHiddenAiInteraction = {
 
 export type ForceEndTurnStalledAiResolution = {
     playerId: string;
-    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
+    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn' | 'active-turn-legal-only';
     requiresConfirmedAdvancePhase?: boolean;
+    legalActionOnly?: boolean;
     fingerprintHint?: string;
     resolution: AiResolution;
 };
@@ -454,9 +455,20 @@ export function resolveForceEndTurnForStalledAi(args: {
         // 派系选择阶段的 AI 没动作，通常是 seat 凭据/seat state 还没准备好。
         // 这里若强行发 ADVANCE_PHASE，会把 match 非法推进到 startTurn/playCards，
         // 造成双方 factions 仍为空却直接进游戏、手牌/牌库全空的损坏状态。
-        // 因此 factionSelect 只能等待 AI 正常选派系或由上层补领 seat，不能 watchdog 自动跳过。
+        // 因此 factionSelect 只能走“服务端代 AI 执行合法 SELECT_FACTION”这类 legal-action recovery，
+        // 绝不能 watchdog 自动 ADVANCE_PHASE 跳过。
         if (phase === 'factionSelect') {
-            return null;
+            return {
+                playerId: currentPlayerId,
+                reason: 'active-turn-legal-only',
+                legalActionOnly: true,
+                fingerprintHint: `active-turn-legal-only:${currentPlayerId}:factionSelect`,
+                resolution: buildForceEndTurnResolution({
+                    playerId: currentPlayerId,
+                    suffix: `active-turn-legal-only:${currentPlayerId}:factionSelect`,
+                    commands: [],
+                }),
+            };
         }
         return {
             playerId: currentPlayerId,
@@ -518,7 +530,11 @@ export function resolveManualForceEndAiPhase(args: {
         }
     }
 
-    return resolveForceEndTurnForStalledAi(args);
+    const candidate = resolveForceEndTurnForStalledAi(args);
+    if (candidate?.legalActionOnly) {
+        return null;
+    }
+    return candidate;
 }
 
 export function resolveForceEndTurnRecoveryStep(args: {

@@ -1877,6 +1877,166 @@ describe('GameTransportServer（离座与重连）', () => {
         }
     });
 
+    it('online AI watchdog 在 factionSelect 阶段应走 legal-action recovery，而不是 fallback ADVANCE_PHASE', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-faction-select-legal-action', {
+            initialState: {
+                G: {
+                    core: {
+                        activePlayerId: '2',
+                        currentPlayerIndex: 2,
+                        turnOrder: ['0', '1', '2', '3'],
+                        factionSelection: {
+                            takenFactions: ['aliens', 'pirates'],
+                            playerSelections: {
+                                '0': ['aliens'],
+                                '1': ['pirates'],
+                                '2': [],
+                                '3': [],
+                            },
+                            completedPlayers: [],
+                        },
+                    },
+                    sys: {
+                        phase: 'factionSelect',
+                        turnNumber: 1,
+                        eventStream: { nextId: 1 },
+                        interaction: {
+                            current: undefined,
+                            queue: [],
+                            isBlocked: false,
+                        },
+                        responseWindow: {
+                            current: undefined,
+                        },
+                    },
+                },
+                _stateID: 0,
+                randomSeed: 'seed',
+                randomCursor: 0,
+            },
+            metadata: {
+                gameName: 'test-game',
+                players: {
+                    '0': { name: '玩家0', credentials: 'cred-0', isConnected: false },
+                    '1': { name: 'AI 1', credentials: 'cred-1', isConnected: false },
+                    '2': { name: 'AI 2', credentials: 'cred-2', isConnected: false },
+                    '3': { name: 'AI 3', credentials: 'cred-3', isConnected: false },
+                },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                setupData: {
+                    enableAi: true,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai' },
+                        '2': { type: 'local-ai' },
+                        '3': { type: 'local-ai' },
+                    },
+                },
+            },
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction').mockResolvedValue({
+            playerId: '2',
+            action: {
+                actionId: 'select-faction:robots',
+                kind: 'select-faction',
+                label: '选择派系 robots',
+                commands: [{
+                    type: 'SELECT_FACTION',
+                    payload: { factionId: 'robots' },
+                }],
+            },
+            attemptKey: 'watchdog-faction-select-step-1',
+            source: 'local-ai',
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiRecoveryFailureReportThreshold: 1,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+                options?: { suppressBroadcast?: boolean },
+            ) => Promise<boolean>;
+        };
+
+        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (
+            activeMatch,
+            playerID,
+            commandType,
+            payload,
+        ) => {
+            expect(playerID).toBe('2');
+            expect(commandType).toBe('SELECT_FACTION');
+            expect(payload).toEqual({ factionId: 'robots' });
+
+            const core = activeMatch.state.core as {
+                factionSelection: {
+                    takenFactions: string[];
+                    playerSelections: Record<string, string[]>;
+                    completedPlayers: string[];
+                };
+            };
+
+            activeMatch.state = {
+                ...activeMatch.state,
+                core: {
+                    ...activeMatch.state.core,
+                    activePlayerId: '3',
+                    currentPlayerIndex: 3,
+                    factionSelection: {
+                        ...core.factionSelection,
+                        takenFactions: [...core.factionSelection.takenFactions, 'robots'],
+                        playerSelections: {
+                            ...core.factionSelection.playerSelections,
+                            '2': ['robots'],
+                        },
+                    },
+                },
+                sys: {
+                    ...activeMatch.state.sys,
+                    eventStream: { nextId: 2 },
+                },
+            };
+
+            return true;
+        });
+
+        try {
+            const match = await serverInternal.loadMatch('match-watchdog-faction-select-legal-action');
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+            await nextTick();
+
+            expect(resolutionSpy).toHaveBeenCalled();
+            expect(executeSpy.mock.calls.map(([, , commandType]) => commandType)).toEqual(['SELECT_FACTION']);
+            expect(match.state.core.activePlayerId).toBe('3');
+            expect(match.state.sys.phase).toBe('factionSelect');
+            expect(feedbackReporter).not.toHaveBeenCalled();
+        } finally {
+            executeSpy.mockRestore();
+            resolutionSpy.mockRestore();
+        }
+    });
+
     it('online AI watchdog 遇到同一 AI 的链式可见交互时，应在单次恢复序列内持续消费直到收口', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();

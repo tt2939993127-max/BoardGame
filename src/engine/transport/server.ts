@@ -1143,8 +1143,21 @@ export class GameTransportServer {
                 );
 
                 if (!actionRecoveryApplied) {
+                    const recoveryCommands = currentCandidate.resolution.action.commands;
+                    if (currentCandidate.legalActionOnly === true || recoveryCommands.length === 0) {
+                        await this.handleOnlineAiRecoveryFailure(
+                            match,
+                            tracker,
+                            currentCandidate,
+                            phaseLabel,
+                            progressMarkerBeforeRecovery,
+                            'legal_action_unavailable',
+                        );
+                        return;
+                    }
+
                     usedForcedRecoveryCommand = true;
-                    const nextCommand = mapRecoveryCommand(currentCandidate.resolution.action.commands[0]);
+                    const nextCommand = mapRecoveryCommand(recoveryCommands[0]);
                     const nextCommandType = nextCommand?.type ?? 'UNKNOWN';
                     const nextSuccess = await this.executeCommandInternal(
                         match,
@@ -1507,6 +1520,11 @@ export class GameTransportServer {
         candidate: ForceEndTurnStalledAiResolution,
         seatControllers: Record<string, { type: 'human' | 'local-ai' | 'remote-ai' }>,
     ): boolean {
+        if (candidate.legalActionOnly === true) {
+            return resolveCurrentPlayerId(match.state) !== candidate.playerId
+                || match.state.sys?.phase !== 'factionSelect';
+        }
+
         if (candidate.reason === 'visible-interaction') {
             const current = (match.state.sys?.interaction as { current?: { playerId?: unknown } } | undefined)?.current;
             return String(current?.playerId ?? '') !== candidate.playerId;

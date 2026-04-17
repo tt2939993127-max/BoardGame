@@ -398,7 +398,7 @@ describe('OptimisticEngine — Property 4: 链式乐观命令的正确调和', (
 });
 
 describe('OptimisticEngine — stateID 确认健壮性', () => {
-    it('stateID 和 playerId 命中但 core 不一致时，不应把可疑服务端状态当作成功确认', () => {
+    it('stateID 和 playerId 命中但 core 不一致时，应回滚到服务端权威状态，避免本地回合继续超前', () => {
         const engine = createTestEngine({
             INCREMENT: 'deterministic',
         });
@@ -414,17 +414,8 @@ describe('OptimisticEngine — stateID 确认健壮性', () => {
             lastCommandPlayerId: '0',
         });
 
-        expect(suspicious.didRollback).toBe(false);
-        expect((suspicious.stateToRender.core as CounterCore).value).toBe(11);
-        expect(engine.hasPendingCommands()).toBe(true);
-
-        const corrected = engine.reconcile(createTestState(11), {
-            stateID: 1,
-            lastCommandPlayerId: '0',
-        });
-
-        expect(corrected.didRollback).toBe(false);
-        expect((corrected.stateToRender.core as CounterCore).value).toBe(11);
+        expect(suspicious.didRollback).toBe(true);
+        expect((suspicious.stateToRender.core as CounterCore).value).toBe(10);
         expect(engine.hasPendingCommands()).toBe(false);
     });
 });

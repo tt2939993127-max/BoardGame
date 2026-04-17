@@ -297,8 +297,11 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
     gap: isLandscapeMobileViewport ? blockUnit(0.8) : blockUnit(1.2),
     minWidth: isLandscapeMobileViewport ? inlineUnit(13) : inlineUnit(14),
   } as React.CSSProperties;
+  const actionRailStyle = {
+    width: isLandscapeMobileViewport ? inlineUnit(14.5) : inlineUnit(16),
+  } as React.CSSProperties;
   const actionSlotStyle = {
-    height: isLandscapeMobileViewport ? blockUnit(4.4) : blockUnit(5),
+    height: isLandscapeMobileViewport ? '100%' : blockUnit(5),
   } as React.CSSProperties;
   const lowerStageAlignStyle = isLandscapeMobileViewport
     ? { alignItems: 'flex-start' } as React.CSSProperties
@@ -674,19 +677,44 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
               })}
 
               {/* 操作按钮区（固定高度，避免布局跳动） */}
-              <div className="flex items-center justify-center" style={actionSlotStyle}>
-                <ActionButton
-                  isHost={isHost}
-                  hasSelected={!!hasSelected}
-                  isReady={!!readyPlayers[currentPlayerId]}
-                  everyoneReady={everyoneReady}
-                  onReady={onReady}
-                  onUnready={onUnready}
-                  onStart={onStart}
-                  t={t}
-                />
-              </div>
+              {!isLandscapeMobileViewport && (
+                <div className="flex items-center justify-center" style={actionSlotStyle}>
+                  <ActionButton
+                    isHost={isHost}
+                    hasSelected={!!hasSelected}
+                    isReady={!!readyPlayers[currentPlayerId]}
+                    everyoneReady={everyoneReady}
+                    onReady={onReady}
+                    onUnready={onUnready}
+                    onStart={onStart}
+                    t={t}
+                    isLandscapeMobileViewport={false}
+                  />
                 </div>
+              )}
+                </div>
+
+                {isLandscapeMobileViewport && (
+                  <div
+                    data-testid="sw-faction-action-rail"
+                    className="flex shrink-0 flex-col"
+                    style={actionRailStyle}
+                  >
+                    <div className="flex min-h-0 flex-1 items-center justify-center" style={actionSlotStyle}>
+                      <ActionButton
+                        isHost={isHost}
+                        hasSelected={!!hasSelected}
+                        isReady={!!readyPlayers[currentPlayerId]}
+                        everyoneReady={everyoneReady}
+                        onReady={onReady}
+                        onUnready={onUnready}
+                        onStart={onStart}
+                        t={t}
+                        isLandscapeMobileViewport
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1016,11 +1044,21 @@ interface ActionButtonProps {
   onUnready: () => void;
   onStart: () => void;
   t: TFunction;
+  isLandscapeMobileViewport?: boolean;
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({
-  isHost, hasSelected, isReady, everyoneReady, onReady, onUnready, onStart, t,
+  isHost, hasSelected, isReady, everyoneReady, onReady, onUnready, onStart, t, isLandscapeMobileViewport = false,
 }) => {
+  const mobileActionButtonStyle = isLandscapeMobileViewport
+    ? {
+        width: '100%',
+        minHeight: 'calc(var(--sw-selection-block-unit) * 6.2)',
+        paddingInline: 'calc(var(--sw-selection-inline-unit) * 1.2)',
+        paddingBlock: 'calc(var(--sw-selection-block-unit) * 0.9)',
+      } satisfies React.CSSProperties
+    : undefined;
+
   if (isHost && hasSelected) {
     return (
       <motion.button
@@ -1030,12 +1068,15 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         onClick={onStart}
         data-testid="sw-faction-start"
         className={clsx(
-          'px-[2.5vw] py-[0.7vw] rounded-xl text-[clamp(12px,0.9vw,18px)] font-black tracking-[0.2em] uppercase',
+          isLandscapeMobileViewport
+            ? 'rounded-xl text-[clamp(11px,calc(var(--sw-selection-inline-unit)*0.56),15px)] font-black tracking-[0.08em] leading-tight uppercase text-center'
+            : 'px-[2.5vw] py-[0.7vw] rounded-xl text-[clamp(12px,0.9vw,18px)] font-black tracking-[0.2em] uppercase',
           'border-2 transition-[background-color,border-color,opacity,transform,box-shadow] duration-200',
           everyoneReady
             ? 'bg-gradient-to-b from-amber-400 via-amber-600 to-amber-700 text-white border-amber-300 shadow-[0_4px_0_#92400e,0_8px_20px_rgba(245,158,11,0.25)] hover:brightness-110 active:translate-y-[2px] active:shadow-[0_2px_0_#92400e] cursor-pointer'
             : 'bg-white/5 text-white/20 border-white/10 cursor-not-allowed'
         )}
+        style={mobileActionButtonStyle}
       >
         {everyoneReady
           ? t('factionSelection.start')
@@ -1051,7 +1092,13 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         animate={{ opacity: 1 }}
         onClick={onReady}
         data-testid="sw-faction-ready"
-        className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider bg-gradient-to-b from-emerald-400 to-emerald-600 text-white border-2 border-emerald-300 shadow-[0_3px_0_#047857] hover:brightness-110 active:translate-y-[2px] active:shadow-none cursor-pointer transition-[transform] duration-200"
+        className={clsx(
+          isLandscapeMobileViewport
+            ? 'rounded-xl text-[clamp(11px,calc(var(--sw-selection-inline-unit)*0.56),15px)] font-bold tracking-[0.08em] leading-tight text-center'
+            : 'px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider',
+          'bg-gradient-to-b from-emerald-400 to-emerald-600 text-white border-2 border-emerald-300 shadow-[0_3px_0_#047857] hover:brightness-110 active:translate-y-[2px] active:shadow-none cursor-pointer transition-[transform] duration-200'
+        )}
+        style={mobileActionButtonStyle}
       >
         {t('factionSelection.ready')}
       </motion.button>
@@ -1065,7 +1112,13 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         animate={{ opacity: 1 }}
         onClick={onUnready}
         data-testid="sw-faction-unready"
-        className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer transition-all duration-200"
+        className={clsx(
+          isLandscapeMobileViewport
+            ? 'rounded-xl text-[clamp(11px,calc(var(--sw-selection-inline-unit)*0.56),15px)] font-bold tracking-[0.08em] leading-tight text-center'
+            : 'px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider',
+          'border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer transition-all duration-200'
+        )}
+        style={mobileActionButtonStyle}
       >
         {t('factionSelection.cancelReady')}
       </motion.button>

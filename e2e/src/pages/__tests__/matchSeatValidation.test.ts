@@ -18,6 +18,7 @@ import {
 } from '../../engine/transport/react';
 import {
     applyAiAutoRecoveryRejection,
+    finalizeOnlineAiResolutionConfirmation,
     resolveForceAdvancePhaseAfterRecovery,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
@@ -389,7 +390,7 @@ describe('onlineAiSeats', () => {
         ]);
     });
 
-    it('回归：factionSelect 阶段 AI seat 未就绪时，watchdog 不得用 ADVANCE_PHASE 跳过派系选择', async () => {
+    it('回归：factionSelect 阶段 AI seat 未就绪时，watchdog 只能走 legal-action recovery，不得用 ADVANCE_PHASE 跳过派系选择', async () => {
         const onlineAiState = await loadOnlineAiSeatState({
             gameConfig: buildGameManifest(),
             matchInfo: {
@@ -440,7 +441,12 @@ describe('onlineAiSeats', () => {
             seatStates: {},
         });
 
-        expect(candidate).toBeNull();
+        expect(candidate).toMatchObject({
+            playerId: '1',
+            reason: 'active-turn-legal-only',
+            legalActionOnly: true,
+        });
+        expect(candidate?.resolution.action.commands).toEqual([]);
     });
 
     it('仅凭据有变化时才触发持久化', () => {
@@ -1208,6 +1214,38 @@ describe('submitOnlineAiResolution', () => {
         expect(onConfirmed).toHaveBeenCalledWith({ sys: { phase: 'playCards' } });
         rejectHandler?.('command_failed');
         expect(onRejected).toHaveBeenCalledWith('command_failed');
+    });
+});
+
+describe('finalizeOnlineAiResolutionConfirmation', () => {
+    it('confirmed 后应释放当前 attemptKey 并触发下一拍重试', () => {
+        const scheduleRetry = vi.fn();
+        const lastAiAttemptKeyRef = { current: 'attempt-confirmed' as string | null };
+
+        const continued = finalizeOnlineAiResolutionConfirmation({
+            lastAiAttemptKeyRef,
+            resolutionAttemptKey: 'attempt-confirmed',
+            scheduleRetry,
+        });
+
+        expect(continued).toBe(true);
+        expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(scheduleRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('旧确认不应清掉已切到新 attempt 的锁，也不应插入陈旧重试', () => {
+        const scheduleRetry = vi.fn();
+        const lastAiAttemptKeyRef = { current: 'attempt-newer' as string | null };
+
+        const continued = finalizeOnlineAiResolutionConfirmation({
+            lastAiAttemptKeyRef,
+            resolutionAttemptKey: 'attempt-older',
+            scheduleRetry,
+        });
+
+        expect(continued).toBe(false);
+        expect(lastAiAttemptKeyRef.current).toBe('attempt-newer');
+        expect(scheduleRetry).not.toHaveBeenCalled();
     });
 });
 

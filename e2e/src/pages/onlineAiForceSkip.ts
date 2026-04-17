@@ -54,6 +54,33 @@ type SubmitOnlineAiResolutionSequenceArgs = {
     }) => void;
 };
 
+type FinalizeOnlineAiResolutionConfirmationArgs = {
+    lastAiAttemptKeyRef: { current: string | null };
+    resolutionAttemptKey: string;
+    scheduleRetry: () => void;
+};
+
+export function finalizeOnlineAiResolutionConfirmation(
+    args: FinalizeOnlineAiResolutionConfirmationArgs,
+): boolean {
+    const {
+        lastAiAttemptKeyRef,
+        resolutionAttemptKey,
+        scheduleRetry,
+    } = args;
+
+    if (
+        lastAiAttemptKeyRef.current !== null
+        && lastAiAttemptKeyRef.current !== resolutionAttemptKey
+    ) {
+        return false;
+    }
+
+    lastAiAttemptKeyRef.current = null;
+    scheduleRetry();
+    return true;
+}
+
 function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): void {
     const {
         client,

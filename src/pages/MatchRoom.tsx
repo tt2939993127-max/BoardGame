@@ -71,6 +71,7 @@ import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     applyAiAutoRecoveryRejection,
+    finalizeOnlineAiResolutionConfirmation,
     resolveManualForceEndAiPhase,
     resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnForStalledAi,
@@ -344,6 +345,15 @@ const OnlineAiSeatBridge = ({
                 scheduleRetry: () => {
                     setAiRetryVersion((version) => version + 1);
                 },
+                onConfirmed: () => {
+                    finalizeOnlineAiResolutionConfirmation({
+                        lastAiAttemptKeyRef,
+                        resolutionAttemptKey: resolution.attemptKey,
+                        scheduleRetry: () => {
+                            setAiRetryVersion((version) => version + 1);
+                        },
+                    });
+                },
             });
         };
 
@@ -499,7 +509,7 @@ const OnlineAiSeatBridge = ({
             seatControllers,
             seatStates,
         });
-        if (!candidate) {
+        if (!candidate || candidate.legalActionOnly) {
             forceEndTurnTrackerRef.current = null;
             return;
         }

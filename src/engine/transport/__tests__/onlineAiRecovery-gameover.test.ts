@@ -86,7 +86,7 @@ describe('onlineAiRecovery - 游戏结束检查', () => {
         expect(result?.reason).toBe('active-turn');
     });
 
-    it('factionSelect 阶段即使当前玩家是 AI，也不应走 active-turn 强制推进', () => {
+    it('factionSelect 阶段即使当前玩家是 AI，也只允许 legal-action recovery，不得走 ADVANCE_PHASE 强制推进', () => {
         const sharedState: MatchState<unknown> = {
             core: {
                 activePlayerId: '1',
@@ -112,7 +112,12 @@ describe('onlineAiRecovery - 游戏结束检查', () => {
             seatStates: {},
         });
 
-        expect(result).toBeNull();
+        expect(result).toMatchObject({
+            playerId: '1',
+            reason: 'active-turn-legal-only',
+            legalActionOnly: true,
+        });
+        expect(result?.resolution.action.commands).toEqual([]);
     });
 
     it('游戏结束后即使有交互也应该返回 null', () => {
