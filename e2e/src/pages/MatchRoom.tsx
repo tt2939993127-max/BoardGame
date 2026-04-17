@@ -92,6 +92,79 @@ const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'syn
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
 
+type OnlineAiDebugWindow = Window & {
+    __BG_ONLINE_AI_DEBUG__?: {
+        getSeatLatestState: (playerId: string) => MatchState<unknown> | null;
+        setSeatLatestStateOverride: (playerId: string, state: MatchState<unknown> | null) => void;
+        clearSeatLatestStateOverride: (playerId: string) => void;
+        clearAllSeatLatestStateOverrides: () => void;
+    };
+};
+
+type PhaseCarrier = {
+    phase?: unknown;
+};
+
+function resolveStatePhase(state: MatchState<unknown> | null | undefined): string | null {
+    if (!state || typeof state !== 'object') return null;
+    const sysPhase = (state.sys as PhaseCarrier | undefined)?.phase;
+    if (typeof sysPhase === 'string' && sysPhase.length > 0) return sysPhase;
+    const corePhase = (state.core as PhaseCarrier | undefined)?.phase;
+    if (typeof corePhase === 'string' && corePhase.length > 0) return corePhase;
+    return null;
+}
+
+function resolveStateTurnNumber(state: MatchState<unknown> | null | undefined): number | null {
+    if (!state || typeof state !== 'object') return null;
+    const sysTurnNumber = (state.sys as { turnNumber?: unknown } | undefined)?.turnNumber;
+    if (typeof sysTurnNumber === 'number') return sysTurnNumber;
+    const coreTurnNumber = (state.core as { turnNumber?: unknown } | undefined)?.turnNumber;
+    if (typeof coreTurnNumber === 'number') return coreTurnNumber;
+    return null;
+}
+
+function resolveCurrentPlayerIdFromState(state: MatchState<unknown> | null | undefined): string | null {
+    const core = state?.core as {
+        activePlayerId?: unknown;
+        currentPlayer?: unknown;
+    } | undefined;
+    if (!core) return null;
+    if (typeof core.activePlayerId === 'string') return core.activePlayerId;
+    if (typeof core.currentPlayer === 'string') return core.currentPlayer;
+    return null;
+}
+
+function isSeatStateFreshEnoughForAiDecision(args: {
+    sharedState: MatchState<unknown> | null | undefined;
+    seatState: MatchState<unknown> | null | undefined;
+    playerId: string;
+}): boolean {
+    const { sharedState, seatState, playerId } = args;
+    if (!sharedState || !seatState) {
+        return false;
+    }
+
+    const sharedCurrentPlayerId = resolveCurrentPlayerIdFromState(sharedState);
+    const seatCurrentPlayerId = resolveCurrentPlayerIdFromState(seatState);
+    if (sharedCurrentPlayerId !== playerId || seatCurrentPlayerId !== playerId) {
+        return false;
+    }
+
+    const sharedPhase = resolveStatePhase(sharedState);
+    const seatPhase = resolveStatePhase(seatState);
+    if (!sharedPhase || !seatPhase || sharedPhase !== seatPhase) {
+        return false;
+    }
+
+    const sharedTurnNumber = resolveStateTurnNumber(sharedState);
+    const seatTurnNumber = resolveStateTurnNumber(seatState);
+    if (sharedTurnNumber !== null && seatTurnNumber !== null && sharedTurnNumber !== seatTurnNumber) {
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * 教程 dispatch 桥接组件
  *
@@ -190,14 +263,47 @@ const OnlineAiSeatBridge = ({
         autoSubmittedAt: number | null;
         lastReportedFailureReason: string | null;
     } | null>(null);
+    const staleSeatDecisionKeyRef = useRef<string | null>(null);
     const latestSharedStateRef = useRef<MatchState<unknown> | null>(null);
     const pendingRecoveryCheckTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    const aiSeatStateOverridesRef = useRef<Record<string, MatchState<unknown> | null>>({});
 
     useEffect(() => {
         latestSharedStateRef.current = state && typeof state === 'object'
             ? state as MatchState<unknown>
             : null;
     }, [state]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !import.meta.env.DEV) {
+            return;
+        }
+        const debugWindow = window as OnlineAiDebugWindow;
+        debugWindow.__BG_ONLINE_AI_DEBUG__ = {
+            getSeatLatestState: (playerId: string) => {
+                const override = aiSeatStateOverridesRef.current[playerId];
+                if (override !== undefined) {
+                    return override;
+                }
+                const seatState = clientsRef.current[playerId]?.latestState;
+                return seatState && typeof seatState === 'object'
+                    ? seatState as MatchState<unknown>
+                    : null;
+            },
+            setSeatLatestStateOverride: (playerId: string, nextState: MatchState<unknown> | null) => {
+                aiSeatStateOverridesRef.current[playerId] = nextState;
+            },
+            clearSeatLatestStateOverride: (playerId: string) => {
+                delete aiSeatStateOverridesRef.current[playerId];
+            },
+            clearAllSeatLatestStateOverrides: () => {
+                aiSeatStateOverridesRef.current = {};
+            },
+        };
+        return () => {
+            delete debugWindow.__BG_ONLINE_AI_DEBUG__;
+        };
+    }, []);
 
     useEffect(() => {
         const pendingTimers = pendingRecoveryCheckTimersRef.current;
@@ -293,11 +399,63 @@ const OnlineAiSeatBridge = ({
                 matchId,
                 seatControllers,
                 visibleStateResolver: (playerId) => {
-                    const seatState = clientsRef.current[playerId]?.latestState;
-                    if (!seatState || typeof seatState !== 'object') {
+                    const overriddenSeatState = aiSeatStateOverridesRef.current[playerId];
+                    const rawSeatState = overriddenSeatState !== undefined
+                        ? overriddenSeatState
+                        : clientsRef.current[playerId]?.latestState;
+                    if (!rawSeatState || typeof rawSeatState !== 'object') {
                         return null;
                     }
-                    return seatState as MatchState<unknown>;
+                    const seatState = rawSeatState as MatchState<unknown>;
+                    const isFreshEnough = isSeatStateFreshEnoughForAiDecision({
+                        sharedState: state as MatchState<unknown>,
+                        seatState,
+                        playerId,
+                    });
+                    if (!isFreshEnough) {
+                        const sharedState = state as MatchState<unknown>;
+                        const diagnosticKey = [
+                            playerId,
+                            resolveStateTurnNumber(sharedState) ?? 'no-shared-turn',
+                            resolveStatePhase(sharedState) ?? 'no-shared-phase',
+                            resolveCurrentPlayerIdFromState(sharedState) ?? 'no-shared-player',
+                            resolveStateTurnNumber(seatState) ?? 'no-seat-turn',
+                            resolveStatePhase(seatState) ?? 'no-seat-phase',
+                            resolveCurrentPlayerIdFromState(seatState) ?? 'no-seat-player',
+                        ].join(':');
+                        if (staleSeatDecisionKeyRef.current !== diagnosticKey) {
+                            staleSeatDecisionKeyRef.current = diagnosticKey;
+                            appendMatchLoadTrace({
+                                stage: 'online-ai-seat-state-stale',
+                                source: 'match-room',
+                                gameId: engineConfig.gameId,
+                                matchId,
+                                payload: {
+                                    playerId,
+                                    sharedTurnNumber: resolveStateTurnNumber(sharedState),
+                                    sharedPhase: resolveStatePhase(sharedState),
+                                    sharedCurrentPlayerId: resolveCurrentPlayerIdFromState(sharedState),
+                                    seatTurnNumber: resolveStateTurnNumber(seatState),
+                                    seatPhase: resolveStatePhase(seatState),
+                                    seatCurrentPlayerId: resolveCurrentPlayerIdFromState(seatState),
+                                },
+                            });
+                            console.warn('[OnlineAiSeatBridge] stale seat state blocked AI decision', {
+                                matchId,
+                                gameId: engineConfig.gameId,
+                                playerId,
+                                sharedTurnNumber: resolveStateTurnNumber(sharedState),
+                                sharedPhase: resolveStatePhase(sharedState),
+                                sharedCurrentPlayerId: resolveCurrentPlayerIdFromState(sharedState),
+                                seatTurnNumber: resolveStateTurnNumber(seatState),
+                                seatPhase: resolveStatePhase(seatState),
+                                seatCurrentPlayerId: resolveCurrentPlayerIdFromState(seatState),
+                            });
+                        }
+                        return null;
+                    }
+                    staleSeatDecisionKeyRef.current = null;
+                    return seatState;
                 },
             });
 
@@ -509,7 +667,7 @@ const OnlineAiSeatBridge = ({
             seatControllers,
             seatStates,
         });
-        if (!candidate || candidate.legalActionOnly) {
+        if (!candidate || candidate.legalActionOnly || candidate.reason === 'active-turn') {
             forceEndTurnTrackerRef.current = null;
             return;
         }

@@ -117,6 +117,7 @@ const HandCard: React.FC<{
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const spriteConfig = getCardSpriteConfig(card);
+  const showPlayableHighlight = canPlay && !isSelected;
   const shouldRenderMagnifyButton = Boolean(onMagnify) && !suppressMagnifyButton;
   const magnifyButtonSize = `calc(${HAND_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_SIZE_RATIO})`;
   const magnifyButtonOffset = `calc(${HAND_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_OFFSET_RATIO})`;
@@ -187,8 +188,8 @@ const HandCard: React.FC<{
           border-2 transition-all duration-150
           ${isSelected
             ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30'
-            : canPlay
-              ? 'border-green-400/80 hover:border-green-300 shadow-md shadow-green-400/30'
+            : showPlayableHighlight
+              ? 'border-emerald-300 ring-2 ring-emerald-300/80 ring-offset-1 ring-offset-black/45 shadow-[0_0_0_1px_rgba(167,243,208,0.95),0_0_18px_rgba(16,185,129,0.5)] hover:border-emerald-200'
               : canAfford
                 ? 'border-slate-500/80 hover:border-slate-400'
                 : 'border-slate-700/60'}
@@ -209,6 +210,9 @@ const HandCard: React.FC<{
         )}
 
         {isSelected && <div className="absolute inset-0 bg-amber-400/15 pointer-events-none" />}
+        {showPlayableHighlight && (
+          <div className="absolute inset-0 bg-emerald-300/12 pointer-events-none" />
+        )}
       </div>
 
       {shouldRenderMagnifyButton && (

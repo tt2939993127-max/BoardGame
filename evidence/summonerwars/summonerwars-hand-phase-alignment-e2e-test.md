@@ -3,7 +3,7 @@
 - 用例 1：移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌
 - 用例 2：移动横屏：长按放大与阶段说明在手机可达
 - 用例 3：在线对局流程：召唤、移动、建造、攻击与弃牌（PC 视口 + 布局断言）
-- 最近复跑时间：2026-04-15（移动横屏基础流程高亮修复验证 02:16；移动横屏长按/阶段说明回归验证 02:24；PC 在线对局截图沿用前次证据）
+- 最近复跑时间：2026-04-17（移动横屏基础流程 + 可打出手牌高亮验证；PC 在线对局布局 + 可打出手牌高亮验证）
 
 ## 执行命令
 
@@ -31,10 +31,20 @@ npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "在线对局�
 - 我实际看到：棋盘主区在画面中心；底部手牌居中且未侵入右侧 controls；右侧阶段条位于 controls 上方，不与“结束阶段/弃牌堆”重叠。
 - 判定：PC 在线对局下布局稳定，可作为“PC 也修住了”的证据。
 
+### 0.2）PC 在线对局 - 召唤阶段可打出手牌高亮
+- 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\在线对局流程：召唤、移动、建造、攻击与弃牌\50-pc-online-playable-hand-highlight.png`
+- 我实际看到：可打出的手牌边缘有明显青绿色 ring 和发光，不再只是很弱的一圈细边，肉眼能直接分辨“哪些牌现在可用”。
+- 判定：达到“召唤阶段可选手牌高亮恢复可见”的验收标准。
+
 ### 1）基础流程起始主态
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-start.png`
 - 我实际看到：底部手牌以整屏 `50%` 为锚点居中（不再用“右侧安全走廊”导致整体左偏）；棋盘主区保持在画面中心；右侧阶段列表在上、结束阶段按钮/弃牌堆在下，形成上下分层，没有互相遮挡；手牌也没有把右下 controls 区域压到不可用（与下方 `assertMobileLandscapeControlsReachable` 的可点击校验一致）。
 - 判定：达到本轮“移动端整屏居中 + 手牌不再把 controls 挡死 + 阶段区与按钮分层”的验收标准。
+
+### 1.0）移动横屏 - 召唤阶段可打出手牌高亮
+- 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-playable-hand-highlight.png`
+- 我实际看到：三张可打出的手牌都带有明显青绿色描边和外发光，压缩到手机手牌大小后也不会“看起来像没高亮”。
+- 判定：达到“移动端同样能直接看见可打出手牌”的验收标准。
 
 ### 1.1）召唤高亮
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌\40-mobile-basic-flow-summon-highlight.png`

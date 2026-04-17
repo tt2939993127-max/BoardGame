@@ -318,7 +318,7 @@ export default function AdminFeedbackPage() {
 
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<string>('open');
     const [typeFilter, setTypeFilter] = useState<string>('all');
     const [severityFilter, setSeverityFilter] = useState<string>('all');
     const [reporterTypeFilter, setReporterTypeFilter] = useState<string>('all');
@@ -439,7 +439,7 @@ export default function AdminFeedbackPage() {
         });
     };
 
-    const handleStatusUpdate = async (id: string, newStatus: string) => {
+    const handleStatusUpdate = useCallback(async (id: string, newStatus: string) => {
         try {
             const response = await fetch(`${ADMIN_API_URL}/feedback/${id}/status`, {
                 method: 'PATCH',
@@ -451,14 +451,16 @@ export default function AdminFeedbackPage() {
             });
             if (!response.ok) throw new Error('update_failed');
 
-            setFeedbacks((prev) => prev.map((feedback) => (
-                feedback._id === id ? { ...feedback, status: newStatus as FeedbackItem['status'] } : feedback
-            )));
+            setFeedbacks((prev) => prev
+                .map((feedback) => (
+                    feedback._id === id ? { ...feedback, status: newStatus as FeedbackItem['status'] } : feedback
+                ))
+                .filter((feedback) => statusFilter === 'all' || feedback.status === statusFilter));
             success(t('feedback.messages.updateSuccess'));
         } catch {
             error(t('feedback.messages.updateFailed'));
         }
-    };
+    }, [error, statusFilter, success, t, token]);
 
     const handleDelete = async (id: string) => {
         if (!confirm(t('feedback.confirm.delete'))) return;

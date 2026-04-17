@@ -103,6 +103,10 @@ public/**/*.m4a
 public/**/*.mp4
 public/**/*.webm
 
+# Home V2 书本壳素材需要跟仓，不能继续被资源忽略规则吞掉
+!public/assets/common/images/home-v2/
+!public/assets/common/images/home-v2/**
+
 # 资源清单与 demo 例外
 !public/assets/
 !public/assets/**/

@@ -14,6 +14,14 @@ type FeedbackManagerScope = {
 
 const DEFAULT_USER_SOURCE = 'feedback-modal';
 const LEGACY_WATCHDOG_SOURCE = 'online-ai-watchdog';
+const WATCHDOG_AGGREGATION_SOURCE = 'online-ai-watchdog';
+
+const FEEDBACK_SEVERITY_RANK: Record<string, number> = {
+    low: 1,
+    medium: 2,
+    high: 3,
+    critical: 4,
+};
 
 @Injectable()
 export class FeedbackService {
@@ -33,11 +41,16 @@ export class FeedbackService {
     }
 
     async createSystem(dto: CreateSystemFeedbackDto): Promise<Feedback> {
+        const source = this.normalizeSource(dto.source, 'unknown');
+        const gameId = this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName);
+        if (this.shouldAggregateSystemFeedback(dto, source, gameId)) {
+            return this.createOrUpdateAggregatedSystemFeedback(dto, source, gameId);
+        }
         return this.feedbackModel.create({
             ...dto,
-            source: this.normalizeSource(dto.source, 'unknown'),
+            source,
             reporterType: FeedbackReporterType.SYSTEM,
-            gameId: this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName),
+            gameId,
         });
     }
 
@@ -129,6 +142,157 @@ export class FeedbackService {
         }
         const normalized = value.trim().toLowerCase();
         return normalized || fallback;
+    }
+
+    private shouldAggregateSystemFeedback(
+        dto: CreateSystemFeedbackDto,
+        source: string,
+        gameId?: string,
+    ): boolean {
+        if (source !== WATCHDOG_AGGREGATION_SOURCE) {
+            return false;
+        }
+        return Boolean(gameId && (dto.autoReportKind || dto.errorContext?.name));
+    }
+
+    private buildSystemAggregationKey(
+        dto: CreateSystemFeedbackDto,
+        source: string,
+        gameId?: string,
+    ): string | null {
+        if (!gameId) {
+            return null;
+        }
+        const autoReportFamily = this.normalizeWatchdogAutoReportFamily(
+            dto.autoReportKind ?? dto.errorContext?.name,
+        );
+        const normalizedReason = this.normalizeWatchdogReason(
+            dto.errorContext?.message
+            ?? dto.content.replace(/^\[system\]\[online-ai-watchdog\]\s+/i, ''),
+        );
+        return [
+            'system-feedback',
+            source,
+            gameId,
+            autoReportFamily,
+            normalizedReason || 'unknown',
+        ].join(':');
+    }
+
+    private normalizeWatchdogAutoReportFamily(value?: string | null): string {
+        const normalized = typeof value === 'string'
+            ? value.trim().toLowerCase()
+            : '';
+        if (!normalized) {
+            return 'unknown';
+        }
+        if (normalized.startsWith('force-end-turn-')) {
+            return 'force-end-turn';
+        }
+        return normalized;
+    }
+
+    private normalizeWatchdogReason(value?: string | null): string {
+        if (typeof value !== 'string') {
+            return 'unknown';
+        }
+        const normalized = value
+            .trim()
+            .toLowerCase()
+            .replace(/:steps=\d+\b/g, ':steps')
+            .replace(/\s+/g, ' ')
+            || 'unknown';
+        const segments = normalized.split(':').filter(Boolean);
+        if (segments.length >= 2 && ['recover-interaction', 'follow-up-advance'].includes(segments[1])) {
+            return `${segments[0]}:${segments[1]}`;
+        }
+        return normalized;
+    }
+
+    private pickMoreSevereSeverity(
+        current?: string,
+        incoming?: string,
+    ): string | undefined {
+        if (!incoming) {
+            return current;
+        }
+        if (!current) {
+            return incoming;
+        }
+        return (FEEDBACK_SEVERITY_RANK[incoming] ?? 0) >= (FEEDBACK_SEVERITY_RANK[current] ?? 0)
+            ? incoming
+            : current;
+    }
+
+    private resolveAggregatedSystemStatus(
+        existingStatus: FeedbackStatus | undefined,
+        incomingStatus: FeedbackStatus | undefined,
+    ): FeedbackStatus {
+        if (existingStatus === FeedbackStatus.IN_PROGRESS || existingStatus === FeedbackStatus.CLOSED) {
+            return existingStatus;
+        }
+        if (incomingStatus === FeedbackStatus.RESOLVED) {
+            return existingStatus === FeedbackStatus.OPEN
+                ? FeedbackStatus.OPEN
+                : FeedbackStatus.RESOLVED;
+        }
+        return FeedbackStatus.OPEN;
+    }
+
+    private async createOrUpdateAggregatedSystemFeedback(
+        dto: CreateSystemFeedbackDto,
+        source: string,
+        gameId?: string,
+    ): Promise<Feedback> {
+        const aggregationKey = this.buildSystemAggregationKey(dto, source, gameId);
+        if (!aggregationKey) {
+            return this.feedbackModel.create({
+                ...dto,
+                source,
+                reporterType: FeedbackReporterType.SYSTEM,
+                gameId,
+            });
+        }
+
+        const now = new Date();
+        const existing = await this.feedbackModel.findOne({ aggregationKey }).exec();
+        if (!existing) {
+            return this.feedbackModel.create({
+                ...dto,
+                source,
+                reporterType: FeedbackReporterType.SYSTEM,
+                gameId,
+                incidentKey: aggregationKey,
+                aggregationKey,
+                occurrenceCount: 1,
+                firstOccurredAt: now,
+                lastOccurredAt: now,
+                latestIncidentKey: dto.incidentKey,
+            });
+        }
+
+        existing.content = dto.content;
+        existing.type = dto.type ?? existing.type;
+        existing.severity = this.pickMoreSevereSeverity(existing.severity, dto.severity) as typeof existing.severity;
+        existing.status = this.resolveAggregatedSystemStatus(existing.status, dto.status);
+        existing.source = source;
+        existing.reporterType = FeedbackReporterType.SYSTEM;
+        existing.gameId = gameId;
+        existing.gameName = dto.gameName ?? existing.gameName;
+        existing.autoReportKind = dto.autoReportKind ?? existing.autoReportKind;
+        existing.contactInfo = dto.contactInfo ?? existing.contactInfo;
+        existing.actionLog = dto.actionLog ?? existing.actionLog;
+        existing.stateSnapshot = dto.stateSnapshot ?? existing.stateSnapshot;
+        existing.clientContext = dto.clientContext ?? existing.clientContext;
+        existing.errorContext = dto.errorContext ?? existing.errorContext;
+        existing.incidentKey = aggregationKey;
+        existing.aggregationKey = aggregationKey;
+        existing.occurrenceCount = Math.max(1, Number(existing.occurrenceCount) || 1) + 1;
+        existing.firstOccurredAt = existing.firstOccurredAt ?? now;
+        existing.lastOccurredAt = now;
+        existing.latestIncidentKey = dto.incidentKey ?? existing.latestIncidentKey;
+        await existing.save();
+        return existing.toObject() as Feedback;
     }
 
     private buildOriginFilter(

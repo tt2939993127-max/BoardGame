@@ -1,6 +1,6 @@
 ---
 name: data-entry-workflow
-description: "用于本项目里基于图片、规则书、Wiki、PDF、截图做业务数据录入、核对、裁图、资源索引登记、文案同步时。先执行零猜测数据录入门禁，再按 gameId 进入对应 workflow；适用于 Dice Throne 角色录入、Smash Up 派系 intake，以及其他游戏的数据真相源锁定与核对契约建立。"
+description: "用于本项目里基于图片、规则书、Wiki、PDF、截图做业务数据录入、核对、裁图、资源索引登记、文案同步时。先执行零猜测数据录入门禁，再按 gameId 进入对应 workflow；适用于 Dice Throne 角色录入、Smash Up 派系 intake / implementation 交接，以及其他游戏的数据真相源锁定与核对契约建立。"
 ---
 
 # 数据录入工作流
@@ -32,10 +32,20 @@ description: "用于本项目里基于图片、规则书、Wiki、PDF、截图�
 
 ### Smash Up
 
-- 新派系图片、卡牌、基地、atlas、locale intake：
-  读 `docs/games/smashup/workflows/smashup-faction-intake.md`
+- **仅 intake / 仅录入资源**
+  - 适用：用户只要求核图、切 atlas、录静态数据、补 locale、补 faction metadata、上传资源
+  - 读 `docs/games/smashup/workflows/smashup-faction-intake.md`
+- **intake + 派系玩法实施**
+  - 适用：用户明确要求“把新派系做进游戏”“继续实现玩法”“从图片一路做到正式可玩”
+  - 先读 `docs/games/smashup/workflows/smashup-faction-intake.md`
+  - intake 收口后继续读 `docs/games/smashup/workflows/smashup-faction-implementation.md`
+- **禁止误路由**
+  - Smash Up 新派系任务不是“新增游戏”，默认**不要**改走 `.windsurf/skills/create-new-game/SKILL.md`
+  - 除非用户真的要新增一个全新的 `gameId`，否则应以 Smash Up 专用 workflow 为准
 - 额外硬规则：
   涉及 Wiki 核对时，必须按仓库根 `AGENTS.md` 使用项目爬虫，不能凭记忆。
+  - 若 intake 文档已经明确“不包含 gameplay ability handler”，则不得把“资源接入完成”误报成“派系完成”
+  - intake 阶段的输出必须形成 handoff 包，再交给 implementation 阶段；不能把两阶段混成一团不留痕
 
 ### Dice Throne
 

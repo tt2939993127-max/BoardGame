@@ -122,8 +122,13 @@ type OnlineAiRecoveryFeedbackPayload = {
     matchId: string;
     gameId: string;
     playerId: string;
-    incidentKind: 'force-end-turn-success' | 'force-end-turn-failed' | 'unsatisfiable-interaction-auto-skipped';
+    incidentKind:
+        | 'force-end-turn-success'
+        | 'force-end-turn-failed'
+        | 'unsatisfiable-interaction-auto-skipped'
+        | 'legal-action-recovered';
     severity: 'medium' | 'high';
+    status?: 'open' | 'resolved';
     reason: string;
     trackerKey: string;
     progressMarker: string;
@@ -167,6 +172,26 @@ type OnlineAiRecoveryLegalActionSummary = {
         label: string;
         commandTypes: string[];
     }>;
+};
+
+type OnlineAiRecoveryDecisionPreview = {
+    previewSource: 'seat-policy' | 'remote-fallback-policy';
+    policyId: string;
+    chosenAction: {
+        actionId: string;
+        kind: string;
+        label: string;
+        commandTypes: string[];
+    } | null;
+    reasoningSummary: string | null;
+    confidence: number | null;
+    error: string | null;
+};
+
+type OnlineAiRecoveryAiSummary = {
+    seatControllerType: 'human' | 'local-ai' | 'remote-ai';
+    legalActions: OnlineAiRecoveryLegalActionSummary | null;
+    decisionPreview: OnlineAiRecoveryDecisionPreview | null;
 };
 
 const isRecoverableInteractionOption = (option: AiInteractionOptionSnapshot): boolean => {
@@ -1266,10 +1291,11 @@ export class GameTransportServer {
                 playerId: candidate.playerId,
                 incidentKind: 'force-end-turn-success',
                 severity: 'medium',
+                status: 'resolved',
                 reason: `${candidate.reason}:${phaseLabel}:steps=${totalAdvanceSteps}`,
                 trackerKey: tracker.key,
                 progressMarker: progressMarkerBeforeRecovery,
-                stateSnapshot: this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
+                stateSnapshot: await this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
                 actionLog: this.buildOnlineAiRecoveryActionLog(match),
             });
         } finally {
@@ -1316,17 +1342,17 @@ export class GameTransportServer {
                 reason: `${candidate.reason}:${phaseLabel}:${reason}`,
                 trackerKey: tracker.key,
                 progressMarker: progressMarkerBeforeRecovery,
-                stateSnapshot: this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
+                stateSnapshot: await this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
                 actionLog: this.buildOnlineAiRecoveryActionLog(match),
             });
         }
     }
 
-    private buildOnlineAiRecoveryStateSnapshot(
+    private async buildOnlineAiRecoveryStateSnapshot(
         match: ActiveMatch,
         candidate: ForceEndTurnStalledAiResolution,
         progressMarker: string,
-    ): string {
+    ): Promise<string> {
         const interactionState = match.state.sys?.interaction as { isBlocked?: unknown } | undefined;
         const sharedInteraction = extractAiInteractionSnapshot(match.state);
         const seatView = this.applyPlayerView(match, candidate.playerId) as MatchState<unknown>;
@@ -1344,7 +1370,7 @@ export class GameTransportServer {
                 tokenUsageTotals?: unknown;
             };
         } | undefined)?.pendingDamage;
-        const legalActions = this.buildOnlineAiRecoveryLegalActionsSummary(match, candidate.playerId, seatView);
+        const aiSummary = await this.buildOnlineAiRecoveryAiSummary(match, candidate.playerId, seatView);
         const sharedUnsatisfiableReasonDetailed = resolveUnsatisfiableReasonFromInteraction(
             match.state,
             sharedInteractionState as HiddenInteractionDescriptor | undefined,
@@ -1377,7 +1403,9 @@ export class GameTransportServer {
                 seatSelectability: buildInteractionSelectabilityDiagnostic(seatInteraction),
                 seatUnsatisfiableReason,
             },
-            legalActions,
+            seatControllerType: aiSummary.seatControllerType,
+            legalActions: aiSummary.legalActions,
+            aiDecisionPreview: aiSummary.decisionPreview,
             responseWindow,
             pendingDamage: pendingDamage ? {
                 id: pendingDamage.id ?? null,
@@ -1390,11 +1418,14 @@ export class GameTransportServer {
         });
     }
 
-    private buildOnlineAiRecoveryLegalActionsSummary(
+    private async buildOnlineAiRecoveryAiSummary(
         match: ActiveMatch,
         playerId: string,
         seatView: MatchState<unknown>,
-    ): OnlineAiRecoveryLegalActionSummary | null {
+    ): Promise<OnlineAiRecoveryAiSummary> {
+        const setupSeatControllers = extractSetupSeatControllers(match.metadata.setupData);
+        const seatControllerType = resolveSeatControllerTypeForTraining(setupSeatControllers, playerId);
+
         try {
             const decisionContext = buildAiDecisionContext({
                 gameId: match.engineConfig.gameId,
@@ -1405,7 +1436,79 @@ export class GameTransportServer {
                 decisionBudgetMs: 250,
                 source: 'online',
             });
-            return summarizeOnlineAiRecoveryLegalActions(decisionContext.legalActions);
+
+            const legalActions = summarizeOnlineAiRecoveryLegalActions(decisionContext.legalActions);
+            if (seatControllerType === 'human') {
+                return {
+                    seatControllerType,
+                    legalActions,
+                    decisionPreview: null,
+                };
+            }
+
+            const runtime = aiModule.getGameAiRuntime(match.engineConfig.gameId);
+            if (!runtime) {
+                return {
+                    seatControllerType,
+                    legalActions,
+                    decisionPreview: null,
+                };
+            }
+
+            const seatController = setupSeatControllers?.[playerId] as aiModule.AiSeatController | undefined;
+            const previewPolicy = seatControllerType === 'local-ai' && seatController?.type === 'local-ai'
+                ? aiModule.resolveLocalAiPolicy(runtime, seatController)
+                : seatControllerType === 'remote-ai'
+                    ? aiModule.resolveLocalAiPolicyByPreference({
+                        runtime,
+                        preferredPolicyId: seatController && seatController.type === 'remote-ai'
+                            ? seatController.fallbackPolicyId
+                            : undefined,
+                    })
+                    : undefined;
+
+            if (!previewPolicy) {
+                return {
+                    seatControllerType,
+                    legalActions,
+                    decisionPreview: null,
+                };
+            }
+
+            try {
+                const decision = await Promise.resolve(previewPolicy.decide(decisionContext));
+                const chosenAction = aiModule.resolveAiActionDecision(decisionContext, decision);
+                return {
+                    seatControllerType,
+                    legalActions,
+                    decisionPreview: {
+                        previewSource: seatControllerType === 'remote-ai' ? 'remote-fallback-policy' : 'seat-policy',
+                        policyId: previewPolicy.id,
+                        chosenAction: chosenAction ? {
+                            actionId: chosenAction.actionId,
+                            kind: chosenAction.kind,
+                            label: chosenAction.label,
+                            commandTypes: chosenAction.commands.map((command) => command.type),
+                        } : null,
+                        reasoningSummary: typeof decision?.reasoningSummary === 'string' ? decision.reasoningSummary : null,
+                        confidence: typeof decision?.confidence === 'number' ? decision.confidence : null,
+                        error: null,
+                    },
+                };
+            } catch (error) {
+                return {
+                    seatControllerType,
+                    legalActions,
+                    decisionPreview: {
+                        previewSource: seatControllerType === 'remote-ai' ? 'remote-fallback-policy' : 'seat-policy',
+                        policyId: previewPolicy.id,
+                        chosenAction: null,
+                        reasoningSummary: null,
+                        confidence: null,
+                        error: error instanceof Error ? error.message : String(error),
+                    },
+                };
+            }
         } catch (error) {
             logger.warn('[GameTransport] failed to summarize online-ai legal actions for watchdog feedback', {
                 matchID: match.matchID,
@@ -1413,7 +1516,11 @@ export class GameTransportServer {
                 playerID: playerId,
                 error: error instanceof Error ? error.message : String(error),
             });
-            return null;
+            return {
+                seatControllerType,
+                legalActions: null,
+                decisionPreview: null,
+            };
         }
     }
 
@@ -1573,17 +1680,18 @@ export class GameTransportServer {
         return true;
     }
 
-    private buildUnsatisfiableInteractionStateSnapshot(args: {
+    private async buildUnsatisfiableInteractionStateSnapshot(args: {
         match: ActiveMatch;
         playerId: string;
         reason: string;
         commandType: string;
         progressMarkerBefore: string;
         preCommandSeatView: MatchState<unknown>;
-    }): string {
+    }): Promise<string> {
         const { match, playerId, reason, commandType, progressMarkerBefore, preCommandSeatView } = args;
         const interaction = extractAiInteractionSnapshot(preCommandSeatView);
         const responseWindow = extractAiResponseWindowSnapshot(preCommandSeatView);
+        const aiSummary = await this.buildOnlineAiRecoveryAiSummary(match, playerId, preCommandSeatView);
         const seatUnsatisfiableReasonDetailed = resolveUnsatisfiableReasonFromInteraction(
             preCommandSeatView,
             (preCommandSeatView.sys?.interaction as { current?: unknown } | undefined)?.current as HiddenInteractionDescriptor | undefined,
@@ -1607,6 +1715,9 @@ export class GameTransportServer {
                 seatSelectability: buildInteractionSelectabilityDiagnostic(interaction),
                 seatUnsatisfiableReason,
             },
+            seatControllerType: aiSummary.seatControllerType,
+            legalActions: aiSummary.legalActions,
+            aiDecisionPreview: aiSummary.decisionPreview,
             responseWindow,
         });
     }
@@ -1659,6 +1770,7 @@ export class GameTransportServer {
                 content: `[system][online-ai-watchdog] ${payload.incidentKind} ${payload.reason}`,
                 type: 'bug',
                 severity: payload.severity,
+                ...(payload.status ? { status: payload.status } : {}),
                 source: 'online-ai-watchdog',
                 autoReportKind: payload.incidentKind,
                 incidentKey: payload.trackerKey,
@@ -1732,6 +1844,10 @@ export class GameTransportServer {
             return false;
         }
 
+        // legal-action recovery 会串行执行 1..N 条命令，前面用 suppressBroadcast 合并中间态；
+        // 一旦最终确实推进了权威状态，这里必须补发一次统一广播，否则房间前端看不到 watchdog 代打后的召唤/推进结果。
+        this.broadcastState(match);
+
         const resolved = this.hasOnlineAiRecoveryResolved(match, candidate, seatControllers);
         if (resolved) {
             this.onlineAiRecoveryTrackers.delete(match.matchID);
@@ -1751,6 +1867,22 @@ export class GameTransportServer {
             markerAfter,
             resolved,
         });
+
+        if (resolved) {
+            await this.reportOnlineAiRecoveryFeedback({
+                matchId: match.matchID,
+                gameId: match.gameId,
+                playerId: resolution.playerId,
+                incidentKind: 'legal-action-recovered',
+                severity: 'medium',
+                status: 'resolved',
+                reason: `${candidate.reason}:legal-action:${resolution.action.kind}:${resolution.action.actionId}`,
+                trackerKey: tracker.key,
+                progressMarker: markerBefore,
+                stateSnapshot: await this.buildOnlineAiRecoveryStateSnapshot(match, candidate, markerBefore),
+                actionLog: this.buildOnlineAiRecoveryActionLog(match),
+            });
+        }
 
         return true;
     }
@@ -2409,7 +2541,7 @@ export class GameTransportServer {
                         reason,
                         trackerKey,
                         progressMarker: progressMarkerBeforeCommand,
-                        stateSnapshot: this.buildUnsatisfiableInteractionStateSnapshot({
+                        stateSnapshot: await this.buildUnsatisfiableInteractionStateSnapshot({
                             match,
                             playerId: playerID,
                             reason,

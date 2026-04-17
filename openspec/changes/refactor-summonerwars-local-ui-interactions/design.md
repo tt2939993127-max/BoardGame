@@ -48,6 +48,40 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 - `glacialShiftMode`
 - 仍然由 `abilityMode` 驱动的多步技能选择
 
+## 剩余本地等待态分组（2026-04-17 盘点）
+
+### A. 事件卡 presenter / 交互镜像
+这些链路引擎侧已经创建了 `sys.interaction`，但 UI 仍在 `useEventCardModes` / `StatusBanners` / `Board` 再镜像一份本地 mode：
+- `eventTargetMode`
+- `funeralPyreMode`
+- `mindControlMode`
+- `stunMode`
+- `hypnoticLureMode`
+- `chantEntanglementMode`
+- `withdrawMode`
+- `telekinesisTargetMode`
+- `afterAttackAbilityMode`
+
+### B. 事件卡复杂累计结果
+这些链路仍由本地 mode 保存跨步累计结果，后续最值得抽象为通用多步交互：
+- `bloodSummonMode`
+- `annihilateMode`
+- `sneakMode`
+- `glacialShiftMode`
+
+### C. 技能与事件流桥接态
+这些状态仍在 `useGameEvents` / `useCellInteraction` 承担“等待玩家输入”职责，不只是展示：
+- `abilityMode`
+- `pendingBeforeAttack`
+- `fireSacrificeSummonMode`
+- `rapidFireMode`
+- `magicEventChoiceMode`
+
+### D. 不纳入本轮 Phase B 的 phase-local UI 态
+这些状态是本地 UI 便利态，但不是 hidden interaction 双轨根因：
+- `selectedCardsForDiscard`
+- `endPhaseConfirmPending`
+
 ## 交互建模原则
 
 ### 1. simple-choice
@@ -64,6 +98,12 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 - `sourceId`
 - `autoResolveIfSingle`（只用于真正强制效果）
 
+当前应优先保留/收敛为 `simple-choice` 的链路：
+- 单步目标/卡牌/确认：`eventTarget`、`funeral_pyre`、`hypnotic_lure`、`magic_event_choice`
+- 固定两步、每一步都可单独排队：`stun`、`withdraw`、`after_attack_telekinesis_*`、`ice_ram_*`、`telekinesis_instead_*`
+- 固定多选但本质仍是一次提交：`mind_control`、`chant_entanglement`、`blood_rune`、`before_attack_holy_arrow`、`before_attack_healing`
+- 已由领域侧排好 step meta 的阶段/移动后能力：`on_phase_start_illusion`、`on_phase_start_blood_rune`、`after_move_spirit_bond`、`after_move_ancestral_bond`、`after_move_structure_shift_*`、`after_move_frost_axe`
+
 ### 2. multistep-choice
 适用于：
 - 需要先选目标，再选位置/方向/卡牌的链路
@@ -78,6 +118,48 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 - `canConfirm`
 - `toCommands`
 - `sourceId`
+
+当前更值得抽为 `multistep-choice` 的链路：
+- `blood_summon`
+- `annihilate`
+- `sneak`
+- `glacial_shift`
+- `revive_undead`
+
+这些链路的共同点是：本地现在既负责展示当前 step，也负责保存跨步累计结果，如 `completedCount`、`selectedTargets`、`currentTargetIndex`、`damageTargets`、`recorded`。
+
+## Phase B 批次顺序
+
+### Batch 1：先清掉 simple-choice 镜像
+优先把以下链路改为“直接由当前交互派生 presenter，不再各自持有本地真相源”：
+- `magicEventChoiceMode`
+- `eventTargetMode`
+- `funeralPyreMode`
+- `hypnoticLureMode`
+- `stunMode`
+- `withdrawMode`
+- `afterAttackAbilityMode`
+- `telekinesisTargetMode`
+- `mindControlMode`
+- `chantEntanglementMode`
+
+### Batch 2：再拆掉事件流/技能桥接态
+- `before_attack_*`
+- `on_phase_start_illusion`
+- `on_phase_start_blood_rune`
+- `after_move_spirit_bond`
+- `after_move_ancestral_bond`
+- `after_move_structure_shift_*`
+- `after_move_frost_axe`
+- `ice_ram_*`
+- `fire_sacrifice_summon`
+
+### Batch 3：最后抽公共复杂多步交互
+- `blood_summon`
+- `annihilate`
+- `sneak`
+- `glacial_shift`
+- `revive_undead`
 
 ## 风险与缓解
 
@@ -104,4 +186,9 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
   - hidden interaction 仅 owner 可见，但服务端/AI seat 可诊断
   - human responder / human active turn 不被 AI 恢复逻辑误伤
   - 无解选项可 cancel/skip，不会卡死
+- 当前已确认的边界：
+  - `hidden interaction` 在 transport / watchdog / stale-seat 在线房链路已有覆盖，但还缺一条 Summoner Wars 专属的“owner 看得到、guest 看不到”UI 级证据
+  - 真人不受 AI watchdog 误伤已有 transport + 在线房证据
+  - 无解交互可通过 `skip/pass/emergency skip` 收口已有引擎级证据，但还缺一条 Phase B 代表链路的 cancel/skip 直测
+  - `Phase B` 运行时“链不重触发”已有局部去重证据，但还缺一条代表链路的闭环回归
 - 回写 `evidence/summonerwars/` 与 `evidence/engine/`

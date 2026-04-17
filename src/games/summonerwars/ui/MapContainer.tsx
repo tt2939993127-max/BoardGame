@@ -61,6 +61,7 @@ export interface MapContainerProps {
   contentTestId?: string;
   scaleTestId?: string;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export const shouldReserveSystemBackGesture = (args: {
@@ -89,6 +90,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   contentTestId,
   scaleTestId,
   className = '',
+  style,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -515,6 +517,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       onDragStart={(event) => event.preventDefault()}
       data-testid={containerTestId}
       style={{
+        ...style,
         cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',

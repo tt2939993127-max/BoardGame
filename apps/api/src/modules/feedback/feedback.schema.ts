@@ -81,6 +81,21 @@ export class Feedback {
     incidentKey?: string;
 
     @Prop({ type: String })
+    aggregationKey?: string;
+
+    @Prop({ type: Number, default: 1 })
+    occurrenceCount!: number;
+
+    @Prop({ type: Date })
+    firstOccurredAt?: Date;
+
+    @Prop({ type: Date })
+    lastOccurredAt?: Date;
+
+    @Prop({ type: String })
+    latestIncidentKey?: string;
+
+    @Prop({ type: String })
     gameName?: string;
 
     @Prop({ type: String, lowercase: true, trim: true })
@@ -108,4 +123,5 @@ FeedbackSchema.index({ reporterType: 1, source: 1, createdAt: -1 });
 FeedbackSchema.index({ gameId: 1, createdAt: -1 });
 FeedbackSchema.index({ status: 1, createdAt: -1 });
 FeedbackSchema.index({ incidentKey: 1 }, { sparse: true });
+FeedbackSchema.index({ aggregationKey: 1 }, { sparse: true });
 

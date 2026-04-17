@@ -142,6 +142,10 @@ export class CreateSystemFeedbackDto {
     @IsOptional()
     severity?: FeedbackSeverity;
 
+    @IsEnum(FeedbackStatus)
+    @IsOptional()
+    status?: FeedbackStatus;
+
     @IsString()
     @IsNotEmpty()
     @MaxLength(64)

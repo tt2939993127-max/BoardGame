@@ -259,8 +259,11 @@ const createMetadata = (credentials: string): MatchMetadata => ({
     setupData: {},
 });
 
-const createOnlineAiRecoveryMetadata = (): MatchMetadata => ({
-    gameName: 'test-game',
+const createOnlineAiRecoveryMetadata = (overrides?: {
+    gameName?: string;
+    seatControllers?: Record<string, { type: 'human' | 'local-ai' | 'remote-ai'; policyId?: string; fallbackPolicyId?: string }>;
+}): MatchMetadata => ({
+    gameName: overrides?.gameName ?? 'test-game',
     players: {
         '0': {
             name: '玩家0',
@@ -277,7 +280,7 @@ const createOnlineAiRecoveryMetadata = (): MatchMetadata => ({
     updatedAt: Date.now(),
     setupData: {
         enableAi: true,
-        seatControllers: {
+        seatControllers: overrides?.seatControllers ?? {
             '0': { type: 'human' },
             '1': { type: 'local-ai' },
         },
@@ -1467,6 +1470,108 @@ describe('GameTransportServer（离座与重连）', () => {
         }));
     });
 
+    it('online AI watchdog 完成 legal action 恢复后也应写入系统反馈', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+        const gameId = 'test-watchdog-legal-action-recovery';
+
+        aiModule.registerGameAiRuntime({
+            gameId,
+            buildLegalActions: () => [{
+                actionId: 'legal-advance',
+                kind: 'advance-phase',
+                label: '合法推进阶段',
+                commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+            }],
+            localPolicies: {
+                legalRecoveryPolicy: {
+                    id: 'legalRecoveryPolicy',
+                    decide: () => ({
+                        actionId: 'legal-advance',
+                        confidence: 0.91,
+                        reasoningSummary: '当前 AI 仍有合法动作，先走合法动作恢复推进。',
+                    }),
+                },
+            },
+            defaultLocalPolicyId: 'legalRecoveryPolicy',
+        });
+
+        await storage.createMatch('match-watchdog-legal-action-feedback', {
+            initialState: createOnlineAiRecoveryState(),
+            metadata: createOnlineAiRecoveryMetadata({
+                gameName: gameId,
+                seatControllers: {
+                    '0': { type: 'human' },
+                    '1': { type: 'local-ai', policyId: 'legalRecoveryPolicy' },
+                },
+            }),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfigWithId(gameId)],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        const match = await serverInternal.loadMatch('match-watchdog-legal-action-feedback');
+        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType) => {
+            if (commandType === 'ADVANCE_PHASE' && activeMatch.state.sys.phase === 'main2') {
+                activeMatch.state = {
+                    ...activeMatch.state,
+                    core: {
+                        ...activeMatch.state.core,
+                        activePlayerId: '0',
+                        currentPlayerIndex: 0,
+                    },
+                    sys: {
+                        ...activeMatch.state.sys,
+                        phase: 'main1',
+                        turnNumber: 5,
+                    },
+                };
+                return true;
+            }
+            return true;
+        });
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+        await nextTick();
+
+        expect(executeSpy).toHaveBeenCalledTimes(1);
+        expect(match.state.sys.phase).toBe('main1');
+        expect(match.state.sys.turnNumber).toBe(5);
+        expect(match.state.core.activePlayerId).toBe('0');
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+            matchId: 'match-watchdog-legal-action-feedback',
+            gameId,
+            playerId: '1',
+            incidentKind: 'legal-action-recovered',
+            status: 'resolved',
+        }));
+
+        const payload = feedbackReporter.mock.calls[0]?.[0] as { reason?: string; stateSnapshot?: string } | undefined;
+        expect(payload?.reason).toContain('active-turn:legal-action:advance-phase:legal-advance');
+        expect(typeof payload?.stateSnapshot).toBe('string');
+    });
+
     it('online AI watchdog 在 summonerwars 应使用 END_PHASE 推进阶段', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
@@ -1620,6 +1725,68 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(feedbackReporter).not.toHaveBeenCalled();
     });
 
+    it('online AI watchdog 在 AI 当前阶段卡在 human 可见交互时不得误发 ADVANCE_PHASE', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-human-visible-interaction', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'scoreBases',
+                interaction: {
+                    current: createSimpleChoice(
+                        'human-choice-1',
+                        '0',
+                        'human choice',
+                        [{
+                            id: 'move-base',
+                            label: '移动基地',
+                            value: { targetId: 'base-2' },
+                        }],
+                        {
+                            sourceId: 'pirate_first_mate_choose_base',
+                            targetType: 'base',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-human-visible-interaction');
+        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal');
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(executeSpy).not.toHaveBeenCalled();
+        expect(feedbackReporter).not.toHaveBeenCalled();
+    });
+
     it('online AI watchdog 缺少 enableAi 标记时仍应根据 seatControllers 启动', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
@@ -1693,6 +1860,7 @@ describe('GameTransportServer（离座与重连）', () => {
             matchId: 'match-watchdog-stale-seat-controllers',
             playerId: '1',
             incidentKind: 'force-end-turn-success',
+            status: 'resolved',
         }));
     });
 
@@ -1797,6 +1965,7 @@ describe('GameTransportServer（离座与重连）', () => {
             matchId: 'match-watchdog-response-window-human',
             playerId: '1',
             incidentKind: 'force-end-turn-success',
+            status: 'resolved',
         }));
     });
 
@@ -2286,7 +2455,11 @@ describe('GameTransportServer（离座与重连）', () => {
                 matchId: string;
                 gameId: string;
                 playerId: string;
-                incidentKind: 'force-end-turn-success' | 'force-end-turn-failed' | 'unsatisfiable-interaction-auto-skipped';
+                incidentKind:
+                    | 'force-end-turn-success'
+                    | 'force-end-turn-failed'
+                    | 'unsatisfiable-interaction-auto-skipped'
+                    | 'legal-action-recovered';
                 severity: 'medium' | 'high';
                 reason: string;
                 trackerKey: string;
@@ -2408,6 +2581,122 @@ describe('GameTransportServer（离座与重连）', () => {
             selectionState: 'manual-selection-required',
             disabledOptionIds: ['option-disabled'],
             enabledOptionIds: ['option-manual'],
+        });
+    });
+
+    it('online AI watchdog 自动反馈应携带 AI 决策预览', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+        const gameId = 'test-watchdog-preview';
+
+        aiModule.registerGameAiRuntime({
+            gameId,
+            buildLegalActions: () => [{
+                actionId: 'advance-phase',
+                kind: 'advance-phase',
+                label: '结束阶段',
+                commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+            }],
+            localPolicies: {
+                previewPolicy: {
+                    id: 'previewPolicy',
+                    decide: () => ({
+                        actionId: 'advance-phase',
+                        confidence: 0.88,
+                        reasoningSummary: '阶段已无可执行动作；优先结束阶段',
+                    }),
+                },
+            },
+            defaultLocalPolicyId: 'previewPolicy',
+        });
+
+        await storage.createMatch('match-watchdog-ai-preview', {
+            initialState: createOnlineAiRecoveryState({
+                interaction: {
+                    current: {
+                        id: 'preview-choice',
+                        kind: 'simple-choice',
+                        playerId: '1',
+                        data: {
+                            sourceId: 'preview-source',
+                            title: 'interaction.preview',
+                            multi: { min: 1 },
+                            options: [{
+                                id: 'preview-option',
+                                label: '预览选项',
+                                value: { targetId: 'x-1' },
+                            }],
+                        },
+                    },
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata({
+                gameName: gameId,
+                seatControllers: {
+                    '0': { type: 'human' },
+                    '1': { type: 'local-ai', policyId: 'previewPolicy' },
+                },
+            }),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfigWithId(gameId)],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiRecoveryFailureReportThreshold: 1,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-ai-preview');
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockResolvedValue(false);
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        const payload = feedbackReporter.mock.calls[0]?.[0] as { stateSnapshot?: string } | undefined;
+        const snapshot = JSON.parse(payload?.stateSnapshot ?? '{}');
+
+        expect(snapshot.seatControllerType).toBe('local-ai');
+        expect(snapshot.legalActions).toMatchObject({
+            total: 1,
+            truncated: false,
+        });
+        expect(snapshot.legalActions?.items).toContainEqual(expect.objectContaining({
+            actionId: 'advance-phase',
+            kind: 'advance-phase',
+            label: '结束阶段',
+            commandTypes: ['ADVANCE_PHASE'],
+        }));
+        expect(snapshot.aiDecisionPreview).toMatchObject({
+            previewSource: 'seat-policy',
+            policyId: 'previewPolicy',
+            reasoningSummary: '阶段已无可执行动作；优先结束阶段',
+            confidence: 0.88,
+            error: null,
+        });
+        expect(snapshot.aiDecisionPreview?.chosenAction).toMatchObject({
+            actionId: 'advance-phase',
+            kind: 'advance-phase',
+            label: '结束阶段',
+            commandTypes: ['ADVANCE_PHASE'],
         });
     });
 
@@ -2742,6 +3031,12 @@ describe('GameTransportServer（离座与重连）', () => {
             disabledOptions: 1,
             selectionState: 'recoverable-option-available',
         });
+        expect(snapshot.seatControllerType).toBe('local-ai');
+        expect(snapshot.legalActions).toMatchObject({
+            total: 0,
+            truncated: false,
+        });
+        expect(snapshot.aiDecisionPreview).toBeNull();
         expect(snapshot.interaction?.seatUnsatisfiableReason).toBe('all-options-disabled');
         expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
             id: '__emergency_skip__',

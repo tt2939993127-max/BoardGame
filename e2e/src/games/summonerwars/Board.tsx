@@ -44,7 +44,6 @@ import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
 import { useScreenShake } from './ui/BoardEffects';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { useVisualSequenceGate } from '../../components/game/framework/hooks/useVisualSequenceGate';
-import { useIsInteractionBusy } from '../../components/game/framework/hooks/useIsInteractionBusy';
 import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
 import type { Card, BoardUnit, BoardStructure, CellCoord, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
@@ -65,6 +64,7 @@ import { PathTrailEffect } from './ui/PathTrailEffect';
 import { useMovementTrails } from './ui/useMovementTrails';
 import {
   BOARD_SHELL_REFERENCE_WIDTH,
+  SUMMONER_WARS_DESKTOP_HUD_REFERENCE_WIDTH_PX,
   SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX,
 } from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
@@ -73,6 +73,7 @@ import { SUMMONER_WARS_MANIFEST } from './manifest';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import type { InteractionDescriptor, PromptOption } from '../../engine/systems/InteractionSystem';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
+import { shouldBlockHandInteraction } from './ui/handInteractionBusy';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -84,7 +85,7 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.18;
 const MOBILE_LANDSCAPE_MAP_PADDING = '4vw';
-const DESKTOP_MAP_PADDING = '10vw';
+const DESKTOP_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
 ]);
@@ -100,13 +101,22 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
   const viewport = useRuntimeViewport();
+  const viewportSafeWidth = useMemo(() => {
+    const safeWidth = viewport.width - viewport.safeArea.left - viewport.safeArea.right;
+    return safeWidth > 0 ? safeWidth : viewport.width;
+  }, [viewport.safeArea.left, viewport.safeArea.right, viewport.width]);
   const isMobileViewport = viewport.width <= 1023;
   const isLandscapeMobileViewport = isMobileViewport && viewport.width > viewport.height;
-  const useCompactHandLayout = isLandscapeMobileViewport;
+  const desktopReferenceWidth = Math.min(
+    SUMMONER_WARS_DESKTOP_HUD_REFERENCE_WIDTH_PX,
+    viewportSafeWidth || SUMMONER_WARS_DESKTOP_HUD_REFERENCE_WIDTH_PX,
+  );
+  const useCompactHandLayout = isLandscapeMobileViewport || (!isMobileViewport && desktopReferenceWidth < 1100);
   const mapInitialScale = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
-  const mapPaddingLeft = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
-  const mapPaddingRight = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
-  const mapShadeWidth = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : DESKTOP_MAP_PADDING;
+  const desktopMapPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${DESKTOP_MAP_SIDE_RATIO})`;
+  const mapPaddingLeft = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : desktopMapPadding;
+  const mapPaddingRight = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : desktopMapPadding;
+  const mapShadeWidth = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_PADDING : desktopMapPadding;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
   const activeEventNameClass = 'text-[11px] py-0.5 px-1';
@@ -127,11 +137,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     : 'absolute top-[40%] right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
-    : '100vw';
+    : !isMobileViewport
+      ? `${desktopReferenceWidth}px`
+      : '100vw';
   const mobileLandscapeCenteredContentWidth = `calc(100vw - (${MOBILE_LANDSCAPE_MAP_PADDING} * 2))`;
   const handReferenceWidthCss = isLandscapeMobileViewport
     ? mobileLandscapeCenteredContentWidth
-    : '100vw';
+    : !isMobileViewport
+      ? `${desktopReferenceWidth}px`
+      : '100vw';
   const boardShellStyle = {
     '--sw-board-reference-width': boardReferenceWidthCss,
     '--sw-hand-reference-width': handReferenceWidthCss,
@@ -563,8 +577,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     setGrabFollowMode: noopSetGrabFollowMode,
   });
 
-  const engineInteractionBusy = useIsInteractionBusy(G, playerID);
-  const handInteractionBusy = engineInteractionBusy || !!abilityMode || interaction.hasActiveEventMode;
+  const engineInteractionBusy = !!currentInteraction && currentInteraction.playerId === (myPlayerId as PlayerId);
+  const handInteractionBusy = shouldBlockHandInteraction({
+    hasAbilityMode: !!abilityMode,
+    hasActiveEventMode: interaction.hasActiveEventMode,
+    hasEngineInteraction: engineInteractionBusy,
+    hasSwInteraction: !!swInteraction,
+  });
 
   // 关闭骰子结果 → 播放攻击动画
   const handleCloseDiceResult = () => {

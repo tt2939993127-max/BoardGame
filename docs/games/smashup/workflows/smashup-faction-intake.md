@@ -1,8 +1,8 @@
-# Smash Up 派系图片接入工作流
+# Smash Up 派系图片 intake 工作流
 
 ## 适用范围
 
-适用于 Smash Up 新增一批派系图片后的 intake 流程，覆盖：
+适用于 Smash Up 新增一批派系图片后的 **intake** 流程，覆盖：
 
 - 卡牌图集压缩
 - 基地图集压缩
@@ -11,9 +11,19 @@
 - locale 文本录入
 - UI faction metadata 接入
 - R2 上传
-- Vitest / E2E / evidence
+- intake 阶段的 Vitest / E2E / evidence
 
-本工作流面向“给定图片即可复刻录入”的场景，不包含派系完整 gameplay ability handler 的实现。
+本工作流面向“给定图片即可复刻录入”的场景，**不包含派系完整 gameplay ability handler 的实现**。
+
+如果用户明确要求：
+
+- “把这个派系做进游戏”
+- “继续实现玩法”
+- “从图片一路做到正式可玩”
+
+则本工作流只负责前半段 intake；完成后必须继续进入：
+
+- `docs/games/smashup/workflows/smashup-faction-implementation.md`
 
 ## 输入物
 
@@ -24,11 +34,24 @@
 - 该批派系的英文 canonical 名称来源
 - 该批派系的卡牌/基地效果文本来源
 
-本次 Oops, You Did It Again 的权威分工如下：
+本次 Oops, You Did It Again 批次的权威分工如下（保留为案例）：
 
 - 图片：切片顺序、中文图面、中文图内标题
 - Smash Up Wiki：英文名称、英文效果文本
 - TTS / atlas-config 源：canonical 英文基地名、deck/base 对应关系
+
+## intake 输出口径
+
+intake 的目标不是“尽快改代码”，而是交付一份能安全进入 implementation 的 handoff 包。
+
+至少应包含：
+
+- 真相源表
+- 切图表
+- 核对合同表
+- 对照表
+- 冲突待裁定表
+- implementation 交接清单
 
 ## 资源交付口径
 
@@ -58,7 +81,7 @@
 - Wiki 负责什么
 - TTS 负责什么
 - 是否存在命名冲突
-- 本轮 scope 是否只做 intake
+- 本轮 scope 是否只做 intake，还是要继续进入 implementation
 
 如果存在图面英文和 canonical 英文不一致，必须先裁定：
 
@@ -107,7 +130,7 @@ npm run compress:images -- public/assets/i18n/zh-CN/smashup
 - row-major 顺序
 - 是否有尾格 / logo 格 / 非卡牌格
 
-本次 Oops 批次结论：
+本次 Oops 批次结论（案例，不是全局默认）：
 
 - `aiji.png`：`7 x 7`，前 48 格为卡牌，第 49 格为 `Smash Up` 尾格
 - `aiji_base.png`：`2 x 4`，共 8 张基地
@@ -146,6 +169,12 @@ npm run compress:images -- public/assets/i18n/zh-CN/smashup
 - `type`
 
 不要伪造未实现的 `abilityTags` 或 handler 绑定。
+
+如果用户本轮后续还要继续实现玩法，则这里还应额外整理：
+
+- 每个派系的关键机制关键词
+- 每个派系明显可复用的已有共享机制
+- 仍待 implementation 阶段裁定的高风险点
 
 ### 7. 录入 locale
 
@@ -205,7 +234,7 @@ npm run assets:check
 
 上传后必须验证远端 `HEAD 200`。
 
-### 10. 运行自动化验证
+### 10. 运行 intake 自动化验证
 
 推荐命令：
 
@@ -228,6 +257,32 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops 四派�
 
 - `evidence/<task>-contract.md`
 - `evidence/<task>-e2e-test.md`
+
+## implementation handoff 条件
+
+只有在以下条件全部满足时，才允许从 intake 进入 implementation：
+
+- [ ] 主真相源 / 对照源已经锁定
+- [ ] atlas 几何与 row-major 索引已经锁定
+- [ ] faction / card / base 的 canonical 名称已锁定
+- [ ] 冲突项已裁定，或已被明确登记为 blocker
+- [ ] 资源链路（压缩 / 运行时接线 / 上传要求）已明确
+- [ ] intake evidence 已留档
+- [ ] 已形成 implementation 交接清单
+
+若上述任一项缺失，则 implementation 不得把当前状态说成“已可以安全开工”。
+
+## implementation 交接清单模板
+
+进入 implementation 前，建议至少写清：
+
+- 本批次 faction 清单
+- 每个派系的 card / base 名单
+- 每个派系的关键词摘要
+- 哪些卡可能直接复用现有实现
+- 哪些卡“名字像但还没核对语义”
+- 哪些卡 / 基地必须全新实现
+- 哪些共享层可能需要补洞
 
 ## Oops 批次特殊经验
 

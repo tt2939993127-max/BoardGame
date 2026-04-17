@@ -17,6 +17,8 @@ import {
   waitForPhase,
   cloneState,
 } from '../helpers/summonerwars';
+import { getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
+import { isCellEmpty, isValidCoord } from '../../src/games/summonerwars/domain/helpers';
 
 // ============================================================================
 // 测试状态准备函数
@@ -136,6 +138,135 @@ const prepareWithdrawState = (coreState: any) => {
   return { state: next, kairuPos, emptyPos };
 };
 
+const getWithdrawTargets = (core: any, sourcePosition: { row: number; col: number }) => {
+  const result: { row: number; col: number }[] = [];
+  const dirs = [
+    { dr: -1, dc: 0 },
+    { dr: 1, dc: 0 },
+    { dr: 0, dc: -1 },
+    { dr: 0, dc: 1 },
+  ];
+  for (const { dr, dc } of dirs) {
+    for (let step = 1; step <= 2; step++) {
+      const pos = { row: sourcePosition.row + dr * step, col: sourcePosition.col + dc * step };
+      if (!isValidCoord(pos) || !isCellEmpty(core, pos)) break;
+      result.push(pos);
+    }
+  }
+  return result;
+};
+
+const prepareChantOfWeavingState = (coreState: any) => {
+  const next = cloneState(coreState);
+  next.currentPlayer = '0';
+  next.phase = 'summon';
+  next.selectedUnit = undefined;
+  next.abilityUsage = {};
+  if (next.players?.['0']) {
+    next.players['0'].magic = 3;
+    next.players['0'].moveCount = 0;
+    next.players['0'].attackCount = 0;
+    next.players['0'].hand = [{
+      id: 'barbaric-chant-of-weaving-e2e',
+      cardType: 'event',
+      name: '编织颂歌',
+      faction: 'barbaric',
+      eventType: 'common',
+      playPhase: 'summon',
+      cost: 0,
+      isActive: true,
+      effect: '可在目标相邻召唤，召唤时充能目标。',
+      deckSymbols: [],
+    }];
+  }
+
+  const board = next.board;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 6; col++) {
+      board[row][col].unit = null;
+      board[row][col].structure = null;
+    }
+  }
+
+  board[6][2].unit = {
+    instanceId: 'chant-weaving-my-summoner',
+    cardId: 'chant-weaving-my-summoner-card',
+    card: {
+      id: 'barbaric-summoner',
+      cardType: 'unit',
+      name: '阿布亚·石',
+      faction: 'barbaric',
+      cost: 0,
+      life: 10,
+      strength: 5,
+      attackType: 'ranged',
+      attackRange: 3,
+      unitClass: 'summoner',
+      deckSymbols: [],
+      abilities: ['ancestral_bond'],
+    },
+    owner: '0',
+    position: { row: 6, col: 2 },
+    damage: 0,
+    boosts: 0,
+    hasMoved: false,
+    hasAttacked: false,
+  };
+
+  board[1][3].unit = {
+    instanceId: 'chant-weaving-enemy-summoner',
+    cardId: 'chant-weaving-enemy-summoner-card',
+    card: {
+      id: 'necro-summoner',
+      cardType: 'unit',
+      name: '亡灵召唤师',
+      faction: 'necromancer',
+      cost: 0,
+      life: 10,
+      strength: 4,
+      attackType: 'ranged',
+      attackRange: 3,
+      unitClass: 'summoner',
+      deckSymbols: [],
+      abilities: [],
+    },
+    owner: '1',
+    position: { row: 1, col: 3 },
+    damage: 0,
+    boosts: 0,
+    hasMoved: false,
+    hasAttacked: false,
+  };
+
+  const targetPos = { row: 4, col: 3 };
+  board[targetPos.row][targetPos.col].unit = {
+    instanceId: 'chant-weaving-target',
+    cardId: 'chant-weaving-target-card',
+    card: {
+      id: 'barbaric-lioness',
+      cardType: 'unit',
+      name: '雌狮',
+      faction: 'barbaric',
+      cost: 2,
+      life: 2,
+      strength: 3,
+      attackType: 'melee',
+      attackRange: 1,
+      unitClass: 'common',
+      deckSymbols: [],
+      abilities: ['intimidate', 'life_up'],
+    },
+    owner: '0',
+    position: targetPos,
+    damage: 0,
+    boosts: 0,
+    hasMoved: false,
+    hasAttacked: false,
+  };
+
+  return { state: next, targetPos };
+};
+
 // ============================================================================
 // 测试用例
 // ============================================================================
@@ -186,7 +317,7 @@ test.describe('炽原精灵阵营特色交互', () => {
     const { hostPage, hostContext, guestContext } = match;
     try {
       const coreState = await readCoreState(hostPage);
-      const { state: withdrawCore, kairuPos, emptyPos } = prepareWithdrawState(coreState);
+      const { state: withdrawCore, kairuPos } = prepareWithdrawState(coreState);
       await applyCoreState(hostPage, withdrawCore);
       await closeDebugPanelIfOpen(hostPage);
       await waitForPhase(hostPage, 'attack');
@@ -220,6 +351,9 @@ test.describe('炽原精灵阵营特色交互', () => {
         }
       }
       if (!enemyPos) { test.skip(true, '无法在凯鲁尊者旁放置敌方单位'); return; }
+      const withdrawTargets = getWithdrawTargets(kairuState, kairuPos);
+      const withdrawPos = withdrawTargets[0];
+      if (!withdrawPos) { test.skip(true, '无法为凯鲁尊者找到撤退目标'); return; }
       kairuState.selectedUnit = undefined;
       kairuState.players['0'].attackCount = 0;
       await applyCoreState(hostPage, kairuState);
@@ -255,7 +389,7 @@ test.describe('炽原精灵阵营特色交互', () => {
           return document.body.textContent?.includes('撤退：选择移动目标位置') ?? false;
         });
       }, { timeout: 10000 }).toBe(true);
-      const targetCell = hostPage.getByTestId(`sw-cell-${emptyPos.row}-${emptyPos.col}`);
+      const targetCell = hostPage.getByTestId(`sw-cell-${withdrawPos.row}-${withdrawPos.col}`);
       await expect(targetCell).toBeVisible({ timeout: 10000 });
       await expect.poll(async () => {
         return await targetCell.evaluate((node) => {
@@ -263,7 +397,7 @@ test.describe('炽原精灵阵营特色交互', () => {
           return style.borderColor !== 'transparent' || style.backgroundColor !== 'transparent';
         });
       }, { timeout: 10000 }).toBe(true);
-      await clickBoardElement(hostPage, `[data-testid="sw-cell-${emptyPos.row}-${emptyPos.col}"]`);
+      await clickBoardElement(hostPage, `[data-testid="sw-cell-${withdrawPos.row}-${withdrawPos.col}"]`);
       console.log('[withdraw-e2e] 已点击撤退目标格');
       await expect.poll(async () => {
         return await hostPage.evaluate(() => {
@@ -274,11 +408,65 @@ test.describe('炽原精灵阵营特色交互', () => {
       }, { timeout: 10000 }).toBe(false);
       await hostPage.waitForTimeout(1200);
       const afterWithdraw = await readCoreState(hostPage);
-      const movedUnit = afterWithdraw.board[emptyPos.row][emptyPos.col]?.unit;
+      const movedUnit = afterWithdraw.board[withdrawPos.row][withdrawPos.col]?.unit;
       expect(movedUnit?.instanceId).toBe(kairu.instanceId);
       expect(movedUnit?.boosts ?? 0).toBeLessThan(kairu.boosts ?? 0);
       expect(afterWithdraw.board[kairuPos.row][kairuPos.col]?.unit?.instanceId ?? null).not.toBe(kairu.instanceId);
       console.log('[withdraw-e2e] 核心状态已确认撤退成功');
+    } finally {
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
+    }
+  });
+
+  test('编织颂歌：召唤阶段可正常打出且不会被交互忙碌提示误拦截', async ({ browser }, testInfo) => {
+    test.setTimeout(180000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const match = await setupSWOnlineMatch(browser, baseURL, 'barbaric', 'necromancer');
+    if (!match) { test.skip(true, 'Game server unavailable or room creation failed.'); return; }
+    const { hostPage, hostContext, guestContext } = match;
+    try {
+      const coreState = await readCoreState(hostPage);
+      const { state: weavingCore } = prepareChantOfWeavingState(coreState);
+      await applyCoreState(hostPage, weavingCore);
+      await closeDebugPanelIfOpen(hostPage);
+      await waitForPhase(hostPage, 'summon');
+      await hostPage.waitForTimeout(600);
+
+      const weavingCard = hostPage.getByTestId('sw-hand-area')
+        .locator('[data-card-id="barbaric-chant-of-weaving-e2e"]')
+        .first();
+      await expect(weavingCard).toBeVisible({ timeout: 5000 });
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'chant-weaving-before-play', {
+          filename: 'chant-weaving-before-play.png',
+        }),
+        fullPage: false,
+      });
+
+      await weavingCard.click();
+      await hostPage.waitForTimeout(500);
+
+      await expect.poll(async () => {
+        const state = await readCoreState(hostPage);
+        return !!state?.players?.['0']?.activeEvents?.some((event: any) => event.id === 'barbaric-chant-of-weaving-e2e');
+      }, { timeout: 10000 }).toBe(true);
+
+      await expect.poll(async () => {
+        const state = await readCoreState(hostPage);
+        return !!state?.players?.['0']?.hand?.some((card: any) => card.id === 'barbaric-chant-of-weaving-e2e');
+      }, { timeout: 10000 }).toBe(false);
+
+      expect(await hostPage.getByText('请先完成当前操作').isVisible().catch(() => false)).toBe(false);
+      await closeDebugPanelIfOpen(hostPage);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'chant-weaving-after-play', {
+          filename: 'chant-weaving-after-play.png',
+        }),
+        fullPage: false,
+      });
     } finally {
       void hostContext.close().catch(() => {});
       void guestContext.close().catch(() => {});

@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '../framework';
-import type { BrowserContext, Locator, Page } from '@playwright/test';
+import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { waitForState, waitForPhaseChange } from '../helpers/waitForState';
 import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
@@ -238,6 +238,156 @@ const buildSummonerWarsOnlineAiWatchdogState = (
       },
       responseWindow: {
         ...state.sys.responseWindow,
+        current: undefined,
+      },
+    },
+  };
+};
+
+type OnlineAiDebugApi = {
+  getSeatLatestState?: (playerId: string) => unknown;
+  setSeatLatestStateOverride?: (playerId: string, state: unknown) => void;
+  clearSeatLatestStateOverride?: (playerId: string) => void;
+  clearAllSeatLatestStateOverrides?: () => void;
+};
+
+const waitForOnlineAiDebugApi = async (page: Page, timeout = 15000) => {
+  await page.waitForFunction(
+    () => Boolean((window as Window & { __BG_ONLINE_AI_DEBUG__?: OnlineAiDebugApi }).__BG_ONLINE_AI_DEBUG__),
+    { timeout, polling: 200 },
+  );
+};
+
+const setOnlineAiSeatStateOverride = async (page: Page, playerId: string, state: unknown) => {
+  await page.evaluate(([targetPlayerId, nextState]) => {
+    const api = (window as Window & { __BG_ONLINE_AI_DEBUG__?: OnlineAiDebugApi }).__BG_ONLINE_AI_DEBUG__;
+    if (!api?.setSeatLatestStateOverride) {
+      throw new Error('在线 AI 调试 API 未就绪');
+    }
+    api.setSeatLatestStateOverride(targetPlayerId, nextState);
+  }, [playerId, state]);
+};
+
+const clearOnlineAiSeatStateOverride = async (page: Page, playerId: string) => {
+  await page.evaluate((targetPlayerId) => {
+    const api = (window as Window & { __BG_ONLINE_AI_DEBUG__?: OnlineAiDebugApi }).__BG_ONLINE_AI_DEBUG__;
+    api?.clearSeatLatestStateOverride?.(targetPlayerId);
+  }, playerId).catch(() => {});
+};
+
+const countUnitsForPlayer = (core: Record<string, any> | null | undefined, playerId: string) => {
+  const board = Array.isArray(core?.board) ? core.board : [];
+  let count = 0;
+  for (const row of board) {
+    if (!Array.isArray(row)) continue;
+    for (const cell of row) {
+      if (cell?.unit?.owner === playerId) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+};
+
+const findNewUnitPositionForPlayer = (
+  beforeCore: Record<string, any> | null | undefined,
+  afterCore: Record<string, any> | null | undefined,
+  playerId: string,
+) => {
+  const beforeBoard = Array.isArray(beforeCore?.board) ? beforeCore.board : [];
+  const afterBoard = Array.isArray(afterCore?.board) ? afterCore.board : [];
+  for (let row = 0; row < afterBoard.length; row += 1) {
+    const afterRow = Array.isArray(afterBoard[row]) ? afterBoard[row] : [];
+    const beforeRow = Array.isArray(beforeBoard[row]) ? beforeBoard[row] : [];
+    for (let col = 0; col < afterRow.length; col += 1) {
+      const nextUnit = afterRow[col]?.unit;
+      if (!nextUnit || nextUnit.owner !== playerId) continue;
+      const prevUnit = beforeRow[col]?.unit;
+      if (!prevUnit || prevUnit.instanceId !== nextUnit.instanceId) {
+        return {
+          row,
+          col,
+          instanceId: nextUnit.instanceId as string | undefined,
+          name: nextUnit.card?.name as string | undefined,
+        };
+      }
+    }
+  }
+  return null;
+};
+
+const buildSummonerWarsOnlineAiSummonRaceState = (
+  liveState: Awaited<ReturnType<typeof getMatchState>>,
+) => {
+  const state = withSummonerWarsMobileEvidenceActionLog(
+    createSummonerWarsMobileEvidenceState({
+      faction0: 'necromancer',
+      faction1: 'trickster',
+    }),
+    Date.now(),
+  );
+  const liveTurnOrder = Array.isArray((liveState.sys as { turnOrder?: unknown } | undefined)?.turnOrder)
+    ? ((liveState.sys as { turnOrder?: unknown[] }).turnOrder ?? []).filter((playerId): playerId is string => typeof playerId === 'string')
+    : ['0', '1'];
+  const liveCurrentPlayerIndex = typeof (liveState.sys as { currentPlayerIndex?: unknown } | undefined)?.currentPlayerIndex === 'number'
+    ? (liveState.sys as { currentPlayerIndex: number }).currentPlayerIndex
+    : 0;
+  const aiPlayerIndex = liveTurnOrder.indexOf('1');
+
+  return {
+    ...liveState,
+    ...state,
+    core: {
+      ...liveState.core,
+      ...state.core,
+      currentPlayer: '1',
+      phase: 'summon',
+      turnNumber: Math.max(state.core.turnNumber ?? 0, 5),
+    },
+    sys: {
+      ...liveState.sys,
+      ...state.sys,
+      matchId: liveState.sys?.matchId,
+      turnOrder: liveTurnOrder,
+      currentPlayerIndex: aiPlayerIndex >= 0 ? aiPlayerIndex : liveCurrentPlayerIndex,
+      phase: 'summon',
+      turnNumber: Math.max(state.sys.turnNumber ?? 0, 5),
+      interaction: {
+        ...state.sys.interaction,
+        current: undefined,
+        queue: [],
+        isBlocked: false,
+      },
+      responseWindow: {
+        ...state.sys.responseWindow,
+        current: undefined,
+      },
+    },
+  };
+};
+
+const buildSummonerWarsStaleAiDrawSeatState = (
+  authoritativeState: ReturnType<typeof buildSummonerWarsOnlineAiSummonRaceState>,
+) => {
+  const staleState = cloneState(authoritativeState as Record<string, unknown>) as ReturnType<typeof buildSummonerWarsOnlineAiSummonRaceState>;
+  return {
+    ...staleState,
+    core: {
+      ...staleState.core,
+      currentPlayer: '1',
+      phase: 'draw',
+    },
+    sys: {
+      ...staleState.sys,
+      phase: 'draw',
+      interaction: {
+        ...staleState.sys.interaction,
+        current: undefined,
+        queue: [],
+        isBlocked: false,
+      },
+      responseWindow: {
+        ...staleState.sys.responseWindow,
         current: undefined,
       },
     },
@@ -1173,6 +1323,7 @@ const getHighlightMetrics = async (page: Page, selector: string) => (
         return {
           row: node.getAttribute('data-row'),
           col: node.getAttribute('data-col'),
+          className: node.className,
           borderTopColor: styles.borderTopColor,
           backgroundColor: styles.backgroundColor,
           borderTopWidth: styles.borderTopWidth,
@@ -1191,6 +1342,29 @@ const getHighlightMetrics = async (page: Page, selector: string) => (
     };
   }, selector)
 );
+
+const assertPlayableHandHighlightVisible = async (
+  page: Page,
+  testInfo: TestInfo,
+  snapshotKey: string,
+) => {
+  const playableCards = page.getByTestId('sw-hand-area').locator('[data-can-play="true"]');
+  await expect(playableCards.first()).toBeVisible({ timeout: 8000 });
+
+  const playableCardLocators = await expandLocatorMatches(playableCards);
+  expect(playableCardLocators.length).toBeGreaterThan(0);
+
+  const playableHighlightMetrics = await getHighlightMetrics(page, '[data-testid="sw-hand-area"] [data-can-play="true"] > div:first-child');
+  expect(playableHighlightMetrics.count).toBeGreaterThan(0);
+  expect(String(playableHighlightMetrics.samples[0]?.className ?? '')).toMatch(/border-emerald|ring-emerald|border-green|ring-green/);
+  expect(playableHighlightMetrics.samples[0]?.boxShadow).not.toBe('none');
+
+  await captureEvidenceClipAroundLocators(page, playableCardLocators.slice(0, 3), {
+    path: getEvidenceScreenshotPath(testInfo, snapshotKey, {
+      filename: `${snapshotKey}.png`,
+    }),
+  });
+};
 
 const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
   await expect.poll(async () => page.evaluate(({ testId, target }) => {
@@ -1839,7 +2013,9 @@ const prepareDeterministicCore = (coreState: any) => {
   next.players['0'] = {
     ...player,
     magic: 10,
-    hand: [unitCard, structureCard, eventCard, ...extraCards],
+    // 把已筛掉火祀召唤的稳定单位放到手牌末尾，避免 UI 流程里 `.last()`
+    // 误点到 extraCards 中带额外召唤交互的单位，导致基础召唤链路失真。
+    hand: [structureCard, eventCard, ...extraCards, unitCard],
     deck,
     moveCount: 0,
     attackCount: 0,
@@ -2627,6 +2803,7 @@ test.describe('SummonerWars', () => {
     };
 
     await assertDesktopLayoutStable('50-pc-online-layout-start');
+    await assertPlayableHandHighlightVisible(hostPage, testInfo, '50-pc-online-playable-hand-highlight');
 
     // 召唤
     const unitCard = hostPage.getByTestId('sw-hand-area')
@@ -2770,6 +2947,168 @@ test.describe('SummonerWars', () => {
 
     await hostContext.close();
     await guestContext.close();
+  });
+
+  test('在线 AI 回合起始若 seatState 落后上一拍 draw，不得在 8 秒兜底中直接跳过 summon，且后续应由 watchdog 真正召唤单位', async ({ browser }, testInfo) => {
+    test.setTimeout(180000);
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    try {
+      if (!await ensureGameServerAvailable(hostPage)) {
+        test.skip(true, 'Game server unavailable for online AI stale-seat E2E.');
+      }
+
+      await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
+      const matchId = await createSWRoomViaAPI(hostPage, {
+        setupData: {
+          enableAi: true,
+          seatControllers: {
+            '1': {
+              type: 'local-ai',
+              minimumActionDelayMs: 0,
+            },
+          },
+        },
+      });
+      if (!matchId) {
+        test.skip(true, 'AI room creation failed or backend unavailable.');
+      }
+
+      await ensurePlayerIdInUrl(hostPage, '0');
+      await hostPage.goto(`/play/summonerwars/match/${matchId!}?playerID=0`, { waitUntil: 'domcontentloaded' });
+
+      await waitForState(hostPage, async () => {
+        return await hostPage.getByTestId('debug-toggle').isVisible().catch(() => false);
+      }, { timeout: 30000, message: '等待 Summoner Wars 在线房间调试面板就绪' });
+      await waitForOnlineAiDebugApi(hostPage, 15000);
+
+      await expect.poll(async () => {
+        return hostPage.evaluate((targetMatchId) => {
+          return localStorage.getItem(`match_ai_creds_${targetMatchId}`);
+        }, matchId!);
+      }, {
+        timeout: 15000,
+        message: '等待 host 自动领取 AI seat 凭据',
+      }).not.toBeNull();
+
+      await expect.poll(async () => {
+        return hostPage.evaluate(() => {
+          const api = (window as Window & { __BG_ONLINE_AI_DEBUG__?: OnlineAiDebugApi }).__BG_ONLINE_AI_DEBUG__;
+          return Boolean(api?.getSeatLatestState?.('1'));
+        });
+      }, {
+        timeout: 15000,
+        message: '等待 AI seat latestState 首次同步完成',
+      }).toBe(true);
+
+      const liveState = await getMatchState(matchId!, hostPage);
+      const authoritativeSummonState = buildSummonerWarsOnlineAiSummonRaceState(liveState);
+      const staleDrawSeatState = buildSummonerWarsStaleAiDrawSeatState(authoritativeSummonState);
+      await setOnlineAiSeatStateOverride(hostPage, '1', staleDrawSeatState);
+      await injectMatchState(matchId!, authoritativeSummonState as never, hostPage);
+      await waitForSummonerWarsUI(hostPage, 30000);
+
+      const beforeCore = await readCoreState(hostPage);
+      const beforeAiUnitCount = countUnitsForPlayer(beforeCore as Record<string, any>, '1');
+      expect(beforeAiUnitCount).toBeGreaterThan(0);
+
+      await expect.poll(async () => {
+        const core = await readCoreState(hostPage);
+        return {
+          currentPlayer: core?.currentPlayer ?? null,
+          phase: core?.phase ?? null,
+        };
+      }, {
+        timeout: 8000,
+        message: '等待注入后的 AI summon 状态在前端稳定',
+      }).toEqual({
+        currentPlayer: '1',
+        phase: 'summon',
+      });
+
+      const beforeGuardPath = getEvidenceScreenshotPath(testInfo, 'online-ai-stale-seat-before-guard', {
+        filename: 'online-ai-stale-seat-before-guard.png',
+      });
+      await hostPage.screenshot({ path: beforeGuardPath, fullPage: false });
+
+      await hostPage.waitForTimeout(2500);
+
+      const guardedCore = await readCoreState(hostPage);
+      expect(guardedCore.currentPlayer).toBe('1');
+      expect(guardedCore.phase).toBe('summon');
+      expect(countUnitsForPlayer(guardedCore as Record<string, any>, '1')).toBe(beforeAiUnitCount);
+
+      const guardedPath = getEvidenceScreenshotPath(testInfo, 'online-ai-stale-seat-after-guard', {
+        filename: 'online-ai-stale-seat-after-guard.png',
+      });
+      await hostPage.screenshot({ path: guardedPath, fullPage: false });
+
+      await expect.poll(async () => {
+        const latestState = await getMatchState(matchId!, hostPage);
+        const core = latestState.core as Record<string, any>;
+        return {
+          currentPlayer: core?.currentPlayer ?? null,
+          phase: core?.phase ?? null,
+          aiUnitCount: countUnitsForPlayer(core, '1'),
+        };
+      }, {
+        timeout: 20000,
+        message: '等待服务端 watchdog 使用 legal action 为 AI 真正召唤单位',
+      }).toEqual({
+        currentPlayer: '1',
+        phase: 'summon',
+        aiUnitCount: beforeAiUnitCount + 1,
+      });
+
+      await expect.poll(async () => {
+        const latestState = await getMatchState(matchId!, hostPage);
+        const core = latestState.core as Record<string, any>;
+        return {
+          currentPlayer: core?.currentPlayer ?? null,
+          phase: core?.phase ?? null,
+          aiUnitCount: countUnitsForPlayer(core as Record<string, any>, '1'),
+        };
+      }, {
+        timeout: 10000,
+        message: '等待前端 UI 同步到 watchdog 已成功召唤的状态',
+      }).toEqual({
+        currentPlayer: '1',
+        phase: 'summon',
+        aiUnitCount: beforeAiUnitCount + 1,
+      });
+
+      const recoveredServerState = await getMatchState(matchId!, hostPage);
+      const recoveredServerCore = recoveredServerState.core as Record<string, any>;
+      const newUnitPosition = findNewUnitPositionForPlayer(
+        authoritativeSummonState.core as Record<string, any>,
+        recoveredServerCore,
+        '1',
+      );
+      expect(newUnitPosition).not.toBeNull();
+
+      await expect(hostPage.getByTestId(`sw-unit-${newUnitPosition!.row}-${newUnitPosition!.col}`)).toBeVisible({
+        timeout: 10000,
+      });
+
+      const recoveredPath = getEvidenceScreenshotPath(testInfo, 'online-ai-stale-seat-watchdog-summoned', {
+        filename: 'online-ai-stale-seat-watchdog-summoned.png',
+      });
+      await hostPage.screenshot({ path: recoveredPath, fullPage: false });
+    } finally {
+      await clearOnlineAiSeatStateOverride(hostPage, '1');
+      await hostContext.close();
+    }
   });
 
   test('主动技能：复活死灵 UI 流程', async ({ browser }, testInfo) => {
@@ -3656,6 +3995,7 @@ test.describe('SummonerWars', () => {
       }),
       fullPage: false,
     });
+    await assertPlayableHandHighlightVisible(hostPage, testInfo, '40-mobile-basic-flow-playable-hand-highlight');
 
     const unitCard = hostPage.getByTestId('sw-hand-area')
       .locator('[data-card-type="unit"][data-can-play="true"]')

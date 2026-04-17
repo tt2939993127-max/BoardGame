@@ -401,10 +401,14 @@ export function resolveForceEndTurnForStalledAi(args: {
     }
     const currentInteraction = args.sharedState?.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
     const visibleCurrent = currentInteraction?.current as HiddenSimpleChoiceInteraction | undefined;
-    if (visibleCurrent?.playerId && args.seatControllers[String(visibleCurrent.playerId)]?.type !== 'human') {
+    if (visibleCurrent?.playerId) {
+        const interactionPlayerId = String(visibleCurrent.playerId);
+        if (args.seatControllers[interactionPlayerId]?.type === 'human') {
+            return null;
+        }
         return buildForceEndTurnFromInteractionState(
             args.sharedState as MatchState<unknown>,
-            String(visibleCurrent.playerId),
+            interactionPlayerId,
             'visible-interaction',
         );
     }

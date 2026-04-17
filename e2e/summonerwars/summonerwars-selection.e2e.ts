@@ -239,6 +239,10 @@ test.describe('SummonerWars selection and turn-lock flows', () => {
         stageRect: rectOf('[data-testid="sw-faction-stage"]'),
         previewRect: rectOf('[data-testid="sw-faction-preview-panel"]'),
         railRect: rectOf('[data-testid="sw-faction-player-rail"]'),
+        actionRailRect: rectOf('[data-testid="sw-faction-action-rail"]'),
+        actionButtonRect: rectOf(
+          '[data-testid="sw-faction-start"], [data-testid="sw-faction-ready"], [data-testid="sw-faction-unready"]',
+        ),
         previewHasImage: !!preview?.querySelector('img'),
         waitingBannerRect: rectOf('[data-testid="opponent-offline-banner"]'),
         titleRect: rectOf('[data-testid="sw-faction-title"]'),
@@ -267,6 +271,20 @@ test.describe('SummonerWars selection and turn-lock flows', () => {
     expect(selectedLayout.previewRect?.right ?? 0).toBeLessThanOrEqual(selectedLayout.railRect?.left ?? 99999);
     expect(selectedLayout.railRect?.right ?? 99999).toBeLessThanOrEqual(selectedLayout.viewportWidth + 1);
     expect(selectedLayout.railRect?.bottom ?? 99999).toBeLessThanOrEqual(selectedLayout.viewportHeight + 1);
+    expect(selectedLayout.actionRailRect).not.toBeNull();
+    expect(selectedLayout.actionButtonRect).not.toBeNull();
+    expect(selectedLayout.actionRailRect?.left ?? 0).toBeGreaterThanOrEqual(selectedLayout.railRect?.right ?? 99999);
+    expect(selectedLayout.actionRailRect?.right ?? 99999).toBeLessThanOrEqual(selectedLayout.viewportWidth + 1);
+    expect(selectedLayout.actionButtonRect?.left ?? 0).toBeGreaterThanOrEqual(selectedLayout.actionRailRect?.left ?? 99999);
+    expect(selectedLayout.actionButtonRect?.right ?? 99999).toBeLessThanOrEqual(selectedLayout.viewportWidth + 1);
+    expect(
+      selectedLayout.actionButtonRect?.width ?? 0,
+      '移动横屏操作按钮不应再被玩家状态列挤压成窄条',
+    ).toBeGreaterThanOrEqual(selectedLayout.inlineUnitPx * 12);
+    expect(
+      (selectedLayout.actionButtonRect?.width ?? 0) / Math.max(selectedLayout.actionButtonRect?.height ?? 1, 1),
+      '移动横屏操作按钮应保持横向按钮形态，而不是接近竖条',
+    ).toBeGreaterThanOrEqual(2);
     expect(selectedLayout.waitingBannerRect).toBeNull();
 
     await hostGame.screenshot('selection-phone-landscape-both-picked', testInfo);

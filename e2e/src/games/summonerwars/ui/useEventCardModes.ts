@@ -82,46 +82,30 @@ export function useEventCardModes({
   const showToast = useToast();
 
   // ---------- 状态 ----------
-  const [eventTargetMode, setEventTargetMode] = useState<EventTargetModeState | null>(null);
   const [bloodSummonMode, setBloodSummonMode] = useState<BloodSummonModeState | null>(null);
-  const [funeralPyreMode, setFuneralPyreMode] = useState<FuneralPyreModeState | null>(null);
   const [annihilateMode, setAnnihilateMode] = useState<AnnihilateModeState | null>(null);
-  const [mindControlMode, setMindControlMode] = useState<MindControlModeState | null>(null);
   const [stunMode, setStunMode] = useState<StunModeState | null>(null);
-  const [hypnoticLureMode, setHypnoticLureMode] = useState<HypnoticLureModeState | null>(null);
-  const [chantEntanglementMode, setChantEntanglementMode] = useState<ChantEntanglementModeState | null>(null);
   const [sneakMode, setSneakMode] = useState<SneakModeState | null>(null);
   const [glacialShiftMode, setGlacialShiftMode] = useState<GlacialShiftModeState | null>(null);
   const [withdrawMode, setWithdrawMode] = useState<WithdrawModeState | null>(null);
   const [telekinesisTargetMode, setTelekinesisTargetMode] = useState<TelekinesisTargetModeState | null>(null);
+  const [selectedMultiTargetOptionIds, setSelectedMultiTargetOptionIds] = useState<string[]>([]);
 
   // ---------- 派生 ----------
   const clearAllEventModes = useCallback(() => {
-    setEventTargetMode(null);
     setBloodSummonMode(null);
     setAnnihilateMode(null);
-    setFuneralPyreMode(null);
-    setMindControlMode(null);
     setStunMode(null);
-    setHypnoticLureMode(null);
-    setChantEntanglementMode(null);
     setSneakMode(null);
     setGlacialShiftMode(null);
     setWithdrawMode(null);
     setTelekinesisTargetMode(null);
+    setSelectedMultiTargetOptionIds([]);
     setSelectedHandCardId(null);
   }, [setSelectedHandCardId]);
 
-  const hasActiveEventMode = !!(eventTargetMode || bloodSummonMode || annihilateMode
-    || funeralPyreMode || mindControlMode || stunMode || hypnoticLureMode || chantEntanglementMode
-    || sneakMode || glacialShiftMode || withdrawMode || telekinesisTargetMode);
-
   const findInteractionOptionId = useCallback((matcher: (option: PromptOption) => boolean) => {
     return swInteraction?.options.find(matcher)?.id ?? null;
-  }, [swInteraction]);
-
-  const findInteractionOptionIds = useCallback((matcher: (option: PromptOption) => boolean) => {
-    return swInteraction?.options.filter(matcher).map((option) => option.id) ?? [];
   }, [swInteraction]);
 
   const respondPositionOption = useCallback((pos: CellCoord): boolean => {
@@ -138,6 +122,127 @@ export function useEventCardModes({
     respondInteractionOption(optionId);
     return true;
   }, [findInteractionOptionId, respondInteractionOption]);
+
+  const extractTargetPositionOptions = useCallback((
+    type: string,
+    action: string,
+  ): Array<{ optionId: string; position: CellCoord }> => {
+    if (!swInteraction || swInteraction.type !== type) return [];
+    return swInteraction.options
+      .map((option) => {
+        const value = option.value as { action?: string; targetPosition?: CellCoord } | undefined;
+        if (value?.action !== action || !value.targetPosition) return null;
+        return { optionId: option.id, position: value.targetPosition };
+      })
+      .filter((item): item is { optionId: string; position: CellCoord } => !!item);
+  }, [swInteraction]);
+
+  const selectedMultiTargetOptionIdSet = useMemo(
+    () => new Set(selectedMultiTargetOptionIds),
+    [selectedMultiTargetOptionIds],
+  );
+
+  const eventTargetMode = useMemo<EventTargetModeState | null>(() => {
+    if (!swInteraction || swInteraction.type !== 'event_target') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : undefined;
+    if (!cardId) return null;
+    const card = myHand.find((item) => item.id === cardId);
+    if (!card || card.cardType !== 'event') return null;
+    const validTargets = swInteraction.options
+      .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+      .filter((pos): pos is CellCoord => !!pos);
+    return {
+      cardId,
+      card: card as EventCard,
+      validTargets,
+    };
+  }, [myHand, swInteraction]);
+
+  const funeralPyreMode = useMemo<FuneralPyreModeState | null>(() => {
+    if (!swInteraction || swInteraction.type !== 'funeral_pyre') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : undefined;
+    if (!cardId) return null;
+    return {
+      cardId,
+      charges: (swInteraction.meta?.charges as number | undefined) ?? 0,
+    };
+  }, [swInteraction]);
+
+  const mindControlOptions = useMemo(
+    () => extractTargetPositionOptions('mind_control_select_targets', 'mind_control_target'),
+    [extractTargetPositionOptions],
+  );
+
+  const mindControlMode = useMemo<MindControlModeState | null>(() => {
+    if (!swInteraction || swInteraction.type !== 'mind_control_select_targets') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '';
+    const selectedTargets = mindControlOptions
+      .filter((option) => selectedMultiTargetOptionIdSet.has(option.optionId))
+      .map((option) => option.position);
+    return {
+      cardId,
+      validTargets: mindControlOptions.map((option) => option.position),
+      selectedTargets,
+    };
+  }, [mindControlOptions, selectedMultiTargetOptionIdSet, swInteraction]);
+
+  const hypnoticLureMode = useMemo<HypnoticLureModeState | null>(() => {
+    if (!swInteraction || swInteraction.type !== 'hypnotic_lure_select_target') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '';
+    const validTargets = swInteraction.options
+      .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+      .filter((pos): pos is CellCoord => !!pos);
+    return {
+      cardId,
+      validTargets,
+    };
+  }, [swInteraction]);
+
+  const chantEntanglementOptions = useMemo(
+    () => extractTargetPositionOptions('chant_entanglement_select_targets', 'chant_entanglement_target'),
+    [extractTargetPositionOptions],
+  );
+
+  const chantEntanglementMode = useMemo<ChantEntanglementModeState | null>(() => {
+    if (!swInteraction || swInteraction.type !== 'chant_entanglement_select_targets') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '';
+    const selectedTargets = chantEntanglementOptions
+      .filter((option) => selectedMultiTargetOptionIdSet.has(option.optionId))
+      .map((option) => option.position);
+    return {
+      cardId,
+      validTargets: chantEntanglementOptions.map((option) => option.position),
+      selectedTargets,
+    };
+  }, [chantEntanglementOptions, selectedMultiTargetOptionIdSet, swInteraction]);
+
+  const setFuneralPyreMode = useCallback((mode: FuneralPyreModeState | null) => {
+    if (!mode) {
+      setSelectedHandCardId(null);
+    }
+  }, [setSelectedHandCardId]);
+
+  const setMindControlMode = useCallback((mode: MindControlModeState | null) => {
+    if (!mode) {
+      setSelectedMultiTargetOptionIds([]);
+    }
+  }, []);
+
+  const setHypnoticLureMode = useCallback((mode: HypnoticLureModeState | null) => {
+    if (!mode) {
+      setSelectedHandCardId(null);
+    }
+  }, [setSelectedHandCardId]);
+
+  const setChantEntanglementMode = useCallback((mode: ChantEntanglementModeState | null) => {
+    if (!mode) {
+      setSelectedMultiTargetOptionIds([]);
+    }
+  }, []);
+
+  const hasActiveEventMode = !!(eventTargetMode || bloodSummonMode || annihilateMode
+    || funeralPyreMode || mindControlMode || stunMode || hypnoticLureMode || chantEntanglementMode
+    || sneakMode || glacialShiftMode || withdrawMode || telekinesisTargetMode);
 
   const lastInteractionIdRef = useRef<string | null>(null);
 
@@ -241,22 +346,9 @@ export function useEventCardModes({
         break;
       }
       case 'event_target': {
-        const validTargets = swInteraction.options
-          .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
-          .filter((pos): pos is CellCoord => !!pos);
-        if (cardId) {
-          const card = myHand.find(c => c.id === cardId) as EventCard | undefined;
-          setEventTargetMode({ cardId, card, validTargets });
-        }
         break;
       }
       case 'funeral_pyre': {
-        if (cardId) {
-          setFuneralPyreMode({
-            cardId,
-            charges: (meta.charges as number | undefined) ?? 0,
-          });
-        }
         break;
       }
       case 'blood_summon_select_target': {
@@ -301,7 +393,6 @@ export function useEventCardModes({
           currentTargetIndex: 0,
           damageTargets: [],
         });
-        setEventTargetMode(null);
         break;
       }
       case 'annihilate_select_damage': {
@@ -318,10 +409,6 @@ export function useEventCardModes({
         break;
       }
       case 'mind_control_select_targets': {
-        const validTargets = swInteraction.options
-          .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
-          .filter((pos): pos is CellCoord => !!pos);
-        setMindControlMode({ cardId: cardId ?? '', validTargets, selectedTargets: [] });
         break;
       }
       case 'stun_select_target': {
@@ -360,17 +447,9 @@ export function useEventCardModes({
         break;
       }
       case 'hypnotic_lure_select_target': {
-        const validTargets = swInteraction.options
-          .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
-          .filter((pos): pos is CellCoord => !!pos);
-        setHypnoticLureMode({ cardId: cardId ?? '', validTargets });
         break;
       }
       case 'chant_entanglement_select_targets': {
-        const validTargets = swInteraction.options
-          .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
-          .filter((pos): pos is CellCoord => !!pos);
-        setChantEntanglementMode({ cardId: cardId ?? '', validTargets, selectedTargets: [] });
         break;
       }
       case 'sneak_select_unit': {
@@ -710,20 +789,13 @@ export function useEventCardModes({
 
     // 心灵操控多目标选择模式
     if (mindControlMode) {
-      const isValid = mindControlMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        const alreadySelected = mindControlMode.selectedTargets.some(p => p.row === gameRow && p.col === gameCol);
-        if (alreadySelected) {
-          setMindControlMode({
-            ...mindControlMode,
-            selectedTargets: mindControlMode.selectedTargets.filter(p => !(p.row === gameRow && p.col === gameCol)),
-          });
-        } else {
-          setMindControlMode({
-            ...mindControlMode,
-            selectedTargets: [...mindControlMode.selectedTargets, { row: gameRow, col: gameCol }],
-          });
-        }
+      const option = mindControlOptions.find((item) => item.position.row === gameRow && item.position.col === gameCol);
+      if (option) {
+        setSelectedMultiTargetOptionIds((current) => (
+          current.includes(option.optionId)
+            ? current.filter((optionId) => optionId !== option.optionId)
+            : [...current, option.optionId]
+        ));
       }
       return true;
     }
@@ -799,21 +871,17 @@ export function useEventCardModes({
 
     // 交缠颂歌目标选择模式
     if (chantEntanglementMode) {
-      const isValid = entanglementHighlights.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        const key = `${gameRow}-${gameCol}`;
-        const selectedKeys = new Set(chantEntanglementMode.selectedTargets.map(p => `${p.row}-${p.col}`));
-        if (selectedKeys.has(key)) {
-          setChantEntanglementMode({
-            ...chantEntanglementMode,
-            selectedTargets: chantEntanglementMode.selectedTargets.filter(p => !(p.row === gameRow && p.col === gameCol)),
-          });
-        } else if (chantEntanglementMode.selectedTargets.length < 2) {
-          setChantEntanglementMode({
-            ...chantEntanglementMode,
-            selectedTargets: [...chantEntanglementMode.selectedTargets, { row: gameRow, col: gameCol }],
-          });
-        }
+      const option = chantEntanglementOptions.find((item) => item.position.row === gameRow && item.position.col === gameCol);
+      if (option) {
+        setSelectedMultiTargetOptionIds((current) => {
+          if (current.includes(option.optionId)) {
+            return current.filter((optionId) => optionId !== option.optionId);
+          }
+          if (current.length >= 2) {
+            return current;
+          }
+          return [...current, option.optionId];
+        });
       }
       return true;
     }
@@ -1011,14 +1079,8 @@ export function useEventCardModes({
   const handleConfirmMindControl = useCallback(() => {
     if (!mindControlMode || mindControlMode.selectedTargets.length === 0) return;
     if (swInteraction?.type !== 'mind_control_select_targets') return;
-    const optionIds = findInteractionOptionIds((option) => {
-      const value = option.value as { action?: string; targetPosition?: CellCoord } | undefined;
-      return value?.action === 'mind_control_target'
-        && mindControlMode.selectedTargets.some((target) =>
-          target.row === value.targetPosition?.row && target.col === value.targetPosition?.col);
-    });
-    respondInteractionOption(null, optionIds);
-  }, [findInteractionOptionIds, mindControlMode, respondInteractionOption, swInteraction]);
+    respondInteractionOption(null, selectedMultiTargetOptionIds);
+  }, [mindControlMode, respondInteractionOption, selectedMultiTargetOptionIds, swInteraction]);
 
   const handleConfirmStun = useCallback(() => {
     // 不再需要：dispatch 已在 handleEventModeClick 中直接完成
@@ -1047,14 +1109,8 @@ export function useEventCardModes({
   const handleConfirmEntanglement = useCallback(() => {
     if (!chantEntanglementMode || chantEntanglementMode.selectedTargets.length < 2) return;
     if (swInteraction?.type !== 'chant_entanglement_select_targets') return;
-    const optionIds = findInteractionOptionIds((option) => {
-      const value = option.value as { action?: string; targetPosition?: CellCoord } | undefined;
-      return value?.action === 'chant_entanglement_target'
-        && chantEntanglementMode.selectedTargets.some((target) =>
-          target.row === value.targetPosition?.row && target.col === value.targetPosition?.col);
-    });
-    respondInteractionOption(null, optionIds);
-  }, [chantEntanglementMode, findInteractionOptionIds, respondInteractionOption, swInteraction]);
+    respondInteractionOption(null, selectedMultiTargetOptionIds);
+  }, [chantEntanglementMode, respondInteractionOption, selectedMultiTargetOptionIds, swInteraction]);
 
   const handleConfirmTelekinesis = useCallback((_direction?: 'push' | 'pull', _axis?: 'row' | 'col') => {
     // 念力已改为棋盘点击终点模式，dispatch 在 handleEventModeClick 中完成

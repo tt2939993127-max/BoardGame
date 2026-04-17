@@ -35,6 +35,7 @@ import { createSummonerWarsInteractionSystem } from '../domain/systems';
 import { buildSummonerWarsAiLegalActions } from '../ai';
 import { resolveNextLocalAiAction } from '../../../engine/ai';
 import { engineConfig } from '../game';
+import { shouldBlockHandInteraction } from '../ui/handInteractionBusy';
 
 // ============================================================================
 // 测试辅助
@@ -113,6 +114,41 @@ const interactionSystems = [
   createSimpleChoiceSystem<SummonerWarsCore>(),
   createSummonerWarsInteractionSystem(),
 ];
+
+describe('SummonerWars 手牌交互阻塞判定', () => {
+  it('未知引擎交互不应阻止召唤阶段打出事件卡', () => {
+    expect(shouldBlockHandInteraction({
+      hasAbilityMode: false,
+      hasActiveEventMode: false,
+      hasEngineInteraction: true,
+      hasSwInteraction: false,
+    })).toBe(false);
+  });
+
+  it('召唤师战争交互存在时应继续阻止手牌并发操作', () => {
+    expect(shouldBlockHandInteraction({
+      hasAbilityMode: false,
+      hasActiveEventMode: false,
+      hasEngineInteraction: true,
+      hasSwInteraction: true,
+    })).toBe(true);
+  });
+
+  it('本地能力模式或事件模式仍应优先阻止手牌操作', () => {
+    expect(shouldBlockHandInteraction({
+      hasAbilityMode: true,
+      hasActiveEventMode: false,
+      hasEngineInteraction: false,
+      hasSwInteraction: false,
+    })).toBe(true);
+    expect(shouldBlockHandInteraction({
+      hasAbilityMode: false,
+      hasActiveEventMode: true,
+      hasEngineInteraction: false,
+      hasSwInteraction: false,
+    })).toBe(true);
+  });
+});
 
 function runPipeline(
   state: MatchState<SummonerWarsCore>,

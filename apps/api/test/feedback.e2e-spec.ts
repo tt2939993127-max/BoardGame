@@ -157,6 +157,7 @@ describe('Feedback Module (e2e)', () => {
             source: 'online-ai-watchdog',
             type: 'bug',
             severity: 'high',
+            status: 'resolved',
         };
 
         await request(app.getHttpServer())
@@ -178,6 +179,113 @@ describe('Feedback Module (e2e)', () => {
 
         expect(okRes.body.reporterType).toBe('system');
         expect(okRes.body.source).toBe('online-ai-watchdog');
+        expect(okRes.body.status).toBe('resolved');
+    });
+
+    it('online-ai-watchdog 相同根因的系统反馈应聚合到同一条记录并累计次数', async () => {
+        const payloadA = {
+            content: '[system][online-ai-watchdog] force-end-turn-success active-turn:follow-up-advance:steps=1',
+            source: 'online-ai-watchdog',
+            type: 'bug',
+            severity: 'medium',
+            status: 'resolved',
+            autoReportKind: 'force-end-turn-success',
+            incidentKey: 'tracker-a',
+            gameName: 'dicethrone',
+            clientContext: {
+                gameId: 'dicethrone',
+                route: 'server-watchdog',
+                mode: 'online',
+            },
+            errorContext: {
+                source: 'online-ai-watchdog',
+                name: 'force-end-turn-success',
+                message: 'active-turn:follow-up-advance:steps=1',
+            },
+        };
+        const payloadB = {
+            ...payloadA,
+            content: '[system][online-ai-watchdog] force-end-turn-success active-turn:follow-up-advance:steps=3',
+            incidentKey: 'tracker-b',
+            errorContext: {
+                ...payloadA.errorContext,
+                message: 'active-turn:follow-up-advance:steps=3',
+            },
+        };
+
+        const first = await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send(payloadA)
+            .expect(201);
+
+        const second = await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send(payloadB)
+            .expect(201);
+
+        expect(second.body._id).toBe(first.body._id);
+        expect(second.body.incidentKey).toContain('system-feedback:online-ai-watchdog:dicethrone:force-end-turn:active-turn:follow-up-advance');
+        expect(second.body.latestIncidentKey).toBe('tracker-b');
+        expect(second.body.occurrenceCount).toBe(2);
+        expect(second.body.status).toBe('resolved');
+
+        const docs = await feedbackModel.find({ source: 'online-ai-watchdog' }).lean();
+        expect(docs).toHaveLength(1);
+        expect(docs[0].occurrenceCount).toBe(2);
+        expect(docs[0].latestIncidentKey).toBe('tracker-b');
+    });
+
+    it('online-ai-watchdog 已打开的失败聚合项，不应被后续一次成功恢复自动改成 resolved', async () => {
+        const failed = {
+            content: '[system][online-ai-watchdog] force-end-turn-failed active-turn:follow-up-advance:command_failed',
+            source: 'online-ai-watchdog',
+            type: 'bug',
+            severity: 'high',
+            autoReportKind: 'force-end-turn-failed',
+            incidentKey: 'failure-tracker',
+            gameName: 'smashup',
+            clientContext: {
+                gameId: 'smashup',
+                route: 'server-watchdog',
+                mode: 'online',
+            },
+            errorContext: {
+                source: 'online-ai-watchdog',
+                name: 'force-end-turn-failed',
+                message: 'active-turn:follow-up-advance:command_failed',
+            },
+        };
+        const recovered = {
+            ...failed,
+            content: '[system][online-ai-watchdog] force-end-turn-success active-turn:follow-up-advance:steps=1',
+            severity: 'medium',
+            status: 'resolved',
+            autoReportKind: 'force-end-turn-success',
+            incidentKey: 'failure-tracker-2',
+            errorContext: {
+                ...failed.errorContext,
+                name: 'force-end-turn-success',
+                message: 'active-turn:follow-up-advance:steps=1',
+            },
+        };
+
+        const first = await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send(failed)
+            .expect(201);
+
+        const second = await request(app.getHttpServer())
+            .post('/internal/feedback/system')
+            .set('X-Internal-Feedback-Token', INTERNAL_FEEDBACK_TOKEN)
+            .send(recovered)
+            .expect(201);
+
+        expect(second.body._id).toBe(first.body._id);
+        expect(second.body.status).toBe('open');
+        expect(second.body.occurrenceCount).toBe(2);
     });
 
     it('登录用户反馈会绑定 userId 且管理员可更新状态', async () => {

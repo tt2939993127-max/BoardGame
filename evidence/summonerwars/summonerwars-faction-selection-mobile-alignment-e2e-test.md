@@ -1,7 +1,7 @@
 # Summoner Wars 阵营选择界面移动端对齐 E2E 证据
 
-- 日期：2026-04-15
-- 目标：把手机横屏的阵营选择界面收回到更接近 PC 的构图，不再出现整体过小、下半区过低、预览区贴底的问题。
+- 日期：2026-04-17
+- 目标：把手机横屏的阵营选择界面收回到更接近 PC 的构图，不再出现整体过小、下半区过低、预览区贴底，以及“开始/等待”操作区被玩家状态列挤扁的问题。
 - 相关实现：
   - `src/games/summonerwars/ui/FactionSelectionAdapter.tsx`
   - `e2e/src/games/summonerwars/ui/FactionSelectionAdapter.tsx`
@@ -26,13 +26,14 @@
 ### 3. 手机横屏：双方都选完后的界面
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars-selection.e2e\mobile-landscape-keeps-faction-selection-aligned-with-pc-composition\selection-phone-landscape-both-picked.png`
 - 我实际看到：双方选中标记出现后，下方预览图已显示，预览区位于第二层中央偏左，玩家状态区位于其右侧，仍在屏幕内。
+- 我实际看到：玩家状态区右侧新增独立操作列，`等待全员就绪` 按钮不再塞在玩家状态卡下方，按钮宽度足够，文案没有被压成窄条。
 - 我实际看到：预览图底边仍贴近屏幕底部，但没有再被明显裁掉；玩家状态卡完整可见。此时顶部等待横幅已按状态正常消失，没有残留错位横幅。
-- 判定：达到“双方选完后预览区与玩家状态区仍可同时完整工作”的验收标准；等待横幅也没有在后续状态里残留错位。
+- 判定：达到“双方选完后预览区、玩家状态区、右侧操作区仍可同时完整工作”的验收标准；等待横幅也没有在后续状态里残留错位。
 
 ## 结论
 
 - 这轮修复聚焦的是移动端阵营选择舞台的缩放与下半区垂直布局，不碰 PC 分支。
-- 修后手机横屏界面已更接近 PC：主卡牌区更大、下半区上提、舞台整体不再超出屏幕，等待横幅也回到标题中心线附近。
+- 修后手机横屏界面已更接近 PC：主卡牌区更大、下半区上提、舞台整体不再超出屏幕，等待横幅回到标题中心线附近，开始/等待按钮也改为右侧独立操作列。
 - 本轮已通过两条 E2E：
   - `mobile landscape keeps faction selection aligned with pc composition`
   - `main flow enters match from faction selection`
