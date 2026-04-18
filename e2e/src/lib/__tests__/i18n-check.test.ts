@@ -85,6 +85,42 @@ describe('i18n 静态检查工具', () => {
         expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(true);
     });
 
+    it('i18n.exists 命名空间一致时可作为 t(variable) 的保护条件', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('game-summonerwars');
+            const key = \`phase.${'${phaseId}'}\`;
+            if (i18n.exists(key, { ns: 'game-summonerwars' })) {
+                t(key);
+            }
+        `;
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'game-summonerwars']),
+        });
+        expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);
+        expect(result.warnings.some((warning) => warning.type === 'exists-namespace-mismatch')).toBe(false);
+    });
+
+    it('i18n.exists 命名空间不一致时会产生 mismatch 告警', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('game-summonerwars');
+            const key = 'phase.summon';
+            if (i18n.exists(key, { ns: 'common' })) {
+                t(key);
+            }
+        `;
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'game-summonerwars']),
+        });
+        expect(result.warnings).toContainEqual(expect.objectContaining({
+            type: 'exists-namespace-mismatch',
+            key: 'key',
+        }));
+    });
+
     it('混合字面量与动态 namespace 时，仍保留可确定的字面量 namespace', () => {
         const content = `
             import { useTranslation } from 'react-i18next';

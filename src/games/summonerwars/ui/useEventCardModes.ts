@@ -1038,7 +1038,13 @@ export function useEventCardModes({
         if (!cpSummoner) { failReason = t('eventCard.noSummoner'); break; }
         const cpTargets = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner' && manhattanDistance(cpSummoner.position, u.position) <= 3);
-        if (cpTargets.length === 0) break;
+        if (cpTargets.length === 0) {
+          failReason = t(
+            'eventCard.chantPowerNeedFriendlyInRange',
+            '力量颂歌：召唤师3格内没有可选的友方士兵/英雄',
+          );
+          break;
+        }
         activated = true;
         break;
       }

@@ -372,6 +372,7 @@
   "eventCard": {
     "noSummoner": "Your summoner is not on the board",
     "noValidTarget": "No valid targets available",
+    "chantPowerNeedFriendlyInRange": "Chant of Power requires at least 1 friendly common/champion within 3 spaces of your summoner",
     "entanglementNeedTwoCommons": "Chant of Entanglement requires at least 2 friendly commons within 3 spaces of your summoner"
   },
   "destroyEffect": {

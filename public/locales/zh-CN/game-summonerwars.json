@@ -372,6 +372,7 @@
   "eventCard": {
     "noSummoner": "召唤师不在场上",
     "noValidTarget": "没有符合条件的目标",
+    "chantPowerNeedFriendlyInRange": "力量颂歌需要召唤师3格内至少1个友方士兵/英雄",
     "entanglementNeedTwoCommons": "交缠颂歌需要召唤师3格内至少2个友方士兵"
   },
   "interaction": {
