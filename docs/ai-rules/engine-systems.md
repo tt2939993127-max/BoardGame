@@ -66,6 +66,41 @@
 
 > ⚠️ 裁剪只动 `sys` 层，不碰 `core`（游戏领域状态）。卡牌预览（`previewRef`）、弃牌堆等展示数据不受影响。对手手牌隐藏是 `playerView` 的职责，不是传输裁剪。
 
+#### 在线 AI 决策视图（强制）
+
+在线 AI 不能再在“整份 `sharedState`”与“整份 seat `latestState`”之间粗暴二选一。当前统一口径是：
+
+- **authoritative shared**：`phase`、`turnNumber`、`currentPlayer`、公共棋盘、公共资源、公开 setup 状态，永远以当前权威 shared 为准。
+- **private overlay**：hidden interaction、seat 专属 options、私有手牌、seat 私有候选，只从该 seat 的私有 overlay 读取。
+
+##### 默认决策语义
+
+- `shared`
+  - 公开 setup / 公开决策。
+  - 即使 seat overlay 缺失或 stale，AI 也可以继续基于 authoritative shared 决策。
+- `private-required`
+  - hidden interaction、response window、seat 专属 option 列表或其它私有候选。
+  - seat overlay 缺失或 stale 时，必须阻止 AI 出手，不能回退到共享视角乱决策。
+
+##### 默认推断规则
+
+- 看到 `sharedState.sys.responseWindow.current`，默认视为 `private-required`。
+- 看到 shared 侧 `interaction.current.playerId === 当前 AI`，默认视为 `private-required`。
+- 看到 shared 侧 `interaction.isBlocked === true` 且当前交互未公开暴露给当前 AI，默认视为 `private-required`。
+- 看到 private overlay 内当前 AI 专属 interaction / responder queue，默认视为 `private-required`。
+- 其余默认按 `shared` 处理。
+
+##### 运行时扩展点
+
+- 游戏 runtime 可通过 `resolveOnlineDecisionVisibility()` 做少量 override。
+- 只有当框架无法从结构稳定推断时才允许 override，禁止把所有 phase / 所有情况做成游戏白名单表。
+
+##### 实现要求
+
+- `MatchRoom`、`resolveNextAiAction`、服务端 watchdog / legal-action recovery 必须复用同一套决策视图 helper。
+- 私有决策的 freshness gate 只允许拦 `private-required`，不得再一刀切阻断整个在线 AI。
+- 新增在线 AI 决策点时，先判断它依赖公共真相还是私有 overlay，再决定是否允许 shared fallback。
+
 #### GameBoardProps 契约（强制）
 
 ```typescript

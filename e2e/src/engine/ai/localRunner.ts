@@ -2,6 +2,7 @@ import type { MatchState } from '../types';
 import type { GameEngineConfig } from '../transport/server';
 import { applyPlayerViewToState } from './playerView';
 import { buildAiDecisionContext, createAiLegalActionId, resolveAiActionDecision } from './context';
+import { isResolvedOnlineAiDecisionView, type ResolvedOnlineAiDecisionView } from './onlineDecisionView';
 import {
     getGameAiRuntime,
     getRemoteAiProvider,
@@ -30,9 +31,9 @@ interface ResolveNextAiActionArgs {
      * 在线房间里，每个 AI seat 都有自己的 transport client 和 playerView。
      * 如果继续基于“当前主玩家”的过滤状态再套一层 playerView，
      * AI 会看不到只对自己可见的交互，导致 simple-choice 永远不响应。
-     * 返回 null 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到共享视角”。
+     * 返回 null / canDecide=false 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到错误视角”。
      */
-    visibleStateResolver?: (playerId: string) => MatchState<unknown> | null | undefined;
+    visibleStateResolver?: (playerId: string) => MatchState<unknown> | ResolvedOnlineAiDecisionView | null | undefined;
 }
 
 function shouldUseRemoteDecision(args: {
@@ -243,13 +244,18 @@ export async function resolveNextAiAction(
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
         if (seatController.type === 'human') continue;
 
-        const resolvedSeatState = args.visibleStateResolver?.(playerId);
-        if (resolvedSeatState === null) {
+        const resolvedVisibleState = args.visibleStateResolver?.(playerId);
+        if (resolvedVisibleState === null) {
             continue;
         }
 
-        const visibleState = resolvedSeatState
-            ?? applyPlayerViewToState(args.engineConfig, args.state, playerId);
+        if (isResolvedOnlineAiDecisionView(resolvedVisibleState) && !resolvedVisibleState.canDecide) {
+            continue;
+        }
+
+        const visibleState = isResolvedOnlineAiDecisionView(resolvedVisibleState)
+            ? resolvedVisibleState.visibleState
+            : resolvedVisibleState ?? applyPlayerViewToState(args.engineConfig, args.state, playerId);
         const context = buildAiDecisionContext({
             gameId: args.engineConfig.gameId,
             matchId: args.matchId,

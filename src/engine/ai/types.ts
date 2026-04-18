@@ -185,9 +185,16 @@ export interface BuildGameAiLegalActionsArgs {
     state: MatchState<unknown>;
 }
 
+export type OnlineAiDecisionVisibility = 'shared' | 'private-required';
+
 export interface GameAiRuntime {
     gameId: string;
     buildLegalActions(args: BuildGameAiLegalActionsArgs): AiLegalAction[];
+    resolveOnlineDecisionVisibility?(args: {
+        playerId: PlayerId;
+        sharedState: MatchState<unknown>;
+        privateOverlay: MatchState<unknown> | null;
+    }): OnlineAiDecisionVisibility | null | undefined;
     localPolicies?: Record<string, LocalAiPolicy>;
     defaultLocalPolicyId?: string;
     shouldUseRemoteDecision?: (

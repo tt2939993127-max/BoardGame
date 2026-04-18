@@ -246,7 +246,7 @@ GitHub Actions 自动化：
 - 自动正式发版 workflow：`.github/workflows/android-push-release.yml`
 - 手动 OTA workflow：`.github/workflows/android-ota-publish.yml`
 - `main` 自动发版：命中 Android H5 相关路径后，自动发布 **stable OTA**；**原生壳仍需手动发包**
-- 自动版本管理：自动发版成功后，workflow 会把 `package.json` / `package-lock.json` 自动递增到下一个 patch 版本，并回推一个带 `[skip android release]` 的 bot commit，避免发版循环
+- 自动版本管理：默认会在自动发版成功后把 `package.json` / `package-lock.json` 自动递增到下一个 patch 版本，并回推一个带 `[skip android release]` 的 bot commit，避免发版循环；如需临时关闭，可把仓库变量 `ANDROID_AUTO_BUMP_VERSION` 设为 `false`
 - 手动触发：仍可手动选择 `stable` / `gray` / `edge` 单独发布 OTA，并支持 `dry_run`、`skip_latest`、`force_update`
 - 正式门禁：如需人工审批，可在**手动** OTA workflow 上绑定 `android-ota-production` Environment
 - 项目强制规则：OTA manifest 不得再写 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`；所有已安装版本默认都必须收到 OTA。若误传这些参数，发布脚本必须直接失败。

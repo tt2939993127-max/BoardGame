@@ -7,7 +7,7 @@ import { isMatchNotFoundError, useMatchStatus, validateStoredMatchSeat, type Sto
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAiSeats';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
-import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
+import { registerGameAiRuntime, resolveNextAiAction, resolveOnlineAiDecisionView } from '../../engine/ai';
 import {
     buildAiProgressMarker,
     LocalGameProvider,
@@ -519,6 +519,174 @@ describe('resolveOnlineHudPresence', () => {
 });
 
 describe('resolveNextAiAction 在线视角', () => {
+    it('公开 setup 决策在 private overlay 过期时，仍应基于 authoritative shared 继续', async () => {
+        const gameId = '__test_online_ai_shared_setup_fallback__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const phase = (state.sys as { phase?: string })?.phase;
+                const currentPlayerId = (state.core as { currentPlayerId?: string })?.currentPlayerId;
+                if (phase !== 'factionSelect' || currentPlayerId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: `select-faction-${playerId}`,
+                    kind: 'select-faction',
+                    label: `由 ${playerId} 选择派系`,
+                    commands: [{ type: 'SELECT_FACTION', payload: { factionId: 'robots' } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'factionSelect',
+                turnNumber: 3,
+                interaction: { current: null, queue: [], isBlocked: false },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const staleSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'draw',
+                turnNumber: 2,
+                interaction: { current: null, queue: [], isBlocked: false },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedState,
+            matchId: 'match-online-ai-shared-setup-fallback',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                sharedState,
+                privateOverlay: staleSeatState,
+                playerId,
+            }),
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('select-faction');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'SELECT_FACTION', payload: { factionId: 'robots' } },
+        ]);
+    });
+
+    it('private-required 决策在 private overlay 过期时，仍必须阻止 AI 出手', async () => {
+        const gameId = '__test_online_ai_private_overlay_stale_guard__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (interaction?.playerId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: `respond-${playerId}`,
+                    kind: 'interaction-choice',
+                    label: `由 ${playerId} 响应`,
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'summon',
+                turnNumber: 5,
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const staleSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'draw',
+                turnNumber: 4,
+                interaction: {
+                    current: {
+                        id: 'hidden-choice',
+                        playerId: '1',
+                    },
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedState,
+            matchId: 'match-online-ai-private-overlay-stale-guard',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                sharedState,
+                privateOverlay: staleSeatState,
+                playerId,
+            }),
+        });
+
+        expect(resolution).toBeNull();
+    });
+
     it('在线 AI 应优先使用 seat 自己同步到的状态，才能看到隐藏交互', async () => {
         const gameId = '__test_online_ai_hidden_interaction__';
         registerGameAiRuntime({

@@ -19,7 +19,7 @@ export const GAME_NAME = 'summonerwars';
 export const SUMMONERWARS_FACTION_INDEX: Record<string, number> = {
   necromancer: 0,
   trickster: 1,
-  phoenix_elf: 2,
+  paladin: 2,
   goblin: 3,
   frost: 4,
   barbaric: 5,
@@ -600,9 +600,9 @@ export const setupSWOnlineMatch = async (
     await selectFactionsViaDispatch(hostPage, guestPage, hostFactionId, guestFactionId);
   } catch {
     // dispatch 失败时 fallback 到 UI 点击
-    // 阵营索引映射：necromancer=0, trickster=1, phoenix_elf=2, goblin=3, frost=4, barbaric=5
+    // 阵营索引映射：necromancer=0, trickster=1, paladin=2, goblin=3, frost=4, barbaric=5
     const factionIndexMap: Record<string, number> = {
-      necromancer: 0, trickster: 1, phoenix_elf: 2, goblin: 3, frost: 4, barbaric: 5,
+      necromancer: 0, trickster: 1, paladin: 2, goblin: 3, frost: 4, barbaric: 5,
     };
     const hostIdx = factionIndexMap[hostFactionId] ?? 0;
     const guestIdx = factionIndexMap[guestFactionId] ?? 0;

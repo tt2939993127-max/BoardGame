@@ -11,7 +11,8 @@
 
 import type { BrowserContext, Page } from '@playwright/test';
 import { test, expect } from '../framework';
-import { cloneState } from '../helpers/summonerwars';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
+import { cloneState, setupSWOnlineMatch } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
 
 // ============================================================================
@@ -861,84 +862,64 @@ test.describe('圣堂骑士弃牌技能', () => {
 
   test('圣光箭：可以跳过弃牌直接攻击', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
+    await clearEvidenceScreenshotsForTest(testInfo);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
-
-    const hostContext = await browser.newContext({ baseURL });
-    await blockAudioRequests(hostContext);
-    await setChineseLocale(hostContext);
-    await resetMatchStorage(hostContext);
-    await disableAudio(hostContext);
-    await disableTutorial(hostContext);
-    await disableSummonerWarsAutoSkip(hostContext);
-    const hostPage = await hostContext.newPage();
-
-    if (!await ensureGameServerAvailable(hostPage)) {
-      test.skip(true, 'Game server unavailable for online tests.');
+    const match = await setupSWOnlineMatch(browser, baseURL, 'paladin', 'necromancer');
+    if (!match) {
+      test.skip(true, 'Game server unavailable or room creation failed.');
+      return;
     }
 
-    const matchId = await createSummonerWarsRoom(hostPage);
-    if (!matchId) {
-      test.skip(true, 'Room creation failed or backend unavailable.');
+    const { hostPage, guestPage, hostContext, guestContext } = match;
+
+    try {
+      console.log('[holy-arrow-skip] setup-ready');
+      const coreState = await readCoreState(hostPage);
+      const holyArrowCore = prepareHolyArrowState(coreState);
+      await applyCoreState(hostPage, holyArrowCore);
+      await closeDebugPanelIfOpen(hostPage);
+      await waitForPhase(hostPage, 'attack');
+      console.log('[holy-arrow-skip] state-applied');
+
+      const magicDisplay = hostPage.getByTestId('sw-player-magic-0');
+      const initialMagic = parseInt(await magicDisplay.innerText(), 10);
+
+      const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
+      await expect(archer).toBeVisible({ timeout: 5000 });
+      await archer.click();
+      console.log('[holy-arrow-skip] archer-clicked');
+
+      const enemyUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="1"]').first();
+      await expect(enemyUnit).toBeVisible({ timeout: 5000 });
+      await enemyUnit.click();
+      console.log('[holy-arrow-skip] enemy-clicked');
+
+      const confirmDiscardBtn = hostPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i });
+      const skipButton = hostPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i }).first();
+      await expect(confirmDiscardBtn).toBeVisible({ timeout: 8000 });
+      await expect(skipButton).toBeVisible({ timeout: 3000 });
+      console.log('[holy-arrow-skip] prompt-visible');
+
+      await expect(guestPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i })).toHaveCount(0);
+      await expect(guestPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i })).toHaveCount(0);
+      console.log('[holy-arrow-skip] guest-hidden-confirmed');
+
+      await skipButton.click();
+      console.log('[holy-arrow-skip] skip-clicked');
+      await expect(confirmDiscardBtn).toBeHidden({ timeout: 5000 });
+      await expect(skipButton).toBeHidden({ timeout: 5000 });
+      await hostPage.waitForTimeout(1200);
+      await expect(confirmDiscardBtn).toBeHidden();
+      await expect(skipButton).toBeHidden();
+      console.log('[holy-arrow-skip] prompt-cleared');
+
+      const currentMagic = parseInt(await magicDisplay.innerText(), 10);
+      expect(currentMagic).toBe(initialMagic);
+      console.log('[holy-arrow-skip] assertion-finished');
+    } finally {
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
-
-    await ensurePlayerIdInUrl(hostPage, '0');
-
-    const guestContext = await browser.newContext({ baseURL });
-    await blockAudioRequests(guestContext);
-    await setChineseLocale(guestContext);
-    await resetMatchStorage(guestContext);
-    await disableAudio(guestContext);
-    await disableTutorial(guestContext);
-    await disableSummonerWarsAutoSkip(guestContext);
-    const guestPage = await guestContext.newPage();
-    await joinMatchAsGuest(guestPage, matchId!);
-
-    await completeFactionSelection(hostPage, guestPage);
-    await waitForSummonerWarsUI(hostPage);
-    await waitForSummonerWarsUI(guestPage);
-
-    const coreState = await readCoreState(hostPage);
-    const holyArrowCore = prepareHolyArrowState(coreState);
-    await applyCoreState(hostPage, holyArrowCore);
-    await closeDebugPanelIfOpen(hostPage);
-
-    await waitForPhase(hostPage, 'attack');
-
-    const magicDisplay = hostPage.getByTestId('sw-player-magic-0');
-    const initialMagic = parseInt(await magicDisplay.innerText());
-
-    // 点击城塞弓箭手（精确匹配）
-    const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
-    await expect(archer).toBeVisible({ timeout: 5000 });
-    await archer.click();
-
-    // 点击敌方单位
-    const enemyUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="1"]').first();
-    await expect(enemyUnit).toBeVisible({ timeout: 5000 });
-    await enemyUnit.click();
-
-    // 验证被动触发横幅出现
-    const confirmDiscardBtn = hostPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i });
-    const skipButton = hostPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i });
-    await expect(confirmDiscardBtn).toBeVisible({ timeout: 8000 });
-    await expect(skipButton).toBeVisible({ timeout: 3000 });
-
-    // 点击跳过按钮（不弃牌直接攻击）
-    await skipButton.click();
-
-    // 验证横幅消失
-    await expect(confirmDiscardBtn).toBeHidden({ timeout: 5000 });
-
-    // 验证魔力不变
-    const currentMagic = parseInt(await magicDisplay.innerText());
-    expect(currentMagic).toBe(initialMagic);
-
-    // 验证攻击正常进行
-    const diceResult = hostPage.getByTestId('sw-dice-result-overlay');
-    await expect(diceResult).toBeVisible({ timeout: 8000 });
-
-    await hostContext.close();
-    await guestContext.close();
   });
 
   test('圣光箭：同名副本只允许选择真实 interaction option', async ({ browser }, testInfo) => {

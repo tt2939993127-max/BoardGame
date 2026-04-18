@@ -196,9 +196,6 @@ export function useGameEvents({
   // 技能模式
   const [abilityMode, setAbilityMode] = useState<AbilityModeState | null>(null);
 
-  // 攻击后技能模式（念力/高阶念力/读心传念）
-  const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
-
   // 阶段切换时清理技能模式
   useEffect(() => {
     // 移动后技能（ancestral_bond, spirit_bond, structure_shift, frost_axe）只在移动阶段有效
@@ -343,7 +340,6 @@ export function useGameEvents({
       // 撤回导致 EventStream 回退时，清理所有 UI 交互状态
       // 防止撤回后残留的技能按钮仍可点击（如锻造师 frost_axe 充能）
       setAbilityMode(null);
-      setAfterAttackAbilityMode(null);
       gateRef.current.reset();
     }
 
@@ -735,8 +731,6 @@ export function useGameEvents({
     isVisualBusy: gate.isVisualBusy,
     abilityMode,
     setAbilityMode,
-    afterAttackAbilityMode,
-    setAfterAttackAbilityMode,
     pendingAttackRef,
     handleCloseDiceResult,
     clearPendingAttack,

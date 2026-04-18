@@ -143,6 +143,8 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 - `mindControlMode`
 - `chantEntanglementMode`
 
+> 2026-04-18 进展：上述 Batch 1 链路已改成“系统态优先 presenter”；其中 `withdrawMode` / `telekinesisTargetMode` 仍保留本地 fallback，但当前 `simple-choice` 存在时一律以交互元数据派生为准。
+
 ### Batch 2：再拆掉事件流/技能桥接态
 - `before_attack_*`
 - `on_phase_start_illusion`
@@ -153,6 +155,8 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 - `after_move_frost_axe`
 - `ice_ram_*`
 - `fire_sacrifice_summon`
+
+> 2026-04-18 进展：`before_attack_*`、`on_phase_start_*`、`after_move_*` 已改成 `Board` 侧 `swInteraction -> abilityMode` 派生优先；`useGameEvents` 仅保留无交互 fallback，不再是这些链路的首要真相源。当前 Batch 2 主要剩余 `ice_ram_*` 与 `fire_sacrifice_summon`。
 
 ### Batch 3：最后抽公共复杂多步交互
 - `blood_summon`

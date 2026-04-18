@@ -2040,7 +2040,12 @@ describe('GameTransportServer（离座与重连）', () => {
 
             expect(resolutionSpy).toHaveBeenCalled();
             expect(match.state.sys.interaction?.current).toBeUndefined();
-            expect(feedbackReporter).not.toHaveBeenCalled();
+            expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+                matchId: 'match-watchdog-visible-interaction-action',
+                playerId: '1',
+                incidentKind: 'legal-action-recovered',
+                status: 'resolved',
+            }));
         } finally {
             resolutionSpy.mockRestore();
         }
@@ -2199,7 +2204,12 @@ describe('GameTransportServer（离座与重连）', () => {
             expect(executeSpy.mock.calls.map(([, , commandType]) => commandType)).toEqual(['SELECT_FACTION']);
             expect(match.state.core.activePlayerId).toBe('3');
             expect(match.state.sys.phase).toBe('factionSelect');
-            expect(feedbackReporter).not.toHaveBeenCalled();
+            expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+                matchId: 'match-watchdog-faction-select-legal-action',
+                playerId: '2',
+                incidentKind: 'legal-action-recovered',
+                status: 'resolved',
+            }));
         } finally {
             executeSpy.mockRestore();
             resolutionSpy.mockRestore();
@@ -2380,7 +2390,12 @@ describe('GameTransportServer（离座与重连）', () => {
             expect(resolutionSpy).toHaveBeenCalledTimes(2);
             expect(buildAiProgressMarker(match.state)).toBe('4|draw|1|||0');
             expect(match.state.sys.interaction?.current).toBeUndefined();
-            expect(feedbackReporter).not.toHaveBeenCalled();
+            expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+                matchId: 'match-watchdog-visible-interaction-chain',
+                playerId: '1',
+                incidentKind: 'legal-action-recovered',
+                status: 'resolved',
+            }));
         } finally {
             executeSpy.mockRestore();
             resolutionSpy.mockRestore();

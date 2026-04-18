@@ -56,6 +56,7 @@ import { MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN, findUnitPositionByInstanceId 
 import { CardSprite } from './ui/CardSprite';
 import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './ui/spriteHelpers';
 import { useGameEvents } from './ui/useGameEvents';
+import type { AbilityModeState, AfterAttackAbilityModeState } from './ui/useGameEvents';
 import { useCellInteraction } from './ui/useCellInteraction';
 import { StatusBanners } from './ui/StatusBanners';
 import { BoardGrid, getCellPosition } from './ui/BoardGrid';
@@ -365,8 +366,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     dyingEntities,
     damageBuffer,
     isVisualBusy,
-    abilityMode: localAbilityMode, setAbilityMode,
-    afterAttackAbilityMode, setAfterAttackAbilityMode,
+    abilityMode: localAbilityMode, setAbilityMode: setLocalAbilityMode,
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
     releaseDamageSnapshot,
@@ -393,48 +393,106 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       options: (data.options ?? []) as PromptOption[],
     };
   }, [currentInteraction, myPlayerId]);
-  const previousSwInteractionTypeRef = useRef<string | null>(null);
-  const abilityModeInteractionIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!swInteraction) {
-      const previousType = previousSwInteractionTypeRef.current;
-      if (previousType === 'after_attack_mind_transmission' || previousType === 'after_attack_telekinesis_target') {
-        setAfterAttackAbilityMode(null);
-      }
-      previousSwInteractionTypeRef.current = null;
-      return;
+  const afterAttackAbilityMode = useMemo<AfterAttackAbilityModeState | null>(() => {
+    if (!swInteraction) return null;
+    if (
+      swInteraction.type !== 'after_attack_mind_transmission'
+      && swInteraction.type !== 'after_attack_telekinesis_target'
+    ) {
+      return null;
     }
-    previousSwInteractionTypeRef.current = swInteraction.type;
-  }, [setAfterAttackAbilityMode, swInteraction]);
+    const sourceUnitId = typeof swInteraction.meta?.sourceUnitId === 'string' ? swInteraction.meta.sourceUnitId : undefined;
+    const sourcePosition = swInteraction.meta?.sourcePosition as CellCoord | undefined;
+    const abilityId = swInteraction.meta?.abilityId as AfterAttackAbilityModeState['abilityId'] | undefined;
+    if (!sourceUnitId || !sourcePosition || !abilityId) return null;
+    return {
+      abilityId,
+      sourceUnitId,
+      sourcePosition,
+    };
+  }, [swInteraction]);
+  const [interactionAbilityDraft, setInteractionAbilityDraft] = useState<{
+    interactionId: string;
+    selectedCardIds: string[];
+  } | null>(null);
+  const noopSetAfterAttackAbilityMode = useCallback((_mode: AfterAttackAbilityModeState | null) => {}, []);
 
-  useEffect(() => {
-    if (!swInteraction) {
-      if (abilityModeInteractionIdRef.current && localAbilityMode?.context === 'beforeAttack') {
-        setAbilityMode(null);
-      }
-      abilityModeInteractionIdRef.current = null;
-      return;
-    }
-
-    if (abilityModeInteractionIdRef.current === swInteraction.id) return;
-
+  const systemAbilityMode = useMemo<AbilityModeState | null>(() => {
+    if (!swInteraction) return null;
     const meta = swInteraction.meta as {
       sourceUnitId?: string;
+      sourcePosition?: CellCoord;
       targetPosition?: CellCoord;
     };
-    if (!meta.sourceUnitId || !meta.targetPosition) return;
+    if (!meta.sourceUnitId) return null;
+
+    if (swInteraction.type === 'on_phase_start_illusion') {
+      return {
+        abilityId: 'illusion',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'on_phase_start_blood_rune') {
+      return {
+        abilityId: 'blood_rune',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'after_move_spirit_bond') {
+      return {
+        abilityId: 'spirit_bond',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'after_move_ancestral_bond') {
+      return {
+        abilityId: 'ancestral_bond',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'after_move_structure_shift_target') {
+      return {
+        abilityId: 'structure_shift',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'after_move_structure_shift_direction') {
+      return {
+        abilityId: 'structure_shift',
+        step: 'selectNewPosition',
+        sourceUnitId: meta.sourceUnitId,
+        targetPosition: meta.targetPosition,
+      };
+    }
+
+    if (swInteraction.type === 'after_move_frost_axe') {
+      return {
+        abilityId: 'frost_axe',
+        step: 'selectUnit',
+        sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (!meta.targetPosition) return null;
 
     if (swInteraction.type === 'before_attack_life_drain') {
-      abilityModeInteractionIdRef.current = swInteraction.id;
-      setAbilityMode({
+      return {
         abilityId: 'life_drain',
         step: 'selectUnit',
         sourceUnitId: meta.sourceUnitId,
         context: 'beforeAttack',
         pendingAttackTarget: meta.targetPosition,
-      });
-      return;
+      };
     }
 
     if (swInteraction.type === 'before_attack_holy_arrow' || swInteraction.type === 'before_attack_healing') {
@@ -445,18 +503,39 @@ export const SummonerWarsBoard: React.FC<Props> = ({
           return value?.action === expectedAction && typeof value.cardId === 'string' ? value.cardId : null;
         })
         .filter((cardId): cardId is string => !!cardId);
-      abilityModeInteractionIdRef.current = swInteraction.id;
-      setAbilityMode({
+      const selectedCardIds = interactionAbilityDraft?.interactionId === swInteraction.id
+        ? interactionAbilityDraft.selectedCardIds.filter((cardId) => selectableCardIds.includes(cardId))
+        : [];
+      return {
         abilityId: swInteraction.type === 'before_attack_holy_arrow' ? 'holy_arrow' : 'healing',
         step: 'selectCards',
         sourceUnitId: meta.sourceUnitId,
         context: 'beforeAttack',
-        selectedCardIds: [],
+        selectedCardIds,
         selectableCardIds,
         pendingAttackTarget: meta.targetPosition,
-      });
+      };
     }
-  }, [localAbilityMode?.context, setAbilityMode, swInteraction]);
+    return null;
+  }, [interactionAbilityDraft, swInteraction]);
+
+  const setAbilityMode = useCallback((mode: AbilityModeState | null) => {
+    if (systemAbilityMode?.context === 'beforeAttack') {
+      if (!mode) {
+        setInteractionAbilityDraft(null);
+        return;
+      }
+      if (mode.step === 'selectCards') {
+        if (!swInteraction) return;
+        setInteractionAbilityDraft({
+          interactionId: swInteraction.id,
+          selectedCardIds: mode.selectedCardIds ?? [],
+        });
+      }
+      return;
+    }
+    setLocalAbilityMode(mode);
+  }, [setLocalAbilityMode, swInteraction, systemAbilityMode?.context]);
 
   const findInteractionOptionId = useCallback(
     (matcher: (option: PromptOption) => boolean): string | null => {
@@ -535,7 +614,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     };
   }, [swInteraction]);
 
-  const abilityMode = localAbilityMode;
+  const abilityMode = systemAbilityMode ?? localAbilityMode;
 
   const systemIceShardsMode = useMemo(() => {
     if (!swInteraction || swInteraction.type !== 'ice_shards') return null;
@@ -571,7 +650,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction: currentInteraction,
     abilityMode, setAbilityMode, soulTransferMode,
     mindCaptureMode, setMindCaptureMode: noopSetMindCaptureMode,
-    afterAttackAbilityMode, setAfterAttackAbilityMode,
+    afterAttackAbilityMode, setAfterAttackAbilityMode: noopSetAfterAttackAbilityMode,
     rapidFireMode: effectiveRapidFireMode,
     grabFollowMode: null,
     setGrabFollowMode: noopSetGrabFollowMode,
@@ -921,8 +1000,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     ) {
       cancelSwInteraction(true);
     }
-    setAfterAttackAbilityMode(null);
-  }, [cancelSwInteraction, setAfterAttackAbilityMode, swInteraction]);
+  }, [cancelSwInteraction, swInteraction]);
 
   // 连续射击确认/取消
   const handleConfirmRapidFire = useCallback(() => {

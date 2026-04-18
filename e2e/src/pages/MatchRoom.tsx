@@ -83,6 +83,7 @@ import {
 import {
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
+    resolveOnlineAiDecisionView,
     type AiSeatController,
 } from '../engine/ai';
 
@@ -100,70 +101,6 @@ type OnlineAiDebugWindow = Window & {
         clearAllSeatLatestStateOverrides: () => void;
     };
 };
-
-type PhaseCarrier = {
-    phase?: unknown;
-};
-
-function resolveStatePhase(state: MatchState<unknown> | null | undefined): string | null {
-    if (!state || typeof state !== 'object') return null;
-    const sysPhase = (state.sys as PhaseCarrier | undefined)?.phase;
-    if (typeof sysPhase === 'string' && sysPhase.length > 0) return sysPhase;
-    const corePhase = (state.core as PhaseCarrier | undefined)?.phase;
-    if (typeof corePhase === 'string' && corePhase.length > 0) return corePhase;
-    return null;
-}
-
-function resolveStateTurnNumber(state: MatchState<unknown> | null | undefined): number | null {
-    if (!state || typeof state !== 'object') return null;
-    const sysTurnNumber = (state.sys as { turnNumber?: unknown } | undefined)?.turnNumber;
-    if (typeof sysTurnNumber === 'number') return sysTurnNumber;
-    const coreTurnNumber = (state.core as { turnNumber?: unknown } | undefined)?.turnNumber;
-    if (typeof coreTurnNumber === 'number') return coreTurnNumber;
-    return null;
-}
-
-function resolveCurrentPlayerIdFromState(state: MatchState<unknown> | null | undefined): string | null {
-    const core = state?.core as {
-        activePlayerId?: unknown;
-        currentPlayer?: unknown;
-    } | undefined;
-    if (!core) return null;
-    if (typeof core.activePlayerId === 'string') return core.activePlayerId;
-    if (typeof core.currentPlayer === 'string') return core.currentPlayer;
-    return null;
-}
-
-function isSeatStateFreshEnoughForAiDecision(args: {
-    sharedState: MatchState<unknown> | null | undefined;
-    seatState: MatchState<unknown> | null | undefined;
-    playerId: string;
-}): boolean {
-    const { sharedState, seatState, playerId } = args;
-    if (!sharedState || !seatState) {
-        return false;
-    }
-
-    const sharedCurrentPlayerId = resolveCurrentPlayerIdFromState(sharedState);
-    const seatCurrentPlayerId = resolveCurrentPlayerIdFromState(seatState);
-    if (sharedCurrentPlayerId !== playerId || seatCurrentPlayerId !== playerId) {
-        return false;
-    }
-
-    const sharedPhase = resolveStatePhase(sharedState);
-    const seatPhase = resolveStatePhase(seatState);
-    if (!sharedPhase || !seatPhase || sharedPhase !== seatPhase) {
-        return false;
-    }
-
-    const sharedTurnNumber = resolveStateTurnNumber(sharedState);
-    const seatTurnNumber = resolveStateTurnNumber(seatState);
-    if (sharedTurnNumber !== null && seatTurnNumber !== null && sharedTurnNumber !== seatTurnNumber) {
-        return false;
-    }
-
-    return true;
-}
 
 /**
  * 教程 dispatch 桥接组件
@@ -403,25 +340,27 @@ const OnlineAiSeatBridge = ({
                     const rawSeatState = overriddenSeatState !== undefined
                         ? overriddenSeatState
                         : clientsRef.current[playerId]?.latestState;
-                    if (!rawSeatState || typeof rawSeatState !== 'object') {
-                        return null;
-                    }
-                    const seatState = rawSeatState as MatchState<unknown>;
-                    const isFreshEnough = isSeatStateFreshEnoughForAiDecision({
-                        sharedState: state as MatchState<unknown>,
-                        seatState,
+                    const sharedState = state as MatchState<unknown>;
+                    const privateOverlay = rawSeatState && typeof rawSeatState === 'object'
+                        ? rawSeatState as MatchState<unknown>
+                        : null;
+                    const decisionView = resolveOnlineAiDecisionView({
+                        runtime: getGameImplementation(engineConfig.gameId).ai,
+                        sharedState,
+                        privateOverlay,
                         playerId,
                     });
-                    if (!isFreshEnough) {
-                        const sharedState = state as MatchState<unknown>;
+                    if (!decisionView.canDecide) {
                         const diagnosticKey = [
                             playerId,
-                            resolveStateTurnNumber(sharedState) ?? 'no-shared-turn',
-                            resolveStatePhase(sharedState) ?? 'no-shared-phase',
-                            resolveCurrentPlayerIdFromState(sharedState) ?? 'no-shared-player',
-                            resolveStateTurnNumber(seatState) ?? 'no-seat-turn',
-                            resolveStatePhase(seatState) ?? 'no-seat-phase',
-                            resolveCurrentPlayerIdFromState(seatState) ?? 'no-seat-player',
+                            decisionView.visibility,
+                            decisionView.blockedReason ?? 'no-blocked-reason',
+                            decisionView.diagnostics.sharedTurnNumber ?? 'no-shared-turn',
+                            decisionView.diagnostics.sharedPhase ?? 'no-shared-phase',
+                            decisionView.diagnostics.sharedCurrentPlayerId ?? 'no-shared-player',
+                            decisionView.diagnostics.privateTurnNumber ?? 'no-seat-turn',
+                            decisionView.diagnostics.privatePhase ?? 'no-seat-phase',
+                            decisionView.diagnostics.privateCurrentPlayerId ?? 'no-seat-player',
                         ].join(':');
                         if (staleSeatDecisionKeyRef.current !== diagnosticKey) {
                             staleSeatDecisionKeyRef.current = diagnosticKey;
@@ -432,30 +371,34 @@ const OnlineAiSeatBridge = ({
                                 matchId,
                                 payload: {
                                     playerId,
-                                    sharedTurnNumber: resolveStateTurnNumber(sharedState),
-                                    sharedPhase: resolveStatePhase(sharedState),
-                                    sharedCurrentPlayerId: resolveCurrentPlayerIdFromState(sharedState),
-                                    seatTurnNumber: resolveStateTurnNumber(seatState),
-                                    seatPhase: resolveStatePhase(seatState),
-                                    seatCurrentPlayerId: resolveCurrentPlayerIdFromState(seatState),
+                                    visibility: decisionView.visibility,
+                                    blockedReason: decisionView.blockedReason,
+                                    sharedTurnNumber: decisionView.diagnostics.sharedTurnNumber,
+                                    sharedPhase: decisionView.diagnostics.sharedPhase,
+                                    sharedCurrentPlayerId: decisionView.diagnostics.sharedCurrentPlayerId,
+                                    seatTurnNumber: decisionView.diagnostics.privateTurnNumber,
+                                    seatPhase: decisionView.diagnostics.privatePhase,
+                                    seatCurrentPlayerId: decisionView.diagnostics.privateCurrentPlayerId,
                                 },
                             });
                             console.warn('[OnlineAiSeatBridge] stale seat state blocked AI decision', {
                                 matchId,
                                 gameId: engineConfig.gameId,
                                 playerId,
-                                sharedTurnNumber: resolveStateTurnNumber(sharedState),
-                                sharedPhase: resolveStatePhase(sharedState),
-                                sharedCurrentPlayerId: resolveCurrentPlayerIdFromState(sharedState),
-                                seatTurnNumber: resolveStateTurnNumber(seatState),
-                                seatPhase: resolveStatePhase(seatState),
-                                seatCurrentPlayerId: resolveCurrentPlayerIdFromState(seatState),
+                                visibility: decisionView.visibility,
+                                blockedReason: decisionView.blockedReason,
+                                sharedTurnNumber: decisionView.diagnostics.sharedTurnNumber,
+                                sharedPhase: decisionView.diagnostics.sharedPhase,
+                                sharedCurrentPlayerId: decisionView.diagnostics.sharedCurrentPlayerId,
+                                seatTurnNumber: decisionView.diagnostics.privateTurnNumber,
+                                seatPhase: decisionView.diagnostics.privatePhase,
+                                seatCurrentPlayerId: decisionView.diagnostics.privateCurrentPlayerId,
                             });
                         }
-                        return null;
+                        return decisionView;
                     }
                     staleSeatDecisionKeyRef.current = null;
-                    return seatState;
+                    return decisionView;
                 },
             });
 

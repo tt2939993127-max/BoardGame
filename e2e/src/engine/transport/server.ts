@@ -24,7 +24,7 @@ import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import * as aiModule from '../ai';
-import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds } from '../ai';
+import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds, getGameAiRuntime, resolveOnlineAiDecisionView } from '../ai';
 import { extractAiInteractionSnapshot, extractAiResponseWindowSnapshot } from '../ai/snapshots';
 import type { AiInteractionSnapshot, AiInteractionOptionSnapshot } from '../ai/types';
 import {
@@ -1816,7 +1816,12 @@ export class GameTransportServer {
             seatControllers: {
                 [candidate.playerId]: seatController,
             },
-            visibleStateResolver: (playerId) => this.applyPlayerView(match, playerId) as MatchState<unknown>,
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                runtime: getGameAiRuntime(match.gameId) ?? null,
+                sharedState: match.state,
+                privateOverlay: this.applyPlayerView(match, playerId) as MatchState<unknown>,
+                playerId,
+            }),
         });
 
         if (!resolution || resolution.playerId !== candidate.playerId || resolution.action.commands.length === 0) {
@@ -2488,7 +2493,7 @@ export class GameTransportServer {
             
             // SmashUp: 基地计分
             if (eventType === 'su:base_scored') {
-                const payload = (event as any).payload;
+                const payload = ((event as GameEvent).payload ?? {}) as Record<string, unknown>;
                 logger.info('game_event', {
                     matchID: match.matchID,
                     gameId: engineConfig.gameId,
@@ -2501,7 +2506,7 @@ export class GameTransportServer {
             
             // SmashUp: VP 授予
             if (eventType === 'su:vp_awarded') {
-                const payload = (event as any).payload;
+                const payload = ((event as GameEvent).payload ?? {}) as Record<string, unknown>;
                 logger.info('game_event', {
                     matchID: match.matchID,
                     gameId: engineConfig.gameId,

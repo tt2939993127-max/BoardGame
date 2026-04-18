@@ -82,25 +82,25 @@ export function useEventCardModes({
   const showToast = useToast();
 
   // ---------- 状态 ----------
-  const [bloodSummonMode, setBloodSummonMode] = useState<BloodSummonModeState | null>(null);
-  const [annihilateMode, setAnnihilateMode] = useState<AnnihilateModeState | null>(null);
-  const [stunMode, setStunMode] = useState<StunModeState | null>(null);
-  const [sneakMode, setSneakMode] = useState<SneakModeState | null>(null);
-  const [glacialShiftMode, setGlacialShiftMode] = useState<GlacialShiftModeState | null>(null);
-  const [withdrawMode, setWithdrawMode] = useState<WithdrawModeState | null>(null);
-  const [telekinesisTargetMode, setTelekinesisTargetMode] = useState<TelekinesisTargetModeState | null>(null);
+  const [localBloodSummonMode, setBloodSummonMode] = useState<BloodSummonModeState | null>(null);
+  const [localAnnihilateMode, setAnnihilateMode] = useState<AnnihilateModeState | null>(null);
+  const [localSneakMode, setSneakMode] = useState<SneakModeState | null>(null);
+  const [localGlacialShiftMode, setGlacialShiftMode] = useState<GlacialShiftModeState | null>(null);
+  const [localWithdrawMode, setLocalWithdrawMode] = useState<WithdrawModeState | null>(null);
+  const [localTelekinesisTargetMode, setLocalTelekinesisTargetMode] = useState<TelekinesisTargetModeState | null>(null);
   const [selectedMultiTargetOptionIds, setSelectedMultiTargetOptionIds] = useState<string[]>([]);
+  const [selectedAnnihilateOptionIds, setSelectedAnnihilateOptionIds] = useState<string[]>([]);
 
   // ---------- 派生 ----------
   const clearAllEventModes = useCallback(() => {
     setBloodSummonMode(null);
     setAnnihilateMode(null);
-    setStunMode(null);
     setSneakMode(null);
     setGlacialShiftMode(null);
-    setWithdrawMode(null);
-    setTelekinesisTargetMode(null);
+    setLocalWithdrawMode(null);
+    setLocalTelekinesisTargetMode(null);
     setSelectedMultiTargetOptionIds([]);
+    setSelectedAnnihilateOptionIds([]);
     setSelectedHandCardId(null);
   }, [setSelectedHandCardId]);
 
@@ -140,6 +140,11 @@ export function useEventCardModes({
   const selectedMultiTargetOptionIdSet = useMemo(
     () => new Set(selectedMultiTargetOptionIds),
     [selectedMultiTargetOptionIds],
+  );
+
+  const selectedAnnihilateOptionIdSet = useMemo(
+    () => new Set(selectedAnnihilateOptionIds),
+    [selectedAnnihilateOptionIds],
   );
 
   const eventTargetMode = useMemo<EventTargetModeState | null>(() => {
@@ -240,6 +245,241 @@ export function useEventCardModes({
     }
   }, []);
 
+  const bloodSummonMode = useMemo<BloodSummonModeState | null>(() => {
+    if (!swInteraction) return localBloodSummonMode;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : undefined;
+    switch (swInteraction.type) {
+      case 'blood_summon_select_target':
+        return {
+          step: 'selectTarget',
+          cardId,
+          completedCount: (swInteraction.meta?.completedCount as number | undefined) ?? 0,
+        };
+      case 'blood_summon_select_card':
+        return {
+          step: 'selectCard',
+          cardId,
+          targetPosition: swInteraction.meta?.targetPosition as CellCoord | undefined,
+          completedCount: (swInteraction.meta?.completedCount as number | undefined) ?? 0,
+        };
+      case 'blood_summon_select_position':
+        return {
+          step: 'selectPosition',
+          cardId,
+          targetPosition: swInteraction.meta?.targetPosition as CellCoord | undefined,
+          summonCardId: swInteraction.meta?.summonCardId as string | undefined,
+          completedCount: (swInteraction.meta?.completedCount as number | undefined) ?? 0,
+        };
+      case 'blood_summon_confirm':
+        return {
+          step: 'confirm',
+          cardId,
+          completedCount: (swInteraction.meta?.completedCount as number | undefined) ?? 1,
+        };
+      default:
+        return localBloodSummonMode;
+    }
+  }, [localBloodSummonMode, swInteraction]);
+
+  const annihilateOptions = useMemo(
+    () => extractTargetPositionOptions('annihilate_select_targets', 'annihilate_target'),
+    [extractTargetPositionOptions],
+  );
+
+  const annihilateMode = useMemo<AnnihilateModeState | null>(() => {
+    if (!swInteraction) return localAnnihilateMode;
+    if (swInteraction.type === 'annihilate_select_targets') {
+      return {
+        step: 'selectTargets',
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        selectedTargets: annihilateOptions
+          .filter((option) => selectedAnnihilateOptionIdSet.has(option.optionId))
+          .map((option) => option.position),
+        currentTargetIndex: 0,
+        damageTargets: [],
+      };
+    }
+    if (swInteraction.type === 'annihilate_select_damage') {
+      return {
+        step: 'selectDamageTarget',
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        selectedTargets: (swInteraction.meta?.selectedTargets as CellCoord[] | undefined) ?? [],
+        currentTargetIndex: (swInteraction.meta?.currentTargetIndex as number | undefined) ?? 0,
+        damageTargets: (swInteraction.meta?.damageTargets as (CellCoord | null)[] | undefined) ?? [],
+      };
+    }
+    return localAnnihilateMode;
+  }, [annihilateOptions, localAnnihilateMode, selectedAnnihilateOptionIdSet, swInteraction]);
+
+  const stunMode = useMemo<StunModeState | null>(() => {
+    if (!swInteraction) return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '';
+    if (swInteraction.type === 'stun_select_target') {
+      const validTargets = swInteraction.options
+        .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+        .filter((pos): pos is CellCoord => !!pos);
+      return { step: 'selectTarget', cardId, validTargets };
+    }
+    if (swInteraction.type === 'stun_select_destination') {
+      const targetPosition = swInteraction.meta?.targetPosition as CellCoord | undefined;
+      const destinations = swInteraction.options
+        .map((option) => {
+          const value = option.value as {
+            moveRow?: number;
+            moveCol?: number;
+            distance?: number;
+            targetPosition?: CellCoord;
+          } | undefined;
+          const position = value?.targetPosition;
+          if (!position) return null;
+          return {
+            position,
+            moveRow: value.moveRow ?? 0,
+            moveCol: value.moveCol ?? 0,
+            distance: value.distance ?? 1,
+          };
+        })
+        .filter((item): item is { position: CellCoord; moveRow: number; moveCol: number; distance: number } => !!item);
+      return {
+        step: 'selectDestination',
+        cardId,
+        validTargets: [],
+        targetPosition,
+        destinations,
+      };
+    }
+    return null;
+  }, [swInteraction]);
+
+  const setStunMode = useCallback((mode: StunModeState | null) => {
+    if (!mode) {
+      setSelectedHandCardId(null);
+    }
+  }, [setSelectedHandCardId]);
+
+  const systemWithdrawMode = useMemo<WithdrawModeState | null>(() => {
+    if (!swInteraction) return null;
+    const sourceUnitId = typeof swInteraction.meta?.sourceUnitId === 'string' ? swInteraction.meta.sourceUnitId : undefined;
+    if (!sourceUnitId) return null;
+    if (swInteraction.type === 'after_attack_withdraw_cost') {
+      return {
+        sourceUnitId,
+        step: 'selectCost',
+      };
+    }
+    if (swInteraction.type === 'after_attack_withdraw_position') {
+      const costType = swInteraction.meta?.costType as WithdrawModeState['costType'] | undefined;
+      if (!costType) return null;
+      return {
+        sourceUnitId,
+        step: 'selectPosition',
+        costType,
+      };
+    }
+    return null;
+  }, [swInteraction]);
+
+  const withdrawMode = systemWithdrawMode ?? localWithdrawMode;
+
+  const setWithdrawMode = useCallback((mode: WithdrawModeState | null) => {
+    setLocalWithdrawMode(mode);
+    if (!mode) {
+      setSelectedHandCardId(null);
+    }
+  }, [setSelectedHandCardId]);
+
+  const systemTelekinesisTargetMode = useMemo<TelekinesisTargetModeState | null>(() => {
+    if (!swInteraction) return null;
+    const isSystemDirectionMode = swInteraction.type === 'after_attack_telekinesis_direction'
+      || (swInteraction.type === 'activated_ability_target' && swInteraction.meta?.step === 'selectDirection');
+    if (!isSystemDirectionMode) return null;
+    const sourceUnitId = typeof swInteraction.meta?.sourceUnitId === 'string' ? swInteraction.meta.sourceUnitId : undefined;
+    const sourcePosition = swInteraction.meta?.sourcePosition as CellCoord | undefined;
+    const targetPosition = swInteraction.meta?.targetPosition as CellCoord | undefined;
+    const abilityId = swInteraction.meta?.abilityId as TelekinesisTargetModeState['abilityId'] | undefined;
+    if (!sourceUnitId || !targetPosition || !abilityId) return null;
+    const destinations = swInteraction.options
+      .map((option) => {
+        const value = option.value as {
+          targetPosition?: CellCoord;
+          moveRow?: number;
+          moveCol?: number;
+        } | undefined;
+        const position = value?.targetPosition;
+        if (!position || typeof value?.moveRow !== 'number' || typeof value?.moveCol !== 'number') return null;
+        return {
+          position,
+          moveRow: value.moveRow,
+          moveCol: value.moveCol,
+        };
+      })
+      .filter((item): item is { position: CellCoord; moveRow: number; moveCol: number } => !!item);
+    return {
+      abilityId,
+      sourceUnitId,
+      sourcePosition,
+      targetPosition,
+      destinations,
+    };
+  }, [swInteraction]);
+
+  const telekinesisTargetMode = systemTelekinesisTargetMode ?? localTelekinesisTargetMode;
+
+  const setTelekinesisTargetMode = useCallback((mode: TelekinesisTargetModeState | null) => {
+    setLocalTelekinesisTargetMode(mode);
+  }, []);
+
+  const sneakMode = useMemo<SneakModeState | null>(() => {
+    if (!swInteraction) return localSneakMode;
+    if (swInteraction.type === 'sneak_select_unit') {
+      const validUnits = swInteraction.options
+        .filter((option) => option.id !== 'finish')
+        .map((option) => (option.value as { position?: CellCoord } | undefined)?.position)
+        .filter((pos): pos is CellCoord => !!pos);
+      return {
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        step: 'selectUnit',
+        validUnits,
+        recorded: (swInteraction.meta?.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [],
+      };
+    }
+    if (swInteraction.type === 'sneak_select_direction') {
+      return {
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        step: 'selectDirection',
+        currentUnit: swInteraction.meta?.currentUnit as CellCoord | undefined,
+        recorded: (swInteraction.meta?.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [],
+      };
+    }
+    return localSneakMode;
+  }, [localSneakMode, swInteraction]);
+
+  const glacialShiftMode = useMemo<GlacialShiftModeState | null>(() => {
+    if (!swInteraction) return localGlacialShiftMode;
+    if (swInteraction.type === 'glacial_shift_select_building') {
+      const validBuildings = swInteraction.options
+        .filter((option) => option.id !== 'finish')
+        .map((option) => (option.value as { position?: CellCoord } | undefined)?.position)
+        .filter((pos): pos is CellCoord => !!pos);
+      return {
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        step: 'selectBuilding',
+        validBuildings,
+        recorded: (swInteraction.meta?.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [],
+      };
+    }
+    if (swInteraction.type === 'glacial_shift_select_destination') {
+      return {
+        cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
+        step: 'selectDestination',
+        currentBuilding: swInteraction.meta?.currentBuilding as CellCoord | undefined,
+        validBuildings: [],
+        recorded: (swInteraction.meta?.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [],
+      };
+    }
+    return localGlacialShiftMode;
+  }, [localGlacialShiftMode, swInteraction]);
+
   const hasActiveEventMode = !!(eventTargetMode || bloodSummonMode || annihilateMode
     || funeralPyreMode || mindControlMode || stunMode || hypnoticLureMode || chantEntanglementMode
     || sneakMode || glacialShiftMode || withdrawMode || telekinesisTargetMode);
@@ -271,78 +511,10 @@ export function useEventCardModes({
 
     switch (swInteraction.type) {
       case 'after_attack_mind_transmission':
-      case 'after_attack_telekinesis_target': {
-        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
-        const sourcePosition = meta.sourcePosition as CellCoord | undefined;
-        const abilityId = meta.abilityId as AfterAttackAbilityModeState['abilityId'] | undefined;
-        if (sourceUnitId && sourcePosition && abilityId) {
-          queueMicrotask(() => {
-            setAfterAttackAbilityMode({
-              abilityId,
-              sourceUnitId,
-              sourcePosition,
-            });
-          });
-        }
-        break;
-      }
-      case 'after_attack_telekinesis_direction': {
-        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
-        const sourcePosition = meta.sourcePosition as CellCoord | undefined;
-        const targetPosition = meta.targetPosition as CellCoord | undefined;
-        const abilityId = meta.abilityId as TelekinesisTargetModeState['abilityId'] | undefined;
-        if (!sourceUnitId || !targetPosition || !abilityId) break;
-        const destinations = swInteraction.options
-          .map((option) => {
-            const value = option.value as {
-              targetPosition?: CellCoord;
-              moveRow?: number;
-              moveCol?: number;
-            } | undefined;
-            const pos = value?.targetPosition;
-            if (!pos || typeof value?.moveRow !== 'number' || typeof value?.moveCol !== 'number') return null;
-            return {
-              position: pos,
-              moveRow: value.moveRow,
-              moveCol: value.moveCol,
-            };
-          })
-          .filter((item): item is { position: CellCoord; moveRow: number; moveCol: number } => !!item);
-        queueMicrotask(() => {
-          setTelekinesisTargetMode({
-            abilityId,
-            sourceUnitId,
-            sourcePosition,
-            targetPosition,
-            destinations,
-          });
-        });
-        break;
-      }
-      case 'after_attack_withdraw_cost': {
-        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
-        if (sourceUnitId) {
-          queueMicrotask(() => {
-            setWithdrawMode({
-              sourceUnitId,
-              step: 'selectCost',
-            });
-          });
-        }
-        break;
-      }
+      case 'after_attack_telekinesis_target':
+      case 'after_attack_telekinesis_direction':
+      case 'after_attack_withdraw_cost':
       case 'after_attack_withdraw_position': {
-        const sourceUnitId = typeof meta.sourceUnitId === 'string' ? meta.sourceUnitId : undefined;
-        const costType = meta.costType as WithdrawModeState['costType'] | undefined;
-        if (sourceUnitId && costType) {
-          queueMicrotask(() => {
-            setWithdrawMode({
-              sourceUnitId,
-              step: 'selectPosition',
-              costType,
-            });
-          });
-        }
         break;
       }
       case 'event_target': {
@@ -351,99 +523,19 @@ export function useEventCardModes({
       case 'funeral_pyre': {
         break;
       }
-      case 'blood_summon_select_target': {
-        setBloodSummonMode({ step: 'selectTarget', cardId, completedCount: (meta.completedCount as number | undefined) ?? 0 });
-        break;
-      }
-      case 'blood_summon_select_card': {
-        const targetPosition = meta.targetPosition as CellCoord | undefined;
-        setBloodSummonMode({
-          step: 'selectCard',
-          cardId,
-          targetPosition,
-          completedCount: (meta.completedCount as number | undefined) ?? 0,
-        });
-        break;
-      }
-      case 'blood_summon_select_position': {
-        const targetPosition = meta.targetPosition as CellCoord | undefined;
-        const summonCardId = meta.summonCardId as string | undefined;
-        setBloodSummonMode({
-          step: 'selectPosition',
-          cardId,
-          targetPosition,
-          summonCardId,
-          completedCount: (meta.completedCount as number | undefined) ?? 0,
-        });
-        break;
-      }
-      case 'blood_summon_confirm': {
-        setBloodSummonMode({
-          step: 'confirm',
-          cardId,
-          completedCount: (meta.completedCount as number | undefined) ?? 1,
-        });
-        break;
-      }
-      case 'annihilate_select_targets': {
-        setAnnihilateMode({
-          step: 'selectTargets',
-          cardId: cardId ?? '',
-          selectedTargets: [],
-          currentTargetIndex: 0,
-          damageTargets: [],
-        });
-        break;
-      }
+      case 'blood_summon_select_target':
+      case 'blood_summon_select_card':
+      case 'blood_summon_select_position':
+      case 'blood_summon_confirm':
+      case 'annihilate_select_targets':
       case 'annihilate_select_damage': {
-        const selectedTargets = (meta.selectedTargets as CellCoord[] | undefined) ?? [];
-        const currentTargetIndex = (meta.currentTargetIndex as number | undefined) ?? 0;
-        const damageTargets = (meta.damageTargets as (CellCoord | null)[] | undefined) ?? [];
-        setAnnihilateMode({
-          step: 'selectDamageTarget',
-          cardId: cardId ?? '',
-          selectedTargets,
-          currentTargetIndex,
-          damageTargets,
-        });
         break;
       }
       case 'mind_control_select_targets': {
         break;
       }
-      case 'stun_select_target': {
-        const validTargets = swInteraction.options
-          .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
-          .filter((pos): pos is CellCoord => !!pos);
-        setStunMode({ step: 'selectTarget', cardId: cardId ?? '', validTargets });
-        break;
-      }
+      case 'stun_select_target':
       case 'stun_select_destination': {
-        const targetPosition = meta.targetPosition as CellCoord | undefined;
-        const destinations = swInteraction.options
-          .map((option) => {
-            const value = option.value as {
-              moveRow?: number;
-              moveCol?: number;
-              distance?: number;
-              targetPosition?: CellCoord;
-            };
-            const pos = value.targetPosition;
-            if (!pos) return null;
-            return {
-              position: pos,
-              moveRow: value.moveRow ?? 0,
-              moveCol: value.moveCol ?? 0,
-              distance: value.distance ?? 1,
-            };
-          })
-          .filter((item): item is { position: CellCoord; moveRow: number; moveCol: number; distance: number } => !!item);
-        setStunMode({
-          step: 'selectDestination',
-          cardId: cardId ?? '',
-          targetPosition,
-          destinations,
-        });
         break;
       }
       case 'hypnotic_lure_select_target': {
@@ -452,54 +544,10 @@ export function useEventCardModes({
       case 'chant_entanglement_select_targets': {
         break;
       }
-      case 'sneak_select_unit': {
-        const validUnits = swInteraction.options
-          .filter((option) => option.id !== 'finish')
-          .map((option) => (option.value as { position?: CellCoord } | undefined)?.position)
-          .filter((pos): pos is CellCoord => !!pos);
-        const recorded = (meta.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [];
-        setSneakMode({
-          cardId: cardId ?? '',
-          step: 'selectUnit',
-          validUnits,
-          recorded,
-        });
-        break;
-      }
-      case 'sneak_select_direction': {
-        const recorded = (meta.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [];
-        const currentUnit = meta.currentUnit as CellCoord | undefined;
-        setSneakMode({
-          cardId: cardId ?? '',
-          step: 'selectDirection',
-          currentUnit,
-          recorded,
-        });
-        break;
-      }
-      case 'glacial_shift_select_building': {
-        const validBuildings = swInteraction.options
-          .filter((option) => option.id !== 'finish')
-          .map((option) => (option.value as { position?: CellCoord } | undefined)?.position)
-          .filter((pos): pos is CellCoord => !!pos);
-        const recorded = (meta.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [];
-        setGlacialShiftMode({
-          cardId: cardId ?? '',
-          step: 'selectBuilding',
-          validBuildings,
-          recorded,
-        });
-        break;
-      }
+      case 'sneak_select_unit':
+      case 'sneak_select_direction':
+      case 'glacial_shift_select_building':
       case 'glacial_shift_select_destination': {
-        const recorded = (meta.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [];
-        const currentBuilding = meta.currentBuilding as CellCoord | undefined;
-        setGlacialShiftMode({
-          cardId: cardId ?? '',
-          step: 'selectDestination',
-          currentBuilding,
-          recorded,
-        });
         break;
       }
       default:
@@ -763,20 +811,13 @@ export function useEventCardModes({
     // 除灭多步骤模式
     if (annihilateMode) {
       if (annihilateMode.step === 'selectTargets') {
-        const isValid = annihilateHighlights.some(p => p.row === gameRow && p.col === gameCol);
-        if (isValid) {
-          const alreadySelected = annihilateMode.selectedTargets.some(p => p.row === gameRow && p.col === gameCol);
-          if (alreadySelected) {
-            setAnnihilateMode({
-              ...annihilateMode,
-              selectedTargets: annihilateMode.selectedTargets.filter(p => !(p.row === gameRow && p.col === gameCol)),
-            });
-          } else {
-            setAnnihilateMode({
-              ...annihilateMode,
-              selectedTargets: [...annihilateMode.selectedTargets, { row: gameRow, col: gameCol }],
-            });
-          }
+        const option = annihilateOptions.find((item) => item.position.row === gameRow && item.position.col === gameCol);
+        if (option) {
+          setSelectedAnnihilateOptionIds((current) => (
+            current.includes(option.optionId)
+              ? current.filter((optionId) => optionId !== option.optionId)
+              : [...current, option.optionId]
+          ));
         }
       } else if (annihilateMode.step === 'selectDamageTarget') {
         const isValid = annihilateHighlights.some(p => p.row === gameRow && p.col === gameCol);
@@ -916,10 +957,11 @@ export function useEventCardModes({
     withdrawMode, withdrawHighlights,
     glacialShiftMode, glacialShiftHighlights,
     sneakMode, sneakHighlights,
-    chantEntanglementMode, entanglementHighlights,
+    chantEntanglementMode,
     hypnoticLureMode, eventTargetMode,
+    chantEntanglementOptions, mindControlOptions, annihilateOptions,
     findInteractionOptionId, respondInteractionOption,
-    respondPositionOption, swInteraction]);
+    respondPositionOption, setTelekinesisTargetMode, setWithdrawMode, swInteraction]);
 
   // ---------- 打出事件卡 ----------
 

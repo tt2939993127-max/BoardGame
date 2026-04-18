@@ -35,7 +35,7 @@ jobs:
     if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip android release]')
     runs-on: ubuntu-latest
     env:
-      AUTO_BUMP_VERSION: ${{ vars.ANDROID_AUTO_BUMP_VERSION || 'false' }}
+      AUTO_BUMP_VERSION: ${{ vars.ANDROID_AUTO_BUMP_VERSION || 'true' }}
 
     steps:
       - name: Checkout repository
@@ -116,7 +116,7 @@ jobs:
             echo "No version files changed; skip commit."
             exit 0
           fi
-          git commit -m "chore(release): bump android version to ${{ steps.next_version.outputs.next_version }} [skip android release]"
+          git commit -m "chore：回写 Android 版本到 ${{ steps.next_version.outputs.next_version }} [skip android release]"
           git push
 
       - name: Write workflow summary

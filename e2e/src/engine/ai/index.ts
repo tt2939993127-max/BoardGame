@@ -5,6 +5,7 @@ export * from './playerView';
 export * from './snapshots';
 export * from './context';
 export * from './localRunner';
+export * from './onlineDecisionView';
 export * from './scoring';
 export * from './lookahead';
 export * from './strategy';

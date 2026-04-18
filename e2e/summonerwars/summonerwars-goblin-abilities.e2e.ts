@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from '../framework';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
 import {
   setupSWOnlineMatch,
   readCoreState,
@@ -167,17 +168,18 @@ test.describe('洞穴地精阵营特色交互', () => {
       await expect(summonerAfter).toBeVisible({ timeout: 5000 });
       await expect(allyAfter).toBeVisible({ timeout: 5000 });
     } finally {
-      await hostContext.close();
-      await guestContext.close();
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
   });
 
   test('鲜血符文：选择自伤获得充能', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
+    await clearEvidenceScreenshotsForTest(testInfo);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     const match = await setupSWOnlineMatch(browser, baseURL, 'goblin', 'necromancer');
     if (!match) { test.skip(true, 'Game server unavailable or room creation failed.'); return; }
-    const { hostPage, hostContext, guestContext } = match;
+    const { hostPage, guestPage, hostContext, guestContext } = match;
 
     try {
       // blood_rune 触发时机：attack 阶段开始（onPhaseStart）
@@ -205,17 +207,41 @@ test.describe('洞穴地精阵营特色交互', () => {
       const chargeButton = hostPage.locator('button').filter({ hasText: /花1魔力充能|Spend 1 Magic to Charge/i });
       await expect(damageButton).toBeVisible({ timeout: 10000 });
       await expect(chargeButton).toBeVisible({ timeout: 3000 });
+      await expect(guestPage.locator('button').filter({ hasText: /自伤1点|Take 1 Damage/i })).toHaveCount(0);
+      await expect(guestPage.locator('button').filter({ hasText: /花1魔力充能|Spend 1 Magic to Charge/i })).toHaveCount(0);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'blood-rune-owner-visible', {
+          subdir: 'summonerwars/summonerwars-goblin-abilities.e2e/鲜血符文：选择自伤获得充能',
+        }),
+        fullPage: true,
+      });
+      await guestPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'blood-rune-guest-hidden', {
+          subdir: 'summonerwars/summonerwars-goblin-abilities.e2e/鲜血符文：选择自伤获得充能',
+        }),
+        fullPage: true,
+      });
 
       // 选择"自伤1点"
       await damageButton.click();
       await hostPage.waitForTimeout(1500);
       await expect(damageButton).toBeHidden({ timeout: 5000 });
+      await hostPage.waitForTimeout(1200);
+      await expect(damageButton).toBeHidden();
 
       // 验证布拉夫受到1点伤害
       await expect.poll(async () => {
         const currentDamage = parseInt(await blarf.getAttribute('data-unit-damage') ?? '0');
         return currentDamage;
       }, { timeout: 5000 }).toBe(initialDamage + 1);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'blood-rune-after-damage', {
+          subdir: 'summonerwars/summonerwars-goblin-abilities.e2e/鲜血符文：选择自伤获得充能',
+        }),
+        fullPage: true,
+      });
     } finally {
       await hostContext.close();
       await guestContext.close();

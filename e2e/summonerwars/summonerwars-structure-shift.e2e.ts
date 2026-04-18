@@ -9,6 +9,7 @@
  */
 
 import { test, expect } from '../framework';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
 import {
   applyCoreState,
   clickBoardElement,
@@ -80,6 +81,7 @@ const prepareStructureShiftState = (coreState: any) => {
 test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
   test('建筑转移：移动后推拉友方建筑', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
+    await clearEvidenceScreenshotsForTest(testInfo);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     const match = await setupSWOnlineMatch(browser, baseURL, 'frost', 'necromancer');
     if (!match) {
@@ -87,7 +89,7 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
       return;
     }
 
-    const { hostPage, hostContext, guestContext } = match;
+    const { hostPage, guestPage, hostContext, guestContext } = match;
 
     try {
       const coreState = await readCoreState(hostPage);
@@ -116,6 +118,19 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
         hostPage.locator('[class*="prompt"]').filter({ hasText: /Select structure|Structure shift/i }),
       );
       await expect(structureSelectionPrompt).toBeVisible({ timeout: 8000 });
+      await expect(guestPage.locator('[data-testid="sw-ability-prompt"]')).toBeHidden();
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'structure-shift-owner-visible', {
+          subdir: 'summonerwars/summonerwars-structure-shift.e2e/建筑转移：移动后推拉友方建筑',
+        }),
+        fullPage: true,
+      });
+      await guestPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'structure-shift-guest-hidden', {
+          subdir: 'summonerwars/summonerwars-structure-shift.e2e/建筑转移：移动后推拉友方建筑',
+        }),
+        fullPage: true,
+      });
 
       await clickBoardElement(hostPage, '[data-testid^="sw-structure-"][data-owner="0"]');
 
@@ -136,9 +151,16 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
           .getAttribute('data-testid');
         return currentTestId !== initialStructureTestId;
       }, { timeout: 5000 }).toBe(true);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'structure-shift-after-move', {
+          subdir: 'summonerwars/summonerwars-structure-shift.e2e/建筑转移：移动后推拉友方建筑',
+        }),
+        fullPage: true,
+      });
     } finally {
-      await hostContext.close();
-      await guestContext.close();
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
   });
 });
