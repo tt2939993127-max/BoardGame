@@ -926,7 +926,6 @@ const buildActivatedAbilitySemantics = (args: {
 } => {
     const { state, playerId, unit, abilityDef } = args;
     const strategyTags: SummonerWarsStrategyTag[] = ['ability-tempo'];
-    const ownSummoner = getSummoner(state.core, playerId);
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const adjacentAllies = getAdjacentCells(unit.position)
         .map((position) => getUnitAt(state.core, position))
@@ -2013,7 +2012,6 @@ const interactionPositionScorer: LocalAiActionScorer = {
         const playerId = context.playerId;
         const state = context.visibleState as SummonerWarsState;
         const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
-        const ownSummoner = getSummoner(state.core, playerId);
 
         // grab_follow：抓附手跟随友方 → 前推价值高
         if (interactionAction === 'grab_follow') {
