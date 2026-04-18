@@ -73,6 +73,7 @@ import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiS
 import {
     applyAiAutoRecoveryRejection,
     finalizeOnlineAiResolutionConfirmation,
+    resolveCurrentPlayerId,
     resolveManualForceEndAiPhase,
     resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnForStalledAi,
@@ -468,8 +469,40 @@ const OnlineAiSeatBridge = ({
             }
 
             if (aiDispatchResult.kind === 'idle') {
+                const sharedState = state as MatchState<unknown>;
+                const currentPlayerId = resolveCurrentPlayerId(sharedState);
+                const activeAiPlayerId = currentPlayerId && seatControllers[currentPlayerId]?.type !== 'human'
+                    ? currentPlayerId
+                    : null;
+                if (activeAiPlayerId) {
+                    const idleDecisionKey = [
+                        'idle-active-ai',
+                        activeAiPlayerId,
+                        sharedState.sys?.turnNumber ?? 'no-shared-turn',
+                        sharedState.sys?.phase ?? 'no-shared-phase',
+                    ].join(':');
+                    const now = Date.now();
+                    const lastRecovery = staleSeatRecoveryRef.current;
+                    const canRecover = !lastRecovery
+                        || lastRecovery.key !== idleDecisionKey
+                        || now - lastRecovery.lastRecoveryAt >= STALE_SEAT_RECOVERY_MIN_INTERVAL_MS;
+                    if (canRecover) {
+                        staleSeatRecoveryRef.current = {
+                            key: idleDecisionKey,
+                            lastRecoveryAt: now,
+                        };
+                        for (const seatClient of Object.values(clientsRef.current)) {
+                            seatClient.resync();
+                        }
+                        delayTimer = setTimeout(() => {
+                            delayTimer = null;
+                            setAiRetryVersion((version) => version + 1);
+                        }, STALE_SEAT_RECOVERY_RETRY_MS);
+                    }
+                } else {
+                    staleSeatRecoveryRef.current = null;
+                }
                 staleSeatDecisionKeyRef.current = null;
-                staleSeatRecoveryRef.current = null;
                 lastAiAttemptKeyRef.current = null;
                 return;
             }

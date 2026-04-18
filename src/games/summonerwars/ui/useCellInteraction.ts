@@ -25,7 +25,7 @@ import { extractPositions } from '../../../engine/primitives/uiHints';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
 import { useToast } from '../../../contexts/ToastContext';
-import { useEventCardModes } from './useEventCardModes';
+import { useEventCardModes, requiresEventInteraction } from './useEventCardModes';
 import type { PendingBeforeAttack } from './modeTypes';
 import type { InteractionDescriptor, PromptOption } from '../../../engine/systems/InteractionSystem';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
@@ -524,6 +524,19 @@ export function useCellInteraction({
     // 任何格子交互都重置结束阶段确认状态
      
     setEndPhaseConfirmPending(false);
+
+    const selectedCard = selectedHandCardId
+      ? myHand.find((card) => card.id === selectedHandCardId)
+      : undefined;
+    const isArmedNonInteractiveEvent = !!selectedCard
+      && selectedCard.cardType === 'event'
+      && !requiresEventInteraction(selectedCard.id)
+      && !eventCardModes.hasActiveEventMode
+      && !swInteraction;
+    if (isArmedNonInteractiveEvent) {
+      setSelectedHandCardId(null);
+      return;
+    }
 
     // InteractionSystem：抓附跟随 / 喂养巨食兽（相邻吞噬）
     if (swInteraction && (swInteraction.type === 'grab_follow' || swInteraction.type === 'feed_beast')) {

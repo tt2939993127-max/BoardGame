@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SummonerWarsCore, CellCoord, EventCard, GamePhase } from '../domain/types';
+import type { SummonerWarsCore, CellCoord, EventCard, GamePhase, UnitCard } from '../domain/types';
 import { SW_COMMANDS } from '../domain/types';
 import {
   getPlayerUnits, isCellEmpty, getAdjacentCells,
@@ -42,6 +42,10 @@ const INTERACTIVE_EVENT_BASE_IDS = new Set<string>([
   CARD_IDS.GOBLIN_SNEAK,
   CARD_IDS.FROST_GLACIAL_SHIFT,
 ]);
+
+export function requiresEventInteraction(cardId: string): boolean {
+  return INTERACTIVE_EVENT_BASE_IDS.has(getBaseCardId(cardId));
+}
 
 // ============================================================================
 // 参数
@@ -447,6 +451,7 @@ export function useEventCardModes({
       return {
         cardId: typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : '',
         step: 'selectDirection',
+        validUnits: [],
         currentUnit: swInteraction.meta?.currentUnit as CellCoord | undefined,
         recorded: (swInteraction.meta?.recorded as { position: CellCoord; newPosition: CellCoord }[] | undefined) ?? [],
       };
@@ -1108,7 +1113,7 @@ export function useEventCardModes({
     }
 
     if (activated) {
-      if (INTERACTIVE_EVENT_BASE_IDS.has(baseId)) {
+      if (requiresEventInteraction(cardId)) {
         dispatch(SW_COMMANDS.REQUEST_EVENT_INTERACTION, { cardId });
       }
       setSelectedHandCardId(cardId);

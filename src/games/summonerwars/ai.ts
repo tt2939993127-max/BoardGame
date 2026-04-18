@@ -926,6 +926,7 @@ const buildActivatedAbilitySemantics = (args: {
 } => {
     const { state, playerId, unit, abilityDef } = args;
     const strategyTags: SummonerWarsStrategyTag[] = ['ability-tempo'];
+    const ownSummoner = getSummoner(state.core, playerId);
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const adjacentAllies = getAdjacentCells(unit.position)
         .map((position) => getUnitAt(state.core, position))

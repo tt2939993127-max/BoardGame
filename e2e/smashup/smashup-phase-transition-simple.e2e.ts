@@ -40,6 +40,7 @@ async function setupSmashUpOnlineAiRoom(
     browser: Browser,
     baseURL: string | undefined,
     options?: {
+        numPlayers?: number;
         seatControllers?: Record<string, unknown>;
         beforeEnterMatch?: (args: { hostPage: Page; matchId: string }) => Promise<void> | void;
     },
@@ -73,7 +74,7 @@ async function setupSmashUpOnlineAiRoom(
     const base = getGameServerBaseURL();
     const createResponse = await hostPage.request.post(`${base}/games/smashup/create`, {
         data: {
-            numPlayers: 2,
+            numPlayers: options?.numPlayers ?? 2,
             setupData: {
                 guestId,
                 ownerKey: `guest:${guestId}`,
@@ -1003,6 +1004,291 @@ function buildOnlineAiResponseWindowPlayableState(baseState: any) {
     return nextState;
 }
 
+function buildOnlineAiFourPlayerResponseWindowStressState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+    const existingBases = Array.isArray(nextState.core?.bases) ? nextState.core.bases : [];
+    const turnOrder = ['0', '1', '2', '3'];
+    const primaryBase = existingBases[0] ?? { defId: 'base_the_mothership', minions: [], ongoingActions: [] };
+    const secondaryBase = existingBases[1] ?? { defId: 'base_tortuga', minions: [], ongoingActions: [] };
+
+    const buildPlayer = (playerId: '0' | '1' | '2' | '3', vp: number) => ({
+        ...(existingPlayers[playerId] ?? {}),
+        hand: [
+            { uid: `p${playerId}-under-pressure-1`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
+            { uid: `p${playerId}-under-pressure-2`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
+        ],
+        deck: [],
+        discard: [],
+        factions: ['giant_ants', 'pirates'],
+        minionsPlayed: 1,
+        minionLimit: 1,
+        actionsPlayed: 1,
+        actionLimit: 1,
+        minionsPlayedPerBase: {},
+        sameNameMinionDefId: null,
+        vp,
+    });
+
+    const sourceMinions = turnOrder.map((playerId) => ({
+        uid: `p${playerId}-under-pressure-source`,
+        defId: 'giant_ant_soldier',
+        controller: playerId,
+        owner: playerId,
+        basePower: 1,
+        powerCounters: 2,
+        powerModifier: 0,
+        tempPowerModifier: 0,
+        talentUsed: false,
+        playedThisTurn: false,
+        attachedActions: [],
+    }));
+
+    const targetMinions = turnOrder.map((playerId) => ({
+        uid: `p${playerId}-under-pressure-target`,
+        defId: 'pirates_first_mate',
+        controller: playerId,
+        owner: playerId,
+        basePower: 2,
+        powerCounters: 0,
+        powerModifier: 0,
+        tempPowerModifier: 0,
+        talentUsed: false,
+        playedThisTurn: false,
+        attachedActions: [],
+    }));
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 0,
+        phase: 'playCards',
+        turnNumber: 9,
+        turnOrder,
+        factionSelection: undefined,
+        players: {
+            ...existingPlayers,
+            '0': buildPlayer('0', 5),
+            '1': buildPlayer('1', 4),
+            '2': buildPlayer('2', 3),
+            '3': buildPlayer('3', 2),
+        },
+        bases: [
+            {
+                ...primaryBase,
+                defId: primaryBase.defId ?? 'base_the_mothership',
+                breakpoint: 12,
+                minions: sourceMinions,
+                ongoingActions: Array.isArray(primaryBase.ongoingActions) ? primaryBase.ongoingActions : [],
+            },
+            {
+                ...secondaryBase,
+                defId: secondaryBase.defId ?? 'base_tortuga',
+                minions: targetMinions,
+                ongoingActions: Array.isArray(secondaryBase.ongoingActions) ? secondaryBase.ongoingActions : [],
+            },
+        ],
+        baseDeck: ['base_the_factory', 'base_cave_of_shinies', 'base_rhodes_plaza'],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder,
+        currentPlayerIndex: 0,
+        phase: 'playCards',
+        turnNumber: 9,
+        flowHalted: false,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return nextState;
+}
+
+function buildOnlineAiComplexMultiBaseScoringState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 1,
+        phase: 'scoreBases',
+        turnNumber: 8,
+        turnOrder: ['0', '1'],
+        factionSelection: undefined,
+        scoringEligibleBaseIndices: [0, 1, 2],
+        baseDeck: ['base_the_factory', 'base_cave_of_shinies', 'base_rhodes_plaza'],
+        players: {
+            ...existingPlayers,
+            '0': {
+                ...(existingPlayers['0'] ?? {}),
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['ninjas', 'aliens'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 2,
+            },
+            '1': {
+                ...(existingPlayers['1'] ?? {}),
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['dinosaurs', 'wizards'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 3,
+            },
+        },
+        bases: [
+            {
+                defId: 'base_the_jungle',
+                breakpoint: 12,
+                minions: [
+                    {
+                        uid: 'ai-b0-king-rex',
+                        defId: 'test_minion',
+                        controller: '1',
+                        owner: '1',
+                        basePower: 9,
+                        powerCounters: 0,
+                        powerModifier: 12,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                    {
+                        uid: 'ai-b0-tiger-assassin',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '0',
+                        basePower: 8,
+                        powerCounters: 0,
+                        powerModifier: 10,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: [],
+            },
+            {
+                defId: 'base_ninja_dojo',
+                breakpoint: 18,
+                minions: [
+                    {
+                        uid: 'ai-b1-king-rex',
+                        defId: 'test_minion',
+                        controller: '1',
+                        owner: '1',
+                        basePower: 9,
+                        powerCounters: 0,
+                        powerModifier: 13,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                    {
+                        uid: 'ai-b1-shinobi',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '0',
+                        basePower: 8,
+                        powerCounters: 0,
+                        powerModifier: 11,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: [],
+            },
+            {
+                defId: 'base_pirate_cove',
+                breakpoint: 20,
+                minions: [
+                    {
+                        uid: 'ai-b2-king-rex',
+                        defId: 'test_minion',
+                        controller: '1',
+                        owner: '1',
+                        basePower: 9,
+                        powerCounters: 0,
+                        powerModifier: 14,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                    {
+                        uid: 'ai-b2-invader',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '0',
+                        basePower: 8,
+                        powerCounters: 0,
+                        powerModifier: 12,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        playedThisTurn: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: [],
+            },
+        ],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder: ['0', '1'],
+        currentPlayerIndex: 1,
+        phase: 'scoreBases',
+        turnNumber: 8,
+        flowHalted: false,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return nextState;
+}
+
 async function installUiRefreshMonitor(page: Page): Promise<void> {
     await page.evaluate(() => {
         const selectors = {
@@ -1903,6 +2189,129 @@ test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', asy
     }
 });
 
+test('在线 AI 在三基地并发达标场景下应完成 multi_base_scoring 收口且不出现卡死', async ({ browser }, testInfo) => {
+    test.setTimeout(150000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL, {
+        seatControllers: {
+            '1': {
+                type: 'local-ai',
+                difficulty: 'expert',
+                minimumActionDelayMs: 150,
+            },
+        },
+    });
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiComplexMultiBaseScoringState);
+        await waitForSmashUpUI(hostPage);
+        await hostPage.evaluate(() => {
+            const win = window as Window & {
+                __SU_AI_MULTI_BASE_TRACK__?: Array<{
+                    phase: string | null;
+                    currentPlayerIndex: number | null;
+                    timestamp: number;
+                }>;
+                __SU_AI_MULTI_BASE_TRACK_TIMER__?: number;
+            };
+            const sample = () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const phase = state?.sys?.phase ?? null;
+                const currentPlayerIndex = typeof state?.core?.currentPlayerIndex === 'number'
+                    ? state.core.currentPlayerIndex
+                    : null;
+                const track = win.__SU_AI_MULTI_BASE_TRACK__ ?? [];
+                track.push({
+                    phase,
+                    currentPlayerIndex,
+                    timestamp: Date.now(),
+                });
+                if (track.length > 800) {
+                    track.shift();
+                }
+                win.__SU_AI_MULTI_BASE_TRACK__ = track;
+            };
+            if (typeof win.__SU_AI_MULTI_BASE_TRACK_TIMER__ === 'number') {
+                window.clearInterval(win.__SU_AI_MULTI_BASE_TRACK_TIMER__);
+            }
+            win.__SU_AI_MULTI_BASE_TRACK__ = [];
+            sample();
+            win.__SU_AI_MULTI_BASE_TRACK_TIMER__ = window.setInterval(sample, 80);
+        });
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        expect(['scoreBases', 'playCards']).toContain(injectedState.sys?.phase);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-multi-base-before');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const interactionCurrent = state.sys?.interaction?.current ?? null;
+            const responseWindowCurrent = state.sys?.responseWindow?.current ?? null;
+            const vp0 = state.core?.players?.['0']?.vp ?? 0;
+            const vp1 = state.core?.players?.['1']?.vp ?? 0;
+            return {
+                phase: state.sys?.phase ?? null,
+                interactionSourceId: interactionCurrent?.data?.sourceId ?? null,
+                interactionPlayerId: interactionCurrent?.playerId ?? null,
+                responseWindowType: responseWindowCurrent?.windowType ?? null,
+                vp0AtLeast5: vp0 >= 5,
+                vp1AtLeast7: vp1 >= 7,
+            };
+        }, {
+            timeout: 45000,
+            message: '等待在线 AI 在三基地并发达标场景中完成计分并收口回到 playCards',
+        }).toEqual({
+            phase: 'playCards',
+            interactionSourceId: null,
+            interactionPlayerId: null,
+            responseWindowType: null,
+            vp0AtLeast5: true,
+            vp1AtLeast7: true,
+        });
+
+        const track = await hostPage.evaluate(() => {
+            const win = window as Window & {
+                __SU_AI_MULTI_BASE_TRACK__?: Array<{
+                    phase: string | null;
+                    currentPlayerIndex: number | null;
+                    timestamp: number;
+                }>;
+                __SU_AI_MULTI_BASE_TRACK_TIMER__?: number;
+            };
+            if (typeof win.__SU_AI_MULTI_BASE_TRACK_TIMER__ === 'number') {
+                window.clearInterval(win.__SU_AI_MULTI_BASE_TRACK_TIMER__);
+                win.__SU_AI_MULTI_BASE_TRACK_TIMER__ = undefined;
+            }
+            return win.__SU_AI_MULTI_BASE_TRACK__ ?? [];
+        });
+        const playCardsTrack = track.filter((item: {
+            phase: string | null;
+            currentPlayerIndex: number | null;
+            timestamp: number;
+        }) => item.phase === 'playCards' && typeof item.currentPlayerIndex === 'number');
+        let swaps = 0;
+        for (let i = 1; i < playCardsTrack.length; i += 1) {
+            if (playCardsTrack[i].currentPlayerIndex !== playCardsTrack[i - 1].currentPlayerIndex) {
+                swaps += 1;
+            }
+        }
+        expect(swaps).toBeLessThanOrEqual(1);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-multi-base-after');
+        await expect(hostPage.getByText(/AI 响应超时|AI 强制结束失败/)).toHaveCount(0);
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
 test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
 
@@ -2118,6 +2527,130 @@ test('在线 AI 持有真实响应牌时，应在 meFirst 响应窗口内自动�
         await expect(hostPage.getByText('AI 自动跳过。')).toHaveCount(0);
         await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-response-window-playable-after-resolve');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
+test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且不卡死', async ({ browser }, testInfo) => {
+    test.setTimeout(180000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL, {
+        numPlayers: 4,
+        seatControllers: {
+            '1': {
+                type: 'local-ai',
+                difficulty: 'expert',
+                minimumActionDelayMs: 120,
+            },
+            '2': {
+                type: 'local-ai',
+                difficulty: 'expert',
+                minimumActionDelayMs: 120,
+            },
+            '3': {
+                type: 'local-ai',
+                difficulty: 'expert',
+                minimumActionDelayMs: 120,
+            },
+        },
+    });
+    if (!setup) {
+        test.skip(true, 'SmashUp 四人 AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+        await waitForAiSeatCredential(hostPage, matchId, '2');
+        await waitForAiSeatCredential(hostPage, matchId, '3');
+
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiFourPlayerResponseWindowStressState);
+        await waitForSmashUpUI(hostPage);
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        expect(injectedState.core?.turnOrder).toEqual(['0', '1', '2', '3']);
+        expect(injectedState.core?.currentPlayerIndex).toBe(0);
+        for (const pid of ['0', '1', '2', '3'] as const) {
+            const hand = (injectedState.core?.players?.[pid]?.hand ?? []) as Array<{ defId?: string }>;
+            const responseCardCount = hand.filter((card) => card.defId === 'giant_ant_under_pressure').length;
+            expect(responseCardCount).toBeGreaterThanOrEqual(2);
+        }
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-4p-response-rotation-before');
+        await dispatchHarnessCommand(hostPage, '0', 'ADVANCE_PHASE', {});
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            const responseWindow = state.sys?.responseWindow?.current ?? null;
+            return {
+                phase: state.sys?.phase ?? null,
+                windowType: responseWindow?.windowType ?? null,
+                responderQueueLength: Array.isArray(responseWindow?.responderQueue) ? responseWindow.responderQueue.length : 0,
+                currentResponder: responseWindow?.responderQueue?.[responseWindow.currentResponderIndex] ?? null,
+            };
+        }, {
+            timeout: 15000,
+            message: '等待四人计分响应窗口打开',
+        }).toEqual({
+            phase: 'scoreBases',
+            windowType: 'meFirst',
+            responderQueueLength: 4,
+            currentResponder: '0',
+        });
+
+        const responderHistory: string[] = [];
+        let responseClosed = false;
+        for (let i = 0; i < 120; i += 1) {
+            const state = await getMatchState(matchId, hostPage);
+            const responseWindow = state.sys?.responseWindow?.current ?? null;
+            if (!responseWindow) {
+                responseClosed = true;
+                break;
+            }
+            const currentResponder = responseWindow.responderQueue?.[responseWindow.currentResponderIndex];
+            if (typeof currentResponder === 'string') {
+                responderHistory.push(currentResponder);
+            }
+            if (currentResponder === '0') {
+                await dispatchHarnessCommand(hostPage, '0', 'RESPONSE_PASS', {});
+            } else {
+                await hostPage.waitForTimeout(280);
+            }
+        }
+
+        expect(responseClosed).toBe(true);
+
+        const compactHistory = responderHistory.filter((id, idx) => idx === 0 || id !== responderHistory[idx - 1]);
+        const hasSubsequence = (source: string[], target: string[]): boolean => {
+            let pointer = 0;
+            for (const item of source) {
+                if (item === target[pointer]) {
+                    pointer += 1;
+                }
+                if (pointer === target.length) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        expect(compactHistory.includes('1')).toBe(true);
+        expect(compactHistory.includes('2')).toBe(true);
+        expect(compactHistory.includes('3')).toBe(true);
+        expect(hasSubsequence(compactHistory, ['0', '1', '2', '3'])).toBe(true);
+
+        const finalState = await getMatchState(matchId, hostPage);
+        expect(finalState.sys?.responseWindow?.current ?? null).toBeNull();
+        expect(finalState.sys?.interaction?.current ?? null).toBeNull();
+        expect(finalState.sys?.phase).toBe('playCards');
+        await expect(hostPage.getByText('AI 响应超时')).toHaveCount(0);
+        await expect(hostPage.getByText('AI 自动跳过。')).toHaveCount(0);
+        await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-4p-response-rotation-after');
     } finally {
         await setup.hostContext.close();
     }

@@ -16,6 +16,7 @@ import { CardSprite } from './CardSprite';
 import { useToast } from '../../../contexts/ToastContext';
 import { playDeniedSound } from '../../../lib/audio/useGameAudio';
 import { resolveCardAtlasId } from './cardAtlas';
+import { requiresEventInteraction } from './useEventCardModes';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 import { useTouchLongPress } from '../../../hooks/ui/useTouchLongPress';
 import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
@@ -377,6 +378,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
       const event = card as EventCard;
       if (event.playPhase === phase || event.playPhase === 'any') {
+        if (requiresEventInteraction(cardId)) {
+          onPlayEvent?.(cardId);
+          return;
+        }
+
+        if (selectedCardId !== cardId) {
+          onCardSelect?.(cardId);
+          return;
+        }
+
         onPlayEvent?.(cardId);
         return;
       }

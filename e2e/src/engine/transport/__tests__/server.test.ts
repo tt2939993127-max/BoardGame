@@ -2001,19 +2001,22 @@ describe('GameTransportServer（离座与重连）', () => {
             metadata: createOnlineAiRecoveryMetadata(),
         });
 
-        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction').mockResolvedValue({
-            playerId: '1',
-            action: {
-                actionId: 'interaction:reaction-choice-1:pass',
-                kind: 'interaction-choice',
-                label: 'Pass',
-                commands: [{
-                    type: INTERACTION_COMMANDS.RESPOND,
-                    payload: { optionId: 'pass' },
-                }],
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch').mockResolvedValue({
+            kind: 'action',
+            resolution: {
+                playerId: '1',
+                action: {
+                    actionId: 'interaction:reaction-choice-1:pass',
+                    kind: 'interaction-choice',
+                    label: 'Pass',
+                    commands: [{
+                        type: INTERACTION_COMMANDS.RESPOND,
+                        payload: { optionId: 'pass' },
+                    }],
+                },
+                attemptKey: 'watchdog-ai-action',
+                source: 'local-ai',
             },
-            attemptKey: 'watchdog-ai-action',
-            source: 'local-ai',
         });
 
         try {
@@ -2114,19 +2117,22 @@ describe('GameTransportServer（离座与重连）', () => {
             },
         });
 
-        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction').mockResolvedValue({
-            playerId: '2',
-            action: {
-                actionId: 'select-faction:robots',
-                kind: 'select-faction',
-                label: '选择派系 robots',
-                commands: [{
-                    type: 'SELECT_FACTION',
-                    payload: { factionId: 'robots' },
-                }],
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch').mockResolvedValue({
+            kind: 'action',
+            resolution: {
+                playerId: '2',
+                action: {
+                    actionId: 'select-faction:robots',
+                    kind: 'select-faction',
+                    label: '选择派系 robots',
+                    commands: [{
+                        type: 'SELECT_FACTION',
+                        payload: { factionId: 'robots' },
+                    }],
+                },
+                attemptKey: 'watchdog-faction-select-step-1',
+                source: 'local-ai',
             },
-            attemptKey: 'watchdog-faction-select-step-1',
-            source: 'local-ai',
         });
 
         const server = new GameTransportServer({
@@ -2258,35 +2264,41 @@ describe('GameTransportServer（离座与重连）', () => {
             metadata: createOnlineAiRecoveryMetadata(),
         });
 
-        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiAction');
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch');
         resolutionSpy
             .mockResolvedValueOnce({
-                playerId: '1',
-                action: {
-                    actionId: 'interaction:reaction-choice-1:pass',
-                    kind: 'interaction-choice',
-                    label: 'Pass',
-                    commands: [{
-                        type: INTERACTION_COMMANDS.RESPOND,
-                        payload: { optionId: 'pass' },
-                    }],
+                kind: 'action',
+                resolution: {
+                    playerId: '1',
+                    action: {
+                        actionId: 'interaction:reaction-choice-1:pass',
+                        kind: 'interaction-choice',
+                        label: 'Pass',
+                        commands: [{
+                            type: INTERACTION_COMMANDS.RESPOND,
+                            payload: { optionId: 'pass' },
+                        }],
+                    },
+                    attemptKey: 'watchdog-chain-step-1',
+                    source: 'local-ai',
                 },
-                attemptKey: 'watchdog-chain-step-1',
-                source: 'local-ai',
             })
             .mockResolvedValueOnce({
-                playerId: '1',
-                action: {
-                    actionId: 'interaction:reaction-choice-2:pass',
-                    kind: 'interaction-choice',
-                    label: 'Pass',
-                    commands: [{
-                        type: INTERACTION_COMMANDS.RESPOND,
-                        payload: { optionId: 'pass' },
-                    }],
+                kind: 'action',
+                resolution: {
+                    playerId: '1',
+                    action: {
+                        actionId: 'interaction:reaction-choice-2:pass',
+                        kind: 'interaction-choice',
+                        label: 'Pass',
+                        commands: [{
+                            type: INTERACTION_COMMANDS.RESPOND,
+                            payload: { optionId: 'pass' },
+                        }],
+                    },
+                    attemptKey: 'watchdog-chain-step-2',
+                    source: 'local-ai',
                 },
-                attemptKey: 'watchdog-chain-step-2',
-                source: 'local-ai',
             });
 
         const server = new GameTransportServer({
