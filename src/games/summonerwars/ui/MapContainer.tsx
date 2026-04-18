@@ -8,7 +8,6 @@ import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 
 const DRAG_THRESHOLD = 5;
 const SCALE_EPSILON = 0.02;
 const SCALE_BADGE_HIDE_DELAY_MS = 1200;
-const SYSTEM_BACK_GESTURE_EDGE_PX = 24;
 
 interface TouchPoint {
   clientX: number;
@@ -63,19 +62,6 @@ export interface MapContainerProps {
   className?: string;
   style?: React.CSSProperties;
 }
-
-export const shouldReserveSystemBackGesture = (args: {
-  enabled: boolean;
-  clientX: number;
-  viewportWidth: number;
-}) => {
-  if (!args.enabled) return false;
-  if (!Number.isFinite(args.clientX) || !Number.isFinite(args.viewportWidth) || args.viewportWidth <= 0) {
-    return false;
-  }
-  const edgeSize = Math.max(0, Math.min(SYSTEM_BACK_GESTURE_EDGE_PX, args.viewportWidth / 2));
-  return args.clientX <= edgeSize || args.clientX >= args.viewportWidth - edgeSize;
-};
 
 export const MapContainer: React.FC<MapContainerProps> = ({
   children,
