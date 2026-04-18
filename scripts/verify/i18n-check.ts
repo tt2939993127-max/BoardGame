@@ -1193,8 +1193,6 @@ const main = () => {
     const missing = Array.from(missingMap.values());
     const blockingWarningTypes = new Set<I18nWarning['type']>([
         'raw-validation-error',
-        'dynamic-key',
-        'exists-namespace-mismatch',
     ]);
     const blockingWarnings = warnings.filter((warning) => blockingWarningTypes.has(warning.type));
 
