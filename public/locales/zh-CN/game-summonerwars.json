@@ -418,6 +418,9 @@
   "statusBanners": {
     "insufficientMagic": "魔力不足",
     "insufficientCharge": "需要至少1点充能",
+    "eventTarget": {
+      "message": "选择事件卡目标"
+    },
     "magicEventChoice": {
       "message": "选择：打出事件卡或弃牌换魔力"
     },

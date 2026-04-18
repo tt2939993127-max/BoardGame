@@ -873,6 +873,12 @@ const getManifestGameId = (filePath: string): string | null => {
     return match?.[1] ?? null;
 };
 
+const getTutorialGameId = (filePath: string): string | null => {
+    const normalized = normalizeFilePath(filePath);
+    const match = normalized.match(/\/src\/games\/([^/]+)\/tutorial\.[jt]sx?$/);
+    return match?.[1] ?? null;
+};
+
 const getGameIdFromPath = (filePath: string): string | null => {
     const normalized = normalizeFilePath(filePath);
     const match = normalized.match(/\/src\/games\/([^/]+)\//);
@@ -987,6 +993,37 @@ export const collectManifestReferencesFromContent = (
     return references;
 };
 
+export const collectTutorialReferencesFromContent = (
+    content: string,
+    filePath: string,
+    knownNamespaces: Set<string>,
+): I18nReference[] => {
+    const gameId = getTutorialGameId(filePath);
+    if (!gameId) return [];
+
+    const references: I18nReference[] = [];
+    const defaultNamespace = `game-${gameId}`;
+    const contentKeyRegex = /\bcontent\s*:\s*['"]([^'"]+)['"]/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = contentKeyRegex.exec(content)) !== null) {
+        const rawKey = match[1];
+        const parsed = parseI18nKey(rawKey, knownNamespaces);
+        const namespace = parsed.namespace ?? defaultNamespace;
+        if (!knownNamespaces.has(namespace)) continue;
+        if (!parsed.key) continue;
+        references.push(createManifestReference(
+            filePath,
+            getLineNumber(content, match.index),
+            'tutorial.content',
+            parsed.key,
+            namespace,
+        ));
+    }
+
+    return references;
+};
+
 export const collectStaticKeyReferencesFromContent = (
     content: string,
     filePath: string,
@@ -1075,7 +1112,8 @@ const getReferenceConcreteKeys = (
     locales: LocalesByLanguage,
     language: string,
 ): string[] => {
-    if (!ref.patternSegments) {
+    const patternSegments = ref.patternSegments;
+    if (!patternSegments) {
         return ref.namespaces
             .filter((namespace) => {
                 const localeData = locales[language]?.[namespace];
@@ -1089,7 +1127,7 @@ const getReferenceConcreteKeys = (
         if (!localeData) {
             return [];
         }
-        return collectPatternMatches(localeData, ref.patternSegments).map((key) => `${namespace}:${key}`);
+        return collectPatternMatches(localeData, patternSegments).map((key) => `${namespace}:${key}`);
     });
 };
 
@@ -1106,6 +1144,7 @@ const main = () => {
         const result = collectReferencesFromContent(content, file, { defaultNamespace: DEFAULT_NAMESPACE, knownNamespaces });
         references.push(...result.references);
         references.push(...collectManifestReferencesFromContent(content, file, knownNamespaces));
+        references.push(...collectTutorialReferencesFromContent(content, file, knownNamespaces));
         references.push(...collectStaticKeyReferencesFromContent(content, file, knownNamespaces));
         warnings.push(...result.warnings);
     }

@@ -381,6 +381,9 @@
   "statusBanners": {
     "insufficientMagic": "Insufficient magic",
     "insufficientCharge": "Requires at least 1 charge",
+    "eventTarget": {
+      "message": "Choose an event target"
+    },
     "magicEventChoice": {
       "message": "Choose: Play event card or discard for magic"
     },
