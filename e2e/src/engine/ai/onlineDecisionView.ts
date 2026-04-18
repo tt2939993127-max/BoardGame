@@ -126,14 +126,105 @@ function resolveVisibilityByDefault(args: {
     return 'shared';
 }
 
+function resolveInteractionPlayerId(state: MatchState<unknown> | null | undefined): string | null {
+    const interaction = state?.sys?.interaction as {
+        current?: {
+            playerId?: unknown;
+        } | null;
+    } | undefined;
+    return typeof interaction?.current?.playerId === 'string'
+        ? interaction.current.playerId
+        : null;
+}
+
+function resolveInteractionId(state: MatchState<unknown> | null | undefined): string | null {
+    const interaction = state?.sys?.interaction as {
+        current?: {
+            id?: unknown;
+        } | null;
+    } | undefined;
+    return typeof interaction?.current?.id === 'string'
+        ? interaction.current.id
+        : null;
+}
+
+function resolveResponseWindowCurrent(state: MatchState<unknown> | null | undefined): {
+    id: string | null;
+    windowType: string | null;
+    sourceId: string | null;
+    currentResponderId: string | null;
+} | null {
+    const current = (state?.sys?.responseWindow as {
+        current?: {
+            id?: unknown;
+            windowType?: unknown;
+            sourceId?: unknown;
+            responderQueue?: unknown;
+            currentResponderIndex?: unknown;
+        } | null;
+    } | undefined)?.current;
+    if (!current) {
+        return null;
+    }
+
+    const responderQueue = Array.isArray(current.responderQueue) ? current.responderQueue : [];
+    const responderIndex = typeof current.currentResponderIndex === 'number'
+        ? current.currentResponderIndex
+        : 0;
+    const currentResponderId = typeof responderQueue[responderIndex] === 'string'
+        ? responderQueue[responderIndex]
+        : null;
+
+    return {
+        id: typeof current.id === 'string' ? current.id : null,
+        windowType: typeof current.windowType === 'string' ? current.windowType : null,
+        sourceId: typeof current.sourceId === 'string' ? current.sourceId : null,
+        currentResponderId,
+    };
+}
+
 function isPrivateOverlayFreshEnough(args: {
     sharedState: MatchState<unknown>;
     privateOverlay: MatchState<unknown>;
     playerId: string;
 }): boolean {
+    const sharedResponseWindow = resolveResponseWindowCurrent(args.sharedState);
+    const privateResponseWindow = resolveResponseWindowCurrent(args.privateOverlay);
+    const isResponseWindowDecision = !!sharedResponseWindow || !!privateResponseWindow;
+
+    if (isResponseWindowDecision) {
+        if (!sharedResponseWindow || !privateResponseWindow) {
+            return false;
+        }
+        if (sharedResponseWindow.currentResponderId !== privateResponseWindow.currentResponderId) {
+            return false;
+        }
+        if (sharedResponseWindow.windowType !== privateResponseWindow.windowType) {
+            return false;
+        }
+        if (sharedResponseWindow.sourceId && privateResponseWindow.sourceId
+            && sharedResponseWindow.sourceId !== privateResponseWindow.sourceId) {
+            return false;
+        }
+    }
+
+    const sharedInteractionPlayerId = resolveInteractionPlayerId(args.sharedState);
+    const privateInteractionPlayerId = resolveInteractionPlayerId(args.privateOverlay);
+    const isInteractionDecision = sharedInteractionPlayerId === args.playerId
+        || privateInteractionPlayerId === args.playerId;
+
+    if (isInteractionDecision) {
+        const sharedInteractionId = resolveInteractionId(args.sharedState);
+        const privateInteractionId = resolveInteractionId(args.privateOverlay);
+        if (sharedInteractionId && privateInteractionId && sharedInteractionId !== privateInteractionId) {
+            return false;
+        }
+    }
+
     const sharedCurrentPlayerId = resolveCurrentPlayerIdFromState(args.sharedState);
     const privateCurrentPlayerId = resolveCurrentPlayerIdFromState(args.privateOverlay);
-    if (sharedCurrentPlayerId !== args.playerId || privateCurrentPlayerId !== args.playerId) {
+    if (!isResponseWindowDecision && !isInteractionDecision
+        && (sharedCurrentPlayerId !== args.playerId || privateCurrentPlayerId !== args.playerId)) {
         return false;
     }
 

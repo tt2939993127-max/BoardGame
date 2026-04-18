@@ -881,8 +881,7 @@ test.describe('圣堂骑士弃牌技能', () => {
       await waitForPhase(hostPage, 'attack');
       console.log('[holy-arrow-skip] state-applied');
 
-      const magicDisplay = hostPage.getByTestId('sw-player-magic-0');
-      const initialMagic = parseInt(await magicDisplay.innerText(), 10);
+      const initialMagic = Number((await readCoreState(hostPage)).players?.['0']?.magic ?? 0);
 
       const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
       await expect(archer).toBeVisible({ timeout: 5000 });
@@ -913,8 +912,10 @@ test.describe('圣堂骑士弃牌技能', () => {
       await expect(skipButton).toBeHidden();
       console.log('[holy-arrow-skip] prompt-cleared');
 
-      const currentMagic = parseInt(await magicDisplay.innerText(), 10);
-      expect(currentMagic).toBe(initialMagic);
+      await expect.poll(async () => {
+        const core = await readCoreState(hostPage);
+        return Number(core.players?.['0']?.magic ?? 0);
+      }, { timeout: 5000 }).toBe(initialMagic);
       console.log('[holy-arrow-skip] assertion-finished');
     } finally {
       void hostContext.close().catch(() => {});

@@ -243,8 +243,8 @@ test.describe('洞穴地精阵营特色交互', () => {
         fullPage: true,
       });
     } finally {
-      await hostContext.close();
-      await guestContext.close();
+      void hostContext.close().catch(() => {});
+      void guestContext.close().catch(() => {});
     }
   });
 

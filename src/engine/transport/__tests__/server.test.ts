@@ -2956,6 +2956,76 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(executed).toContain('SYS_RESPONSE_WINDOW_FORCE_CLOSE');
     });
 
+    it('online AI watchdog 在 response window 中 responder 不是 activePlayer 时，仍应执行 RESPONSE_PASS', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+
+        await storage.createMatch('match-watchdog-response-responder-not-active-player', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '0',
+                phase: 'defensiveRoll',
+                responseWindow: {
+                    current: {
+                        id: 'response-window-1',
+                        windowType: 'afterRollConfirmed',
+                        sourceId: 'attack-1',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-response-responder-not-active-player');
+
+        const executed: string[] = [];
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (match, _playerID, commandType) => {
+            executed.push(commandType);
+
+            if (commandType === 'RESPONSE_PASS') {
+                match.state = {
+                    ...match.state,
+                    sys: {
+                        ...match.state.sys,
+                        responseWindow: {
+                            ...(match.state.sys?.responseWindow ?? {}),
+                            current: undefined,
+                        },
+                    },
+                };
+                return true;
+            }
+
+            return true;
+        });
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(executed[0]).toBe('RESPONSE_PASS');
+    });
+
     it('AI 走无解交互 emergency skip 时，服务端应立即自动反馈', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();

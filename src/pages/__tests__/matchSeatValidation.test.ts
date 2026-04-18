@@ -687,6 +687,108 @@ describe('resolveNextAiAction 在线视角', () => {
         expect(resolution).toBeNull();
     });
 
+    it('response window 当前 responder 不是 activePlayer 时，仍应允许 AI 响应', async () => {
+        const gameId = '__test_online_ai_response_window_responder_not_active_player__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const responseWindow = (state.sys as {
+                    responseWindow?: {
+                        current?: {
+                            responderQueue?: string[];
+                            currentResponderIndex?: number;
+                        };
+                    };
+                })?.responseWindow?.current;
+                const currentResponderId = responseWindow?.responderQueue?.[responseWindow.currentResponderIndex ?? 0];
+                if (currentResponderId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: 'response-pass',
+                    kind: 'response-pass',
+                    label: '跳过响应',
+                    commands: [{ type: 'RESPONSE_PASS', payload: {} }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedState = {
+            core: {
+                currentPlayerId: '0',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 9,
+                interaction: { current: null, queue: [], isBlocked: false },
+                responseWindow: {
+                    current: {
+                        id: 'rw-def-1',
+                        sourceId: 'attack-1',
+                        windowType: 'afterRollConfirmed',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            },
+        } as MatchState<unknown>;
+
+        const privateOverlay = {
+            core: {
+                currentPlayerId: '0',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 9,
+                interaction: { current: null, queue: [], isBlocked: false },
+                responseWindow: {
+                    current: {
+                        id: 'rw-def-1',
+                        sourceId: 'attack-1',
+                        windowType: 'afterRollConfirmed',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                    },
+                },
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedState,
+            matchId: 'match-online-ai-response-window-responder-not-active-player',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                sharedState,
+                privateOverlay,
+                playerId,
+            }),
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('response-pass');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'RESPONSE_PASS', payload: {} },
+        ]);
+    });
+
     it('在线 AI 应优先使用 seat 自己同步到的状态，才能看到隐藏交互', async () => {
         const gameId = '__test_online_ai_hidden_interaction__';
         registerGameAiRuntime({
