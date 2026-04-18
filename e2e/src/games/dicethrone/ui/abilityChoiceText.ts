@@ -31,6 +31,7 @@ const DEFAULT_FACE_LABELS: Record<string, string> = {
     shadow: '暗影',
     helm: '头盔',
     pray: '祈祷',
+    bullet: '子弹',
 };
 
 const DEFAULT_PHASE_LABELS: Record<string, string> = {

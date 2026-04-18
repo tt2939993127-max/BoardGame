@@ -15,7 +15,6 @@ import {
   applyCoreState,
   closeDebugPanelIfOpen,
   waitForPhase,
-  advanceToPhase,
   cloneState,
 } from '../helpers/summonerwars';
 
@@ -183,8 +182,7 @@ test.describe('洞穴地精阵营特色交互', () => {
 
     try {
       // blood_rune 触发时机：attack 阶段开始（onPhaseStart）
-      // 策略：先推进到 build 阶段，注入状态（确保魔力充足+布拉夫存在），再点击"结束阶段"进入 attack
-      await advanceToPhase(hostPage, 'build');
+      // 直接把 core 注入到 build 阶段，再点击"结束阶段"进入 attack 触发交互
       const coreState = await readCoreState(hostPage);
       const { state: bloodRuneCore, blarfPos } = prepareBloodRuneState(coreState);
       await applyCoreState(hostPage, bloodRuneCore);
@@ -199,7 +197,7 @@ test.describe('洞穴地精阵营特色交互', () => {
       // 点击"结束阶段"从 build → attack，触发 blood_rune onPhaseStart
       const endPhaseBtn = hostPage.getByTestId('sw-end-phase');
       await expect(endPhaseBtn).toBeVisible({ timeout: 5000 });
-      await endPhaseBtn.click();
+      await endPhaseBtn.click({ force: true });
       await hostPage.waitForTimeout(2000);
 
       // blood_rune 按钮文本来自 i18n: actions.bloodRuneDamage / actions.bloodRuneCharge

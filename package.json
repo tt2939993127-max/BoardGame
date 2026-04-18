@@ -1,7 +1,7 @@
 {
   "name": "boardgame-platform",
   "private": true,
-  "version": "0.5.58",
+  "version": "0.5.59",
   "type": "module",
   "engines": {
     "node": "24.1.0"
@@ -54,6 +54,7 @@
     "test": "node scripts/infra/vitest-cli-safe.mjs run --configLoader native",
     "test:watch": "node scripts/infra/vitest-cli-safe.mjs --configLoader native",
     "test:core": "node scripts/infra/vitest-cli-safe.mjs run src/core src/components src/hooks src/lib src/shared src/engine src/pages --configLoader native",
+    "test:ai:decision-view": "node scripts/infra/vitest-cli-safe.mjs run src/pages/__tests__/matchSeatValidation.test.ts src/engine/transport/__tests__/server.test.ts src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts src/games/smashup/__tests__/response-window-skip.test.ts --configLoader native",
     "test:smashup": "node scripts/infra/vitest-cli-safe.mjs run src/games/smashup --configLoader native",
     "test:summonerwars": "node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars --configLoader native",
     "test:dicethrone": "node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone --configLoader native",

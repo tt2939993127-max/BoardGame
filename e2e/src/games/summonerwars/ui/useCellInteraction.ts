@@ -544,6 +544,21 @@ export function useCellInteraction({
         }
         // 结构变换目标是建筑，进入选择推拉方向步骤
         if (abilityMode.abilityId === 'structure_shift') {
+          if (swInteraction?.type === 'after_move_structure_shift_target') {
+            const option = swInteraction.options.find((opt) => {
+              const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+              return value?.action === 'after_move_structure_shift_target'
+                && value.targetPosition?.row === gameRow
+                && value.targetPosition?.col === gameCol;
+            });
+            if (option) {
+              dispatch(INTERACTION_COMMANDS.RESPOND, {
+                interactionId: swInteraction.id,
+                optionId: option.id,
+              });
+            }
+            return;
+          }
           setAbilityMode({
             ...abilityMode,
             step: 'selectNewPosition',
@@ -687,6 +702,23 @@ export function useCellInteraction({
     if (abilityMode && abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid && abilityMode.targetPosition) {
+        if (swInteraction?.type === 'after_move_structure_shift_direction') {
+          const option = swInteraction.options.find((opt) => {
+            const value = opt.value as { action?: string; targetPosition?: CellCoord; newPosition?: CellCoord } | undefined;
+            return value?.action === 'after_move_structure_shift_direction'
+              && value.targetPosition?.row === abilityMode.targetPosition?.row
+              && value.targetPosition?.col === abilityMode.targetPosition?.col
+              && value.newPosition?.row === gameRow
+              && value.newPosition?.col === gameCol;
+          });
+          if (option) {
+            dispatch(INTERACTION_COMMANDS.RESPOND, {
+              interactionId: swInteraction.id,
+              optionId: option.id,
+            });
+          }
+          return;
+        }
         dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'structure_shift',
           sourceUnitId: abilityMode.sourceUnitId,

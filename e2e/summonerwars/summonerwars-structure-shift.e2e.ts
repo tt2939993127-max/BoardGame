@@ -1,10 +1,10 @@
 /**
- * SummonerWars - 选择建筑 + 推拉方向 E2E 测试
+ * SummonerWars - 结构变换 E2E 测试
  *
  * 覆盖范围：
  * - 建筑转移（structure_shift）：移动后推拉友方建筑
- * - 建筑选择 UI
- * - 方向选择 UI
+ * - 目标建筑选择 UI（StatusBanners）
+ * - 新位置选择（棋盘点击）
  * - 建筑位置变化
  */
 
@@ -20,11 +20,13 @@ import {
   waitForPhase,
 } from '../helpers/summonerwars';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- E2E 测试中 coreState 为动态 JSON 结构
 const clearBoardCell = (board: any[][], row: number, col: number) => {
   board[row][col].unit = null;
   board[row][col].structure = null;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- E2E 测试中 coreState 为动态 JSON 结构
 const prepareStructureShiftState = (coreState: any) => {
   const next = cloneState(coreState);
   next.phase = 'move';
@@ -68,17 +70,27 @@ const prepareStructureShiftState = (coreState: any) => {
   };
 
   board[6][4].structure = {
-    id: 'shift-structure',
-    type: 'wall',
+    cardId: 'shift-structure-gate',
+    card: {
+      id: 'shift-structure-gate',
+      cardType: 'structure',
+      name: '测试城门',
+      faction: 'frost',
+      cost: 0,
+      life: 5,
+      deckSymbols: [],
+      spriteAtlas: 'portal',
+      spriteIndex: 0,
+    },
     owner: '0',
-    life: 5,
+    position: { row: 6, col: 4 },
     damage: 0,
   };
 
   return next;
 };
 
-test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
+test.describe('召唤师战争 - 结构变换', () => {
   test('建筑转移：移动后推拉友方建筑', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     await clearEvidenceScreenshotsForTest(testInfo);
@@ -114,11 +126,13 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
       await clickBoardElement(hostPage, '[data-testid="sw-cell-5-2"]');
       await hostPage.waitForTimeout(800);
 
-      const structureSelectionPrompt = hostPage.locator('[data-testid="sw-ability-prompt"]').or(
-        hostPage.locator('[class*="prompt"]').filter({ hasText: /Select structure|Structure shift/i }),
-      );
-      await expect(structureSelectionPrompt).toBeVisible({ timeout: 8000 });
-      await expect(guestPage.locator('[data-testid="sw-ability-prompt"]')).toBeHidden();
+      const structureShiftBannerText = hostPage.locator('span').filter({
+        hasText: /结构变换：选择3格内友方建筑|Structure Shift: Select friendly building within 3/i,
+      }).first();
+      const skipButton = hostPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i }).first();
+      await expect(structureShiftBannerText).toBeVisible({ timeout: 8000 });
+      await expect(skipButton).toBeVisible({ timeout: 3000 });
+      await expect(guestPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i })).toHaveCount(0);
       await hostPage.screenshot({
         path: getEvidenceScreenshotPath(testInfo, 'structure-shift-owner-visible', {
           subdir: 'summonerwars/summonerwars-structure-shift.e2e/建筑转移：移动后推拉友方建筑',
@@ -134,15 +148,7 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
 
       await clickBoardElement(hostPage, '[data-testid^="sw-structure-"][data-owner="0"]');
 
-      const directionSelector = hostPage.locator('[data-testid="sw-direction-selector"]').or(
-        hostPage.locator('[class*="direction"]').filter({ hasText: /Choose direction/i }),
-      );
-      await expect(directionSelector).toBeVisible({ timeout: 8000 });
-
-      const upButton = directionSelector.locator('button').filter({ hasText: /^Up$/i }).first();
-      await expect(upButton).toBeVisible({ timeout: 3000 });
-      await upButton.click();
-      await expect(directionSelector).toBeHidden({ timeout: 5000 });
+      await clickBoardElement(hostPage, '[data-testid="sw-cell-5-4"]');
 
       await expect.poll(async () => {
         const currentTestId = await hostPage
@@ -151,6 +157,7 @@ test.describe('召唤师战争 - 选择建筑 + 推拉方向', () => {
           .getAttribute('data-testid');
         return currentTestId !== initialStructureTestId;
       }, { timeout: 5000 }).toBe(true);
+      await expect(hostPage.locator('[data-testid="sw-structure-5-4"][data-owner="0"]')).toBeVisible({ timeout: 5000 });
 
       await hostPage.screenshot({
         path: getEvidenceScreenshotPath(testInfo, 'structure-shift-after-move', {

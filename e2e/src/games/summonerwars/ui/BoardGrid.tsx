@@ -433,7 +433,7 @@ const UnitCell: React.FC<{
   props: BoardGridProps;
 }> = ({ row, col, unit, pos, viewCoord, core, myPlayerId, toViewCoord, currentGrid, props }) => {
   const isNew = props.newUnitIds?.has(unit.instanceId) ?? false;
-  const { t, i18n } = useTranslation('game-summonerwars');
+  const { t } = useTranslation('game-summonerwars');
   const spriteConfig = getUnitSpriteConfig(unit);
   const isMyUnit = unit.owner === myPlayerId;
   const unitInspectKey = `unit-${unit.instanceId}`;
@@ -655,7 +655,7 @@ const UnitCell: React.FC<{
             activeEvents={core.players[unit.owner]?.activeEvents ?? []}
             getAbilityName={(abilityId) => {
               const abilityNameKey = abilityRegistry.get(abilityId)?.name;
-              return abilityNameKey && i18n.exists(abilityNameKey) ? t(abilityNameKey) : abilityId;
+              return abilityNameKey ? t(abilityNameKey, { defaultValue: abilityId }) : abilityId;
             }}
             core={core}
           />

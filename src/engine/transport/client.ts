@@ -237,6 +237,7 @@ export class GameTransportClient {
                 connectionState: this._connectionState,
                 matchID: this.config.matchID,
             });
+            this.config.onError?.('not_connected');
             return;
         }
         this.socket.emit(

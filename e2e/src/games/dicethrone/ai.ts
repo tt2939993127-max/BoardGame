@@ -1676,6 +1676,23 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
     if (!player) return actions;
 
     if (phase === 'discard') {
+        // 规则口径（Rulepop）：弃牌阶段应"卖牌得 CP"而非纯弃牌。
+        // AI 优先卖牌（得 1 CP），只有无法卖牌时才纯弃牌。
+        if (canSellCard(state.core, playerId)) {
+            for (const card of player.hand) {
+                appendAction(actions, state, playerId, {
+                    actionId: createAiLegalActionId('sell-card', card.id),
+                    kind: 'sell-card',
+                    label: `卖出 ${card.id}`,
+                    commands: [{
+                        type: 'SELL_CARD',
+                        payload: { cardId: card.id },
+                    }],
+                    metadata: withAiActionStrategyTags({ cardId: card.id }, buildCardStrategyTags(card, 'sell-card')),
+                });
+            }
+        }
+        // 纯弃牌作为兜底（当卖牌不可用时）
         for (const card of player.hand) {
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('discard', card.id),
@@ -2165,6 +2182,18 @@ const cardValueScorer: LocalAiActionScorer = {
         }
 
         if (action.kind === 'sell-card') {
+            const phase = getContextPhase(context);
+            if (phase === 'discard') {
+                // 弃牌阶段卖牌策略：卖掉最不值得保留的牌（低费、无特殊效果的牌得分更高）
+                // 每张牌卖价固定 1 CP，所以卖高费牌是亏的（失去高费牌只换 1 CP）
+                const keepValue = card.cpCost * 12 + (card.isAttackModifier ? 18 : 0)
+                    + (card.type === 'upgrade' ? 25 : 0) + getCardDrawCount(card) * 14;
+                return {
+                    score: -keepValue,
+                    reason: `弃牌阶段卖 ${cardId}：保留价值越低的牌越适合卖`,
+                };
+            }
+            // 主阶段卖牌：卖高费牌可解锁更多操作空间
             return {
                 score: 10 + card.cpCost * 8,
                 reason: `卖牌 ${cardId} 可换取 CP`,
@@ -2173,8 +2202,11 @@ const cardValueScorer: LocalAiActionScorer = {
 
         if (action.kind === 'discard-card') {
             return {
-                score: card.cpCost * 20 + (card.type === 'action' ? 10 : 0),
-                reason: `优先弃掉费用更高的手牌 ${cardId}`,
+                // 弃牌评分应为负值：目的是在多张可弃牌中选最该弃的那张（相对排序），
+                // 而非让弃牌动作总分超过 advance-phase 导致 AI 在手牌未超限时也优先弃牌。
+                // cpCost 越高越该保留，所以弃高费牌应更不被偏好（更负）。
+                score: -(card.cpCost * 15 + (card.type === 'action' ? 8 : 0) + (card.isAttackModifier ? 12 : 0) + getCardDrawCount(card) * 10),
+                reason: `弃牌 ${cardId}：费用/收益越高的牌越不舍得弃`,
             };
         }
 
@@ -2665,6 +2697,12 @@ const phaseTempoScorer: LocalAiActionScorer = {
                     reason: '主阶段仍优先尝试创造收益，而不是过早结束阶段',
                 };
             }
+            if (phase === 'discard') {
+                return {
+                    score: 40,
+                    reason: '弃牌阶段优先推进，避免不必要弃牌',
+                };
+            }
             return 5;
         }
 
@@ -2713,6 +2751,7 @@ const DICETHRONE_PROJECTABLE_ACTION_KINDS = new Set<AiLegalAction['kind']>([
     'sell-card',
     'advance-phase',
     'select-ability',
+    'discard-card',
 ]);
 
 const isDiceThroneProjectableActionKind = (kind: AiLegalAction['kind']): boolean => {
@@ -2901,6 +2940,38 @@ const projectDiceThroneAction = (args: {
                 : '卖牌后若不能立刻换来更优动作，高难度会压低优先级',
             metadata: {
                 unlockedValue,
+            },
+        };
+    }
+
+    if (args.action.kind === 'discard-card') {
+        const cardId = typeof args.action.metadata?.cardId === 'string'
+            ? args.action.metadata.cardId
+            : null;
+        if (!cardId) return null;
+
+        const handSize = player.hand.length;
+        const handLimit = 6; // DiceThrone HAND_LIMIT
+        const needsDiscard = handSize > handLimit;
+        const card = findPlayerHandCard(state, args.context.playerId, cardId);
+        if (!card) return null;
+
+        // 弃牌后的局势投影：弃牌本身是负收益（失去手牌资源），
+        // 只有在手牌超限时才是必须动作。
+        const cardValue = estimateCardStrategicValue(card, 'play-card');
+        const penalty = needsDiscard
+            ? Number((-cardValue * 0.15 * scale).toFixed(3))
+            : Number((-cardValue * 0.6 * scale).toFixed(3));
+
+        return {
+            score: penalty,
+            reason: needsDiscard
+                ? '手牌超限必须弃牌，高难度会尽量少损失价值'
+                : '手牌未超限时弃牌是纯损失，高难度会极力避免',
+            metadata: {
+                cardValue,
+                needsDiscard,
+                handSize,
             },
         };
     }

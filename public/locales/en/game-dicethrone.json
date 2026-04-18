@@ -744,7 +744,8 @@
       "helm": "Helm",
       "pray": "Pray",
       "katana": "Katana",
-      "rising_sun": "Rising Sun"
+      "rising_sun": "Rising Sun",
+      "bullet": "Bullet"
     },
     "trigger": {
       "generic": "variant condition",

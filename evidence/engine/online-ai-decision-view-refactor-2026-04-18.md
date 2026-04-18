@@ -50,3 +50,41 @@
 - 这轮不是 SummonerWars 单点修补，而是全游戏在线 AI 决策入口的框架级收敛
 - 公开决策不再被 stale seat 误伤
 - 私有决策仍保留 stale-seat 防护
+
+---
+
+## 2026-04-18 补充修复：responseWindow 响应者不等于 activePlayer
+
+### 现象
+- DiceThrone 响应窗口里，当前 responder 可能不是当前行动玩家（例如防御/干扰响应）。
+- 若 freshness 校验把 `currentPlayer===responder` 当硬条件，会把合法响应误判为“不可决策”。
+
+### 修复点
+- 在在线 AI 决策视图 freshness 校验中，`responseWindow` 场景改为按窗口语义对齐：
+  - `windowType`
+  - `sourceId`（双方都存在时必须一致）
+  - `currentResponderId`
+- 非 `responseWindow` / 非当前 AI `interaction` 场景，才继续要求 `currentPlayerId===playerId`。
+
+### 新增/强化回归覆盖
+- `src/pages/__tests__/matchSeatValidation.test.ts`
+  - `response window 当前 responder 不是 activePlayer 时，仍应允许 AI 响应`
+- `src/engine/transport/__tests__/server.test.ts`
+  - `online AI watchdog 在 response window 中 responder 不是 activePlayer 时，仍应执行 RESPONSE_PASS`
+
+### 跨游戏核验（本轮）
+- `npm run test:ai:decision-view`
+  - 120 tests passed（4 files）
+- `npx vitest run src/pages/__tests__/matchSeatValidation.test.ts src/engine/transport/__tests__/server.test.ts`
+  - 107 tests passed（63 + 44）
+- `npx vitest run src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts src/games/smashup/__tests__/response-window-skip.test.ts`
+  - 13 tests passed（8 + 5）
+- `npm run typecheck`
+  - 通过
+
+### 当前风险边界（明确）
+- 已锁死的风险：
+  - 公开决策被 stale seat 误拦
+  - responseWindow responder != activePlayer 被误拦
+- 仍需持续观察的风险：
+  - 某些游戏若存在“结构上看似公开、但实际依赖私有字段”的特殊决策，可能需要 runtime override（少量）。

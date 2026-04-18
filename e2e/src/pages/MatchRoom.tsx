@@ -164,6 +164,38 @@ const TutorialDispatchBridge = ({ children }: { children: ReactNode }) => {
 const MAX_FORCE_END_TURN_FOLLOW_UP_STEPS = 16;
 const RECOVERY_FAILURE_SYNC_GRACE_MS = 700;
 
+function resolveLatestStateEventTimestamp(state: MatchState<unknown>): number | null {
+    const eventStreamEntries = Array.isArray(state.sys?.eventStream?.entries)
+        ? state.sys.eventStream.entries
+        : [];
+    for (let index = eventStreamEntries.length - 1; index >= 0; index -= 1) {
+        const timestamp = (eventStreamEntries[index] as { event?: { timestamp?: unknown } })?.event?.timestamp;
+        if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+            return timestamp;
+        }
+    }
+
+    const actionLogEntries = Array.isArray(state.sys?.actionLog?.entries)
+        ? state.sys.actionLog.entries
+        : [];
+    for (let index = actionLogEntries.length - 1; index >= 0; index -= 1) {
+        const timestamp = (actionLogEntries[index] as { timestamp?: unknown })?.timestamp;
+        if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+            return timestamp;
+        }
+    }
+
+    return null;
+}
+
+function resolveObservedStateAgeMs(state: MatchState<unknown>, now: number): number {
+    const latestTimestamp = resolveLatestStateEventTimestamp(state);
+    if (latestTimestamp === null) {
+        return 0;
+    }
+    return Math.max(0, now - latestTimestamp);
+}
+
 const OnlineAiSeatBridge = ({
     server,
     matchId,
@@ -420,9 +452,13 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
+            const now = Date.now();
+            const minimumDelayMs = resolveAiMinimumActionDelayMs(controller);
+            const decisionElapsedMs = now - startedAt;
+            const observedStateAgeMs = resolveObservedStateAgeMs(state as MatchState<unknown>, now);
             const remainingDelayMs = Math.max(
                 0,
-                resolveAiMinimumActionDelayMs(controller) - (Date.now() - startedAt),
+                minimumDelayMs - Math.max(decisionElapsedMs, observedStateAgeMs),
             );
 
             if (remainingDelayMs > 0) {

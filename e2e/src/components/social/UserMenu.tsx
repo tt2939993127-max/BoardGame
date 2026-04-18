@@ -12,6 +12,9 @@ import { NOTIFICATION_API_URL } from '../../config/server';
 import { useSocial } from '../../contexts/SocialContext';
 
 const NOTIFICATION_SEEN_KEY = 'notification_last_seen';
+const getNotificationSeenStorageKey = (userId?: string | null) => {
+    return userId ? `${NOTIFICATION_SEEN_KEY}:${userId}` : NOTIFICATION_SEEN_KEY;
+};
 
 const parseTimestamp = (value?: string | null) => {
     if (!value) return 0;
@@ -35,13 +38,14 @@ interface UserMenuProps {
 }
 
 export const UserMenu = ({ onLogout }: UserMenuProps) => {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const { openModal, closeModal } = useModalStack();
     const { requests, unreadTotal, ensureRealtimeConnection } = useSocial();
     const { t } = useTranslation(['auth', 'social']);
     const [isOpen, setIsOpen] = useState(false);
     const [hasNewNotification, setHasNewNotification] = useState(false);
+    const [latestNotificationTimestamp, setLatestNotificationTimestamp] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
     const accountModalIdRef = useRef<string | null>(null);
     const cursorModalIdRef = useRef<string | null>(null);
@@ -53,22 +57,60 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
     // 检查是否有新通知（对比 localStorage 记录的上次查看时间）
     useEffect(() => {
         let active = true;
-        fetch(NOTIFICATION_API_URL)
-            .then(res => res.ok ? res.json() : Promise.reject())
-            .then(data => {
-                if (!active) return;
-                const list = data.notifications as { _id: string; createdAt: string }[];
+
+        const syncNotificationBadge = async () => {
+            try {
+                const [notificationsResponse, readStateResponse] = await Promise.all([
+                    fetch(NOTIFICATION_API_URL),
+                    token
+                        ? fetch(`${NOTIFICATION_API_URL}/read-state`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        })
+                        : Promise.resolve(null),
+                ]);
+
+                if (!notificationsResponse.ok) {
+                    return;
+                }
+
+                const data = await notificationsResponse.json() as {
+                    notifications?: { _id: string; createdAt: string }[];
+                };
+
+                if (!active) {
+                    return;
+                }
+
+                const list = data.notifications ?? [];
+                const latestTime = getLatestNotificationTimestamp(list);
+                setLatestNotificationTimestamp(latestTime);
+
                 if (list.length === 0) {
                     setHasNewNotification(false);
                     return;
                 }
-                const lastSeen = localStorage.getItem(NOTIFICATION_SEEN_KEY);
-                const latestTime = getLatestNotificationTimestamp(list);
-                setHasNewNotification(latestTime > parseTimestamp(lastSeen));
-            })
-            .catch(() => {});
+
+                const scopedSeenKey = getNotificationSeenStorageKey(user?.id);
+                const localSeenAt = Math.max(
+                    parseTimestamp(localStorage.getItem(NOTIFICATION_SEEN_KEY)),
+                    parseTimestamp(localStorage.getItem(scopedSeenKey)),
+                );
+
+                let persistedSeenAt = 0;
+                if (readStateResponse?.ok) {
+                    const readState = await readStateResponse.json() as { lastSeenAt?: string | null };
+                    persistedSeenAt = parseTimestamp(readState.lastSeenAt ?? null);
+                }
+
+                setHasNewNotification(latestTime > Math.max(localSeenAt, persistedSeenAt));
+            } catch {
+                // ignore network errors
+            }
+        };
+
+        void syncNotificationBadge();
         return () => { active = false; };
-    }, []);
+    }, [token, user?.id]);
 
     // 点击外部关闭
     useEffect(() => {
@@ -88,8 +130,24 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
 
     const markNotificationsSeen = useCallback(() => {
         setHasNewNotification(false);
-        localStorage.setItem(NOTIFICATION_SEEN_KEY, Date.now().toString());
-    }, []);
+        const seenAt = Math.max(Date.now(), latestNotificationTimestamp);
+        const seenAtRaw = seenAt.toString();
+        localStorage.setItem(NOTIFICATION_SEEN_KEY, seenAtRaw);
+        localStorage.setItem(getNotificationSeenStorageKey(user?.id), seenAtRaw);
+
+        if (token) {
+            void fetch(`${NOTIFICATION_API_URL}/read-state`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ seenAt: new Date(seenAt).toISOString() }),
+            }).catch(() => {
+                // ignore network errors
+            });
+        }
+    }, [latestNotificationTimestamp, token, user?.id]);
 
     const handleOpenFriends = () => {
         ensureRealtimeConnection();

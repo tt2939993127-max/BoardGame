@@ -133,9 +133,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const phaseTrackerClass = isLandscapeMobileViewport
     ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-slate-700/20 min-w-[5.75rem] max-w-[5.75rem] pointer-events-auto'
     : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem] pointer-events-auto';
+  const phaseTrackerRailClass = isLandscapeMobileViewport
+    ? ''
+    : 'absolute inset-y-0 right-2 z-20 flex items-center pointer-events-none';
   const phaseTrackerWrapperClass = isLandscapeMobileViewport
     ? 'absolute top-3 right-3 z-60 pointer-events-auto'
-    : 'absolute top-[40%] right-2 z-20 -translate-y-1/2 pointer-events-auto';
+    : 'pointer-events-auto';
   const boardReferenceWidthCss = isLandscapeMobileViewport
     ? `var(--mobile-board-shell-design-width, ${SUMMONER_WARS_MOBILE_BOARD_REFERENCE_WIDTH_PX}px)`
     : !isMobileViewport
@@ -1421,14 +1424,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   {phaseControlsNode}
                 </div>
 
-                {/* 右侧：阶段指示器 */}
-                <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
-                  {phaseTrackerNode}
+                {/* 右侧：阶段指示器（桌面端独立右侧中线 rail，不再和对手/底部 HUD 共用经验值定位） */}
+                <div className={phaseTrackerRailClass}>
+                  <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                    {phaseTrackerNode}
+                  </div>
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
                 <div
-                  className={`absolute top-3 z-30 pointer-events-auto ${isLandscapeMobileViewport ? '' : 'left-1/2 -translate-x-1/2'}`}
+                  className={`absolute top-3 z-30 pointer-events-auto ${isLandscapeMobileViewport ? '' : 'left-0 right-0 flex justify-center'}`}
                   style={statusBannersWrapperStyle}
                   data-tutorial-id="sw-action-banner"
                 >

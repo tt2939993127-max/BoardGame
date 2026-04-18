@@ -100,6 +100,15 @@
 - `MatchRoom`、`resolveNextAiAction`、服务端 watchdog / legal-action recovery 必须复用同一套决策视图 helper。
 - 私有决策的 freshness gate 只允许拦 `private-required`，不得再一刀切阻断整个在线 AI。
 - 新增在线 AI 决策点时，先判断它依赖公共真相还是私有 overlay，再决定是否允许 shared fallback。
+- **响应窗口特例（强制）**：`responseWindow` 场景下，freshness 校验不得把 `currentPlayer === responder` 当成硬条件。必须按窗口语义对齐（`windowType/sourceId/currentResponder`），因为响应者本来就可能不是当前行动玩家（如 DiceThrone 防御/干扰响应）。
+
+##### 回归门禁（强制）
+
+- 任何触碰在线 AI 决策视图、seat freshness、watchdog legal-action recovery 的改动，至少补并通过以下三类测试：
+- `shared` 决策：seat stale 下仍可继续（例如 faction/setup）。
+- `private-required` 决策：seat stale 下必须阻断。
+- `responseWindow` 决策：responder 不是 activePlayer 时仍可决策（并验证 watchdog 能执行 `RESPONSE_PASS`/等价动作）。
+- 推荐统一门禁命令：`npm run test:ai:decision-view`（合并执行上述四类回归）。
 
 #### GameBoardProps 契约（强制）
 

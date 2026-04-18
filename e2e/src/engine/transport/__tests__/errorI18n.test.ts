@@ -57,6 +57,7 @@ const ENGINE_ERROR_CODES = [
     'character_not_selected',
     'character_selection_not_initialized',
     'command_failed',
+    'not_connected',
 ] as const;
 
 // ── 教程级 error code（对应各游戏 game-<id>.json）────────────────────────────

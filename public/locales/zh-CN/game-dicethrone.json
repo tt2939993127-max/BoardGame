@@ -753,9 +753,50 @@
     "title": "选择发动变体",
     "description": "该技能有多个变体同时满足条件，请选择要发动的变体：",
     "skip": "不发动技能",
+    "variantFallbackName": "{{abilityName}}（{{trigger}}）",
+    "effectSeparator": "；",
     "faceLabel": {
+      "fist": "拳",
+      "palm": "掌",
+      "taiji": "太极",
+      "lotus": "莲花",
+      "sword": "剑",
+      "heart": "心",
+      "strength": "力量",
+      "fire": "火",
+      "magma": "岩浆",
+      "fiery_soul": "火魂",
+      "meteor": "陨石",
+      "bow": "弓",
+      "foot": "脚",
+      "moon": "月",
+      "dagger": "匕首",
+      "bag": "背包",
+      "card": "卡牌",
+      "shadow": "暗影",
+      "helm": "头盔",
+      "pray": "祈祷",
       "katana": "武士刀",
-      "rising_sun": "旭日"
+      "rising_sun": "旭日",
+      "bullet": "子弹"
+    },
+    "trigger": {
+      "generic": "变体条件",
+      "diceSetSeparator": " + ",
+      "faceSeparator": "、",
+      "countFace": "{{count}}个{{face}}",
+      "allSymbolsPresent": "包含{{faces}}",
+      "smallStraight": "小顺子",
+      "largeStraight": "大顺子",
+      "phase": {
+        "setup": "准备阶段",
+        "income": "收入阶段",
+        "main1": "主要阶段 1",
+        "offensiveRoll": "进攻掷骰",
+        "defensiveRoll": "防守掷骰",
+        "main2": "主要阶段 2",
+        "discard": "弃牌阶段"
+      }
     }
   },
   "choices": {

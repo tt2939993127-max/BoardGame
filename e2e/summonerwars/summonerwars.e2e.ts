@@ -12,7 +12,7 @@ import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
+import { DESKTOP_REFERENCE_VIEWPORT, MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 import {
   createSummonerWarsMobileEvidenceState,
   SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
@@ -2626,7 +2626,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 1440, height: 900 },
+      viewport: DESKTOP_REFERENCE_VIEWPORT,
     });
     await blockAudioRequests(hostContext);
     await setChineseLocale(hostContext);
@@ -2649,7 +2649,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({
       baseURL,
-      viewport: { width: 1440, height: 900 },
+      viewport: DESKTOP_REFERENCE_VIEWPORT,
     });
     await blockAudioRequests(guestContext);
     await setChineseLocale(guestContext);
