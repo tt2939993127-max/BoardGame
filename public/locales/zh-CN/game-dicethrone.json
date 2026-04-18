@@ -778,7 +778,9 @@
       "pray": "祈祷",
       "katana": "武士刀",
       "rising_sun": "旭日",
-      "bullet": "子弹"
+      "bullet": "子弹",
+      "bullseye": "靶心",
+      "dash": "冲刺"
     },
     "trigger": {
       "generic": "变体条件",

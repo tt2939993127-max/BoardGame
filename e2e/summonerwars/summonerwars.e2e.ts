@@ -3723,6 +3723,109 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
+  test('事件卡：非交互事件牌应先 armed 再确认，点棋盘可取消', async ({ browser }, testInfo) => {
+    test.setTimeout(90000);
+    await clearEvidenceScreenshotsForTest(testInfo);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    await disableSummonerWarsAutoSkip(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    const matchId = await createSummonerWarsRoom(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    await disableSummonerWarsAutoSkip(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage);
+    await waitForSummonerWarsUI(guestPage);
+
+    const prepared = prepareNonInteractiveEventTwoStepState(await readCoreState(hostPage));
+    await applyCoreState(hostPage, prepared.core);
+    await closeDebugPanelIfOpen(hostPage);
+    await waitForPhase(hostPage, 'move');
+
+    const eventCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-id="frost-ice-repair"]')
+      .first();
+    await expect(eventCard).toBeVisible({ timeout: 5000 });
+    await expect(eventCard).toHaveAttribute('data-selected', 'false');
+
+    // 第一次点击：只 armed（选中上移），不出牌
+    await eventCard.click();
+    await expect(eventCard).toHaveAttribute('data-selected', 'true');
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 5000, message: '第一次点击后事件牌应仍在手牌（仅 armed）' }).toBe(true);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-noninteractive-armed-step', {
+        filename: 'event-noninteractive-armed-step.png',
+      }),
+      fullPage: false,
+    });
+
+    // 点棋盘：取消 armed，不出牌
+    await clickBoardElement(hostPage, `[data-testid="sw-cell-${prepared.structurePos.row}-${prepared.structurePos.col}"]`);
+    await expect(eventCard).toHaveAttribute('data-selected', 'false');
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 5000, message: '点棋盘取消 armed 后事件牌应仍在手牌' }).toBe(true);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-noninteractive-board-cancel', {
+        filename: 'event-noninteractive-board-cancel.png',
+      }),
+      fullPage: false,
+    });
+
+    // 再次 armed 后，第二次点击同一张牌才确认打出
+    await eventCard.click();
+    await expect(eventCard).toHaveAttribute('data-selected', 'true');
+    await eventCard.click();
+
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 10000, message: '第二次点击确认后事件牌应离开手牌' }).toBe(false);
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.board?.[prepared.structurePos.row]?.[prepared.structurePos.col]?.structure?.damage ?? -1;
+    }, { timeout: 10000, message: '寒冰修补结算后结构伤害应从2变为0' }).toBe(0);
+    await expect(eventCard).toBeHidden({ timeout: 5000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-noninteractive-confirm-play', {
+        filename: 'event-noninteractive-confirm-play.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
   test('阶段自动跳过：有事件卡时不应跳过', async ({ browser }, testInfo) => {
     test.setTimeout(90000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -5700,4 +5803,64 @@ const prepareDiscardPileState = (coreState: any) => {
   player.discard = [...discardCards, ...player.discard];
 
   return next;
+};
+
+/**
+ * 准备非交互事件两段式测试状态
+ * - 移动阶段
+ * - 手牌有寒冰修补（非交互型事件）
+ * - 场上至少一个友方建筑且有2点伤害（用于验证二次确认后才真正结算）
+ */
+const prepareNonInteractiveEventTwoStepState = (coreState: any): {
+  core: any;
+  cardId: string;
+  structurePos: { row: number; col: number };
+} => {
+  const next = cloneState(coreState);
+  next.phase = 'move';
+  next.currentPlayer = '0';
+  next.selectedUnit = undefined;
+
+  const player = next.players?.['0'];
+  if (!player) throw new Error('无法读取玩家0状态');
+
+  const cardId = 'frost-ice-repair';
+  const iceRepairCard = {
+    id: cardId,
+    name: '寒冰修补',
+    cardType: 'event',
+    eventType: 'common',
+    cost: 0,
+    playPhase: 'move',
+    effect: '从每个友方建筑上移除2点伤害。',
+    spriteIndex: 7,
+    spriteAtlas: 'cards',
+  };
+
+  player.hand = [iceRepairCard, ...player.hand.filter((c: any) => c.id !== cardId)];
+  player.magic = 10;
+  player.moveCount = 0;
+
+  const board = next.board as any[][] | undefined;
+  if (!board || board.length === 0) {
+    throw new Error('棋盘为空，无法准备寒冰修补测试状态');
+  }
+
+  for (let r = 0; r < board.length; r += 1) {
+    for (let c = 0; c < board[r].length; c += 1) {
+      const structure = board[r]?.[c]?.structure;
+      if (structure?.owner === '0') {
+        board[r][c] = {
+          ...board[r][c],
+          structure: {
+            ...structure,
+            damage: 2,
+          },
+        };
+        return { core: next, cardId, structurePos: { row: r, col: c } };
+      }
+    }
+  }
+
+  throw new Error('未找到友方建筑，无法验证寒冰修补结算效果');
 };

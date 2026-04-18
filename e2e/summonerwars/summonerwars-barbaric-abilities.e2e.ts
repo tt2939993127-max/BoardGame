@@ -561,6 +561,20 @@ test.describe('炽原精灵阵营特色交互', () => {
         const targetUnit = state?.board?.[allyTargetPos.row]?.[allyTargetPos.col]?.unit;
         return (sourceUnit?.boosts ?? -1) === 0 && (targetUnit?.boosts ?? -1) === 3;
       }, { timeout: 10000 }).toBe(true);
+
+      const skipAfterResolve = hostPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i }).first();
+      await expect(skipAfterResolve).toBeHidden({ timeout: 5000 });
+
+      // 回归保护：交互收口后再次点击目标，不应继续重复触发祖灵羁绊
+      await clickBoardElement(hostPage, `[data-testid="sw-unit-${allyTargetPos.row}-${allyTargetPos.col}"][data-owner="0"]`);
+      await hostPage.waitForTimeout(700);
+      await expect.poll(async () => {
+        const state = await readCoreState(hostPage);
+        const sourceUnit = state?.board?.[summonerMoveTo.row]?.[summonerMoveTo.col]?.unit;
+        const targetUnit = state?.board?.[allyTargetPos.row]?.[allyTargetPos.col]?.unit;
+        return (sourceUnit?.boosts ?? -1) === 0 && (targetUnit?.boosts ?? -1) === 3;
+      }, { timeout: 10000 }).toBe(true);
+
       await closeDebugPanelIfOpen(hostPage);
 
       await hostPage.screenshot({

@@ -581,18 +581,19 @@ export function useCellInteraction({
       if (isValid) {
         // 寒冰冲撞：选择目标后进入推拉方向选择
         if (abilityMode.abilityId === 'ice_ram') {
-          if (swInteraction?.type === 'ice_ram_target') {
-            const optionId = swInteraction.options.find((opt) => {
-              const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
-              return value?.action === 'ice_ram_target'
-                && value.targetPosition?.row === gameRow
-                && value.targetPosition?.col === gameCol;
-            })?.id ?? null;
-            if (optionId) {
-              respondInteractionOption(optionId);
+            if (swInteraction?.type === 'ice_ram_target') {
+              const optionId = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'ice_ram_target'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
+              })?.id ?? null;
+              if (optionId) {
+                respondInteractionOption(optionId);
+                setAbilityMode(null);
+              }
+              return;
             }
-            return;
-          }
           setAbilityMode({
             ...abilityMode,
             step: 'selectPushDirection',
@@ -602,21 +603,22 @@ export function useCellInteraction({
         }
         // 结构变换目标是建筑，进入选择推拉方向步骤
         if (abilityMode.abilityId === 'structure_shift') {
-          if (swInteraction?.type === 'after_move_structure_shift_target') {
-            const option = swInteraction.options.find((opt) => {
-              const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
-              return value?.action === 'after_move_structure_shift_target'
-                && value.targetPosition?.row === gameRow
-                && value.targetPosition?.col === gameCol;
-            });
-            if (option) {
-              dispatch(INTERACTION_COMMANDS.RESPOND, {
-                interactionId: swInteraction.id,
-                optionId: option.id,
+            if (swInteraction?.type === 'after_move_structure_shift_target') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'after_move_structure_shift_target'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
               });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+                setAbilityMode(null);
+              }
+              return;
             }
-            return;
-          }
           setAbilityMode({
             ...abilityMode,
             step: 'selectNewPosition',
@@ -679,6 +681,7 @@ export function useCellInteraction({
                   interactionId: swInteraction.id,
                   optionId: option.id,
                 });
+                setAbilityMode(null);
               }
               return;
             }
@@ -701,6 +704,7 @@ export function useCellInteraction({
                   interactionId: swInteraction.id,
                   optionId: option.id,
                 });
+                setAbilityMode(null);
               }
               return;
             }
@@ -724,6 +728,7 @@ export function useCellInteraction({
                   interactionId: swInteraction.id,
                   optionId: option.id,
                 });
+                setAbilityMode(null);
               }
               return;
             }
@@ -748,6 +753,7 @@ export function useCellInteraction({
                   interactionId: swInteraction.id,
                   optionId: option.id,
                 });
+                setAbilityMode(null);
               }
               return;
             }
@@ -836,6 +842,7 @@ export function useCellInteraction({
               interactionId: swInteraction.id,
               optionId: option.id,
             });
+            setAbilityMode(null);
           }
           return;
         }
@@ -863,6 +870,7 @@ export function useCellInteraction({
           })?.id ?? null;
           if (optionId) {
             respondInteractionOption(optionId);
+            setAbilityMode(null);
           }
           return;
         }

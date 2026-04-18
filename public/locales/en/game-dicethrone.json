@@ -745,7 +745,9 @@
       "pray": "Pray",
       "katana": "Katana",
       "rising_sun": "Rising Sun",
-      "bullet": "Bullet"
+      "bullet": "Bullet",
+      "bullseye": "Bullseye",
+      "dash": "Dash"
     },
     "trigger": {
       "generic": "variant condition",

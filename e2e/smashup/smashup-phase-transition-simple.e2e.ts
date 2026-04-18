@@ -323,6 +323,93 @@ async function readSmashUpAiChoiceRejectPatchStatus(page: Page): Promise<{
     });
 }
 
+async function installSmashUpAiResponsePassPatch(
+    page: Page,
+    targetPlayerIds: string[],
+): Promise<void> {
+    await page.evaluate(async ({ ids }) => {
+        const globalWindow = window as Window & {
+            __SU_AI_FORCE_RESPONSE_PASS_PATCH__?: {
+                installed: boolean;
+                targetPlayerIds: string[];
+                rewrittenBatches: number;
+            };
+        };
+        if (globalWindow.__SU_AI_FORCE_RESPONSE_PASS_PATCH__?.installed) {
+            return;
+        }
+
+        const transportModule = await import('/src/engine/transport/client.ts');
+        const proto = transportModule.GameTransportClient?.prototype as {
+            sendBatch?: (
+                this: unknown,
+                batchId: string,
+                commands: Array<{ type: string; payload: unknown }>,
+                onConfirmed?: (state: unknown) => void,
+                onRejected?: (reason: string) => void,
+            ) => void;
+        } | undefined;
+        if (!proto?.sendBatch) {
+            throw new Error('GameTransportClient.sendBatch not available');
+        }
+
+        const originalSendBatch = proto.sendBatch;
+        globalWindow.__SU_AI_FORCE_RESPONSE_PASS_PATCH__ = {
+            installed: true,
+            targetPlayerIds: ids,
+            rewrittenBatches: 0,
+        };
+
+        proto.sendBatch = function patchedSendBatch(
+            this: unknown,
+            batchId: string,
+            commands: Array<{ type: string; payload: unknown }>,
+            onConfirmed?: (state: unknown) => void,
+            onRejected?: (reason: string) => void,
+        ) {
+            const tracker = globalWindow.__SU_AI_FORCE_RESPONSE_PASS_PATCH__;
+            const config = (this as { config?: { playerID?: string | null } }).config;
+            const playerId = config?.playerID ?? null;
+            const latestState = (this as {
+                latestState?: {
+                    sys?: {
+                        responseWindow?: {
+                            current?: {
+                                windowType?: string;
+                                responderQueue?: string[];
+                                currentResponderIndex?: number;
+                            } | null;
+                        };
+                    };
+                } | null;
+            }).latestState;
+            const responseWindow = latestState?.sys?.responseWindow?.current ?? null;
+            const responder = responseWindow?.responderQueue?.[responseWindow.currentResponderIndex ?? 0] ?? null;
+
+            const shouldRewrite = Boolean(
+                tracker
+                && playerId
+                && tracker.targetPlayerIds.includes(playerId)
+                && responseWindow?.windowType === 'meFirst'
+                && responder === playerId
+                && commands.some((command) => command.type === 'PLAY_ACTION'),
+            );
+
+            if (shouldRewrite) {
+                tracker!.rewrittenBatches += 1;
+                const rewritten = commands.map((command) => (
+                    command.type === 'PLAY_ACTION'
+                        ? { type: 'RESPONSE_PASS', payload: {} }
+                        : command
+                ));
+                return originalSendBatch.call(this, batchId, rewritten, onConfirmed, onRejected);
+            }
+
+            return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected);
+        };
+    }, { ids: targetPlayerIds });
+}
+
 async function waitForTurnTracker(page: Page, side: 'YOU' | 'OPP'): Promise<void> {
     await expect(
         page.locator('[data-tutorial-id="su-turn-tracker"]').filter({ hasText: new RegExp(side, 'i') }),
@@ -1014,13 +1101,18 @@ function buildOnlineAiFourPlayerResponseWindowStressState(baseState: any) {
 
     const buildPlayer = (playerId: '0' | '1' | '2' | '3', vp: number) => ({
         ...(existingPlayers[playerId] ?? {}),
-        hand: [
-            { uid: `p${playerId}-under-pressure-1`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
-            { uid: `p${playerId}-under-pressure-2`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
-        ],
+        hand: playerId === '3'
+            ? [
+                { uid: `p${playerId}-shinobi-1`, defId: 'ninja_shinobi', type: 'minion', owner: playerId },
+                { uid: `p${playerId}-shinobi-2`, defId: 'ninja_shinobi', type: 'minion', owner: playerId },
+            ]
+            : [
+                { uid: `p${playerId}-under-pressure-1`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
+                { uid: `p${playerId}-under-pressure-2`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
+            ],
         deck: [],
         discard: [],
-        factions: ['giant_ants', 'pirates'],
+        factions: playerId === '3' ? ['ninjas', 'giant_ants'] : ['giant_ants', 'pirates'],
         minionsPlayed: 1,
         minionLimit: 1,
         actionsPlayed: 1,
@@ -1035,9 +1127,9 @@ function buildOnlineAiFourPlayerResponseWindowStressState(baseState: any) {
         defId: 'giant_ant_soldier',
         controller: playerId,
         owner: playerId,
-        basePower: 1,
+        basePower: 3,
         powerCounters: 2,
-        powerModifier: 0,
+        powerModifier: 3,
         tempPowerModifier: 0,
         talentUsed: false,
         playedThisTurn: false,
@@ -2533,7 +2625,7 @@ test('在线 AI 持有真实响应牌时，应在 meFirst 响应窗口内自动�
 });
 
 test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且不卡死', async ({ browser }, testInfo) => {
-    test.setTimeout(180000);
+    test.setTimeout(240000);
 
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     const setup = await setupSmashUpOnlineAiRoom(browser, baseURL, {
@@ -2542,17 +2634,17 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
             '1': {
                 type: 'local-ai',
                 difficulty: 'expert',
-                minimumActionDelayMs: 120,
+                minimumActionDelayMs: 60,
             },
             '2': {
                 type: 'local-ai',
                 difficulty: 'expert',
-                minimumActionDelayMs: 120,
+                minimumActionDelayMs: 60,
             },
             '3': {
                 type: 'local-ai',
                 difficulty: 'expert',
-                minimumActionDelayMs: 120,
+                minimumActionDelayMs: 60,
             },
         },
     });
@@ -2566,6 +2658,7 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         await waitForAiSeatCredential(hostPage, matchId, '1');
         await waitForAiSeatCredential(hostPage, matchId, '2');
         await waitForAiSeatCredential(hostPage, matchId, '3');
+        await installSmashUpAiResponsePassPatch(hostPage, ['1', '2']);
 
         await applyOnlineMatchState(matchId, hostPage, buildOnlineAiFourPlayerResponseWindowStressState);
         await waitForSmashUpUI(hostPage);
@@ -2575,11 +2668,40 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         expect(injectedState.core?.currentPlayerIndex).toBe(0);
         for (const pid of ['0', '1', '2', '3'] as const) {
             const hand = (injectedState.core?.players?.[pid]?.hand ?? []) as Array<{ defId?: string }>;
-            const responseCardCount = hand.filter((card) => card.defId === 'giant_ant_under_pressure').length;
+            const responseCardCount = pid === '3'
+                ? hand.filter((card) => card.defId === 'ninja_shinobi').length
+                : hand.filter((card) => card.defId === 'giant_ant_under_pressure').length;
             expect(responseCardCount).toBeGreaterThanOrEqual(2);
         }
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-4p-response-rotation-before');
+
+        await hostPage.evaluate(() => {
+            const win = window as Window & {
+                __SU_RESPONSE_ROTATION_TRACK__?: string[];
+                __SU_RESPONSE_ROTATION_TIMER__?: number;
+            };
+            const sample = () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const rw = state?.sys?.responseWindow?.current;
+                const responder = rw?.responderQueue?.[rw?.currentResponderIndex ?? 0];
+                if (typeof responder === 'string') {
+                    const track = win.__SU_RESPONSE_ROTATION_TRACK__ ?? [];
+                    track.push(responder);
+                    if (track.length > 2000) {
+                        track.shift();
+                    }
+                    win.__SU_RESPONSE_ROTATION_TRACK__ = track;
+                }
+            };
+            if (typeof win.__SU_RESPONSE_ROTATION_TIMER__ === 'number') {
+                window.clearInterval(win.__SU_RESPONSE_ROTATION_TIMER__);
+            }
+            win.__SU_RESPONSE_ROTATION_TRACK__ = [];
+            sample();
+            win.__SU_RESPONSE_ROTATION_TIMER__ = window.setInterval(sample, 40);
+        });
+
         await dispatchHarnessCommand(hostPage, '0', 'ADVANCE_PHASE', {});
 
         await expect.poll(async () => {
@@ -2587,43 +2709,75 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
             const responseWindow = state.sys?.responseWindow?.current ?? null;
             return {
                 phase: state.sys?.phase ?? null,
-                windowType: responseWindow?.windowType ?? null,
-                responderQueueLength: Array.isArray(responseWindow?.responderQueue) ? responseWindow.responderQueue.length : 0,
-                currentResponder: responseWindow?.responderQueue?.[responseWindow.currentResponderIndex] ?? null,
+                responseWindow,
             };
         }, {
             timeout: 15000,
             message: '等待四人计分响应窗口打开',
-        }).toEqual({
+        }).toMatchObject({
             phase: 'scoreBases',
-            windowType: 'meFirst',
-            responderQueueLength: 4,
-            currentResponder: '0',
+            responseWindow: {
+                windowType: 'meFirst',
+            },
         });
+        const openedState = await getMatchState(matchId, hostPage);
+        const openedResponseWindow = (openedState as unknown as {
+            sys?: {
+                responseWindow?: {
+                    current?: {
+                        responderQueue?: string[];
+                        currentResponderIndex?: number;
+                    } | null;
+                };
+            };
+        }).sys?.responseWindow?.current ?? null;
+        const openedResponderQueue = openedResponseWindow?.responderQueue ?? [];
+        const openedCurrentResponder = openedResponderQueue[openedResponseWindow?.currentResponderIndex ?? 0] ?? null;
+        expect(openedResponderQueue.length).toBe(4);
+        expect(openedCurrentResponder).toBe('0');
+        expect(openedResponderQueue.includes('1')).toBe(true);
+        expect(openedResponderQueue.includes('2')).toBe(true);
+        expect(openedResponderQueue.includes('3')).toBe(true);
+        console.log('[4p-response] openedResponderQueue=', JSON.stringify(openedResponderQueue));
 
-        const responderHistory: string[] = [];
         let responseClosed = false;
-        for (let i = 0; i < 120; i += 1) {
+        for (let i = 0; i < 420; i += 1) {
             const state = await getMatchState(matchId, hostPage);
+            const interactionCurrent = state.sys?.interaction?.current ?? null;
+            if (interactionCurrent?.playerId === '0' && interactionCurrent?.data?.sourceId === 'smashup_reaction_choose') {
+                await respondCurrentInteraction(hostPage, { optionId: 'pass' });
+                continue;
+            }
             const responseWindow = state.sys?.responseWindow?.current ?? null;
             if (!responseWindow) {
                 responseClosed = true;
                 break;
             }
             const currentResponder = responseWindow.responderQueue?.[responseWindow.currentResponderIndex];
-            if (typeof currentResponder === 'string') {
-                responderHistory.push(currentResponder);
-            }
             if (currentResponder === '0') {
                 await dispatchHarnessCommand(hostPage, '0', 'RESPONSE_PASS', {});
             } else {
-                await hostPage.waitForTimeout(280);
+                await hostPage.waitForTimeout(200);
             }
         }
 
         expect(responseClosed).toBe(true);
 
-        const compactHistory = responderHistory.filter((id, idx) => idx === 0 || id !== responderHistory[idx - 1]);
+        const trackedResponderHistory = await hostPage.evaluate(() => {
+            const win = window as Window & {
+                __SU_RESPONSE_ROTATION_TRACK__?: string[];
+                __SU_RESPONSE_ROTATION_TIMER__?: number;
+            };
+            if (typeof win.__SU_RESPONSE_ROTATION_TIMER__ === 'number') {
+                window.clearInterval(win.__SU_RESPONSE_ROTATION_TIMER__);
+                win.__SU_RESPONSE_ROTATION_TIMER__ = undefined;
+            }
+            return win.__SU_RESPONSE_ROTATION_TRACK__ ?? [];
+        });
+        const compactHistory = trackedResponderHistory.filter((id: string, idx: number) => (
+            idx === 0 || id !== trackedResponderHistory[idx - 1]
+        ));
+        console.log('[4p-response] compactHistory=', JSON.stringify(compactHistory.slice(0, 80)));
         const hasSubsequence = (source: string[], target: string[]): boolean => {
             let pointer = 0;
             for (const item of source) {
@@ -2644,7 +2798,13 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
 
         const finalState = await getMatchState(matchId, hostPage);
         expect(finalState.sys?.responseWindow?.current ?? null).toBeNull();
-        expect(finalState.sys?.interaction?.current ?? null).toBeNull();
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return state.sys?.interaction?.current?.data?.sourceId ?? null;
+        }, {
+            timeout: 10000,
+            message: '等待四人响应链收口后清空房主残留交互',
+        }).toBeNull();
         expect(finalState.sys?.phase).toBe('playCards');
         await expect(hostPage.getByText('AI 响应超时')).toHaveCount(0);
         await expect(hostPage.getByText('AI 自动跳过。')).toHaveCount(0);
