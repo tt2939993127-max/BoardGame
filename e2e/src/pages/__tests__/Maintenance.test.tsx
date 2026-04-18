@@ -11,8 +11,8 @@ import {
 } from '../../lib/browserCompatibility';
 import {
     MapContainer,
-    shouldReserveSystemBackGesture,
 } from '../../games/summonerwars/ui/MapContainer';
+import { shouldReserveSystemBackGesture } from '../../games/summonerwars/ui/mapContainerUtils';
 
 const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState, androidLiveUpdateActivityState } = vi.hoisted(() => ({
     nativeAndroidRuntimeState: {

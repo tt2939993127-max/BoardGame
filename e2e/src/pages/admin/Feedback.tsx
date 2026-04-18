@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
     AlertTriangle,
-    ChevronLeft,
-    ChevronRight,
     Check,
     CheckCircle,
     Circle,
@@ -326,7 +324,6 @@ export default function AdminFeedbackPage() {
     const [sortFilter, setSortFilter] = useState<string>('newest');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -416,7 +413,7 @@ export default function AdminFeedbackPage() {
 
     useEffect(() => {
         if (!activeFeedback) {
-            setIsDetailOpen(false);
+            setActiveId(null);
         }
     }, [activeFeedback]);
 
@@ -511,16 +508,6 @@ export default function AdminFeedbackPage() {
         setter(value);
         setSelectedIds(new Set());
         setActiveId(null);
-        setIsDetailOpen(false);
-    };
-
-    const openDetail = (id: string) => {
-        setActiveId(id);
-        setIsDetailOpen(true);
-    };
-
-    const closeDetail = () => {
-        setIsDetailOpen(false);
     };
 
     return (
@@ -745,6 +732,7 @@ export default function AdminFeedbackPage() {
                     )}
                 </section>
                 <FeedbackDetailPanel
+                    key={activeFeedback?._id ?? 'empty'}
                     item={activeFeedback}
                     typeOptions={typeOptions}
                     severityConfig={severityConfig}
@@ -943,10 +931,6 @@ function FeedbackDetailPanel({
     onImageClick: (src: string) => void;
 }) {
     const [snapshotCopied, setSnapshotCopied] = useState(false);
-
-    useEffect(() => {
-        setSnapshotCopied(false);
-    }, [item?._id]);
 
     if (!item) {
         return (
