@@ -29,6 +29,15 @@
 - **AND** handoff 文档 MUST 明确哪些事项已确认、哪些事项仍待裁定
 - **AND** 若缺少 handoff 文档，则不得把 implementation 说成正式开工完成
 
+### Requirement: implementation 阶段必须采用 Spec 分层拆解
+系统 SHALL 在单派系 implementation 阶段采用分层拆解（配置复用层 / 机制扩展层 / UI+E2E 层），并按层收口后再推进下一层。
+
+#### Scenario: AI 开始实现某一个具体派系
+- **WHEN** AI 已进入该派系 implementation
+- **THEN** AI MUST 先完成可配置复用的一批，再处理新机制或共享扩展的一批，最后完成新 UI 与对应 E2E 的一批
+- **AND** 任何一批仍有未实现项时，AI MUST 维持未完成状态，不得误报该派系完成
+- **AND** 若发现共享抽象缺口，AI MUST 直接做可复用扩展重构，而不是留下临时硬编码
+
 ### Requirement: 长期任务状态记录不得抢占已被其他任务占用的根 planning 文件
 系统 SHALL 在根 `task_plan.md / findings.md / progress.md` 明显被其他任务占用时，使用替代的持久状态记录方式继续推进 Smash Up 批量任务。
 

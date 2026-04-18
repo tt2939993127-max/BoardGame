@@ -88,6 +88,15 @@ describe('SELECT_FACTION 验证', () => {
     expect(validate(core, SW_COMMANDS.SELECT_FACTION, { factionId: 'necromancer' }).valid).toBe(true);
   });
 
+  it('拒绝选择已被其他玩家选择的阵营', () => {
+    const core = SummonerWarsDomain.setup(['0', '1'], createTestRandom());
+    core.selectedFactions['0'] = 'necromancer';
+
+    const r = validate(core, SW_COMMANDS.SELECT_FACTION, { factionId: 'necromancer' }, '1');
+    expect(r.valid).toBe(false);
+    expect(r.error).toContain('已被其他玩家选择');
+  });
+
   it('无效阵营拒绝', () => {
     const core = SummonerWarsDomain.setup(['0', '1'], createTestRandom());
     const r = validate(core, SW_COMMANDS.SELECT_FACTION, { factionId: 'invalid' });

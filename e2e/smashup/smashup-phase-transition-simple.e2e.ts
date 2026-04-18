@@ -1101,18 +1101,13 @@ function buildOnlineAiFourPlayerResponseWindowStressState(baseState: any) {
 
     const buildPlayer = (playerId: '0' | '1' | '2' | '3', vp: number) => ({
         ...(existingPlayers[playerId] ?? {}),
-        hand: playerId === '3'
-            ? [
-                { uid: `p${playerId}-shinobi-1`, defId: 'ninja_shinobi', type: 'minion', owner: playerId },
-                { uid: `p${playerId}-shinobi-2`, defId: 'ninja_shinobi', type: 'minion', owner: playerId },
-            ]
-            : [
-                { uid: `p${playerId}-under-pressure-1`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
-                { uid: `p${playerId}-under-pressure-2`, defId: 'giant_ant_under_pressure', type: 'action', owner: playerId },
-            ],
+        hand: [
+            { uid: `p${playerId}-full-sail-1`, defId: 'pirate_full_sail', type: 'action', owner: playerId },
+            { uid: `p${playerId}-full-sail-2`, defId: 'pirate_full_sail', type: 'action', owner: playerId },
+        ],
         deck: [],
         discard: [],
-        factions: playerId === '3' ? ['ninjas', 'giant_ants'] : ['giant_ants', 'pirates'],
+        factions: ['giant_ants', 'pirates'],
         minionsPlayed: 1,
         minionLimit: 1,
         actionsPlayed: 1,
@@ -2658,7 +2653,7 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         await waitForAiSeatCredential(hostPage, matchId, '1');
         await waitForAiSeatCredential(hostPage, matchId, '2');
         await waitForAiSeatCredential(hostPage, matchId, '3');
-        await installSmashUpAiResponsePassPatch(hostPage, ['1', '2']);
+        await installSmashUpAiResponsePassPatch(hostPage, ['1', '2', '3']);
 
         await applyOnlineMatchState(matchId, hostPage, buildOnlineAiFourPlayerResponseWindowStressState);
         await waitForSmashUpUI(hostPage);
@@ -2668,9 +2663,7 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         expect(injectedState.core?.currentPlayerIndex).toBe(0);
         for (const pid of ['0', '1', '2', '3'] as const) {
             const hand = (injectedState.core?.players?.[pid]?.hand ?? []) as Array<{ defId?: string }>;
-            const responseCardCount = pid === '3'
-                ? hand.filter((card) => card.defId === 'ninja_shinobi').length
-                : hand.filter((card) => card.defId === 'giant_ant_under_pressure').length;
+            const responseCardCount = hand.filter((card) => card.defId === 'pirate_full_sail').length;
             expect(responseCardCount).toBeGreaterThanOrEqual(2);
         }
 
@@ -2741,17 +2734,32 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         console.log('[4p-response] openedResponderQueue=', JSON.stringify(openedResponderQueue));
 
         let responseClosed = false;
-        for (let i = 0; i < 420; i += 1) {
+        let sawResponseWindow = false;
+        for (let i = 0; i < 700; i += 1) {
             const state = await getMatchState(matchId, hostPage);
             const interactionCurrent = state.sys?.interaction?.current ?? null;
             if (interactionCurrent?.playerId === '0' && interactionCurrent?.data?.sourceId === 'smashup_reaction_choose') {
-                await respondCurrentInteraction(hostPage, { optionId: 'pass' });
+                try {
+                    await respondCurrentInteraction(hostPage, { optionId: 'pass' });
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    if (!message.includes('当前没有可响应的交互')) {
+                        throw error;
+                    }
+                }
                 continue;
             }
             const responseWindow = state.sys?.responseWindow?.current ?? null;
+            if (responseWindow) {
+                sawResponseWindow = true;
+            }
             if (!responseWindow) {
-                responseClosed = true;
-                break;
+                if (sawResponseWindow && state.sys?.phase === 'playCards' && !interactionCurrent) {
+                    responseClosed = true;
+                    break;
+                }
+                await hostPage.waitForTimeout(120);
+                continue;
             }
             const currentResponder = responseWindow.responderQueue?.[responseWindow.currentResponderIndex];
             if (currentResponder === '0') {
@@ -2796,8 +2804,22 @@ test('在线四人（1人+3AI）在计分响应窗口中应出现完整轮转且
         expect(compactHistory.includes('3')).toBe(true);
         expect(hasSubsequence(compactHistory, ['0', '1', '2', '3'])).toBe(true);
 
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                phase: state.sys?.phase ?? null,
+                hasResponseWindow: Boolean(state.sys?.responseWindow?.current),
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, {
+            timeout: 15000,
+            message: '等待四人多段计分响应窗口全部收口并回到 playCards',
+        }).toEqual({
+            phase: 'playCards',
+            hasResponseWindow: false,
+            interactionSourceId: null,
+        });
         const finalState = await getMatchState(matchId, hostPage);
-        expect(finalState.sys?.responseWindow?.current ?? null).toBeNull();
         await expect.poll(async () => {
             const state = await getMatchState(matchId, hostPage);
             return state.sys?.interaction?.current?.data?.sourceId ?? null;

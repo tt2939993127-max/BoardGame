@@ -12,6 +12,8 @@
 
 本工作流**不负责**重新做一遍图片核对、atlas 索引裁定、资源 truth-source 合同；这些属于 intake 阶段。
 
+本流程继承通用 `data-entry-workflow` 的 Spec 拆解模板（S0~S4），只是把其具体化到 Smash Up 派系实现。
+
 ## 前置输入（缺一不可）
 
 进入 implementation 前，至少要有：

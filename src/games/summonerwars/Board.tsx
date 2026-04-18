@@ -1487,6 +1487,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     afterAttackAbilityMode={afterAttackAbilityMode}
                     telekinesisTargetMode={interaction.telekinesisTargetMode}
                     magicEventChoiceMode={interaction.magicEventChoiceMode}
+                    eventTargetMode={interaction.eventTargetMode}
                     systemIceShardsMode={systemIceShardsMode}
                     systemFeedBeastMode={systemFeedBeastMode}
                     onCancelAbility={handleCancelAbility}
@@ -1527,6 +1528,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onPlayMagicEvent={interaction.handlePlayMagicEvent}
                     onDiscardMagicEvent={interaction.handleDiscardMagicEvent}
                     onCancelMagicEventChoice={interaction.handleCancelMagicEventChoice}
+                    onCancelEventTargetInteraction={interaction.handleCancelEventTargetInteraction}
                   />
                 </div>
 

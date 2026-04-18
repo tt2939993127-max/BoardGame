@@ -342,7 +342,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
       return;
     }
 
-    if (phase === 'magic' && isMyTurn) {
+    if (phase === 'magic' && isMyTurn && card.cardType !== 'event') {
       onCardClick?.(cardId);
       return;
     }
@@ -385,6 +385,13 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
         if (selectedCardId !== cardId) {
           onCardSelect?.(cardId);
+          return;
+        }
+
+        if (phase === 'magic') {
+          // 魔力阶段维持原有“打出/弃牌/取消”选择流程，
+          // 但入口改为两段式确认后的第二次点击。
+          onCardClick?.(cardId);
           return;
         }
 

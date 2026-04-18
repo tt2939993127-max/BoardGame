@@ -77,6 +77,7 @@ interface StatusBannersProps {
   rapidFireMode: import('./modeTypes').RapidFireModeState | null;
   telekinesisTargetMode: { abilityId: string; targetPosition: CellCoord; destinations: { position: CellCoord; moveRow: number; moveCol: number }[] } | null;
   magicEventChoiceMode: { cardId: string } | null;
+  eventTargetMode: { cardId: string } | null;
   systemIceShardsMode: { sourceBoosts: number } | null;
   systemFeedBeastMode: boolean;
   // 回调
@@ -117,6 +118,7 @@ interface StatusBannersProps {
   onPlayMagicEvent: () => void;
   onDiscardMagicEvent: () => void;
   onCancelMagicEventChoice: () => void;
+  onCancelEventTargetInteraction: () => void;
 }
 
 // ============================================================================
@@ -158,6 +160,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   abilityMode, fireSacrificeSummonMode, onCancelFireSacrifice, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, rapidFireMode, telekinesisTargetMode, magicEventChoiceMode,
+  eventTargetMode,
   systemIceShardsMode, systemFeedBeastMode,
   onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
   onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
@@ -175,6 +178,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onConfirmTelekinesis: _onConfirmTelekinesis, onCancelTelekinesis,
   onAfterMoveSelfCharge,
   onPlayMagicEvent, onDiscardMagicEvent, onCancelMagicEventChoice,
+  onCancelEventTargetInteraction,
 }) => {
   const { t } = useTranslation('game-summonerwars');
 
@@ -188,6 +192,17 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         <GameButton onClick={onPlayMagicEvent} variant="primary" size="sm">{t('actions.playEvent', '打出')}</GameButton>
         <GameButton onClick={onDiscardMagicEvent} variant="secondary" size="sm">{t('actions.discardForMagic', '弃牌')}</GameButton>
         <GameButton onClick={onCancelMagicEventChoice} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
+  if (eventTargetMode) {
+    return (
+      <div className="bg-purple-900/95 px-4 py-2 rounded-lg border border-purple-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-purple-200 text-sm font-bold">
+          {t('statusBanners.eventTarget.message', '选择事件目标，或取消')}
+        </span>
+        <GameButton onClick={onCancelEventTargetInteraction} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
       </div>
     );
   }

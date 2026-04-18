@@ -860,7 +860,13 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             title: string,
             options: PromptOption<SwInteractionValue>[],
             swMeta: SwInteractionMeta,
-            config?: { sourceId?: string; targetType?: 'minion' | 'hand' | 'generic' | 'button'; multi?: PromptMultiConfig; autoResolveIfSingle?: boolean },
+            config?: {
+              sourceId?: string;
+              targetType?: 'minion' | 'hand' | 'generic' | 'button';
+              multi?: PromptMultiConfig;
+              autoResolveIfSingle?: boolean;
+              autoCancelOption?: boolean;
+            },
           ) => {
             if (options.length === 0) return;
             const interaction = createSimpleChoice(
@@ -873,6 +879,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                 targetType: config?.targetType,
                 multi: config?.multi,
                 autoResolveIfSingle: config?.autoResolveIfSingle,
+                autoCancelOption: config?.autoCancelOption ?? true,
               },
             );
             const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
@@ -910,7 +917,8 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                 'interaction.sw.eventTarget',
                 options,
                 { type: 'event_target', cardId: payload.cardId, baseId },
-                { sourceId: baseId, targetType: 'minion', autoResolveIfSingle: true },
+                // 交互事件牌进入交互后不应因单候选自动结算，需允许玩家取消。
+                { sourceId: baseId, targetType: 'minion', autoResolveIfSingle: false },
               );
               break;
             }

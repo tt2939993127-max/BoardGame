@@ -3826,6 +3826,199 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
+  test('事件卡：魔力阶段非交互事件牌应先 armed，再次点击进入打出/弃牌选择', async ({ browser }, testInfo) => {
+    test.setTimeout(90000);
+    await clearEvidenceScreenshotsForTest(testInfo);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    await disableSummonerWarsAutoSkip(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    const matchId = await createSummonerWarsRoom(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    await disableSummonerWarsAutoSkip(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage);
+    await waitForSummonerWarsUI(guestPage);
+
+    const prepared = prepareMagicNonInteractiveEventTwoStepState(await readCoreState(hostPage));
+    await applyCoreState(hostPage, prepared.core);
+    await closeDebugPanelIfOpen(hostPage);
+    await waitForPhase(hostPage, 'magic');
+
+    const eventCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-id="goblin-relentless"]')
+      .first();
+    await expect(eventCard).toBeVisible({ timeout: 5000 });
+    await expect(eventCard).toHaveAttribute('data-selected', 'false');
+
+    const playButton = hostPage.getByRole('button', { name: /Play|打出/i });
+    const discardButton = hostPage.getByRole('button', { name: /Discard|弃牌/i });
+    const cancelButton = hostPage.getByRole('button', { name: /Cancel|取消/i });
+
+    // 第一次点击：仅 armed，不弹选择框
+    await eventCard.click();
+    await expect(eventCard).toHaveAttribute('data-selected', 'true');
+    await expect(playButton).toHaveCount(0);
+    await expect(discardButton).toHaveCount(0);
+    await expect(cancelButton).toHaveCount(0);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-magic-noninteractive-armed-step', {
+        filename: 'event-magic-noninteractive-armed-step.png',
+      }),
+      fullPage: false,
+    });
+
+    // 点棋盘取消 armed
+    await clickBoardElement(hostPage, `[data-testid="sw-cell-${prepared.cancelCell.row}-${prepared.cancelCell.col}"]`);
+    await expect(eventCard).toHaveAttribute('data-selected', 'false');
+    await expect(playButton).toHaveCount(0);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-magic-noninteractive-board-cancel', {
+        filename: 'event-magic-noninteractive-board-cancel.png',
+      }),
+      fullPage: false,
+    });
+
+    // 再次点击同卡：第一次 armed，第二次进入打出/弃牌选择
+    await eventCard.click();
+    await expect(eventCard).toHaveAttribute('data-selected', 'true');
+    await eventCard.click();
+
+    await expect(playButton).toBeVisible({ timeout: 5000 });
+    await expect(discardButton).toBeVisible({ timeout: 5000 });
+    await expect(cancelButton).toBeVisible({ timeout: 5000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-magic-noninteractive-choice-open', {
+        filename: 'event-magic-noninteractive-choice-open.png',
+      }),
+      fullPage: false,
+    });
+
+    // 取消选择后不应消耗手牌
+    await cancelButton.click();
+    await expect(playButton).toHaveCount(0);
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 5000, message: '取消后事件牌应仍在手牌中' }).toBe(true);
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
+  test('事件卡：交互事件牌可直接进交互，取消后不消耗（单目标不自动触发）', async ({ browser }, testInfo) => {
+    test.setTimeout(90000);
+    await clearEvidenceScreenshotsForTest(testInfo);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    await disableSummonerWarsAutoSkip(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    const matchId = await createSummonerWarsRoom(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    await disableSummonerWarsAutoSkip(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage);
+    await waitForSummonerWarsUI(guestPage);
+
+    const prepared = prepareInteractiveEventSingleTargetState(await readCoreState(hostPage));
+    await applyCoreState(hostPage, prepared.core);
+    await closeDebugPanelIfOpen(hostPage);
+    await waitForPhase(hostPage, 'build');
+
+    const eventCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-id="necro-hellfire-blade"]')
+      .first();
+    await expect(eventCard).toBeVisible({ timeout: 5000 });
+
+    // 交互事件牌一次点击直接进入交互（不 armed），但不应立刻结算消耗
+    await eventCard.click();
+
+    const targetHighlights = hostPage.locator('[data-valid-event-target="true"]');
+    await expect(targetHighlights).toHaveCount(1, { timeout: 5000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-interactive-single-target-open', {
+        filename: 'event-interactive-single-target-open.png',
+      }),
+      fullPage: false,
+    });
+
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 5000, message: '进入交互后未确认前，事件牌不应被消耗' }).toBe(true);
+
+    // 点击状态栏取消按钮，取消交互
+    const cancelButton = hostPage.getByRole('button', { name: /Cancel|取消/i }).first();
+    await expect(cancelButton).toBeVisible({ timeout: 5000 });
+    await cancelButton.click();
+
+    await expect(targetHighlights).toHaveCount(0, { timeout: 5000 });
+    await expect.poll(async () => {
+      const core = await readCoreState(hostPage);
+      return core?.players?.['0']?.hand?.some((card: any) => card.id === prepared.cardId) ?? false;
+    }, { timeout: 5000, message: '取消交互后，事件牌应仍在手牌中' }).toBe(true);
+    await closeDebugPanelIfOpen(hostPage);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-interactive-single-target-cancel', {
+        filename: 'event-interactive-single-target-cancel.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
   test('阶段自动跳过：有事件卡时不应跳过', async ({ browser }, testInfo) => {
     test.setTimeout(90000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -5863,4 +6056,152 @@ const prepareNonInteractiveEventTwoStepState = (coreState: any): {
   }
 
   throw new Error('未找到友方建筑，无法验证寒冰修补结算效果');
+};
+
+/**
+ * 准备魔力阶段非交互事件两段式测试状态
+ * - 魔力阶段
+ * - 手牌有不屈不挠（非交互事件）
+ * - 魔力足够，且棋盘存在可点击格子用于取消 armed
+ */
+const prepareMagicNonInteractiveEventTwoStepState = (coreState: any): {
+  core: any;
+  cardId: string;
+  cancelCell: { row: number; col: number };
+} => {
+  const next = cloneState(coreState);
+  next.phase = 'magic';
+  next.currentPlayer = '0';
+  next.selectedUnit = undefined;
+
+  const player = next.players?.['0'];
+  if (!player) throw new Error('无法读取玩家0状态');
+
+  const cardId = 'goblin-relentless';
+  const relentlessCard = {
+    id: cardId,
+    name: '不屈不挠',
+    cardType: 'event',
+    eventType: 'common',
+    cost: 1,
+    playPhase: 'magic',
+    isActive: true,
+    effect: '持续：每当一个友方士兵被消灭时，将其返回到你的手牌，以代替被消灭。',
+    spriteIndex: 2,
+    spriteAtlas: 'cards',
+  };
+
+  player.hand = [relentlessCard, ...player.hand.filter((c: any) => c.id !== cardId)];
+  player.magic = Math.max(5, Number(player.magic ?? 0));
+
+  const board = next.board as any[][] | undefined;
+  if (!board || board.length === 0 || !Array.isArray(board[0])) {
+    throw new Error('棋盘为空，无法准备魔力阶段事件牌测试状态');
+  }
+
+  // 选一个稳定存在的可点击格子用于“点棋盘取消 armed”
+  for (let r = 0; r < board.length; r += 1) {
+    for (let c = 0; c < board[r].length; c += 1) {
+      if (board[r]?.[c]) {
+        return { core: next, cardId, cancelCell: { row: r, col: c } };
+      }
+    }
+  }
+
+  throw new Error('未找到可点击棋盘格子，无法验证 armed 取消');
+};
+
+/**
+ * 准备交互事件“单目标”测试状态
+ * - 建造阶段
+ * - 手牌有狱火铸剑（交互型事件）
+ * - 场上仅保留 1 个可选的友方普通单位
+ */
+const prepareInteractiveEventSingleTargetState = (coreState: any): {
+  core: any;
+  cardId: string;
+} => {
+  const next = cloneState(coreState);
+  next.phase = 'build';
+  next.currentPlayer = '0';
+  next.selectedUnit = undefined;
+
+  const player = next.players?.['0'];
+  if (!player) throw new Error('无法读取玩家0状态');
+
+  const cardId = 'necro-hellfire-blade';
+  const hellfireCard = {
+    id: cardId,
+    name: '狱火铸剑',
+    cardType: 'event',
+    eventType: 'common',
+    cost: 0,
+    playPhase: 'build',
+    effect: '将本事件放置到一个友方士兵的底层。该单位获得战斗力+2。',
+    spriteIndex: 3,
+    spriteAtlas: 'cards',
+  };
+
+  player.hand = [hellfireCard, ...player.hand.filter((c: any) => c.id !== cardId)];
+  player.magic = Math.max(5, Number(player.magic ?? 0));
+
+  const board = next.board as any[][] | undefined;
+  if (!board || board.length === 0 || !Array.isArray(board[0])) {
+    throw new Error('棋盘为空，无法准备交互事件单目标状态');
+  }
+
+  const friendlyCommonCells: Array<{ row: number; col: number }> = [];
+  const allCommonUnits: Array<{ unit: any }> = [];
+  const emptyCells: Array<{ row: number; col: number }> = [];
+
+  for (let r = 0; r < board.length; r += 1) {
+    for (let c = 0; c < board[r].length; c += 1) {
+      const cell = board[r]?.[c];
+      const unit = cell?.unit;
+      if (!unit && cell) emptyCells.push({ row: r, col: c });
+      if (unit?.card?.unitClass === 'common') {
+        allCommonUnits.push({ unit });
+        if (unit.owner === '0') {
+          friendlyCommonCells.push({ row: r, col: c });
+        }
+      }
+    }
+  }
+
+  if (friendlyCommonCells.length === 0) {
+    const fallbackTemplate = allCommonUnits[0]?.unit;
+    const spawnCell = emptyCells[0];
+    if (!fallbackTemplate || !spawnCell) {
+      throw new Error('未找到可用普通单位模板或空格，无法构造单目标交互');
+    }
+    board[spawnCell.row][spawnCell.col] = {
+      ...board[spawnCell.row][spawnCell.col],
+      unit: {
+        ...fallbackTemplate,
+        owner: '0',
+        position: { row: spawnCell.row, col: spawnCell.col },
+        damage: 0,
+        boosts: 0,
+        hasMoved: false,
+        hasAttacked: false,
+      },
+    };
+    friendlyCommonCells.push(spawnCell);
+  }
+
+  const keep = friendlyCommonCells[0];
+  for (let r = 0; r < board.length; r += 1) {
+    for (let c = 0; c < board[r].length; c += 1) {
+      if (r === keep.row && c === keep.col) continue;
+      const unit = board[r]?.[c]?.unit;
+      if (unit?.owner === '0' && unit?.card?.unitClass === 'common') {
+        board[r][c] = {
+          ...board[r][c],
+          unit: undefined,
+        };
+      }
+    }
+  }
+
+  return { core: next, cardId };
 };

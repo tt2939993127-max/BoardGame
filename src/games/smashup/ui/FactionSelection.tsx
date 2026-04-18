@@ -11,6 +11,7 @@ import {
     getFactionVariantGroupById,
     getPreferredFactionVariant,
     getVisibleFactionVariantGroups,
+    isFactionImplementationInProgress,
 } from './factionMeta';
 import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, getFactionTitans, resolveCardName } from '../data/cards';
@@ -85,6 +86,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     const focusedMechanicTutorial = focusedFactionGroup
         ? getFactionMechanicTutorial(focusedFactionGroup.groupId)
         : undefined;
+    const focusedFactionInProgress = focusedFactionGroup
+        ? isFactionImplementationInProgress(focusedFactionGroup.groupId)
+            || (resolvedActiveFactionId ? isFactionImplementationInProgress(resolvedActiveFactionId) : false)
+        : false;
 
     if (!selectionState) return null;
 
@@ -202,6 +207,8 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         const labelMeta = selectedVariantId
             ? getFactionMeta(selectedVariantId) ?? group.defaultVariant
             : group.defaultVariant;
+        const showImplementationBanner = isFactionImplementationInProgress(group.groupId)
+            || (selectedVariantId ? isFactionImplementationInProgress(selectedVariantId) : false);
         const selectedOverlayText = isMyTurn
             ? t('ui.click_to_cancel_selection', { defaultValue: '点击取消选择' })
             : t('ui.selected', { defaultValue: '已选' });
@@ -271,6 +278,17 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                     {t(labelMeta.nameKey)}
                                 </h3>
                             </div>
+
+                            {showImplementationBanner && (
+                                <div
+                                    className="absolute left-1.5 top-1.5 z-40 rounded-sm border border-amber-100/80 bg-amber-500/95 px-2 py-1 shadow-[0_4px_10px_rgba(0,0,0,0.35)]"
+                                    data-testid={`faction-implementation-banner-${group.groupId}`}
+                                >
+                                    <span className="text-[9px] font-black uppercase tracking-wide text-slate-900">
+                                        {t('ui.faction_implementation_in_progress', { defaultValue: '实施中' })}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="absolute -top-1.5 -right-1.5 lg:-top-2 lg:-right-2 z-40 w-8 h-8 lg:w-10 lg:h-10 bg-slate-900 border-2 border-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
@@ -501,6 +519,20 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                                     </GameButton>
                                                                 ) : null}
                                                             </div>
+
+                                                            {focusedFactionInProgress && (
+                                                                <div
+                                                                    className="mb-4 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 shadow-[0_4px_12px_rgba(245,158,11,0.2)]"
+                                                                    data-testid="faction-detail-implementation-banner"
+                                                                >
+                                                                    <p className="text-xs font-black uppercase tracking-wide text-amber-900">
+                                                                        {t('ui.faction_implementation_in_progress', { defaultValue: '实施中' })}
+                                                                    </p>
+                                                                    <p className="mt-1 text-[11px] font-semibold leading-relaxed text-amber-900/90">
+                                                                        {t('ui.faction_implementation_in_progress_hint', { defaultValue: '该派系正在分批实施，规则与交互会持续完善。' })}
+                                                                    </p>
+                                                                </div>
+                                                            )}
 
                                                             {focusedFactionGroup.variants.length > 1 && (
                                                                 <div className="mb-4 flex flex-wrap gap-2" data-testid="faction-variant-switch">

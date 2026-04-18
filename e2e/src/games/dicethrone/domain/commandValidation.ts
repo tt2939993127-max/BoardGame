@@ -241,6 +241,14 @@ const validateSelectCharacter = (
         return fail('unsupported_character');
     }
 
+    const selectedByOtherPlayer = Object.entries(state.selectedCharacters)
+        .some(([otherPlayerId, selectedCharacterId]) => (
+            otherPlayerId !== playerId && selectedCharacterId === cmd.payload.characterId
+        ));
+    if (selectedByOtherPlayer) {
+        return fail('character_already_taken');
+    }
+
     return ok();
 };
 

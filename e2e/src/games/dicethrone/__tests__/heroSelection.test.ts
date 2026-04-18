@@ -141,6 +141,21 @@ describe('选角流程', () => {
             expect(result.valid).toBe(true);
         });
 
+        it('不能选择已被其他玩家选择的角色', () => {
+            const state = createInitialState();
+            state.selectedCharacters['1'] = 'monk';
+
+            const cmd: SelectCharacterCommand = {
+                type: 'SELECT_CHARACTER',
+                playerId: '0',
+                payload: { characterId: 'monk' },
+            };
+
+            const result = validateCommand(state, cmd, 'setup');
+            expect(result.valid).toBe(false);
+            expect(result.error).toBe('character_already_taken');
+        });
+
         it('选角后状态更新', () => {
             const state = createInitialState();
             

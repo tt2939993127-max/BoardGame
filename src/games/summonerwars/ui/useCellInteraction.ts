@@ -1425,6 +1425,11 @@ export function useCellInteraction({
     dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
   }, [dispatch, swInteraction]);
 
+  const handleCancelEventTargetInteraction = useCallback(() => {
+    if (!swInteraction || swInteraction.type !== 'event_target') return;
+    dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+  }, [dispatch, swInteraction]);
+
   // ---------- 返回 ----------
 
   return {
@@ -1485,7 +1490,7 @@ export function useCellInteraction({
     handleConfirmTelekinesis: eventCardModes.handleConfirmTelekinesis,
     handleConfirmMindCapture,
     handleConfirmBeforeAttackCards, handleCancelBeforeAttack,
-    handlePlayMagicEvent, handleDiscardMagicEvent, handleCancelMagicEventChoice,
+    handlePlayMagicEvent, handleDiscardMagicEvent, handleCancelMagicEventChoice, handleCancelEventTargetInteraction,
     clearAllEventModes: eventCardModes.clearAllEventModes,
     hasActiveEventMode: eventCardModes.hasActiveEventMode,
     isMandatoryAbilityActive,

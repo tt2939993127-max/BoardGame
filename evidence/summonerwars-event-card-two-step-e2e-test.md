@@ -1,39 +1,50 @@
-# SummonerWars 事件牌两段式交互 E2E 证据（2026-04-18）
+# SummonerWars 事件牌两段式/交互取消 E2E 证据（2026-04-18）
 
 ## 范围
-- 目标：验证非交互事件牌采用“两段式流程”（第一次点击仅 armed 选中，第二次点击同卡才真正打出），并验证“点棋盘可取消 armed”。
-- 用例：`e2e/summonerwars/summonerwars.e2e.ts` -> `事件卡：非交互事件牌应先 armed 再确认，点棋盘可取消`
-- 补充回归：`事件卡：狱火铸剑打出流程`（交互型事件牌保持单击直进）
+- 非交互事件牌：先 `armed` 再确认，且可点棋盘取消。
+- 魔力阶段非交互事件牌：先 `armed`，第二次点击进入“打出/弃牌/取消”。
+- 交互事件牌：可单击直接进入交互，但未确认前不消耗；点击非目标格可取消。
 
 ## 执行命令
-```bash
-npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：非交互事件牌应先 armed 再确认，点棋盘可取消"
-npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：狱火铸剑打出流程"
+```powershell
+$env:PW_E2E_SERVICE_REUSE='shared-single'
+$env:PW_E2E_FRONTEND_PORT='7174'
+$env:PW_E2E_GAME_SERVER_PORT='20000'
+$env:PW_E2E_API_SERVER_PORT='21000'
+
+npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "事件卡：非交互事件牌应先 armed 再确认，点棋盘可取消"
+npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "事件卡：魔力阶段非交互事件牌应先 armed，再次点击进入打出/弃牌选择"
+npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "事件卡：交互事件牌可直接进交互，取消后不消耗（单目标不自动触发）"
 ```
 
 ## 关键截图与观察
 
-### 1) armed 步骤（第一次点击仅选中）
+### 1) 非交互事件：首次点击仅 armed
 - 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：非交互事件牌应先-armed-再确认，点棋盘可取消/event-noninteractive-armed-step.png`
-- 肉眼观察：
-  - 手牌中的 `frost-ice-repair` 已出现选中态（高亮/上移视觉）。
-  - 事件牌仍在手牌区域，没有被消耗。
-- 验收判断：达标（满足“第一次点击只 armed，不立即打出”）。
+- 观察：事件牌抬起且仍在手牌，未立即结算。
+- 验收：达标。
 
-### 2) 棋盘点击取消 armed
+### 2) 非交互事件：点棋盘取消 armed
 - 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：非交互事件牌应先-armed-再确认，点棋盘可取消/event-noninteractive-board-cancel.png`
-- 肉眼观察：
-  - 手牌中的 `frost-ice-repair` 回到未选中态。
-  - 事件牌仍然留在手牌。
-- 验收判断：达标（满足“点棋盘可取消 armed，且不出牌”）。
+- 观察：事件牌回到未选中，手牌未消耗。
+- 验收：达标。
 
-### 3) 二次确认后真正打出
-- 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：非交互事件牌应先-armed-再确认，点棋盘可取消/event-noninteractive-confirm-play.png`
-- 肉眼观察：
-  - `frost-ice-repair` 已不在手牌中（被打出）。
-  - 用例断言同时校验了目标友方建筑伤害从 `2` 降到 `0`，说明结算发生在二次确认后。
-- 验收判断：达标（满足“第二次点击同卡才真正使用”）。
+### 3) 魔力阶段非交互：二次点击才弹出选择
+- 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：魔力阶段非交互事件牌应先-armed，再次点击进入打出-弃牌选择/event-magic-noninteractive-choice-open.png`
+- 观察：第一次仅 armed；第二次点击出现 `Play / Discard / Cancel` 按钮。
+- 验收：达标。
+
+### 4) 交互事件：进入交互但未确认不消耗
+- 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：交互事件牌可直接进交互，取消后不消耗（单目标不自动触发）/event-interactive-single-target-open.png`
+- 观察：点击后出现单目标高亮；事件牌仍在手牌（未自动触发）。
+- 验收：达标。
+
+### 5) 交互事件：点击状态栏取消按钮
+- 路径：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/summonerwars/summonerwars.e2e/事件卡：交互事件牌可直接进交互，取消后不消耗（单目标不自动触发）/event-interactive-single-target-cancel.png`
+- 观察：点击 `Cancel/取消` 后目标高亮清除，事件牌仍留在手牌。
+- 验收：达标。
 
 ## 结果
 - `事件卡：非交互事件牌应先 armed 再确认，点棋盘可取消`：通过。
-- `事件卡：狱火铸剑打出流程`：通过（交互型事件牌单击直进未回归）。
+- `事件卡：魔力阶段非交互事件牌应先 armed，再次点击进入打出/弃牌选择`：通过。
+- `事件卡：交互事件牌可直接进交互，取消后不消耗（单目标不自动触发）`：通过。

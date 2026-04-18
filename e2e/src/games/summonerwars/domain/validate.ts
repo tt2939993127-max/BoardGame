@@ -173,6 +173,12 @@ export function validateCommand(
       if (core.hostStarted) return { valid: false, error: '游戏已开始，无法更改阵营' };
       const factionId = payload.factionId as string;
       if (!VALID_FACTION_IDS.includes(factionId as FactionId)) return { valid: false, error: '无效的阵营 ID' };
+      const selectingPlayerId = (command.playerId as PlayerId | undefined) ?? playerId;
+      const selectedByOtherPlayer = Object.entries(core.selectedFactions)
+        .some(([selectedPlayerId, selectedFactionId]) => (
+          selectedPlayerId !== selectingPlayerId && selectedFactionId === factionId
+        ));
+      if (selectedByOtherPlayer) return { valid: false, error: '该阵营已被其他玩家选择' };
       return { valid: true };
     }
 

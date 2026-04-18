@@ -31,6 +31,10 @@ export interface FactionMeta {
     icon: LucideIcon | React.FC<any>;
     color: string;
     descriptionKey: string;
+    /** 派系实施状态：用于在派系选择页显示“实施中”横幅 */
+    implementationStatus?: 'in_progress';
+    /** 可选：实施状态提示文案 key */
+    implementationHintKey?: string;
     /** 可选：限制仅在哪些语言界面中显示此阵营，不填则全语言显示 */
     locales?: string[];
 }
@@ -120,6 +124,16 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.NINJAS_POD, nameKey: 'factions.ninjas_pod.name', icon: ShurikenIcon, color: '#991b1b', descriptionKey: 'factions.ninjas_pod.description' },
 ];
 
+/**
+ * 新增派系“实施中”横幅名单（按 groupId / factionId 均可命中）。
+ * 先把入口能力接好，后续新增派系时只需补 metadata 或加入此名单即可展示。
+ */
+const IN_PROGRESS_FACTION_IDS = new Set<string>([
+    'mermaids',
+    'skeletons',
+    'world_champs',
+]);
+
 export const FACTION_VARIANT_GROUPS: FactionVariantGroup[] = (() => {
     const groups = new Map<string, FactionVariantGroup>();
 
@@ -180,6 +194,15 @@ export function getPreferredFactionVariant(groupId: string, locale: string): Fac
 
 export function getFactionMeta(id: string): FactionMeta | undefined {
     return FACTION_METADATA.find(f => f.id === id);
+}
+
+export function isFactionImplementationInProgress(factionId: string): boolean {
+    const groupId = toFactionGroupId(factionId);
+    if (IN_PROGRESS_FACTION_IDS.has(factionId) || IN_PROGRESS_FACTION_IDS.has(groupId)) {
+        return true;
+    }
+    const meta = getFactionMeta(factionId);
+    return meta?.implementationStatus === 'in_progress';
 }
 
 const FACTION_MECHANIC_TUTORIALS: Record<string, FactionMechanicTutorialMeta> = {
