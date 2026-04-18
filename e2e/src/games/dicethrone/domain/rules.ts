@@ -1023,6 +1023,13 @@ export const hasOpponentTargetEffect = (card: AbilityCard): boolean => {
         if (effect.action.target === 'opponent') {
             return true;
         }
+        if (effect.action.target === 'select') {
+            return true;
+        }
+        if (effect.action.type === 'custom' && effect.action.customActionId === 'transfer-status') {
+            // transfer-status 虽然声明 target=self，但交互可跨玩家转移状态，属于可被响应的对局级影响。
+            return true;
+        }
         if (effect.action.type === 'rollDie') {
             return (effect.action.conditionalEffects?.some(rollBranchTargetsOpponent) ?? false)
                 || rollBranchTargetsOpponent(effect.action.defaultEffect);
@@ -1226,9 +1233,21 @@ export const isCardPlayableInResponseWindow = (
             
         case 'afterCardPlayed':
             // 卡牌打出后的响应窗口
-            // 目的：允许对手响应刚打出的卡牌效果（预留）
-            // 当前未定义“效果覆盖”判定规则，避免误放响应，暂时禁止此窗口出牌
-            return false;
+            // 目的：允许对手使用“非骰子干预”的即时响应（如补资源/抽牌/移除状态等）。
+            // 约束：
+            //   1) 仅 instant/roll 时机；
+            //   2) 必须有可执行 action；
+            //   3) 纯骰子干预卡（如弹一手）不允许，避免把打牌后窗口误用成改骰窗口。
+            if (card.timing !== 'instant' && card.timing !== 'roll') {
+                return false;
+            }
+            if (!hasAnyActionEffect(card)) {
+                return false;
+            }
+            if (hasAnyDiceEffect(card)) {
+                return false;
+            }
+            break;
             
         case 'afterAttackResolved':
             // 攻击结算后的响应窗口（防御结束后）

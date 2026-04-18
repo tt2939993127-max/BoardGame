@@ -1,11 +1,11 @@
 import { FLOW_COMMANDS } from '../../engine';
-import type { Command, MatchState, PlayerId } from '../../engine/types';
+import type { Command, MatchState, PlayerId as EnginePlayerId } from '../../engine/types';
 import {
     buildDeterministicAiNoise,
     createAiLegalActionId,
     createActionKindScorer,
+    createLookaheadLocalAiPolicy,
     createProfileAwareActionScorer,
-    createScoredLocalAiPolicy,
     withAiActionStrategyTags,
 } from '../../engine/ai';
 import {
@@ -14,9 +14,12 @@ import {
     createInteractionHintScorer,
 } from '../../engine/ai/semantics';
 import type {
+    AiAssignmentEvaluation,
+    AiDecisionContext,
     AiEffectIntent,
     AiHint,
     AiLegalAction,
+    LocalAiActionEvaluation,
     AiStrategyProfile,
     GameAiRuntime,
     LocalAiActionScorer,
@@ -51,10 +54,12 @@ import type {
     CellCoord,
     FactionId,
     GamePhase,
+    PlayerId as SummonerWarsPlayerId,
     SummonerWarsCore,
 } from './domain/types';
 import type { AbilityDef } from './domain/abilities';
 
+type PlayerId = SummonerWarsPlayerId;
 type SummonerWarsState = MatchState<SummonerWarsCore>;
 type SetupPhase = 'setup';
 type SummonerWarsTurnPhase = SetupPhase | GamePhase;
@@ -132,6 +137,13 @@ const appendAction = (
     const isValid = action.commands.every((command) => isCommandValid(state, playerId, command.type, command.payload));
     if (!isValid) return;
     actions.push(action);
+};
+
+const asSummonerWarsPlayerId = (playerId: EnginePlayerId): PlayerId | null => {
+    if (playerId === '0' || playerId === '1') {
+        return playerId;
+    }
+    return null;
 };
 
 const buildSimpleChoicePayload = (
@@ -631,6 +643,128 @@ const getFrontRowScore = (position: CellCoord, playerId: PlayerId): number => {
         : position.row;
 };
 
+const readActionMetadataNumber = (action: AiLegalAction, key: string): number | null => {
+    const value = action.metadata?.[key];
+    return typeof value === 'number' ? value : null;
+};
+
+const readActionMetadataBoolean = (action: AiLegalAction, key: string): boolean | null => {
+    const value = action.metadata?.[key];
+    return typeof value === 'boolean' ? value : null;
+};
+
+const readActionMetadataString = (action: AiLegalAction, key: string): string | null => {
+    const value = action.metadata?.[key];
+    return typeof value === 'string' ? value : null;
+};
+
+const buildSummonerWarsFeatureSnapshot = (args: {
+    playerId: PlayerId;
+    state: SummonerWarsState;
+    legalActions: AiLegalAction[];
+}): Record<string, unknown> => {
+    const enemyPlayerId = getEnemyPlayerId(args.playerId);
+    const threat = estimateSummonerThreat(args.state.core, args.playerId);
+    const ownUnits = getPlayerUnits(args.state.core, args.playerId);
+    const enemyUnits = getPlayerUnits(args.state.core, enemyPlayerId);
+    const ownFrontlineAverage = ownUnits.length > 0
+        ? ownUnits.reduce((sum, unit) => sum + getFrontRowScore(unit.position, args.playerId), 0) / ownUnits.length
+        : 0;
+    const enemyFrontlineAverage = enemyUnits.length > 0
+        ? enemyUnits.reduce((sum, unit) => sum + getFrontRowScore(unit.position, enemyPlayerId), 0) / enemyUnits.length
+        : 0;
+    const ownCenterControl = ownUnits.filter((unit) => getCenterScore(unit.position) >= 2).length;
+    const enemyCenterControl = enemyUnits.filter((unit) => getCenterScore(unit.position) >= 2).length;
+    const attackActions = args.legalActions.filter((action) => action.kind === 'declare-attack');
+    const gatePressureActions = attackActions.filter((action) => readActionMetadataBoolean(action, 'targetIsGate') === true).length;
+    const summonerPressureActions = attackActions.filter((action) => readActionMetadataString(action, 'targetType') === 'summoner').length;
+    const antiThreatActions = attackActions.filter((action) => readActionMetadataBoolean(action, 'targetIsThreateningSummoner') === true).length;
+    const pressureRatio = threat.remainingLife > 0
+        ? Number((threat.directThreatDamage / threat.remainingLife).toFixed(3))
+        : 0;
+
+    return {
+        threat: {
+            remainingLife: threat.remainingLife,
+            directThreatDamage: threat.directThreatDamage,
+            nearbyEnemyPressure: threat.nearbyEnemyPressure,
+            pressureRatio,
+        },
+        control: {
+            ownCenterControl,
+            enemyCenterControl,
+            centerControlDelta: ownCenterControl - enemyCenterControl,
+        },
+        objective: {
+            attackActionCount: attackActions.length,
+            gatePressureActions,
+            summonerPressureActions,
+            antiThreatActions,
+        },
+        frontline: {
+            ownFrontlineAverage: Number(ownFrontlineAverage.toFixed(3)),
+            enemyFrontlineAverage: Number(enemyFrontlineAverage.toFixed(3)),
+            frontlineDelta: Number((ownFrontlineAverage - enemyFrontlineAverage).toFixed(3)),
+        },
+    };
+};
+
+const evaluateSummonerWarsAssignments = (args: {
+    context: AiDecisionContext;
+    baseEvaluations: LocalAiActionEvaluation[];
+}): AiAssignmentEvaluation[] => {
+    const state = args.context.visibleState as SummonerWarsState;
+    const playerId = asSummonerWarsPlayerId(args.context.playerId);
+    if (!playerId) return [];
+    const enemyPlayerId = getEnemyPlayerId(playerId);
+    const ownSummoner = getSummoner(state.core, playerId);
+    const enemySummoner = getSummoner(state.core, enemyPlayerId);
+    const threat = estimateSummonerThreat(state.core, playerId);
+    const underEmergency = threat.remainingLife > 0 && threat.directThreatDamage >= Math.max(1, threat.remainingLife - 1);
+    const ownUnitsById = new Map(getPlayerUnits(state.core, playerId).map((unit) => [unit.instanceId, unit] as const));
+
+    return args.baseEvaluations
+        .map((evaluation): AiAssignmentEvaluation | null => {
+            const sourceUnitId = readActionMetadataString(evaluation.action, 'sourceUnitId');
+            if (!sourceUnitId) return null;
+            const sourceUnit = ownUnitsById.get(sourceUnitId);
+            if (!sourceUnit) return null;
+
+            if (underEmergency && ownSummoner) {
+                const distanceToOwnSummoner = manhattanDistance(sourceUnit.position, ownSummoner.position);
+                const score = Math.max(0, 5 - distanceToOwnSummoner) * 6;
+                if (score <= 0) return null;
+                return {
+                    actionId: evaluation.action.actionId,
+                    score,
+                    reason: '优先分配靠近己方召唤师的单位进行回防',
+                    metadata: {
+                        mode: 'defense',
+                        distanceToOwnSummoner,
+                    },
+                };
+            }
+
+            if (!enemySummoner) return null;
+            const distanceToEnemySummoner = manhattanDistance(sourceUnit.position, enemySummoner.position);
+            const pressureScore = Math.max(0, 6 - distanceToEnemySummoner) * 5;
+            const targetType = readActionMetadataString(evaluation.action, 'targetType');
+            const score = pressureScore + (targetType === 'summoner' ? 10 : 0);
+            if (score <= 0) return null;
+
+            return {
+                actionId: evaluation.action.actionId,
+                score,
+                reason: '优先分配更接近压制目标的单位推进前线',
+                metadata: {
+                    mode: 'pressure',
+                    distanceToEnemySummoner,
+                },
+            };
+        })
+        .filter((item): item is AiAssignmentEvaluation => item !== null);
+};
+
 /** 计算在指定位置放置传送门后新增的召唤位置数量 */
 const getSummonRangeExtension = (
     state: SummonerWarsCore,
@@ -930,7 +1064,8 @@ const buildActivatedAbilitySemantics = (args: {
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const adjacentAllies = getAdjacentCells(unit.position)
         .map((position) => getUnitAt(state.core, position))
-        .filter((candidate): candidate is BoardUnit => Boolean(candidate) && candidate.owner === playerId);
+        .filter((candidate): candidate is BoardUnit => candidate !== undefined)
+        .filter((candidate) => candidate.owner === playerId);
     const allAllies = getPlayerUnits(state.core, playerId).filter((candidate) => candidate.instanceId !== unit.instanceId);
     const effectTypes = abilityDef.effects.map((effect) => effect.type);
     const sourceAttackTargets = getValidAttackTargetsEnhanced(state.core, unit.position);
@@ -1883,7 +2018,7 @@ const buildEventCardActions = (
                 baseId,
                 playPhase: card.playPhase,
                 interaction: commandType === SW_COMMANDS.REQUEST_EVENT_INTERACTION,
-            }),
+            }, ['ability-tempo']),
         });
     }
 
@@ -1891,11 +2026,12 @@ const buildEventCardActions = (
 };
 
 export function buildSummonerWarsAiLegalActions(args: {
-    playerId: PlayerId;
+    playerId: EnginePlayerId;
     state: MatchState<unknown>;
 }): AiLegalAction[] {
     const state = args.state as SummonerWarsState;
-    const playerId = args.playerId;
+    const playerId = asSummonerWarsPlayerId(args.playerId);
+    if (!playerId) return [];
     const interactionActions = buildInteractionActions(state, playerId);
     if (interactionActions !== null) {
         return interactionActions.filter((action) =>
@@ -2010,7 +2146,8 @@ const interactionPositionScorer: LocalAiActionScorer = {
         const interactionAction = String(action.metadata?.interactionAction ?? '');
         if (!targetPosition) return null;
 
-        const playerId = context.playerId;
+        const playerId = asSummonerWarsPlayerId(context.playerId);
+        if (!playerId) return null;
         const state = context.visibleState as SummonerWarsState;
         const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
 
@@ -2209,7 +2346,17 @@ const strategyProfileScorer = createProfileAwareActionScorer<SummonerWarsStrateg
         'activate-ability',
     ],
     getProfile(context) {
-        return getSummonerWarsStrategyProfile(context.visibleState as SummonerWarsState, context.playerId);
+        const playerId = asSummonerWarsPlayerId(context.playerId);
+        if (!playerId) {
+            return {
+                tags: ['board-control'],
+                tagWeights: {
+                    'board-control': 1,
+                },
+                summary: ['无效玩家视角，回退中性策略'],
+            };
+        }
+        return getSummonerWarsStrategyProfile(context.visibleState as SummonerWarsState, playerId);
     },
 });
 
@@ -2368,7 +2515,7 @@ const activatedAbilityTargetScorer: LocalAiActionScorer = {
             ? action.metadata.distanceToEnemySummoner
             : 99;
         const sourceOwner = typeof action.metadata?.sourceOwner === 'string'
-            ? action.metadata.sourceOwner
+            ? asSummonerWarsPlayerId(action.metadata.sourceOwner)
             : null;
         const isEnemy = sourceOwner ? targetOwner !== sourceOwner : false;
         const visibleState = context.visibleState as SummonerWarsState | undefined;
@@ -2505,7 +2652,80 @@ const phaseTempoScorer: LocalAiActionScorer = {
     },
 };
 
-const baselineLocalPolicy = createScoredLocalAiPolicy({
+const featureSnapshotScorer: LocalAiActionScorer = {
+    id: 'feature-snapshot',
+    score(context, action) {
+        const snapshot = context.featureSnapshot;
+        if (!snapshot || typeof snapshot !== 'object') return null;
+
+        const threat = (snapshot as Record<string, unknown>).threat as Record<string, unknown> | undefined;
+        const objective = (snapshot as Record<string, unknown>).objective as Record<string, unknown> | undefined;
+        const control = (snapshot as Record<string, unknown>).control as Record<string, unknown> | undefined;
+
+        const pressureRatio = typeof threat?.pressureRatio === 'number' ? threat.pressureRatio : 0;
+        const antiThreatActions = typeof objective?.antiThreatActions === 'number' ? objective.antiThreatActions : 0;
+        const centerControlDelta = typeof control?.centerControlDelta === 'number' ? control.centerControlDelta : 0;
+
+        let score = 0;
+        const reasons: string[] = [];
+
+        if (pressureRatio >= 1) {
+            if (action.kind === 'declare-attack' && readActionMetadataBoolean(action, 'targetIsThreateningSummoner') === true) {
+                score += 85;
+                reasons.push('高压回合优先清除威胁己方召唤师的目标');
+            }
+            if (action.kind === 'move-unit') {
+                const before = readActionMetadataNumber(action, 'directThreatDamageBefore');
+                const after = readActionMetadataNumber(action, 'directThreatDamageAfter');
+                if (before !== null && after !== null && after < before) {
+                    score += (before - after) * 14;
+                    reasons.push('移动可显著降低召唤师直伤压力');
+                }
+            }
+        } else {
+            if (action.kind === 'declare-attack') {
+                const targetType = readActionMetadataString(action, 'targetType');
+                if (targetType === 'summoner') {
+                    score += 34;
+                    reasons.push('低压局面可扩大对敌方召唤师压制');
+                }
+                if (readActionMetadataBoolean(action, 'targetIsGate') === true) {
+                    score += 22;
+                    reasons.push('低压局面可压制敌方传送门节奏');
+                }
+            }
+            if (action.kind === 'move-unit') {
+                const before = readActionMetadataNumber(action, 'distanceToEnemySummonerBefore');
+                const after = readActionMetadataNumber(action, 'distanceToEnemySummonerAfter');
+                if (before !== null && after !== null && after < before) {
+                    score += (before - after) * 7;
+                    reasons.push('前压移动能提升后续攻击机会');
+                }
+            }
+        }
+
+        if (action.kind === 'advance-phase' && antiThreatActions > 0 && pressureRatio >= 1) {
+            score -= 96;
+            reasons.push('仍有解压动作，不应提前结束阶段');
+        }
+
+        if (centerControlDelta < 0 && action.kind === 'move-unit') {
+            const centerScore = readActionMetadataNumber(action, 'centerScore');
+            if (centerScore !== null && centerScore >= 2) {
+                score += 16;
+                reasons.push('中心控制落后时优先补位中区');
+            }
+        }
+
+        if (score === 0) return null;
+        return {
+            score: Number(score.toFixed(3)),
+            reason: reasons.join('，'),
+        };
+    },
+};
+
+const baselineLocalPolicy = createLookaheadLocalAiPolicy({
     id: 'baseline',
     scorers: [
         actionKindScorer,
@@ -2524,13 +2744,40 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
         activatedAbilityTargetScorer,
         abilityScorer,
         phaseTempoScorer,
+        featureSnapshotScorer,
     ],
     maxReasonCount: 3,
+    relativeUtility: {
+        enabled: true,
+        weight: 14,
+        minimumUtility: 0.1,
+    },
+    candidateLoop: {
+        enabled: true,
+        maxIterations: 3,
+        batchSize: 5,
+        stopOnUtility: 0.9,
+    },
+    evaluateAssignments({ context, baseEvaluations }) {
+        return evaluateSummonerWarsAssignments({
+            context,
+            baseEvaluations,
+        });
+    },
 });
 
 export const summonerWarsAiRuntime: GameAiRuntime = {
     gameId: 'summonerwars',
     buildLegalActions: buildSummonerWarsAiLegalActions,
+    buildFeatureSnapshot(args) {
+        const playerId = asSummonerWarsPlayerId(args.playerId);
+        if (!playerId) return null;
+        return buildSummonerWarsFeatureSnapshot({
+            playerId,
+            state: args.state as SummonerWarsState,
+            legalActions: args.legalActions,
+        });
+    },
     localPolicies: {
         baseline: baselineLocalPolicy,
     },

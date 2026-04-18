@@ -17,14 +17,38 @@ export interface AiProjectedActionScore {
     metadata?: Record<string, unknown>;
 }
 
+export interface AiRelativeUtilityOptions {
+    enabled?: boolean;
+    weight?: number;
+    minimumUtility?: number;
+}
+
+export interface AiCandidateActionLoopOptions {
+    enabled?: boolean;
+    maxIterations?: number;
+    batchSize?: number;
+    stopOnUtility?: number;
+}
+
+export interface AiAssignmentEvaluation {
+    actionId: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+}
+
 export interface AiLookaheadTraceEntry {
     actionId: string;
     kind: string;
     baseScore: number;
     searchPriority: number;
     projectedScore: number;
+    assignmentScore: number;
+    relativeUtility: number;
+    relativeUtilityScore: number;
     noiseScore: number;
     finalScore: number;
+    belowUtilityThreshold: boolean;
     searched: boolean;
     shortlisted: boolean;
     contributions: LocalAiActionScoreContribution[];
@@ -48,6 +72,13 @@ export interface CreateLookaheadLocalAiPolicyOptions {
         baseEvaluation: LocalAiActionEvaluation;
         difficulty: AiDifficultyProfile;
     }) => number | null | undefined;
+    relativeUtility?: AiRelativeUtilityOptions;
+    evaluateAssignments?: (args: {
+        context: AiDecisionContext;
+        difficulty: AiDifficultyProfile;
+        baseEvaluations: LocalAiActionEvaluation[];
+    }) => AiAssignmentEvaluation[] | null | undefined;
+    candidateLoop?: AiCandidateActionLoopOptions;
 }
 
 interface FinalEvaluation {
@@ -68,6 +99,13 @@ function stableSortedEvaluations(
             }
             return left.index - right.index;
         });
+}
+
+function computeRelativeUtility(score: number, minScore: number, maxScore: number): number {
+    if (maxScore <= minScore) {
+        return 1;
+    }
+    return (score - minScore) / (maxScore - minScore);
 }
 
 function buildConfidence(finalEvaluations: FinalEvaluation[], best: FinalEvaluation): number | undefined {
@@ -93,6 +131,15 @@ function buildReasoningSummary(best: FinalEvaluation, maxReasonCount: number): s
     return topReasons.length > 0 ? topReasons.join('；') : undefined;
 }
 
+function compareFinalEvaluations(left: FinalEvaluation, right: FinalEvaluation, sorted: Array<LocalAiActionEvaluation & { index: number }>): number {
+    if (right.totalScore !== left.totalScore) {
+        return right.totalScore - left.totalScore;
+    }
+    const leftIndex = sorted.findIndex((item) => item.action.actionId === left.action.actionId);
+    const rightIndex = sorted.findIndex((item) => item.action.actionId === right.action.actionId);
+    return leftIndex - rightIndex;
+}
+
 export function createLookaheadLocalAiPolicy(
     options: CreateLookaheadLocalAiPolicyOptions,
 ): LocalAiPolicy {
@@ -110,6 +157,36 @@ export function createLookaheadLocalAiPolicy(
             if (baseEvaluations.length === 0) return null;
 
             const sorted = stableSortedEvaluations(baseEvaluations);
+            const minBaseScore = sorted.reduce((best, item) => Math.min(best, item.totalScore), Number.POSITIVE_INFINITY);
+            const maxBaseScore = sorted.reduce((best, item) => Math.max(best, item.totalScore), Number.NEGATIVE_INFINITY);
+            const relativeUtilityEnabled = options.relativeUtility?.enabled === true;
+            const relativeUtilityWeightRaw = options.relativeUtility?.weight ?? 0;
+            const relativeUtilityWeight = Number.isFinite(relativeUtilityWeightRaw)
+                ? Number(relativeUtilityWeightRaw)
+                : 0;
+            const minimumUtilityRaw = options.relativeUtility?.minimumUtility;
+            const minimumUtility = minimumUtilityRaw !== undefined && Number.isFinite(minimumUtilityRaw)
+                ? Number(minimumUtilityRaw)
+                : null;
+
+            const assignmentByActionId = new Map<string, AiAssignmentEvaluation>();
+            if (options.evaluateAssignments) {
+                try {
+                    const assignmentEvaluations = options.evaluateAssignments({
+                        context: normalizedContext,
+                        difficulty,
+                        baseEvaluations,
+                    }) ?? [];
+                    for (const assignment of assignmentEvaluations) {
+                        if (!assignment || typeof assignment.actionId !== 'string') continue;
+                        if (!Number.isFinite(assignment.score) || assignment.score === 0) continue;
+                        assignmentByActionId.set(assignment.actionId, assignment);
+                    }
+                } catch {
+                    assignmentByActionId.clear();
+                }
+            }
+
             const shortlistSize = Math.max(1, Math.min(difficulty.shortlistSize, sorted.length));
             const projectionRanking = sorted
                 .map((evaluation) => {
@@ -138,16 +215,43 @@ export function createLookaheadLocalAiPolicy(
             const shortlist = new Set(projectionRanking.slice(0, shortlistSize).map((item) => item.actionId));
             const startedAt = Date.now();
 
-            const finalEvaluations: FinalEvaluation[] = sorted.map((evaluation) => {
+            const buildFinalEvaluation = (
+                evaluation: LocalAiActionEvaluation & { index: number },
+                shortlistedForSearch: boolean,
+            ): FinalEvaluation => {
                 const contributions = [...evaluation.contributions];
                 const searchPriority = searchPriorityByActionId.get(evaluation.action.actionId) ?? 0;
                 let projectedScore = 0;
-                let projectedMetadata: Record<string, unknown> | undefined;
-                const shortlisted = shortlist.has(evaluation.action.actionId);
+                let metadata: Record<string, unknown> | undefined;
+                const shortlisted = shortlistedForSearch;
+                const relativeUtility = computeRelativeUtility(evaluation.totalScore, minBaseScore, maxBaseScore);
+                const assignment = assignmentByActionId.get(evaluation.action.actionId);
+                const assignmentScore = assignment?.score ?? 0;
+                let relativeUtilityScore = 0;
+                if (relativeUtilityEnabled && relativeUtilityWeight !== 0) {
+                    relativeUtilityScore = Number((((relativeUtility - 0.5) * 2) * relativeUtilityWeight).toFixed(3));
+                    if (relativeUtilityScore !== 0) {
+                        contributions.push({
+                            scorerId: 'relative-utility',
+                            score: relativeUtilityScore,
+                            reason: `相对效用 ${(relativeUtility * 100).toFixed(0)}%`,
+                        });
+                    }
+                }
+
+                if (assignment && assignmentScore !== 0) {
+                    contributions.push({
+                        scorerId: 'assignment-first',
+                        score: assignmentScore,
+                        ...(assignment.reason ? { reason: assignment.reason } : {}),
+                    });
+                }
+
+                const belowUtilityThreshold = minimumUtility !== null && relativeUtility < minimumUtility;
                 const shouldSearch = Boolean(
                     options.projectAction
                     && difficulty.searchDepth > 0
-                    && shortlisted,
+                    && shortlistedForSearch,
                 );
 
                 if (shouldSearch) {
@@ -165,7 +269,7 @@ export function createLookaheadLocalAiPolicy(
                         });
                         if (projected && Number.isFinite(projected.score) && projected.score !== 0) {
                             projectedScore = projected.score;
-                            projectedMetadata = projected.metadata;
+                            metadata = projected.metadata;
                             contributions.push({
                                 scorerId: 'lookahead',
                                 score: projected.score,
@@ -189,7 +293,18 @@ export function createLookaheadLocalAiPolicy(
                     }
                 }
 
-                const finalScore = evaluation.totalScore + projectedScore + noiseScore;
+                if (assignment?.metadata) {
+                    metadata = {
+                        ...(metadata ?? {}),
+                        assignment: assignment.metadata,
+                    };
+                }
+
+                const finalScore = evaluation.totalScore
+                    + assignmentScore
+                    + relativeUtilityScore
+                    + projectedScore
+                    + noiseScore;
                 return {
                     action: evaluation.action,
                     totalScore: finalScore,
@@ -200,24 +315,86 @@ export function createLookaheadLocalAiPolicy(
                         baseScore: evaluation.totalScore,
                         searchPriority,
                         projectedScore,
+                        assignmentScore,
+                        relativeUtility,
+                        relativeUtilityScore,
                         noiseScore,
                         finalScore,
+                        belowUtilityThreshold,
                         searched: shouldSearch,
                         shortlisted,
                         contributions,
-                        ...(projectedMetadata ? { metadata: projectedMetadata } : {}),
+                        ...(metadata ? { metadata } : {}),
                     },
                 };
-            });
+            };
 
-            const best = [...finalEvaluations].sort((left, right) => {
-                if (right.totalScore !== left.totalScore) {
-                    return right.totalScore - left.totalScore;
+            const candidateLoopEnabled = options.candidateLoop?.enabled === true
+                && Boolean(options.projectAction)
+                && difficulty.searchDepth > 0;
+            const finalEvaluationByActionId = new Map<string, FinalEvaluation>();
+
+            if (candidateLoopEnabled) {
+                const maxIterationsRaw = options.candidateLoop?.maxIterations;
+                const maxIterations = Number.isFinite(maxIterationsRaw)
+                    ? Math.max(1, Math.min(Math.ceil(Number(maxIterationsRaw)), sorted.length))
+                    : Math.max(1, Math.ceil(sorted.length / Math.max(1, shortlistSize)));
+                const batchSizeRaw = options.candidateLoop?.batchSize;
+                const batchSize = Number.isFinite(batchSizeRaw)
+                    ? Math.max(1, Math.min(Math.ceil(Number(batchSizeRaw)), sorted.length))
+                    : shortlistSize;
+                const stopOnUtilityRaw = options.candidateLoop?.stopOnUtility;
+                const stopOnUtility = Number.isFinite(stopOnUtilityRaw)
+                    ? Number(stopOnUtilityRaw)
+                    : null;
+
+                let cursor = 0;
+                for (let iteration = 0; iteration < maxIterations && cursor < projectionRanking.length; iteration += 1) {
+                    const batchActionIds = projectionRanking
+                        .slice(cursor, cursor + batchSize)
+                        .map((item) => item.actionId);
+                    cursor += batchSize;
+
+                    for (const actionId of batchActionIds) {
+                        if (finalEvaluationByActionId.has(actionId)) continue;
+                        const evaluation = sorted.find((item) => item.action.actionId === actionId);
+                        if (!evaluation) continue;
+                        finalEvaluationByActionId.set(actionId, buildFinalEvaluation(evaluation, true));
+                    }
+
+                    if (stopOnUtility !== null) {
+                        const provisionalBest = [...finalEvaluationByActionId.values()].sort((left, right) => compareFinalEvaluations(left, right, sorted))[0];
+                        if (provisionalBest && !provisionalBest.trace.belowUtilityThreshold && provisionalBest.trace.relativeUtility >= stopOnUtility) {
+                            break;
+                        }
+                    }
                 }
-                const leftIndex = sorted.findIndex((item) => item.action.actionId === left.action.actionId);
-                const rightIndex = sorted.findIndex((item) => item.action.actionId === right.action.actionId);
-                return leftIndex - rightIndex;
-            })[0];
+            }
+
+            for (const evaluation of sorted) {
+                if (finalEvaluationByActionId.has(evaluation.action.actionId)) continue;
+                const shortlistedForSearch = candidateLoopEnabled
+                    ? false
+                    : shortlist.has(evaluation.action.actionId);
+                finalEvaluationByActionId.set(
+                    evaluation.action.actionId,
+                    buildFinalEvaluation(evaluation, shortlistedForSearch),
+                );
+            }
+
+            const finalEvaluations: FinalEvaluation[] = sorted
+                .map((evaluation) => finalEvaluationByActionId.get(evaluation.action.actionId))
+                .filter((item): item is FinalEvaluation => Boolean(item));
+
+            const selectionPool = finalEvaluations.filter((item) => !item.trace.belowUtilityThreshold);
+            const rankingSource = selectionPool.length > 0 ? selectionPool : finalEvaluations;
+            const rankedActionIds = [...rankingSource]
+                .sort((left, right) => compareFinalEvaluations(left, right, sorted))
+                .map((item) => item.action.actionId);
+
+            const best = rankedActionIds.length > 0
+                ? rankingSource.find((item) => item.action.actionId === rankedActionIds[0])
+                : undefined;
             if (!best) return null;
 
             return {

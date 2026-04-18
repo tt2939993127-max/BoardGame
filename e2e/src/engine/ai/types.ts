@@ -129,6 +129,7 @@ export interface AiDecisionContext {
     decisionBudgetMs: number;
     source: 'local' | 'online';
     difficulty: AiDifficultyProfile;
+    featureSnapshot?: Record<string, unknown> | null;
 }
 
 export interface AiActionDecision {
@@ -185,11 +186,20 @@ export interface BuildGameAiLegalActionsArgs {
     state: MatchState<unknown>;
 }
 
+export interface BuildGameAiFeatureSnapshotArgs {
+    playerId: PlayerId;
+    state: MatchState<unknown>;
+    legalActions: AiLegalAction[];
+    interaction: AiInteractionSnapshot | null;
+    responseWindow: AiResponseWindowSnapshot | null;
+}
+
 export type OnlineAiDecisionVisibility = 'shared' | 'private-required';
 
 export interface GameAiRuntime {
     gameId: string;
     buildLegalActions(args: BuildGameAiLegalActionsArgs): AiLegalAction[];
+    buildFeatureSnapshot?(args: BuildGameAiFeatureSnapshotArgs): Record<string, unknown> | null | undefined;
     resolveOnlineDecisionVisibility?(args: {
         playerId: PlayerId;
         sharedState: MatchState<unknown>;

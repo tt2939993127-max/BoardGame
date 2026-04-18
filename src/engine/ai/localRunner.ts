@@ -50,6 +50,8 @@ export interface AiBlockedResolution {
         privateTurnNumber: number | null;
         sharedCurrentPlayerId: string | null;
         privateCurrentPlayerId: string | null;
+        sharedEventStreamNextId: number | null;
+        privateEventStreamNextId: number | null;
     } | null;
 }
 
@@ -316,9 +318,11 @@ export async function resolveNextAiDispatch(
                         resolvedVisibleState.diagnostics.sharedTurnNumber ?? 'no-shared-turn',
                         resolvedVisibleState.diagnostics.sharedPhase ?? 'no-shared-phase',
                         resolvedVisibleState.diagnostics.sharedCurrentPlayerId ?? 'no-shared-player',
+                        resolvedVisibleState.diagnostics.sharedEventStreamNextId ?? 'no-shared-eventstream',
                         resolvedVisibleState.diagnostics.privateTurnNumber ?? 'no-seat-turn',
                         resolvedVisibleState.diagnostics.privatePhase ?? 'no-seat-phase',
                         resolvedVisibleState.diagnostics.privateCurrentPlayerId ?? 'no-seat-player',
+                        resolvedVisibleState.diagnostics.privateEventStreamNextId ?? 'no-seat-eventstream',
                     ].join(':'),
                     diagnostics: resolvedVisibleState.diagnostics,
                 };

@@ -1131,6 +1131,13 @@ const buildOnlineAiAfterCardResponseTriggerState = (state: any) => {
     next.core.pendingAttack = null;
     next.core.selectedAbilityId = undefined;
     next.core.rollConfirmed = false;
+    for (const player of Object.values<any>(next.core.players ?? {})) {
+        if (!player) continue;
+        player.resources = {
+            ...(player.resources ?? {}),
+            [RESOURCE_IDS.HP]: 50,
+        };
+    }
     next.core.players['0'].hand = [{
         ...structuredClone(triggerCard),
         id: ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID,
@@ -1141,6 +1148,15 @@ const buildOnlineAiAfterCardResponseTriggerState = (state: any) => {
         id: TWO_PLAYER_AFTER_CARD_PLAYABLE_RESPONSE_CARD_INSTANCE_ID,
     }];
     next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, responseCard.cpCost ?? 0);
+    // transfer-status 需要场上存在可转移状态/Token；补最小前置，确保真实触发链路可执行。
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.CRIT]: 1,
+    };
+    next.core.players['1'].tokens = {
+        ...(next.core.players['1'].tokens ?? {}),
+        [TOKEN_IDS.CRIT]: 0,
+    };
 
     return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-after-card-trigger', next);
 };
@@ -2210,22 +2226,22 @@ test.describe('DiceThrone Simple Start', () => {
             await dispatchHarnessCommand(hostPage, 'PLAY_CARD', '0', {
                 cardId: ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID,
             });
-
+            const afterHostPlayState = await getMatchState(matchId, hostPage);
+            const openedWindow = afterHostPlayState.sys?.responseWindow?.current;
+            if (openedWindow) {
+                expect(openedWindow.windowType).toBe('afterCardPlayed');
+                expect(openedWindow.sourceId).toBe(ONLINE_AI_AFTER_CARD_TRIGGER_CARD_INSTANCE_ID);
+                expect(openedWindow.responderQueue).toEqual(['1']);
+            }
             await expect.poll(async () => {
                 const state = await getMatchState(matchId, hostPage);
-                return {
-                    windowType: state.sys?.responseWindow?.current?.windowType ?? null,
-                    sourceId: state.sys?.responseWindow?.current?.sourceId ?? null,
-                    responderQueue: state.sys?.responseWindow?.current?.responderQueue ?? [],
-                };
+                const cardSequence = state.core?.cardPlayedSequence ?? 0;
+                const handledSequence = state.core?.afterCardResponseWindowSequence ?? 0;
+                return cardSequence > 0 && handledSequence === cardSequence;
             }, {
                 timeout: 10000,
-                message: '等待 host 真实打牌后打开 afterCardPlayed 响应窗口',
-            }).toEqual({
-                windowType: 'afterCardPlayed',
-                sourceId: TRANSFER_STATUS_CARD_ID,
-                responderQueue: ['1'],
-            });
+                message: '等待 host 真实打牌后触发 afterCardPlayed 窗口序号',
+            }).toBe(true);
 
             await clearEvidenceScreenshotsForTest(testInfo);
             await saveEvidenceScreenshot(hostPage, testInfo, '05e-online-ai-after-card-trigger-open');

@@ -5,6 +5,7 @@ import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } fro
 import { createSimpleChoiceSystem } from '../../systems/SimpleChoiceSystem';
 import { createResponseWindowSystem, RESPONSE_WINDOW_EVENTS } from '../../systems/ResponseWindowSystem';
 import * as aiModule from '../../ai';
+import { resolveOnlineAiDecisionView } from '../../ai/onlineDecisionView';
 import type {
     CreateMatchData,
     FetchOpts,
@@ -339,6 +340,88 @@ class FailingTrainingDataRecorder implements TrainingDataRecorder {
         return Promise.reject(new Error('disk-full'));
     }
 }
+
+describe('online decision view（epoch 硬约束）', () => {
+    it('private-required 场景下 eventStream.nextId 不一致时必须判定 stale-private-overlay', () => {
+        const sharedState = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                phase: 'playCards',
+                turnNumber: 4,
+                eventStream: { nextId: 10 },
+                interaction: {
+                    current: undefined,
+                    isBlocked: false,
+                },
+                responseWindow: {
+                    current: undefined,
+                },
+            },
+        } as any;
+
+        const privateOverlay = {
+            ...sharedState,
+            sys: {
+                ...sharedState.sys,
+                eventStream: { nextId: 9 },
+            },
+        } as any;
+
+        const result = resolveOnlineAiDecisionView({
+            sharedState,
+            privateOverlay,
+            playerId: '1',
+        });
+
+        expect(result.visibility).toBe('private-required');
+        expect(result.canDecide).toBe(false);
+        expect(result.blockedReason).toBe('stale-private-overlay');
+        expect(result.diagnostics.sharedEventStreamNextId).toBe(10);
+        expect(result.diagnostics.privateEventStreamNextId).toBe(9);
+    });
+
+    it('private-required 场景下 private overlay 缺失 eventStream.nextId 时必须判定 stale-private-overlay', () => {
+        const sharedState = {
+            core: {
+                activePlayerId: '1',
+            },
+            sys: {
+                phase: 'playCards',
+                turnNumber: 4,
+                eventStream: { nextId: 10 },
+                interaction: {
+                    current: undefined,
+                    isBlocked: false,
+                },
+                responseWindow: {
+                    current: undefined,
+                },
+            },
+        } as any;
+
+        const privateOverlay = {
+            ...sharedState,
+            sys: {
+                ...sharedState.sys,
+                eventStream: {},
+            },
+        } as any;
+
+        const result = resolveOnlineAiDecisionView({
+            sharedState,
+            privateOverlay,
+            playerId: '1',
+        });
+
+        expect(result.visibility).toBe('private-required');
+        expect(result.canDecide).toBe(false);
+        expect(result.blockedReason).toBe('stale-private-overlay');
+        expect(result.diagnostics.sharedEventStreamNextId).toBe(10);
+        expect(result.diagnostics.privateEventStreamNextId).toBeNull();
+    });
+});
 
 describe('ResponseWindowSystem（重复打开去重）', () => {
     const createResponseWindowState = (overrides?: {
@@ -1967,6 +2050,504 @@ describe('GameTransportServer（离座与重连）', () => {
             incidentKind: 'force-end-turn-success',
             status: 'resolved',
         }));
+    });
+
+    it('online AI watchdog 在额外战术交互卡住后，不应自动 ADVANCE_PHASE 跳过 AI 回合', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-smashup-extra-action-skip-turn', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'playCards',
+                interaction: {
+                    current: createSimpleChoice(
+                        'smashup-extra-action-choice',
+                        '1',
+                        '立刻打出一张额外战术，或放弃这次机会',
+                        [
+                            {
+                                id: 'card-0',
+                                label: '额外战术 A',
+                                value: { cardUid: 'hand-1', defId: 'test_action' },
+                            },
+                            {
+                                id: 'skip',
+                                label: '放弃这次额外战术',
+                                value: { skip: true },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_immediate_extra_action',
+                            targetType: 'hand',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata({ gameName: 'smashup' }),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfigWithId('smashup')],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        const match = await serverInternal.loadMatch('match-watchdog-smashup-extra-action-skip-turn');
+        const executed: Array<{ commandType: string; payload: unknown }> = [];
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType, payload) => {
+            executed.push({ commandType, payload });
+
+            if (commandType === INTERACTION_COMMANDS.RESPOND) {
+                activeMatch.state = {
+                    ...activeMatch.state,
+                    sys: {
+                        ...activeMatch.state.sys,
+                        eventStream: {
+                            ...(activeMatch.state.sys?.eventStream ?? {}),
+                            nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        interaction: {
+                            ...(activeMatch.state.sys?.interaction ?? {}),
+                            current: undefined,
+                        },
+                    },
+                };
+                return true;
+            }
+
+            if (commandType === 'ADVANCE_PHASE') {
+                activeMatch.state = {
+                    ...activeMatch.state,
+                    core: {
+                        ...activeMatch.state.core,
+                        activePlayerId: '0',
+                        currentPlayerIndex: 0,
+                    },
+                    sys: {
+                        ...activeMatch.state.sys,
+                        eventStream: {
+                            ...(activeMatch.state.sys?.eventStream ?? {}),
+                            nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        phase: 'playCards',
+                        turnNumber: (activeMatch.state.sys?.turnNumber ?? 4) + 1,
+                    },
+                };
+                return true;
+            }
+
+            return false;
+        });
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(executed.map((item) => item.commandType)).toEqual([
+            INTERACTION_COMMANDS.RESPOND,
+        ]);
+        expect(executed[0]?.payload).toEqual({ optionId: 'skip' });
+        expect(match.state.core.activePlayerId).toBe('1');
+        expect(match.state.sys.phase).toBe('playCards');
+        expect(match.state.sys.turnNumber).toBe(4);
+        expect(feedbackReporter).not.toHaveBeenCalled();
+    });
+
+    it('online AI watchdog 在额外战术交互中遇到 private overlay stale 时，不应 fallback 到 ADVANCE_PHASE', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-smashup-extra-action-private-overlay-stale', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'playCards',
+                interaction: {
+                    current: createSimpleChoice(
+                        'smashup-extra-action-choice-stale-overlay',
+                        '1',
+                        '立刻打出一张额外战术，或放弃这次机会',
+                        [
+                            {
+                                id: 'card-0',
+                                label: '额外战术 A',
+                                value: { cardUid: 'hand-1', defId: 'test_action' },
+                            },
+                            {
+                                id: 'skip',
+                                label: '放弃这次额外战术',
+                                value: { skip: true },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_immediate_extra_action',
+                            targetType: 'hand',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata({ gameName: 'smashup' }),
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch').mockResolvedValue({
+            kind: 'blocked',
+            playerId: '1',
+            blockedReason: 'stale-private-overlay',
+            visibility: 'private-required',
+            blockedKey: '1:private-required:stale-private-overlay',
+            diagnostics: {
+                sharedPhase: 'playCards',
+                privatePhase: 'playCards',
+                sharedTurnNumber: 4,
+                privateTurnNumber: 4,
+                sharedCurrentPlayerId: '1',
+                privateCurrentPlayerId: '1',
+            },
+        });
+
+        try {
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createEngineConfigWithId('smashup')],
+                onlineAiRecoveryTickMs: 0,
+                onlineAiRecoveryTimeoutMs: 0,
+                onlineAiFeedbackReporter: feedbackReporter,
+            });
+
+            const serverInternal = server as unknown as {
+                loadMatch: (matchID: string) => Promise<any>;
+                runOnlineAiRecoveryTick: () => Promise<void>;
+                broadcastState: (match: any) => void;
+                executeCommandInternal: (
+                    match: any,
+                    playerID: string,
+                    commandType: string,
+                    payload: unknown,
+                ) => Promise<boolean>;
+            };
+
+            const match = await serverInternal.loadMatch('match-watchdog-smashup-extra-action-private-overlay-stale');
+            const broadcastSpy = vi.spyOn(serverInternal, 'broadcastState');
+            const executed: Array<{ commandType: string; payload: unknown }> = [];
+            vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType, payload) => {
+                executed.push({ commandType, payload });
+
+                if (commandType === INTERACTION_COMMANDS.RESPOND) {
+                    activeMatch.state = {
+                        ...activeMatch.state,
+                        sys: {
+                            ...activeMatch.state.sys,
+                            eventStream: {
+                                ...(activeMatch.state.sys?.eventStream ?? {}),
+                                nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                            },
+                            interaction: {
+                                ...(activeMatch.state.sys?.interaction ?? {}),
+                                current: undefined,
+                            },
+                        },
+                    };
+                    return true;
+                }
+
+                if (commandType === 'ADVANCE_PHASE') {
+                    activeMatch.state = {
+                        ...activeMatch.state,
+                        core: {
+                            ...activeMatch.state.core,
+                            activePlayerId: '0',
+                            currentPlayerIndex: 0,
+                        },
+                        sys: {
+                            ...activeMatch.state.sys,
+                            eventStream: {
+                                ...(activeMatch.state.sys?.eventStream ?? {}),
+                                nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                            },
+                            phase: 'playCards',
+                            turnNumber: (activeMatch.state.sys?.turnNumber ?? 4) + 1,
+                        },
+                    };
+                    return true;
+                }
+
+                return false;
+            });
+
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+
+            expect(resolutionSpy).toHaveBeenCalled();
+            expect(executed.map((item) => item.commandType)).toEqual([
+                INTERACTION_COMMANDS.RESPOND,
+            ]);
+            expect(executed[0]?.payload).toEqual({ optionId: 'skip' });
+            expect(match.state.core.activePlayerId).toBe('1');
+            expect(match.state.sys.turnNumber).toBe(4);
+            expect(broadcastSpy).toHaveBeenCalled();
+            expect(feedbackReporter).not.toHaveBeenCalled();
+        } finally {
+            resolutionSpy.mockRestore();
+        }
+    });
+
+    it('online AI watchdog 遇到 private overlay stale 时，应使用 emergency playerView 重试合法动作', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-smashup-private-overlay-stale-emergency-view', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'playCards',
+                interaction: {
+                    current: createSimpleChoice(
+                        'smashup-extra-action-choice-emergency-view',
+                        '1',
+                        '立刻打出一张额外战术，或放弃这次机会',
+                        [
+                            {
+                                id: 'card-0',
+                                label: '额外战术 A',
+                                value: { cardUid: 'hand-1', defId: 'test_action' },
+                            },
+                            {
+                                id: 'skip',
+                                label: '放弃这次额外战术',
+                                value: { skip: true },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_immediate_extra_action',
+                            targetType: 'hand',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata({ gameName: 'smashup' }),
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch')
+            .mockResolvedValueOnce({
+                kind: 'blocked',
+                playerId: '1',
+                blockedReason: 'stale-private-overlay',
+                visibility: 'private-required',
+                blockedKey: '1:private-required:stale-private-overlay',
+                diagnostics: {
+                    sharedPhase: 'playCards',
+                    privatePhase: 'playCards',
+                    sharedTurnNumber: 4,
+                    privateTurnNumber: 4,
+                    sharedCurrentPlayerId: '1',
+                    privateCurrentPlayerId: '1',
+                },
+            })
+            .mockResolvedValueOnce({
+                kind: 'action',
+                resolution: {
+                    playerId: '1',
+                    action: {
+                        actionId: 'interaction:smashup-extra-action-choice-emergency-view:skip',
+                        kind: 'interaction-choice',
+                        label: '放弃这次额外战术',
+                        commands: [{
+                            type: INTERACTION_COMMANDS.RESPOND,
+                            payload: { optionId: 'skip' },
+                        }],
+                    },
+                    attemptKey: 'watchdog-emergency-player-view',
+                    source: 'local-ai',
+                },
+            });
+
+        try {
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createEngineConfigWithId('smashup')],
+                onlineAiRecoveryTickMs: 0,
+                onlineAiRecoveryTimeoutMs: 0,
+                onlineAiFeedbackReporter: feedbackReporter,
+            });
+
+            const serverInternal = server as unknown as {
+                loadMatch: (matchID: string) => Promise<any>;
+                runOnlineAiRecoveryTick: () => Promise<void>;
+                executeCommandInternal: (
+                    match: any,
+                    playerID: string,
+                    commandType: string,
+                    payload: unknown,
+                ) => Promise<boolean>;
+            };
+
+            const match = await serverInternal.loadMatch('match-watchdog-smashup-private-overlay-stale-emergency-view');
+            const executed: Array<{ commandType: string; payload: unknown }> = [];
+            vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType, payload) => {
+                executed.push({ commandType, payload });
+
+                if (commandType === INTERACTION_COMMANDS.RESPOND) {
+                    activeMatch.state = {
+                        ...activeMatch.state,
+                        core: {
+                            ...activeMatch.state.core,
+                            activePlayerId: '0',
+                            currentPlayerIndex: 0,
+                        },
+                        sys: {
+                            ...activeMatch.state.sys,
+                            eventStream: {
+                                ...(activeMatch.state.sys?.eventStream ?? {}),
+                                nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                            },
+                            interaction: {
+                                ...(activeMatch.state.sys?.interaction ?? {}),
+                                current: undefined,
+                            },
+                        },
+                    };
+                    return true;
+                }
+
+                if (commandType === 'ADVANCE_PHASE') {
+                    throw new Error('不应在 emergency playerView 重试成功后触发 ADVANCE_PHASE');
+                }
+
+                return false;
+            });
+
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+
+            expect(resolutionSpy).toHaveBeenCalledTimes(2);
+            expect(executed.map((item) => item.commandType)).toEqual([
+                INTERACTION_COMMANDS.RESPOND,
+            ]);
+            expect(match.state.core.activePlayerId).toBe('0');
+            expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+                matchId: 'match-watchdog-smashup-private-overlay-stale-emergency-view',
+                playerId: '1',
+                incidentKind: 'legal-action-recovered',
+                status: 'resolved',
+            }));
+        } finally {
+            resolutionSpy.mockRestore();
+        }
+    });
+
+    it('online AI watchdog 触发 overlay resync 后应按冷却去重，避免连续广播风暴', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+
+        await storage.createMatch('match-watchdog-overlay-resync-cooldown', {
+            initialState: createOnlineAiRecoveryState({
+                activePlayerId: '1',
+                phase: 'playCards',
+                interaction: {
+                    current: createSimpleChoice(
+                        'smashup-extra-action-choice-resync-cooldown',
+                        '1',
+                        '立刻打出一张额外战术，或放弃这次机会',
+                        [
+                            {
+                                id: 'card-0',
+                                label: '额外战术 A',
+                                value: { cardUid: 'hand-1', defId: 'test_action' },
+                            },
+                            {
+                                id: 'skip',
+                                label: '放弃这次额外战术',
+                                value: { skip: true },
+                            },
+                        ],
+                        {
+                            sourceId: 'smashup_immediate_extra_action',
+                            targetType: 'hand',
+                        },
+                    ),
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata({ gameName: 'smashup' }),
+        });
+
+        const resolutionSpy = vi.spyOn(aiModule, 'resolveNextAiDispatch').mockResolvedValue({
+            kind: 'blocked',
+            playerId: '1',
+            blockedReason: 'stale-private-overlay',
+            visibility: 'private-required',
+            blockedKey: '1:private-required:stale-private-overlay',
+            diagnostics: {
+                sharedPhase: 'playCards',
+                privatePhase: 'playCards',
+                sharedTurnNumber: 4,
+                privateTurnNumber: 4,
+                sharedCurrentPlayerId: '1',
+                privateCurrentPlayerId: '1',
+            },
+        });
+
+        try {
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createEngineConfigWithId('smashup')],
+                onlineAiRecoveryTickMs: 0,
+                onlineAiRecoveryTimeoutMs: 0,
+            });
+
+            const serverInternal = server as unknown as {
+                loadMatch: (matchID: string) => Promise<any>;
+                runOnlineAiRecoveryTick: () => Promise<void>;
+                broadcastState: (match: any) => void;
+                executeCommandInternal: (
+                    match: any,
+                    playerID: string,
+                    commandType: string,
+                    payload: unknown,
+                ) => Promise<boolean>;
+            };
+
+            await serverInternal.loadMatch('match-watchdog-overlay-resync-cooldown');
+            const broadcastSpy = vi.spyOn(serverInternal, 'broadcastState');
+            vi.spyOn(serverInternal, 'executeCommandInternal').mockResolvedValue(true);
+
+            await serverInternal.runOnlineAiRecoveryTick();
+            await serverInternal.runOnlineAiRecoveryTick();
+            await nextTick();
+
+            // 首次 blocked 触发一次 resync，冷却期内不应重复广播。
+            expect(broadcastSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            resolutionSpy.mockRestore();
+        }
     });
 
     it('online AI watchdog 应优先执行 AI 合法动作来解除可见交互阻塞，而不是直接 force-end-turn', async () => {

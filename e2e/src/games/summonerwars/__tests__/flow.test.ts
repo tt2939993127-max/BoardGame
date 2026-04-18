@@ -1180,7 +1180,7 @@ describe('召唤师战争本地 AI', () => {
         const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
         const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
             actionId: string;
-            totalScore: number;
+            finalScore: number;
             contributions: Array<{ scorerId: string; score: number }>;
         }>;
         const threatAttack = context.legalActions.find((action) => {
@@ -1196,7 +1196,7 @@ describe('召唤师战争本地 AI', () => {
 
         expect(threatAttack?.metadata?.strategyTags).toContain('summoner-defense');
         expect(threatEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(true);
-        expect(threatEval?.totalScore ?? -Infinity).toBeGreaterThan(championEval?.totalScore ?? -Infinity);
+        expect(threatEval?.finalScore ?? -Infinity).toBeGreaterThan(championEval?.finalScore ?? -Infinity);
         expect(decision?.actionId).toBe(threatAttack?.actionId);
     });
 
@@ -1217,7 +1217,7 @@ describe('召唤师战争本地 AI', () => {
         const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
         const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
             actionId: string;
-            totalScore: number;
+            finalScore: number;
             contributions: Array<{ scorerId: string; score: number }>;
         }>;
         const commonAttack = context.legalActions.find((action) => {
@@ -1239,7 +1239,7 @@ describe('召唤师战争本地 AI', () => {
         expect(championAttack?.metadata?.strategyTags).toEqual(['board-control']);
         expect(championProfileScore).toBe(commonProfileScore);
         expect(championAttackScore).toBeGreaterThan(commonAttackScore);
-        expect(championEval?.totalScore ?? -Infinity).toBeGreaterThan(commonEval?.totalScore ?? -Infinity);
+        expect(championEval?.finalScore ?? -Infinity).toBeGreaterThan(commonEval?.finalScore ?? -Infinity);
         expect(decision?.actionId).toBe(championAttack?.actionId);
     });
 
@@ -1286,7 +1286,7 @@ describe('召唤师战争本地 AI', () => {
         const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
         const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
             actionId: string;
-            totalScore: number;
+            finalScore: number;
             contributions: Array<{ scorerId: string; score: number }>;
         }>;
         const inspireAction = context.legalActions.find((action) => {
@@ -1301,7 +1301,7 @@ describe('召唤师战争本地 AI', () => {
         const prepareAbilityScore = prepareEval?.contributions.find((item) => item.scorerId === 'activated-ability')?.score ?? -Infinity;
 
         expect(inspireAbilityScore).toBeGreaterThan(prepareAbilityScore);
-        expect(inspireEval?.totalScore ?? -Infinity).toBeGreaterThan(prepareEval?.totalScore ?? -Infinity);
+        expect(inspireEval?.finalScore ?? -Infinity).toBeGreaterThan(prepareEval?.finalScore ?? -Infinity);
         expect(decision?.actionId).toBe(inspireAction?.actionId);
     });
 

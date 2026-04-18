@@ -39,6 +39,23 @@ export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDeci
             playerId: args.playerId,
             state: args.visibleState,
         }) ?? []);
+    let featureSnapshot: Record<string, unknown> | null = null;
+    if (runtime?.buildFeatureSnapshot) {
+        try {
+            const snapshot = runtime.buildFeatureSnapshot({
+                playerId: args.playerId,
+                state: args.visibleState,
+                legalActions,
+                interaction,
+                responseWindow,
+            });
+            if (snapshot && typeof snapshot === 'object') {
+                featureSnapshot = snapshot;
+            }
+        } catch {
+            featureSnapshot = null;
+        }
+    }
 
     return {
         gameId: args.gameId,
@@ -56,6 +73,7 @@ export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDeci
                 ? args.seatController.difficulty
                 : undefined,
         ),
+        featureSnapshot,
     };
 }
 

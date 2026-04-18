@@ -408,6 +408,10 @@ const OnlineAiSeatBridge = ({
             if (cancelled) return;
 
             if (aiDispatchResult.kind === 'blocked') {
+                // 已有 in-flight 尝试时，禁止并发恢复链触发重复派发。
+                if (lastAiAttemptKeyRef.current) {
+                    return;
+                }
                 const staleDecisionKey = aiDispatchResult.blockedKey;
                 if (staleSeatDecisionKeyRef.current !== staleDecisionKey) {
                     staleSeatDecisionKeyRef.current = staleDecisionKey;
@@ -468,6 +472,10 @@ const OnlineAiSeatBridge = ({
             }
 
             if (aiDispatchResult.kind === 'idle') {
+                // 已有 in-flight 尝试时，等待确认回调释放锁，不并发拉起恢复链。
+                if (lastAiAttemptKeyRef.current) {
+                    return;
+                }
                 const sharedState = state as MatchState<unknown>;
                 const currentPlayerId = resolveCurrentPlayerId(sharedState);
                 const activeAiPlayerId = currentPlayerId && seatControllers[currentPlayerId]?.type !== 'human'

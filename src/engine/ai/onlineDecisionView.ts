@@ -22,6 +22,8 @@ export interface ResolvedOnlineAiDecisionView {
         privateTurnNumber: number | null;
         sharedCurrentPlayerId: string | null;
         privateCurrentPlayerId: string | null;
+        sharedEventStreamNextId: number | null;
+        privateEventStreamNextId: number | null;
     };
 }
 
@@ -67,11 +69,27 @@ export function resolveCurrentPlayerIdFromState(state: MatchState<unknown> | nul
     return null;
 }
 
+export function resolveEventStreamNextIdFromState(state: MatchState<unknown> | null | undefined): number | null {
+    if (!state || typeof state !== 'object') return null;
+    const nextId = (state.sys as { eventStream?: { nextId?: unknown } } | undefined)?.eventStream?.nextId;
+    return typeof nextId === 'number' ? nextId : null;
+}
+
 function resolveVisibilityByDefault(args: {
     sharedState: MatchState<unknown>;
     privateOverlay: MatchState<unknown> | null;
     playerId: string;
 }): OnlineAiDecisionVisibility {
+    const sharedPhase = resolveStatePhase(args.sharedState);
+    const sharedCurrentPlayerId = resolveCurrentPlayerIdFromState(args.sharedState);
+    const setupLikePhases = new Set(['setup', 'characterSelection', 'characterSelect', 'factionSelect']);
+    const isSetupLikePhase = typeof sharedPhase === 'string' && setupLikePhases.has(sharedPhase);
+
+    // 非 setup 阶段轮到 AI 主动执行时，默认要求 private overlay，避免共享态直推导致 stale seat 误决策。
+    if (sharedCurrentPlayerId === args.playerId && !isSetupLikePhase) {
+        return 'private-required';
+    }
+
     const sharedInteraction = args.sharedState.sys?.interaction as {
         current?: {
             playerId?: unknown;
@@ -203,6 +221,17 @@ function isPrivateOverlayFreshEnough(args: {
     privateOverlay: MatchState<unknown>;
     playerId: string;
 }): boolean {
+    // 硬约束：private overlay 必须和 authoritative shared 指向同一 event-stream epoch。
+    // 不再仅靠 phase/turn/currentPlayer 推断“可能新鲜”。
+    const sharedEventStreamNextId = resolveEventStreamNextIdFromState(args.sharedState);
+    const privateEventStreamNextId = resolveEventStreamNextIdFromState(args.privateOverlay);
+    if (sharedEventStreamNextId === null || privateEventStreamNextId === null) {
+        return false;
+    }
+    if (sharedEventStreamNextId !== privateEventStreamNextId) {
+        return false;
+    }
+
     const sharedHasHiddenInteractionBlocker = hasSharedHiddenInteractionBlocker(args.sharedState, args.playerId);
     const sharedResponseWindow = resolveResponseWindowCurrent(args.sharedState);
     const privateResponseWindow = resolveResponseWindowCurrent(args.privateOverlay);
@@ -297,6 +326,8 @@ export function resolveOnlineAiDecisionView(
         privateTurnNumber: resolveStateTurnNumber(privateOverlay),
         sharedCurrentPlayerId: resolveCurrentPlayerIdFromState(args.sharedState),
         privateCurrentPlayerId: resolveCurrentPlayerIdFromState(privateOverlay),
+        sharedEventStreamNextId: resolveEventStreamNextIdFromState(args.sharedState),
+        privateEventStreamNextId: resolveEventStreamNextIdFromState(privateOverlay),
     };
 
     if (visibility === 'shared') {
