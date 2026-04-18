@@ -1718,6 +1718,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
     }
 
     if (phase === 'offensiveRoll' || phase === 'defensiveRoll') {
+        const offensiveAttackAlreadyInitiated = phase === 'offensiveRoll' && Boolean(state.core.pendingAttack);
         if (phase === 'offensiveRoll' && state.core.rollCount > 0 && !state.core.rollConfirmed) {
             for (const die of getActiveDice(state.core)) {
                 appendAction(actions, state, playerId, {
@@ -1739,6 +1740,12 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
         }
 
         const abilityIds = (() => {
+            if (offensiveAttackAlreadyInitiated) {
+                // 攻击已发起（pendingAttack 已创建）后，offensiveRoll 阶段不应再允许重复选技能。
+                // 否则在线 AI 可能在状态同步抖动时反复发 SELECT_ABILITY，
+                // 触发 attack_already_initiated 拒绝并造成“动画回放/卡死”观感。
+                return [];
+            }
             if (phase === 'offensiveRoll') {
                 return getAvailableAbilityIds(state.core, playerId, phase);
             }
@@ -1770,13 +1777,15 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
             });
         }
 
-        appendAction(actions, state, playerId, {
-            actionId: createAiLegalActionId('roll', 'confirm'),
-            kind: 'confirm-roll',
-            label: '确认骰面',
-            commands: [{ type: 'CONFIRM_ROLL', payload: {} }],
-            metadata: withAiActionStrategyTags({}, ['dice-setup']),
-        });
+        if (!offensiveAttackAlreadyInitiated) {
+            appendAction(actions, state, playerId, {
+                actionId: createAiLegalActionId('roll', 'confirm'),
+                kind: 'confirm-roll',
+                label: '确认骰面',
+                commands: [{ type: 'CONFIRM_ROLL', payload: {} }],
+                metadata: withAiActionStrategyTags({}, ['dice-setup']),
+            });
+        }
     }
 
     if (phase === 'main1' || phase === 'main2') {

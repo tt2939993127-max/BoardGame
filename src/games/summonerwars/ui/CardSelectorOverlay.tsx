@@ -38,8 +38,10 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
     title,
     cancelLabelKey,
 }) => {
-    const { t } = useTranslation('game-summonerwars');
-    const cancelLabel = cancelLabelKey ? t(cancelLabelKey) : t('actions.cancel');
+    const { t, i18n } = useTranslation('game-summonerwars');
+    const cancelLabel = cancelLabelKey
+        ? (i18n.exists(cancelLabelKey, { ns: 'game-summonerwars' }) ? t(cancelLabelKey) : cancelLabelKey)
+        : t('actions.cancel');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 

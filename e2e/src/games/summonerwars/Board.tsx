@@ -425,6 +425,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     const meta = swInteraction.meta as {
       sourceUnitId?: string;
       sourcePosition?: CellCoord;
+      structurePosition?: CellCoord;
       targetPosition?: CellCoord;
     };
     if (!meta.sourceUnitId) return null;
@@ -483,6 +484,25 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         abilityId: 'frost_axe',
         step: 'selectUnit',
         sourceUnitId: meta.sourceUnitId,
+      };
+    }
+
+    if (swInteraction.type === 'ice_ram_target') {
+      return {
+        abilityId: 'ice_ram',
+        step: 'selectUnit',
+        sourceUnitId: 'ice_ram',
+        structurePosition: meta.structurePosition,
+      };
+    }
+
+    if (swInteraction.type === 'ice_ram_push') {
+      return {
+        abilityId: 'ice_ram',
+        step: 'selectPushDirection',
+        sourceUnitId: 'ice_ram',
+        structurePosition: meta.structurePosition,
+        targetPosition: meta.targetPosition,
       };
     }
 
@@ -798,6 +818,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         'after_move_frost_axe',
         'after_attack_mind_transmission',
         'activated_ability_target',
+        'fire_sacrifice_summon',
         'ice_ram_target',
         'ice_ram_push',
       ].includes(swInteraction.type)
@@ -1443,7 +1464,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     core={core}
                     abilityMode={abilityMode}
                     fireSacrificeSummonMode={interaction.fireSacrificeSummonMode}
-                    onCancelFireSacrifice={() => interaction.handleCardSelect(null)}
+                    onCancelFireSacrifice={() => {
+                      if (swInteraction?.type === 'fire_sacrifice_summon') {
+                        cancelSwInteraction(true);
+                        return;
+                      }
+                      interaction.handleCardSelect(null);
+                    }}
                     pendingBeforeAttack={interaction.pendingBeforeAttack}
                     bloodSummonMode={interaction.bloodSummonMode}
                     annihilateMode={interaction.annihilateMode}

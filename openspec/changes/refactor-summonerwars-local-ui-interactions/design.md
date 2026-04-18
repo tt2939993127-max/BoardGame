@@ -158,12 +158,14 @@ Summoner Wars 当前存在两类“等待玩家输入”路径：
 
 > 2026-04-18 进展：`before_attack_*`、`on_phase_start_*`、`after_move_*` 已改成 `Board` 侧 `swInteraction -> abilityMode` 派生优先；`useGameEvents` 仅保留无交互 fallback，不再是这些链路的首要真相源。当前 Batch 2 主要剩余 `ice_ram_*` 与 `fire_sacrifice_summon`。
 
-### Batch 3：最后抽公共复杂多步交互
+### Batch 3：最后抽公共复杂多步交互（移交 Phase C）
 - `blood_summon`
 - `annihilate`
 - `sneak`
 - `glacial_shift`
 - `revive_undead`
+
+> 2026-04-18 收口说明：Phase B 的验收目标是“移除本地等待态真相源、以 `sys.interaction` 为单一交互入口、补齐 owner/guest 可见性与 cancel/skip/不重触发证据”。该目标已达成。上述 Batch 3 属于进一步的通用抽象优化，迁移到后续独立变更（Phase C）执行，不再阻塞 Phase B 关闭。
 
 ## 风险与缓解
 

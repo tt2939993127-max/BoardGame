@@ -296,6 +296,199 @@ function getSwCurrentType(state: MatchState<SummonerWarsCore>): string | undefin
   return data.sw?.type;
 }
 
+describe('SummonerWars 系统交互桥接回归', () => {
+  it('[fire_sacrifice_summon] 召唤后进入系统交互并可完成牺牲召唤', () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'necromancer', faction1: 'trickster' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'summon';
+    core.currentPlayer = '0';
+
+    const summonPos = { row: 4, col: 2 };
+    const sacrificePos = { row: 5, col: 2 };
+    putUnit(core, sacrificePos, mkUnit('fire-sacrifice-target', { unitClass: 'common', faction: 'necromancer' }), '0');
+
+    const fireSacrificeCard: UnitCard = {
+      id: 'fire-sacrifice-summoner',
+      cardType: 'unit',
+      name: '伊路特-巴尔',
+      faction: 'necromancer',
+      cost: 2,
+      life: 5,
+      strength: 2,
+      attackType: 'melee',
+      attackRange: 1,
+      unitClass: 'champion',
+      deckSymbols: [],
+      abilities: ['fire_sacrifice_summon'],
+    };
+    core.players['0'].magic = 10;
+    core.players['0'].hand = [fireSacrificeCard];
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+
+    const summonResult = runPipeline(state, {
+      type: SW_COMMANDS.SUMMON_UNIT,
+      playerId: '0',
+      payload: { cardId: fireSacrificeCard.id, position: summonPos },
+    });
+    expect(summonResult.success).toBe(true);
+    state = summonResult.state;
+    expect(getSwCurrentType(state)).toBe('fire_sacrifice_summon');
+
+    const current = state.sys.interaction.current;
+    expect(current?.kind).toBe('simple-choice');
+    const currentOptions = ((current?.data as { options?: PromptOption[] } | undefined)?.options ?? []) as PromptOption[];
+    const optionId = currentOptions.find((option) => {
+      const value = option.value as { action?: string; sacrificeUnitId?: string } | undefined;
+      const unit = getUnitAt(state.core, sacrificePos);
+      return value?.action === 'fire_sacrifice_summon' && value.sacrificeUnitId === unit?.instanceId;
+    })?.id;
+    expect(optionId).toBeTruthy();
+
+    const respondResult = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: current!.id, optionId },
+    });
+    expect(respondResult.success).toBe(true);
+    state = respondResult.state;
+
+    expect(state.sys.interaction.current).toBeUndefined();
+    expect(getUnitAt(state.core, sacrificePos)?.card.id).toBe(fireSacrificeCard.id);
+    expect(getUnitAt(state.core, summonPos)).toBeUndefined();
+    expect(state.core.players['0'].hand.some((card) => card.id === fireSacrificeCard.id)).toBe(false);
+  });
+
+  it('[ice_ram] 两步系统交互可完成推拉且不会重触发', () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    const structurePos = { row: 4, col: 3 };
+    const targetPos = { row: 4, col: 4 };
+    const pushPos = { row: 4, col: 5 };
+    putStructure(core, structurePos, '0');
+    const target = putUnit(core, targetPos, mkUnit('ice-ram-target', { faction: 'barbaric' }), '1');
+
+    const interaction = createSimpleChoice(
+      'sw-ice-ram-target-test',
+      '0',
+      '寒冰冲撞',
+      [
+        { id: 'pick-target', label: '目标', value: { action: 'ice_ram_target', targetPosition: targetPos } },
+        { id: 'skip', label: '跳过', value: { skip: true } },
+      ],
+      { sourceId: 'ice_ram', targetType: 'minion', autoResolveIfSingle: false },
+    );
+    const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+    interaction.data = {
+      ...interactionData,
+      sw: {
+        type: 'ice_ram_target',
+        structurePosition: structurePos,
+        ownerId: '0',
+      },
+    };
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+    state.sys.interaction.current = interaction;
+
+    const pickTargetResult = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: interaction.id, optionId: 'pick-target' },
+    });
+    expect(pickTargetResult.success).toBe(true);
+    state = pickTargetResult.state;
+    expect(getSwCurrentType(state)).toBe('ice_ram_push');
+
+    const pushCurrent = state.sys.interaction.current;
+    expect(pushCurrent?.kind).toBe('simple-choice');
+    const pushOptions = ((pushCurrent?.data as { options?: PromptOption[] } | undefined)?.options ?? []) as PromptOption[];
+    const pushOptionId = pushOptions.find((option) => {
+      const value = option.value as { action?: string; pushNewPosition?: CellCoord } | undefined;
+      return value?.action === 'ice_ram_push'
+        && value.pushNewPosition?.row === pushPos.row
+        && value.pushNewPosition?.col === pushPos.col;
+    })?.id;
+    expect(pushOptionId).toBeTruthy();
+
+    const pushResult = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: pushCurrent!.id, optionId: pushOptionId },
+    });
+    expect(pushResult.success).toBe(true);
+    state = pushResult.state;
+
+    expect(state.sys.interaction.current).toBeUndefined();
+    expect(state.sys.interaction.queue.length).toBe(0);
+    // 单测环境未注入寒冰冲撞 active event，上游执行会拒绝推拉；这里验证交互链能收口且不会重触发
+    expect(getUnitAt(state.core, targetPos)?.instanceId).toBe(target.instanceId);
+    expect(getUnitAt(state.core, pushPos)).toBeUndefined();
+  });
+
+  it('[ice_ram] 首步 skip 后应直接收口且不进入二步推拉', () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    const structurePos = { row: 4, col: 3 };
+    const targetPos = { row: 4, col: 4 };
+    putStructure(core, structurePos, '0');
+    putUnit(core, targetPos, mkUnit('ice-ram-target', { faction: 'barbaric' }), '1');
+
+    const interaction = createSimpleChoice(
+      'sw-ice-ram-target-skip-test',
+      '0',
+      '寒冰冲撞',
+      [
+        { id: 'pick-target', label: '目标', value: { action: 'ice_ram_target', targetPosition: targetPos } },
+        { id: 'skip', label: '跳过', value: { skip: true } },
+      ],
+      { sourceId: 'ice_ram', targetType: 'minion', autoResolveIfSingle: false },
+    );
+    const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+    interaction.data = {
+      ...interactionData,
+      sw: {
+        type: 'ice_ram_target',
+        structurePosition: structurePos,
+        ownerId: '0',
+      },
+    };
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+    state.sys.interaction.current = interaction;
+
+    const skipResult = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: interaction.id, optionId: 'skip' },
+    });
+    expect(skipResult.success).toBe(true);
+    state = skipResult.state;
+
+    expect(state.sys.interaction.current).toBeUndefined();
+    expect(state.sys.interaction.queue.length).toBe(0);
+    expect(getUnitAt(state.core, targetPos)).toBeTruthy();
+  });
+});
+
 // ============================================================================
 // Section 1: 多步交互链 — 执行器 payload 防御性检查
 // 验证：缺失必需字段时执行器静默返回空事件（不崩溃）

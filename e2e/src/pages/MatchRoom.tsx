@@ -61,6 +61,7 @@ import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { appendMatchLoadTrace } from '../lib/matchLoadTrace';
 import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
+import { onAppVisible } from '../lib/mobile/appVisibility';
 import { isUiHintOnlyError, resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
@@ -82,7 +83,7 @@ import {
 } from './onlineAiForceSkip';
 import {
     resolveAiMinimumActionDelayMs,
-    resolveNextAiAction,
+    resolveNextAiDispatch,
     resolveOnlineAiDecisionView,
     type AiSeatController,
 } from '../engine/ai';
@@ -163,6 +164,8 @@ const TutorialDispatchBridge = ({ children }: { children: ReactNode }) => {
 
 const MAX_FORCE_END_TURN_FOLLOW_UP_STEPS = 16;
 const RECOVERY_FAILURE_SYNC_GRACE_MS = 700;
+const STALE_SEAT_RECOVERY_RETRY_MS = 350;
+const STALE_SEAT_RECOVERY_MIN_INTERVAL_MS = 1200;
 
 function resolveLatestStateEventTimestamp(state: MatchState<unknown>): number | null {
     const eventStreamEntries = Array.isArray(state.sys?.eventStream?.entries)
@@ -213,7 +216,7 @@ const OnlineAiSeatBridge = ({
 }) => {
     const { state } = useGameClient();
     const toast = useToast();
-    const { t } = useTranslation('game');
+    const { t: tGame } = useTranslation('game');
     const clientsRef = useRef<Record<string, GameTransportClient>>({});
     const [connectionVersion, setConnectionVersion] = useState(0);
     const [aiRetryVersion, setAiRetryVersion] = useState(0);
@@ -233,6 +236,10 @@ const OnlineAiSeatBridge = ({
         lastReportedFailureReason: string | null;
     } | null>(null);
     const staleSeatDecisionKeyRef = useRef<string | null>(null);
+    const staleSeatRecoveryRef = useRef<{
+        key: string;
+        lastRecoveryAt: number;
+    } | null>(null);
     const latestSharedStateRef = useRef<MatchState<unknown> | null>(null);
     const pendingRecoveryCheckTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
     const aiSeatStateOverridesRef = useRef<Record<string, MatchState<unknown> | null>>({});
@@ -351,9 +358,20 @@ const OnlineAiSeatBridge = ({
     }, [matchId, seatControllers, seatCredentials, server]);
 
     useEffect(() => {
+        return onAppVisible(() => {
+            for (const client of Object.values(clientsRef.current)) {
+                client.resync();
+            }
+            setAiRetryVersion((version) => version + 1);
+        });
+    }, []);
+
+    useEffect(() => {
         const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
         if (!hasAiSeat || !state) {
             lastAiAttemptKeyRef.current = null;
+            staleSeatRecoveryRef.current = null;
+
             return;
         }
 
@@ -362,7 +380,7 @@ const OnlineAiSeatBridge = ({
 
         const runAiTurn = async () => {
             const startedAt = Date.now();
-            const resolution = await resolveNextAiAction({
+            const aiDispatchResult = await resolveNextAiDispatch({
                 engineConfig,
                 state,
                 matchId,
@@ -382,65 +400,83 @@ const OnlineAiSeatBridge = ({
                         privateOverlay,
                         playerId,
                     });
-                    if (!decisionView.canDecide) {
-                        const diagnosticKey = [
-                            playerId,
-                            decisionView.visibility,
-                            decisionView.blockedReason ?? 'no-blocked-reason',
-                            decisionView.diagnostics.sharedTurnNumber ?? 'no-shared-turn',
-                            decisionView.diagnostics.sharedPhase ?? 'no-shared-phase',
-                            decisionView.diagnostics.sharedCurrentPlayerId ?? 'no-shared-player',
-                            decisionView.diagnostics.privateTurnNumber ?? 'no-seat-turn',
-                            decisionView.diagnostics.privatePhase ?? 'no-seat-phase',
-                            decisionView.diagnostics.privateCurrentPlayerId ?? 'no-seat-player',
-                        ].join(':');
-                        if (staleSeatDecisionKeyRef.current !== diagnosticKey) {
-                            staleSeatDecisionKeyRef.current = diagnosticKey;
-                            appendMatchLoadTrace({
-                                stage: 'online-ai-seat-state-stale',
-                                source: 'match-room',
-                                gameId: engineConfig.gameId,
-                                matchId,
-                                payload: {
-                                    playerId,
-                                    visibility: decisionView.visibility,
-                                    blockedReason: decisionView.blockedReason,
-                                    sharedTurnNumber: decisionView.diagnostics.sharedTurnNumber,
-                                    sharedPhase: decisionView.diagnostics.sharedPhase,
-                                    sharedCurrentPlayerId: decisionView.diagnostics.sharedCurrentPlayerId,
-                                    seatTurnNumber: decisionView.diagnostics.privateTurnNumber,
-                                    seatPhase: decisionView.diagnostics.privatePhase,
-                                    seatCurrentPlayerId: decisionView.diagnostics.privateCurrentPlayerId,
-                                },
-                            });
-                            console.warn('[OnlineAiSeatBridge] stale seat state blocked AI decision', {
-                                matchId,
-                                gameId: engineConfig.gameId,
-                                playerId,
-                                visibility: decisionView.visibility,
-                                blockedReason: decisionView.blockedReason,
-                                sharedTurnNumber: decisionView.diagnostics.sharedTurnNumber,
-                                sharedPhase: decisionView.diagnostics.sharedPhase,
-                                sharedCurrentPlayerId: decisionView.diagnostics.sharedCurrentPlayerId,
-                                seatTurnNumber: decisionView.diagnostics.privateTurnNumber,
-                                seatPhase: decisionView.diagnostics.privatePhase,
-                                seatCurrentPlayerId: decisionView.diagnostics.privateCurrentPlayerId,
-                            });
-                        }
-                        return decisionView;
-                    }
-                    staleSeatDecisionKeyRef.current = null;
                     return decisionView;
                 },
             });
 
             if (cancelled) return;
 
-            if (!resolution) {
+            if (aiDispatchResult.kind === 'blocked') {
+                const staleDecisionKey = aiDispatchResult.blockedKey;
+                if (staleSeatDecisionKeyRef.current !== staleDecisionKey) {
+                    staleSeatDecisionKeyRef.current = staleDecisionKey;
+                    appendMatchLoadTrace({
+                        stage: 'online-ai-seat-state-stale',
+                        source: 'match-room',
+                        gameId: engineConfig.gameId,
+                        matchId,
+                        payload: {
+                            playerId: aiDispatchResult.playerId,
+                            visibility: aiDispatchResult.visibility,
+                            blockedReason: aiDispatchResult.blockedReason,
+                            sharedTurnNumber: aiDispatchResult.diagnostics?.sharedTurnNumber ?? null,
+                            sharedPhase: aiDispatchResult.diagnostics?.sharedPhase ?? null,
+                            sharedCurrentPlayerId: aiDispatchResult.diagnostics?.sharedCurrentPlayerId ?? null,
+                            seatTurnNumber: aiDispatchResult.diagnostics?.privateTurnNumber ?? null,
+                            seatPhase: aiDispatchResult.diagnostics?.privatePhase ?? null,
+                            seatCurrentPlayerId: aiDispatchResult.diagnostics?.privateCurrentPlayerId ?? null,
+                        },
+                    });
+                    console.warn('[OnlineAiSeatBridge] blocked AI decision', {
+                        matchId,
+                        gameId: engineConfig.gameId,
+                        playerId: aiDispatchResult.playerId,
+                        visibility: aiDispatchResult.visibility,
+                        blockedReason: aiDispatchResult.blockedReason,
+                        sharedTurnNumber: aiDispatchResult.diagnostics?.sharedTurnNumber ?? null,
+                        sharedPhase: aiDispatchResult.diagnostics?.sharedPhase ?? null,
+                        sharedCurrentPlayerId: aiDispatchResult.diagnostics?.sharedCurrentPlayerId ?? null,
+                        seatTurnNumber: aiDispatchResult.diagnostics?.privateTurnNumber ?? null,
+                        seatPhase: aiDispatchResult.diagnostics?.privatePhase ?? null,
+                        seatCurrentPlayerId: aiDispatchResult.diagnostics?.privateCurrentPlayerId ?? null,
+                    });
+                }
+                if (staleDecisionKey) {
+                    const now = Date.now();
+                    const lastRecovery = staleSeatRecoveryRef.current;
+                    const canRecover = !lastRecovery
+                        || lastRecovery.key !== staleDecisionKey
+                        || now - lastRecovery.lastRecoveryAt >= STALE_SEAT_RECOVERY_MIN_INTERVAL_MS;
+                    if (canRecover) {
+                        staleSeatRecoveryRef.current = {
+                            key: staleDecisionKey,
+                            lastRecoveryAt: now,
+                        };
+                        for (const seatClient of Object.values(clientsRef.current)) {
+                            seatClient.resync();
+                        }
+                        delayTimer = setTimeout(() => {
+                            delayTimer = null;
+                            setAiRetryVersion((version) => version + 1);
+                        }, STALE_SEAT_RECOVERY_RETRY_MS);
+                    }
+                } else {
+                    staleSeatRecoveryRef.current = null;
+                }
                 lastAiAttemptKeyRef.current = null;
                 return;
             }
 
+            if (aiDispatchResult.kind === 'idle') {
+                staleSeatDecisionKeyRef.current = null;
+                staleSeatRecoveryRef.current = null;
+                lastAiAttemptKeyRef.current = null;
+                return;
+            }
+
+            staleSeatDecisionKeyRef.current = null;
+            staleSeatRecoveryRef.current = null;
+            const resolution = aiDispatchResult.resolution;
             if (!tryReserveAiAttemptKey(lastAiAttemptKeyRef, resolution.attemptKey)) {
                 return;
             }
@@ -774,7 +810,7 @@ const OnlineAiSeatBridge = ({
 
     const forceEndAiPhase = useCallback(async (): Promise<boolean> => {
         if (!state) {
-            toast.info(t('hud.ai.forceEndPhaseNotReady', { ns: 'game' }));
+            toast.info(tGame('hud.ai.forceEndPhaseNotReady', { ns: 'game' }));
             return false;
         }
 
@@ -792,18 +828,18 @@ const OnlineAiSeatBridge = ({
         });
 
         if (!candidate) {
-            toast.info(t('hud.ai.forceEndPhaseUnavailable', { ns: 'game' }));
+            toast.info(tGame('hud.ai.forceEndPhaseUnavailable', { ns: 'game' }));
             return false;
         }
 
         const targetClient = clientsRef.current[candidate.playerId];
         if (!targetClient?.isConnected) {
-            toast.warning(t('hud.ai.forceEndPhaseSeatOffline', { ns: 'game' }));
+            toast.warning(tGame('hud.ai.forceEndPhaseSeatOffline', { ns: 'game' }));
             return false;
         }
 
         const attemptKey = candidate.resolution.attemptKey;
-        toast.info(t('hud.ai.forceEndPhaseSubmitting', { ns: 'game' }), undefined, {
+        toast.info(tGame('hud.ai.forceEndPhaseSubmitting', { ns: 'game' }), undefined, {
             dedupeKey: `game.ai-force-end-turn.manual.submitting.${attemptKey}`,
         });
 
@@ -836,23 +872,23 @@ const OnlineAiSeatBridge = ({
                 },
                 onCompleted: () => {
                     toast.warning(
-                        t('hud.ai.forceEndPhaseSuccess', { ns: 'game' }),
-                        t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                        tGame('hud.ai.forceEndPhaseSuccess', { ns: 'game' }),
+                        tGame('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
                         { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}` },
                     );
                     finish(true);
                 },
                 onRejected: (reason) => {
                     toast.warning(
-                        t('hud.ai.forceEndPhaseFailed', { ns: 'game', reason }),
-                        t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                        tGame('hud.ai.forceEndPhaseFailed', { ns: 'game', reason }),
+                        tGame('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
                         { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}.${reason}` },
                     );
                     finish(false);
                 },
             });
         });
-    }, [seatControllers, state, t, toast]);
+    }, [seatControllers, state, tGame, toast]);
 
     useEffect(() => {
         if (!onForceEndAiPhaseReady) return;
@@ -876,7 +912,7 @@ const OnlineRoomConnectionLoading = ({
     transportError?: string | null;
     onRetry?: () => void;
 }) => {
-    const { t } = useTranslation('lobby');
+    const { t: tLobbyConnection } = useTranslation('lobby');
     const navigate = useNavigate();
     const { state, isConnected, matchPlayers } = useGameClient();
     const core = state?.core as { turnNumber?: number; activePlayer?: number | string; phase?: string } | undefined;
@@ -889,7 +925,7 @@ const OnlineRoomConnectionLoading = ({
     ].join(':');
     const progressText = state
         ? undefined
-        : t(isConnected
+        : tLobbyConnection(isConnected
             ? 'matchRoom.loadingProgress.syncing'
             : 'matchRoom.loadingProgress.connecting');
     if (transportError) {
@@ -907,8 +943,8 @@ const OnlineRoomConnectionLoading = ({
         const content = (
             <div className="fixed inset-0 flex items-center justify-center bg-black px-6 text-center">
                 <div className="max-w-md">
-                    <div className="text-white/85 text-xl font-semibold mb-3">{t(titleKey)}</div>
-                    <div className="text-white/60 text-sm leading-6 mb-6">{t(descriptionKey)}</div>
+                    <div className="text-white/85 text-xl font-semibold mb-3">{tLobbyConnection(titleKey)}</div>
+                    <div className="text-white/60 text-sm leading-6 mb-6">{tLobbyConnection(descriptionKey)}</div>
                     <div className="flex items-center justify-center gap-4">
                         <button
                             onClick={() => {
@@ -920,7 +956,7 @@ const OnlineRoomConnectionLoading = ({
                             }}
                             className="px-5 py-2 rounded-lg bg-amber-600/80 hover:bg-amber-500/90 text-white text-sm font-medium transition-colors"
                         >
-                            {t('matchRoom.connectionTimeout.retry')}
+                            {tLobbyConnection('matchRoom.connectionTimeout.retry')}
                         </button>
                         <button
                             onClick={() => {
@@ -932,7 +968,7 @@ const OnlineRoomConnectionLoading = ({
                             }}
                             className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition-colors"
                         >
-                            {t('matchRoom.connectionTimeout.backToLobby')}
+                            {tLobbyConnection('matchRoom.connectionTimeout.backToLobby')}
                         </button>
                     </div>
                 </div>
@@ -1029,7 +1065,7 @@ export const MatchRoom = () => {
     const { startTutorial, closeTutorial, isActive, currentStep, isBoardMounted } = useTutorial();
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
-    const { t, i18n } = useTranslation('lobby');
+    const { t: tLobby, i18n } = useTranslation('lobby');
     const { user, token } = useAuth();
     const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
     const [hasEverReceivedOnlineState, setHasEverReceivedOnlineState] = useState(false);
@@ -1049,8 +1085,8 @@ export const MatchRoom = () => {
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const guestId = useMemo(() => getOrCreateGuestId(), []);
-    const guestName = useMemo(() => getGuestName(t, guestId), [guestId, t]);
-    const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
+    const guestName = useMemo(() => getGuestName(tLobby, guestId), [guestId, tLobby]);
+    const gameDisplayName = resolveGameDisplayName(gameConfig, tLobby, gameId ?? '');
     const gamePageDataAttributes = useMemo(
         () => getGamePageDataAttributes(gameId, gameConfig),
         [gameConfig, gameId],
@@ -1103,8 +1139,8 @@ export const MatchRoom = () => {
     // 包装 Board 组件（注入 CriticalImageGate）
     // 注意：不能依赖 t 函数引用，否则 i18n namespace 加载完成时 t 变化
     // → WrappedBoard 重建 → Board 卸载重挂载 → CriticalImageGate 重新预加载 → 循环
-    const tRef = useRef(t);
-    tRef.current = t;
+    const tRef = useRef(tLobby);
+    tRef.current = tLobby;
     const [hasCompletedInitialOnlinePreload, setHasCompletedInitialOnlinePreload] = useState(false);
     useEffect(() => {
         setHasCompletedInitialOnlinePreload(false);
@@ -1134,13 +1170,13 @@ export const MatchRoom = () => {
     const tutorialLoadingProgressText = useMemo(() => {
         if (!isTutorialRoute) return undefined;
         if (!gameId || !isGameNamespaceReady) {
-            return t('matchRoom.loadingProgress.loadingGameModule');
+            return tLobby('matchRoom.loadingProgress.loadingGameModule');
         }
-        return t('tutorial.steps.setup', {
+        return tLobby('tutorial.steps.setup', {
             ns: `game-${gameId}`,
-            defaultValue: t('matchRoom.loadingProgress.preparingRoom'),
+            defaultValue: tLobby('matchRoom.loadingProgress.preparingRoom'),
         });
-    }, [gameId, isGameNamespaceReady, isTutorialRoute, t]);
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, tLobby]);
 
     useEffect(() => {
         if (gameImplementationError) {
@@ -1324,7 +1360,7 @@ export const MatchRoom = () => {
 
         setIsAutoJoining(true);
         const guestId = getOrCreateGuestId();
-        const playerName = user?.username || t('player.guest', { id: guestId, ns: 'lobby' });
+        const playerName = user?.username || tLobby('player.guest', { id: guestId, ns: 'lobby' });
 
         let retryCount = 0;
         const maxRetries = 5;
@@ -1363,7 +1399,7 @@ export const MatchRoom = () => {
                     setIsAutoJoining(false);
                 } else {
                     if (error === 'room_full') {
-                        setAutoJoinError(t('error.roomFull'));
+                        setAutoJoinError(tLobby('error.roomFull'));
                         setIsAutoJoining(false);
                         return;
                     }
@@ -1372,7 +1408,7 @@ export const MatchRoom = () => {
                         scheduleRetry(500);
                     } else {
                         if (!cancelled) {
-                            setAutoJoinError(t('error.joinRoomFailed'));
+                            setAutoJoinError(tLobby('error.joinRoomFailed'));
                             setIsAutoJoining(false);
                         }
                     }
@@ -1384,7 +1420,7 @@ export const MatchRoom = () => {
                     scheduleRetry(500);
                 } else {
                     if (!cancelled) {
-                        setAutoJoinError(t('error.joinRoomFailed'));
+                        setAutoJoinError(tLobby('error.joinRoomFailed'));
                         setIsAutoJoining(false);
                     }
                 }
@@ -1402,7 +1438,7 @@ export const MatchRoom = () => {
             }
             autoJoinStartedRef.current = false;
         };
-    }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, t, user]);
+    }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, tLobby, user]);
 
     // 获取凭据
     const credentials = useMemo(() => {
@@ -1528,7 +1564,7 @@ export const MatchRoom = () => {
                     storedAiSeatCredentials,
                     claimMissingSeatCredential: matchStatus.isHost
                         ? async (playerId) => {
-                            const aiPlayerName = t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 });
+                            const aiPlayerName = tLobby('createRoom.aiPlayerName', { seat: Number(playerId) + 1 });
                             const response = await matchApi.claimSeat(gameId, matchId, playerId, token
                                 ? {
                                     token,
@@ -1570,7 +1606,7 @@ export const MatchRoom = () => {
         return () => {
             cancelled = true;
         };
-    }, [gameConfig, gameId, guestId, guestName, isTutorialRoute, localStorageTick, matchId, matchStatus.isHost, t, token]);
+    }, [gameConfig, gameId, guestId, guestName, isTutorialRoute, localStorageTick, matchId, matchStatus.isHost, tLobby, token]);
     // 教程启动 effect
     // 使用 useLayoutEffect 确保在 CriticalImageGate 的 useEffect 之前执行。
     // 配合 TutorialDispatchBridge 的 useLayoutEffect（先 bindDispatch），
@@ -1818,9 +1854,9 @@ export const MatchRoom = () => {
             },
             render: ({ close, closeOnBackdrop }) => (
                 <ConfirmModal
-                    title={t('matchRoom.destroy.forceExitTitle')}
-                    description={t('matchRoom.destroy.forceExitDescription')}
-                    confirmText={t('matchRoom.destroy.forceExitConfirm')}
+                    title={tLobby('matchRoom.destroy.forceExitTitle')}
+                    description={tLobby('matchRoom.destroy.forceExitDescription')}
+                    confirmText={tLobby('matchRoom.destroy.forceExitConfirm')}
                     onConfirm={() => {
                         close();
                         handleForceExitLocal();
@@ -1902,8 +1938,8 @@ export const MatchRoom = () => {
             },
             render: ({ close, closeOnBackdrop }) => (
                 <ConfirmModal
-                    title={t('matchRoom.destroy.title')}
-                    description={t('matchRoom.destroy.description')}
+                    title={tLobby('matchRoom.destroy.title')}
+                    description={tLobby('matchRoom.destroy.description')}
                     onConfirm={() => {
                         close();
                         handleConfirmDestroy();
@@ -1972,11 +2008,11 @@ export const MatchRoom = () => {
         if (last && last.key === key && now - last.timestamp < 3000) return;
         errorToastRef.current = { key, timestamp: now };
         toast.error(
-            { kind: 'text', text: matchStatus.error ?? t('matchRoom.error.matchMissing') },
+            { kind: 'text', text: matchStatus.error ?? tLobby('matchRoom.error.matchMissing') },
             { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
             { dedupeKey: key }
         );
-    }, [gameId, matchId, matchStatus.error, shouldShowMatchError, t, toast]);
+    }, [gameId, matchId, matchStatus.error, shouldShowMatchError, tLobby, toast]);
 
     if (gameNamespaceError) {
         return (
@@ -2004,8 +2040,8 @@ export const MatchRoom = () => {
         return (
             <HudPortal>
                 <LoadingScreen
-                    description={t('matchRoom.loadingResources')}
-                    progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                    description={tLobby('matchRoom.loadingResources')}
+                    progressText={tLobby('matchRoom.loadingProgress.loadingGameModule')}
                 />
             </HudPortal>
         );
@@ -2015,8 +2051,8 @@ export const MatchRoom = () => {
         return (
             <HudPortal>
                 <LoadingScreen
-                    description={t('matchRoom.loadingResources')}
-                    progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                    description={tLobby('matchRoom.loadingResources')}
+                    progressText={tLobby('matchRoom.loadingProgress.loadingGameModule')}
                 />
             </HudPortal>
         );
@@ -2033,7 +2069,7 @@ export const MatchRoom = () => {
                             onClick={() => navigateBackToLobby()}
                             className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                         >
-                            {t('matchRoom.connectionTimeout.backToLobby')}
+                            {tLobby('matchRoom.connectionTimeout.backToLobby')}
                         </button>
                     </div>
                 </div>
@@ -2042,8 +2078,8 @@ export const MatchRoom = () => {
         return (
             <HudPortal>
                 <LoadingScreen
-                    description={t('matchRoom.joiningRoom')}
-                    progressText={t('matchRoom.loadingProgress.joiningRoom')}
+                    description={tLobby('matchRoom.joiningRoom')}
+                    progressText={tLobby('matchRoom.loadingProgress.joiningRoom')}
                 />
             </HudPortal>
         );
@@ -2054,12 +2090,12 @@ export const MatchRoom = () => {
             <div className="w-full game-page-viewport bg-black flex items-center justify-center">
                 <div className="text-center">
                     <div className="text-white/60 text-lg mb-4">{matchStatus.error}</div>
-                    <div className="text-white/40 text-sm mb-6 animate-pulse">{t('matchRoom.redirecting')}</div>
+                    <div className="text-white/40 text-sm mb-6 animate-pulse">{tLobby('matchRoom.redirecting')}</div>
                     <button
                         onClick={() => navigate('/')}
                         className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                     >
-                        {t('matchRoom.returnHome')}
+                        {tLobby('matchRoom.returnHome')}
                     </button>
                 </div>
             </div>
@@ -2069,8 +2105,8 @@ export const MatchRoom = () => {
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
             <SEO
                 title={isTutorialRoute
-                    ? t('matchRoom.tutorialTitle', { game: gameDisplayName })
-                    : t('matchRoom.matchTitle', { game: gameDisplayName })}
+                    ? tLobby('matchRoom.tutorialTitle', { game: gameDisplayName })
+                    : tLobby('matchRoom.matchTitle', { game: gameDisplayName })}
                 ogType="game"
                 noIndex
             />
@@ -2114,9 +2150,9 @@ export const MatchRoom = () => {
                                     {!gameImplReady ? (
                                         <LoadingScreen
                                             anchor="container"
-                                            title={t('matchRoom.title.tutorial')}
-                                            description={t('matchRoom.loadingResources')}
-                                            progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                                            title={tLobby('matchRoom.title.tutorial')}
+                                            description={tLobby('matchRoom.loadingResources')}
+                                            progressText={tLobby('matchRoom.loadingProgress.loadingGameModule')}
                                         />
                                     ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                         <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
@@ -2126,8 +2162,8 @@ export const MatchRoom = () => {
                                                     loading={(
                                                         <LoadingScreen
                                                             anchor="container"
-                                                            title={t('matchRoom.title.tutorial')}
-                                                            description={t('matchRoom.loadingResources')}
+                                                            title={tLobby('matchRoom.title.tutorial')}
+                                                            description={tLobby('matchRoom.loadingResources')}
                                                             progressText={tutorialLoadingProgressText}
                                                         />
                                                     )}
@@ -2136,7 +2172,7 @@ export const MatchRoom = () => {
                                         </LocalGameProvider>
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-white/50">
-                                            {t('matchRoom.noTutorial')}
+                                            {tLobby('matchRoom.noTutorial')}
                                         </div>
                                     )}
                                 </GameModeProvider>
@@ -2195,8 +2231,8 @@ export const MatchRoom = () => {
                                                     board={WrappedBoard}
                                                     loading={(
                                                         <OnlineRoomConnectionLoading
-                                                            title={t('matchRoom.title.connecting')}
-                                                            description={t('matchRoom.loadingResources')}
+                                                            title={tLobby('matchRoom.title.connecting')}
+                                                            description={tLobby('matchRoom.loadingResources')}
                                                             gameId={gameId}
                                                             transportError={onlineTransportError}
                                                         />
@@ -2207,7 +2243,7 @@ export const MatchRoom = () => {
                                     </GameModeProvider>
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-white/50">
-                                        {t('matchRoom.noClient')}
+                                        {tLobby('matchRoom.noClient')}
                                     </div>
                                 )
                             }

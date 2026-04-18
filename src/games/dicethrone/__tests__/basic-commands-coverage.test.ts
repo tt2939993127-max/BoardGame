@@ -1451,6 +1451,44 @@ describe('AI legal actions', () => {
         expect(state.sys.phase).toBe('main2');
     });
 
+    it('本地 AI 在 offensiveRoll 且 pendingAttack 已创建时不应重复选择技能或重复确认骰面', async () => {
+        const state = createHeroMatchup('monk', 'shadow_thief')(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 3;
+        state.core.rollDiceCount = 5;
+        state.core.rollConfirmed = true;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'fist-technique-5',
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+        expect(actions.some((action) => action.kind === 'select-ability')).toBe(false);
+        expect(actions.some((action) => action.kind === 'confirm-roll')).toBe(false);
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'advance-phase',
+        }));
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).not.toBe('select-ability');
+        expect(resolution?.action.kind).not.toBe('confirm-roll');
+    });
+
     it('本地 AI 在太极响应窗口应执行一次 token 后跳过响应，并正确关闭窗口', async () => {
         const random = createQueuedRandom([1, 1]);
         let state = createHeroMatchup('monk', 'monk')(['0', '1'], random);

@@ -1809,7 +1809,7 @@ export class GameTransportServer {
             return false;
         }
 
-        const resolution = await aiModule.resolveNextAiAction({
+        const aiDispatchResult = await aiModule.resolveNextAiDispatch({
             engineConfig: match.engineConfig,
             state: match.state,
             matchId: match.matchID,
@@ -1824,7 +1824,22 @@ export class GameTransportServer {
             }),
         });
 
-        if (!resolution || resolution.playerId !== candidate.playerId || resolution.action.commands.length === 0) {
+        if (aiDispatchResult.kind !== 'action') {
+            if (aiDispatchResult.kind === 'blocked') {
+                logger.info('[GameTransport] online-ai-watchdog legal-action blocked', {
+                    matchID: match.matchID,
+                    gameId: match.gameId,
+                    playerID: aiDispatchResult.playerId,
+                    blockedReason: aiDispatchResult.blockedReason,
+                    visibility: aiDispatchResult.visibility,
+                    blockedKey: aiDispatchResult.blockedKey,
+                });
+            }
+            return false;
+        }
+
+        const resolution = aiDispatchResult.resolution;
+        if (resolution.playerId !== candidate.playerId || resolution.action.commands.length === 0) {
             return false;
         }
 

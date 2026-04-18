@@ -240,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = useCallback(async (email: string, password: string) => {
         const response = await fetch(`${AUTH_API_URL}/login`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
             body: JSON.stringify({ account: email, password }),
         });
@@ -311,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const register = useCallback(async (username: string, email: string, code: string, password: string) => {
         const response = await fetch(`${AUTH_API_URL}/register`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
             body: JSON.stringify({ username, email, code, password }),
         });

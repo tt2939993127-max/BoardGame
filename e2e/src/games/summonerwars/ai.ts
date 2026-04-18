@@ -31,6 +31,7 @@ import {
     BOARD_COLS,
     BOARD_ROWS,
     getAdjacentCells,
+    getPlayerGates,
     getPlayerUnits,
     getSummoner,
     getUnitAt,
@@ -40,6 +41,7 @@ import {
     getValidBuildPositions,
     getValidMoveTargetsEnhanced,
     getValidSummonPositions,
+    isCellEmpty,
     manhattanDistance,
 } from './domain/helpers';
 import { SW_COMMANDS } from './domain/types';
@@ -61,7 +63,8 @@ type SummonerWarsStrategyTag =
     | 'summoner-pressure'
     | 'board-control'
     | 'economy'
-    | 'ability-tempo';
+    | 'ability-tempo'
+    | 'gate-push';
 
 type SummonerWarsInteractionOption = {
     id?: string;
@@ -619,6 +622,34 @@ const getCenterScore = (position: CellCoord): number => {
     return Math.max(0, 4 - Math.abs(position.col - centerCol));
 };
 
+/** 获取位置的前排深度分数（越靠近敌方后排越高，0-7） */
+const getFrontRowScore = (position: CellCoord, playerId: PlayerId): number => {
+    // 玩家0在底部(row 5-7后排)，向前 = row减小
+    // 玩家1在顶部(row 0-2后排)，向前 = row增大
+    return playerId === '0'
+        ? (BOARD_ROWS - 1 - position.row)
+        : position.row;
+};
+
+/** 计算在指定位置放置传送门后新增的召唤位置数量 */
+const getSummonRangeExtension = (
+    state: SummonerWarsCore,
+    playerId: PlayerId,
+    position: CellCoord,
+): number => {
+    const currentPositions = new Set(
+        getValidSummonPositions(state, playerId).map((p) => `${p.row},${p.col}`),
+    );
+    let extension = 0;
+    for (const adj of getAdjacentCells(position)) {
+        const key = `${adj.row},${adj.col}`;
+        if (!currentPositions.has(key) && isCellEmpty(state, adj)) {
+            extension++;
+        }
+    }
+    return extension;
+};
+
 const cloneCoreWithMovedUnit = (
     core: SummonerWarsCore,
     from: CellCoord,
@@ -700,28 +731,34 @@ const getSummonerWarsStrategyProfile = (
         addStrategyWeight(weights, 'summoner-defense', 2);
         addStrategyWeight(weights, 'board-control', 1);
         addStrategyWeight(weights, 'summoner-pressure', 0.45);
+        addStrategyWeight(weights, 'gate-push', 0.3);
         summary.push('前线承压，优先回防');
     } else {
         addStrategyWeight(weights, 'summoner-pressure', 1.15);
         addStrategyWeight(weights, 'board-control', 0.9);
+        addStrategyWeight(weights, 'gate-push', 0.85);
     }
 
     switch (phase) {
         case 'summon':
             addStrategyWeight(weights, 'summoner-pressure', 0.35);
             addStrategyWeight(weights, 'board-control', 0.15);
+            addStrategyWeight(weights, 'gate-push', 0.2);
             break;
         case 'move':
             addStrategyWeight(weights, 'summoner-pressure', 0.4);
             addStrategyWeight(weights, 'board-control', 0.2);
+            addStrategyWeight(weights, 'gate-push', 0.15);
             break;
         case 'attack':
             addStrategyWeight(weights, 'summoner-pressure', 0.55);
             addStrategyWeight(weights, 'board-control', 0.25);
+            addStrategyWeight(weights, 'gate-push', 0.3);
             break;
         case 'build':
-            addStrategyWeight(weights, 'summoner-defense', 0.35);
-            addStrategyWeight(weights, 'board-control', 0.2);
+            addStrategyWeight(weights, 'gate-push', 1.2);
+            addStrategyWeight(weights, 'board-control', 0.3);
+            addStrategyWeight(weights, 'summoner-defense', 0.15);
             break;
         case 'magic':
             addStrategyWeight(weights, 'economy', 1.4);
@@ -800,6 +837,7 @@ const buildMoveStrategyTags = (args: {
 const buildAttackStrategyTags = (args: {
     targetType: string;
     targetIsThreateningSummoner: boolean;
+    targetIsGate: boolean;
 }): SummonerWarsStrategyTag[] => {
     const tags: SummonerWarsStrategyTag[] = [];
     if (args.targetType === 'summoner') {
@@ -807,6 +845,10 @@ const buildAttackStrategyTags = (args: {
     }
     if (args.targetIsThreateningSummoner) {
         pushStrategyTag(tags, 'summoner-defense');
+    }
+    // 攻击敌方传送门不是gate-push（那是己方前推），而是低效行为
+    if (args.targetIsGate) {
+        // 不加进攻性标签，让策略权重自然降低其优先级
     }
     if (args.targetType === 'champion' || args.targetType === 'common' || args.targetType === 'structure') {
         pushStrategyTag(tags, 'board-control');
@@ -1041,6 +1083,10 @@ const buildInteractionActions = (
         } else {
             actions.push(...availableOptions.map((option, index) => {
                 const aiHints = buildInteractionOptionAiHints(state, playerId, current, option);
+                // 提取交互值中的位置信息和动作类型，用于位置感知评分
+                const optionValue = option.value as { action?: string; targetPosition?: CellCoord; position?: CellCoord; newPosition?: CellCoord } | undefined;
+                const interactionAction = optionValue?.action;
+                const interactionTargetPosition = optionValue?.targetPosition ?? optionValue?.position ?? optionValue?.newPosition;
                 return {
                     actionId: createAiLegalActionId('interaction', current.id, option.id),
                     kind: 'interaction-choice',
@@ -1054,6 +1100,8 @@ const buildInteractionActions = (
                         interactionId: current.id,
                         optionId: option.id,
                         optionValue: option.value,
+                        interactionAction,
+                        interactionTargetPosition,
                     },
                 };
             }));
@@ -1335,6 +1383,7 @@ const buildSummonActions = (
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const ownSummoner = getSummoner(state.core, playerId);
     const threat = estimateSummonerThreat(state.core, playerId);
+    const ownGates = getPlayerGates(state.core, playerId);
 
     for (const card of player.hand) {
         if (card.cardType !== 'unit') continue;
@@ -1342,11 +1391,20 @@ const buildSummonActions = (
             const distanceToEnemySummoner = enemySummoner ? manhattanDistance(position, enemySummoner.position) : 99;
             const distanceToOwnSummoner = ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99;
             const centerScore = getCenterScore(position);
+            // 检查是否在前推传送门附近召唤（非起始城门）
+            const nearForwardGate = ownGates.some(gate => {
+                if ((gate.card as import('./domain/types').StructureCard).isStartingGate) return false;
+                return manhattanDistance(position, gate.position) <= 1
+                    && getFrontRowScore(gate.position, playerId) >= 3;
+            });
             const strategyTags = buildSummonStrategyTags({
                 distanceToEnemySummoner,
                 distanceToOwnSummoner,
                 centerScore,
             });
+            if (nearForwardGate) {
+                pushStrategyTag(strategyTags, 'gate-push');
+            }
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('summon-unit', card.id, position.row, position.col),
                 kind: 'summon-unit',
@@ -1368,6 +1426,7 @@ const buildSummonActions = (
                     centerScore,
                     distanceToEnemySummoner,
                     distanceToOwnSummoner,
+                    nearForwardGate,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
@@ -1387,6 +1446,7 @@ const buildMoveActions = (
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const ownSummoner = getSummoner(state.core, playerId);
     const threatBefore = estimateSummonerThreat(state.core, playerId);
+    const ownGates = getPlayerGates(state.core, playerId);
 
     for (const unit of getPlayerUnits(state.core, playerId)) {
         const targets = getValidMoveTargetsEnhanced(state.core, unit.position);
@@ -1401,6 +1461,12 @@ const buildMoveActions = (
                 ? (unit.card.unitClass === 'summoner' ? 0 : manhattanDistance(to, ownSummoner.position))
                 : 99;
             const centerScore = getCenterScore(to);
+            // 移动后是否靠近己方前推传送门（用于保护传送门或配合战术）
+            const nearOwnGateAfterMove = ownGates.some(gate => {
+                if ((gate.card as import('./domain/types').StructureCard).isStartingGate) return false;
+                return manhattanDistance(to, gate.position) <= 1
+                    && getFrontRowScore(gate.position, playerId) >= 3;
+            });
             const strategyTags = buildMoveStrategyTags({
                 attackTargetsAfterMove,
                 distanceToEnemySummonerBefore,
@@ -1413,6 +1479,9 @@ const buildMoveActions = (
                 nearbyEnemyPressureAfter: threatAfter.nearbyEnemyPressure,
                 centerScore,
             });
+            if (nearOwnGateAfterMove) {
+                pushStrategyTag(strategyTags, 'gate-push');
+            }
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('move-unit', unit.instanceId, to.row, to.col),
                 kind: 'move-unit',
@@ -1437,6 +1506,7 @@ const buildMoveActions = (
                     sourceIsSummoner: unit.card.unitClass === 'summoner',
                     distanceToOwnSummonerBefore,
                     distanceToOwnSummonerAfter,
+                    nearOwnGateAfterMove,
                     remainingLifeBefore: threatBefore.remainingLife,
                     directThreatDamageBefore: threatBefore.directThreatDamage,
                     nearbyEnemyPressureBefore: threatBefore.nearbyEnemyPressure,
@@ -1450,6 +1520,44 @@ const buildMoveActions = (
     return actions;
 };
 
+const buildStructureStrategyTags = (args: {
+    isGate: boolean;
+    distanceToOwnSummoner: number;
+    distanceToEnemySummoner: number;
+    centerScore: number;
+    frontRowScore: number;
+    blocksEnemySummon: number;
+}): SummonerWarsStrategyTag[] => {
+    const tags: SummonerWarsStrategyTag[] = [];
+    if (args.isGate) {
+        // 传送门：前推 = 扩展召唤范围 = 进攻性
+        if (args.frontRowScore >= 3) {
+            pushStrategyTag(tags, 'gate-push');
+            pushStrategyTag(tags, 'summoner-pressure');
+        }
+        if (args.distanceToEnemySummoner <= 4) {
+            pushStrategyTag(tags, 'summoner-pressure');
+        }
+        // 阻挡敌方召唤位是传送门的核心战术价值（攻略：堵住敌方召唤格）
+        if (args.blocksEnemySummon > 0) {
+            pushStrategyTag(tags, 'gate-push');
+            pushStrategyTag(tags, 'board-control');
+        }
+        if (args.centerScore >= 2) {
+            pushStrategyTag(tags, 'board-control');
+        }
+    } else {
+        // 防御建筑：靠近召唤师 = 防御性
+        if (args.distanceToOwnSummoner <= 1) {
+            pushStrategyTag(tags, 'summoner-defense');
+        }
+        if (args.centerScore >= 2) {
+            pushStrategyTag(tags, 'board-control');
+        }
+    }
+    return tags;
+};
+
 const buildStructureActions = (
     state: SummonerWarsState,
     playerId: PlayerId,
@@ -1458,20 +1566,40 @@ const buildStructureActions = (
     const player = state.core.players[playerId];
     const buildPositions = getValidBuildPositions(state.core, playerId);
     const ownSummoner = getSummoner(state.core, playerId);
+    const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
     const threat = estimateSummonerThreat(state.core, playerId);
+    const enemyPlayerId = getEnemyPlayerId(playerId);
+    const enemySummonPositions = new Set(
+        getValidSummonPositions(state.core, enemyPlayerId).map(p => `${p.row},${p.col}`),
+    );
 
     for (const card of player.hand) {
         if (card.cardType !== 'structure') continue;
+        const isGate = (card as import('./domain/types').StructureCard).isGate === true
+            && (card as import('./domain/types').StructureCard).isStartingGate !== true;
         for (const position of buildPositions) {
             const distanceToOwnSummoner = ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99;
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(position, enemySummoner.position) : 99;
             const centerScore = getCenterScore(position);
-            const strategyTags: SummonerWarsStrategyTag[] = [];
-            if (distanceToOwnSummoner <= 1) {
-                strategyTags.push('summoner-defense');
+            const frontRowScore = getFrontRowScore(position, playerId);
+            const summonRangeExtension = isGate ? getSummonRangeExtension(state.core, playerId, position) : 0;
+            // 放置后是否阻挡敌方召唤位（攻略核心战术：用传送门堵住敌方召唤格）
+            let blocksEnemySummon = 0;
+            if (isGate) {
+                for (const adj of getAdjacentCells(position)) {
+                    if (enemySummonPositions.has(`${adj.row},${adj.col}`)) {
+                        blocksEnemySummon++;
+                    }
+                }
             }
-            if (centerScore >= 2) {
-                strategyTags.push('board-control');
-            }
+            const strategyTags = buildStructureStrategyTags({
+                isGate,
+                distanceToOwnSummoner,
+                distanceToEnemySummoner,
+                centerScore,
+                frontRowScore,
+                blocksEnemySummon,
+            });
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('build-structure', card.id, position.row, position.col),
                 kind: 'build-structure',
@@ -1487,9 +1615,14 @@ const buildStructureActions = (
                     cardId: card.id,
                     cost: card.cost,
                     life: card.life,
+                    isGate,
                     position,
                     centerScore,
+                    frontRowScore,
+                    summonRangeExtension,
+                    blocksEnemySummon,
                     distanceToOwnSummoner,
+                    distanceToEnemySummoner,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
@@ -1525,9 +1658,11 @@ const buildAttackActions = (
                     ? targetStructure.card.life - targetStructure.damage
                     : 0;
             const targetIsThreateningSummoner = targetUnit ? threateningEnemyIds.has(targetUnit.instanceId) : false;
+            const targetIsGate = targetStructure ? (targetStructure.card.isGate === true) : false;
             const strategyTags = buildAttackStrategyTags({
                 targetType,
                 targetIsThreateningSummoner,
+                targetIsGate,
             });
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('declare-attack', unit.instanceId, target.row, target.col),
@@ -1551,6 +1686,7 @@ const buildAttackActions = (
                     lethalLikely: unit.card.strength >= targetLifeRemaining,
                     targetOwner: targetUnit?.owner ?? targetStructure?.owner,
                     targetIsThreateningSummoner,
+                    targetIsGate,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
@@ -1836,7 +1972,7 @@ const actionKindScorer = createActionKindScorer('action-kind', {
     'setup-host-start': 220,
     'summon-unit': 130,
     'move-unit': 90,
-    'build-structure': 55,
+    'build-structure': 80,
     'declare-attack': 210,
     'play-event': 85,
     'activate-ability': 110,
@@ -1864,6 +2000,82 @@ const interactionHintScorer = createInteractionHintScorer({
     actionKinds: ['interaction-choice'],
     skipPenaltyWhenAlternativesExist: 35,
 });
+
+/** 交互位置感知评分：grab_follow/soul_transfer/mind_capture 等涉及位置选择的交互 */
+const interactionPositionScorer: LocalAiActionScorer = {
+    id: 'interaction-position',
+    score(context, action) {
+        if (action.kind !== 'interaction-choice') return null;
+        const targetPosition = action.metadata?.interactionTargetPosition as CellCoord | undefined;
+        const interactionAction = String(action.metadata?.interactionAction ?? '');
+        if (!targetPosition) return null;
+
+        const playerId = context.playerId;
+        const state = context.visibleState as SummonerWarsState;
+        const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
+        const ownSummoner = getSummoner(state.core, playerId);
+
+        // grab_follow：抓附手跟随友方 → 前推价值高
+        if (interactionAction === 'grab_follow') {
+            const frontRowScore = getFrontRowScore(targetPosition, playerId);
+            const centerScore = getCenterScore(targetPosition);
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(targetPosition, enemySummoner.position) : 99;
+            return {
+                score: frontRowScore * 8 + centerScore * 3 + Math.max(0, 8 - distanceToEnemySummoner) * 2,
+                reason: frontRowScore >= 4
+                    ? '抓附跟随到前排位置'
+                    : '抓附跟随到更有利位置',
+            };
+        }
+
+        // soul_transfer：灵魂转移 → 靠近敌方召唤师更有威胁
+        if (interactionAction === 'soul_transfer') {
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(targetPosition, enemySummoner.position) : 99;
+            const centerScore = getCenterScore(targetPosition);
+            return {
+                score: centerScore * 3 + Math.max(0, 8 - distanceToEnemySummoner) * 4,
+                reason: '灵魂转移到更有威胁的位置',
+            };
+        }
+
+        // mind_capture：心灵控制 → 取决于控制还是伤害
+        if (interactionAction === 'mind_capture') {
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(targetPosition, enemySummoner.position) : 99;
+            const centerScore = getCenterScore(targetPosition);
+            return {
+                score: centerScore * 3 + Math.max(0, 8 - distanceToEnemySummoner) * 3,
+                reason: '心灵控制选择更有利位置',
+            };
+        }
+
+        // glacial_shift_destination：冰霜移动 → 前推或控场
+        if (interactionAction === 'glacial_shift_destination' || interactionAction === 'glacial_shift_building') {
+            const frontRowScore = getFrontRowScore(targetPosition, playerId);
+            const centerScore = getCenterScore(targetPosition);
+            return {
+                score: frontRowScore * 5 + centerScore * 3,
+                reason: '冰霜移动到更有利位置',
+            };
+        }
+
+        // sneak_destination：潜行 → 靠近敌方召唤师
+        if (interactionAction === 'sneak_destination') {
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(targetPosition, enemySummoner.position) : 99;
+            return {
+                score: Math.max(0, 8 - distanceToEnemySummoner) * 6,
+                reason: '潜行到接近敌方召唤师的位置',
+            };
+        }
+
+        // 通用位置评分
+        const frontRowScore = getFrontRowScore(targetPosition, playerId);
+        const centerScore = getCenterScore(targetPosition);
+        return {
+            score: frontRowScore * 4 + centerScore * 2,
+            reason: '选择更有战略价值的位置',
+        };
+    },
+};
 
 const setupScorer: LocalAiActionScorer = {
     id: 'setup-priority',
@@ -1900,7 +2112,7 @@ const setupRandomScorer: LocalAiActionScorer = {
 };
 
 const summonScorer: LocalAiActionScorer = {
-    id: 'summon-tempo',
+    id: 'summon-value',
     score(_context, action) {
         if (action.kind !== 'summon-unit') return null;
         const cost = typeof action.metadata?.cost === 'number' ? action.metadata.cost : 0;
@@ -1910,9 +2122,14 @@ const summonScorer: LocalAiActionScorer = {
         const distanceToEnemySummoner = typeof action.metadata?.distanceToEnemySummoner === 'number'
             ? action.metadata.distanceToEnemySummoner
             : 99;
+        const nearForwardGate = action.metadata?.nearForwardGate === true;
+        let score = strength * 22 + life * 6 + cost * 8 + centerScore * 5 - distanceToEnemySummoner;
+        if (nearForwardGate) score += 35;
         return {
-            score: strength * 22 + life * 6 + cost * 8 + centerScore * 5 - distanceToEnemySummoner,
-            reason: `优先召唤更有场面收益的单位 ${String(action.metadata?.cardName ?? '')}`,
+            score,
+            reason: nearForwardGate
+                ? `利用前推传送门召唤 ${String(action.metadata?.cardName ?? '')}`
+                : `优先召唤更有场面收益的单位 ${String(action.metadata?.cardName ?? '')}`,
         };
     },
 };
@@ -1931,11 +2148,16 @@ const moveScorer: LocalAiActionScorer = {
             ? action.metadata.attackTargetsAfterMove
             : 0;
         const centerScore = typeof action.metadata?.centerScore === 'number' ? action.metadata.centerScore : 0;
+        const nearOwnGateAfterMove = action.metadata?.nearOwnGateAfterMove === true;
+        let score = (before - after) * 20 + attackTargetsAfterMove * 45 + centerScore * 4;
+        if (nearOwnGateAfterMove) score += 20;
         return {
-            score: (before - after) * 20 + attackTargetsAfterMove * 45 + centerScore * 4,
+            score,
             reason: attackTargetsAfterMove > 0
                 ? '优先移动到能形成攻击威胁的位置'
-                : '优先向敌方召唤师和中线施压',
+                : nearOwnGateAfterMove
+                    ? '移动到前推传送门附近保护或配合'
+                    : '优先向敌方召唤师和中线施压',
         };
     },
 };
@@ -1958,6 +2180,9 @@ const attackScorer: LocalAiActionScorer = {
         if (targetType === 'champion') score += 70;
         if (targetType === 'common') score += 40;
         if (targetType === 'structure') score += 15;
+        // 攻击敌方传送门通常是亏的：0费重建，浪费宝贵攻击机会
+        // 只有在敌方只剩1个传送门且能击杀时才值得
+        if (action.metadata?.targetIsGate === true) score -= 30;
         if (lethalLikely) score += 60;
         score += Math.max(0, 10 - targetLifeRemaining);
 
@@ -1965,8 +2190,10 @@ const attackScorer: LocalAiActionScorer = {
             score,
             reason: targetType === 'summoner'
                 ? '优先压制敌方召唤师'
-                : lethalLikely
-                    ? '优先处理接近击杀的目标'
+                : action.metadata?.targetIsGate === true
+                    ? '攻击传送门通常亏（0费重建），优先攻击高价值目标'
+                    : lethalLikely
+                        ? '优先处理接近击杀的目标'
                     : '优先攻击更有价值的目标',
         };
     },
@@ -2048,6 +2275,10 @@ const summonerSafetyScorer: LocalAiActionScorer = {
             };
         }
 
+        if (action.kind === 'build-structure' && action.metadata?.isGate === true) {
+            // 传送门：承压时仍应前推扩展召唤范围，不往召唤师身边缩
+            return null;
+        }
         if (action.kind === 'summon-unit' || action.kind === 'build-structure') {
             const distanceToOwnSummoner = typeof action.metadata?.distanceToOwnSummoner === 'number'
                 ? action.metadata.distanceToOwnSummoner
@@ -2080,9 +2311,29 @@ const buildScorer: LocalAiActionScorer = {
     id: 'build-structure',
     score(_context, action) {
         if (action.kind !== 'build-structure') return null;
+        const isGate = action.metadata?.isGate === true;
         const life = typeof action.metadata?.life === 'number' ? action.metadata.life : 0;
         const cost = typeof action.metadata?.cost === 'number' ? action.metadata.cost : 0;
         const centerScore = typeof action.metadata?.centerScore === 'number' ? action.metadata.centerScore : 0;
+
+        if (isGate) {
+            // 传送门：前推深度 + 召唤范围扩展 + 阻挡敌方召唤位 + 中线控制
+            const frontRowScore = typeof action.metadata?.frontRowScore === 'number' ? action.metadata.frontRowScore : 0;
+            const summonRangeExtension = typeof action.metadata?.summonRangeExtension === 'number' ? action.metadata.summonRangeExtension : 0;
+            const blocksEnemySummon = typeof action.metadata?.blocksEnemySummon === 'number' ? action.metadata.blocksEnemySummon : 0;
+            const distanceToEnemySummoner = typeof action.metadata?.distanceToEnemySummoner === 'number'
+                ? action.metadata.distanceToEnemySummoner : 99;
+            return {
+                score: 40 + frontRowScore * 12 + summonRangeExtension * 18 + blocksEnemySummon * 25
+                    + centerScore * 3 + Math.max(0, 8 - distanceToEnemySummoner) * 4,
+                reason: blocksEnemySummon > 0
+                    ? `传送门堵住${blocksEnemySummon}个敌方召唤位`
+                    : summonRangeExtension > 0
+                        ? `传送门前推扩展${summonRangeExtension}个召唤位`
+                        : '传送门前推扩展召唤范围',
+            };
+        }
+        // 防御建筑：生命 + 费用 + 中线
         return {
             score: 20 + life * 5 + cost * 4 + centerScore * 2,
             reason: '没有更高优先级动作时再考虑铺设建筑',
@@ -2261,6 +2512,7 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
         actionKindScorer,
         interactionHintScorer,
         interactionScorer,
+        interactionPositionScorer,
         setupScorer,
         setupRandomScorer,
         summonScorer,

@@ -95,8 +95,8 @@ export function useCellInteraction({
   const [selectedCardsForDiscard, setSelectedCardsForDiscard] = useState<string[]>([]);
   const [pendingBeforeAttack, setPendingBeforeAttack] = useState<PendingBeforeAttack | null>(null);
   const [endPhaseConfirmPending, setEndPhaseConfirmPending] = useState(false);
-  // 火祀召唤：选中伊路特-巴尔手牌后，先选牺牲品单位
-  const [fireSacrificeSummonMode, setFireSacrificeSummonMode] = useState<{ handCardId: string } | null>(null);
+  // 火祀召唤（本地 fallback）：优先使用系统交互，保留本地状态仅用于旧链路兼容
+  const [localFireSacrificeSummonMode, setLocalFireSacrificeSummonMode] = useState<{ handCardId: string } | null>(null);
 
   // 离开魔力阶段时自动清空弃牌选中和事件卡选择模式
   useEffect(() => {
@@ -143,6 +143,14 @@ export function useCellInteraction({
     if (!cardId) return null;
     return { cardId };
   }, [swInteraction]);
+
+  const fireSacrificeSummonMode = useMemo(() => {
+    if (swInteraction?.type === 'fire_sacrifice_summon') {
+      const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : undefined;
+      if (cardId) return { handCardId: cardId };
+    }
+    return localFireSacrificeSummonMode;
+  }, [localFireSacrificeSummonMode, swInteraction]);
 
   // ---------- 事件卡模式子 hook ----------
   const eventCardModes = useEventCardModes({
@@ -265,6 +273,17 @@ export function useCellInteraction({
 
   // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
+    if (swInteraction?.type === 'fire_sacrifice_summon') {
+      return swInteraction.options
+        .map((opt) => {
+          const value = opt.value as { action?: string; sacrificeUnitId?: string } | undefined;
+          if (value?.action !== 'fire_sacrifice_summon' || !value.sacrificeUnitId) return null;
+          const unit = core.board.flatMap((row) => row.map((cell) => cell.unit))
+            .find((u) => u?.instanceId === value.sacrificeUnitId);
+          return unit?.position ?? null;
+        })
+        .filter((pos): pos is CellCoord => !!pos);
+    }
     // 火祀召唤：选中伊路特-巴尔手牌后，高亮所有可牺牲的友方单位（非召唤师，任意位置）
     if (fireSacrificeSummonMode) {
       return getPlayerUnits(core, myPlayerId as '0' | '1')
@@ -400,7 +419,7 @@ export function useCellInteraction({
       return targets;
     }
     return [];
-  }, [abilityMode, core, myPlayerId, fireSacrificeSummonMode]);
+  }, [abilityMode, core, fireSacrificeSummonMode, myPlayerId, swInteraction]);
 
   // 获取可移动位置
   const validMovePositions = useMemo(() => {
@@ -529,12 +548,38 @@ export function useCellInteraction({
       return; // 选卡模式下只允许手牌交互，不响应棋盘点击
     }
 
+    if (swInteraction?.type === 'fire_sacrifice_summon') {
+      const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
+      if (!clickedUnit) return;
+      const optionId = swInteraction.options.find((opt) => {
+        const value = opt.value as { action?: string; sacrificeUnitId?: string } | undefined;
+        return value?.action === 'fire_sacrifice_summon' && value.sacrificeUnitId === clickedUnit.instanceId;
+      })?.id ?? null;
+      if (!optionId) return;
+      respondInteractionOption(optionId);
+      setSelectedHandCardId(null);
+      setLocalFireSacrificeSummonMode(null);
+      return;
+    }
+
     // 技能单位选择模式（火祀召唤、吸取生命、幻化、结构变换等）
     if (abilityMode && abilityMode.step === 'selectUnit') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
         // 寒冰冲撞：选择目标后进入推拉方向选择
         if (abilityMode.abilityId === 'ice_ram') {
+          if (swInteraction?.type === 'ice_ram_target') {
+            const optionId = swInteraction.options.find((opt) => {
+              const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+              return value?.action === 'ice_ram_target'
+                && value.targetPosition?.row === gameRow
+                && value.targetPosition?.col === gameCol;
+            })?.id ?? null;
+            if (optionId) {
+              respondInteractionOption(optionId);
+            }
+            return;
+          }
           setAbilityMode({
             ...abilityMode,
             step: 'selectPushDirection',
@@ -609,6 +654,21 @@ export function useCellInteraction({
               });
             }
           } else if (abilityMode.abilityId === 'illusion') {
+            if (swInteraction?.type === 'on_phase_start_illusion') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'on_phase_start_illusion'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
+              });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+              }
+              return;
+            }
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'illusion',
               sourceUnitId: abilityMode.sourceUnitId,
@@ -616,6 +676,21 @@ export function useCellInteraction({
               _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'ancestral_bond') {
+            if (swInteraction?.type === 'after_move_ancestral_bond') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'after_move_ancestral_bond'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
+              });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+              }
+              return;
+            }
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'ancestral_bond',
               sourceUnitId: abilityMode.sourceUnitId,
@@ -623,6 +698,22 @@ export function useCellInteraction({
               _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'spirit_bond') {
+            if (swInteraction?.type === 'after_move_spirit_bond') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; choice?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'after_move_spirit_bond'
+                  && value.choice === 'transfer'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
+              });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+              }
+              return;
+            }
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'spirit_bond',
               sourceUnitId: abilityMode.sourceUnitId,
@@ -631,6 +722,22 @@ export function useCellInteraction({
               _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'frost_axe') {
+            if (swInteraction?.type === 'after_move_frost_axe') {
+              const option = swInteraction.options.find((opt) => {
+                const value = opt.value as { action?: string; choice?: string; targetPosition?: CellCoord } | undefined;
+                return value?.action === 'after_move_frost_axe'
+                  && value.choice === 'attach'
+                  && value.targetPosition?.row === gameRow
+                  && value.targetPosition?.col === gameCol;
+              });
+              if (option) {
+                dispatch(INTERACTION_COMMANDS.RESPOND, {
+                  interactionId: swInteraction.id,
+                  optionId: option.id,
+                });
+              }
+              return;
+            }
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'frost_axe',
               sourceUnitId: abilityMode.sourceUnitId,
@@ -734,6 +841,18 @@ export function useCellInteraction({
     } else if (abilityMode && abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid && abilityMode.targetPosition && abilityMode.structurePosition) {
+        if (swInteraction?.type === 'ice_ram_push') {
+          const optionId = swInteraction.options.find((opt) => {
+            const value = opt.value as { action?: string; pushNewPosition?: CellCoord } | undefined;
+            return value?.action === 'ice_ram_push'
+              && value.pushNewPosition?.row === gameRow
+              && value.pushNewPosition?.col === gameCol;
+          })?.id ?? null;
+          if (optionId) {
+            respondInteractionOption(optionId);
+          }
+          return;
+        }
         dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'ice_ram',
           sourceUnitId: 'ice_ram',
@@ -791,7 +910,7 @@ export function useCellInteraction({
             position: { row: gameRow, col: gameCol },
             sacrificeUnitId: sacrificeUnit.instanceId,
           });
-          setFireSacrificeSummonMode(null);
+          setLocalFireSacrificeSummonMode(null);
           setSelectedHandCardId(null);
         }
       } else {
@@ -1008,7 +1127,7 @@ export function useCellInteraction({
     // 如果点击的是已选中的卡牌，取消选中
     if (cardId && selectedHandCardId === cardId) {
       setSelectedHandCardId(null);
-      setFireSacrificeSummonMode(null);
+      setLocalFireSacrificeSummonMode(null);
       return;
     }
 
@@ -1017,20 +1136,7 @@ export function useCellInteraction({
       eventCardModes.clearAllEventModes();
     }
 
-    // 火祀召唤：选中伊路特-巴尔时，进入牺牲品选择模式
-    if (cardId && currentPhase === 'summon' && isMyTurn) {
-      const card = myHand.find(c => c.id === cardId);
-      if (card && card.cardType === 'unit' && (card as UnitCard).abilities?.includes('fire_sacrifice_summon')) {
-        const hasAlly = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.card.unitClass !== 'summoner');
-        if (hasAlly) {
-          setFireSacrificeSummonMode({ handCardId: cardId });
-          setSelectedHandCardId(cardId);
-          return;
-        }
-      }
-    }
-
-    setFireSacrificeSummonMode(null);
+    setLocalFireSacrificeSummonMode(null);
     setSelectedHandCardId(cardId);
   };
 

@@ -148,6 +148,21 @@ function resolveInteractionId(state: MatchState<unknown> | null | undefined): st
         : null;
 }
 
+function hasSharedHiddenInteractionBlocker(state: MatchState<unknown> | null | undefined, playerId: string): boolean {
+    const interaction = state?.sys?.interaction as {
+        current?: {
+            playerId?: unknown;
+        } | null;
+        isBlocked?: unknown;
+    } | undefined;
+    const interactionPlayerId = typeof interaction?.current?.playerId === 'string'
+        ? interaction.current.playerId
+        : null;
+    return interactionPlayerId !== playerId
+        && interaction?.current == null
+        && interaction?.isBlocked === true;
+}
+
 function resolveResponseWindowCurrent(state: MatchState<unknown> | null | undefined): {
     id: string | null;
     windowType: string | null;
@@ -188,6 +203,7 @@ function isPrivateOverlayFreshEnough(args: {
     privateOverlay: MatchState<unknown>;
     playerId: string;
 }): boolean {
+    const sharedHasHiddenInteractionBlocker = hasSharedHiddenInteractionBlocker(args.sharedState, args.playerId);
     const sharedResponseWindow = resolveResponseWindowCurrent(args.sharedState);
     const privateResponseWindow = resolveResponseWindowCurrent(args.privateOverlay);
     const isResponseWindowDecision = !!sharedResponseWindow || !!privateResponseWindow;
@@ -199,11 +215,13 @@ function isPrivateOverlayFreshEnough(args: {
         if (sharedResponseWindow.currentResponderId !== privateResponseWindow.currentResponderId) {
             return false;
         }
+        if (sharedResponseWindow.id !== privateResponseWindow.id) {
+            return false;
+        }
         if (sharedResponseWindow.windowType !== privateResponseWindow.windowType) {
             return false;
         }
-        if (sharedResponseWindow.sourceId && privateResponseWindow.sourceId
-            && sharedResponseWindow.sourceId !== privateResponseWindow.sourceId) {
+        if (sharedResponseWindow.sourceId !== privateResponseWindow.sourceId) {
             return false;
         }
     }
@@ -216,8 +234,17 @@ function isPrivateOverlayFreshEnough(args: {
     if (isInteractionDecision) {
         const sharedInteractionId = resolveInteractionId(args.sharedState);
         const privateInteractionId = resolveInteractionId(args.privateOverlay);
-        if (sharedInteractionId && privateInteractionId && sharedInteractionId !== privateInteractionId) {
-            return false;
+        if (sharedHasHiddenInteractionBlocker) {
+            if (privateInteractionPlayerId !== args.playerId || !privateInteractionId) {
+                return false;
+            }
+        } else {
+            if (sharedInteractionPlayerId !== privateInteractionPlayerId) {
+                return false;
+            }
+            if (sharedInteractionId !== privateInteractionId) {
+                return false;
+            }
         }
     }
 

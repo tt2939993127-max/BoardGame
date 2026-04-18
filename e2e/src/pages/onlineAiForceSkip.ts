@@ -23,7 +23,7 @@ function buildAiBatchId(playerId: string, attemptKey: string): string {
 }
 
 type SubmitOnlineAiResolutionArgs = {
-    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
+    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState' | 'resync'>;
     resolution: AiResolution;
     lastAiAttemptKeyRef: { current: string | null };
     scheduleRetry: () => void;
@@ -32,7 +32,7 @@ type SubmitOnlineAiResolutionArgs = {
 };
 
 type SubmitOnlineAiResolutionSequenceArgs = {
-    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
+    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState' | 'resync'>;
     initialResolution: AiResolution;
     lastAiAttemptKeyRef: { current: string | null };
     scheduleRetry: () => void;
@@ -109,6 +109,7 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
                 lastAiAttemptKeyRef.current = null;
             }
             if (reason !== 'unauthorized') {
+                client.resync();
                 scheduleRetry();
             }
             onRejected?.(reason);

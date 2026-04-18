@@ -7,7 +7,7 @@ import { isMatchNotFoundError, useMatchStatus, validateStoredMatchSeat, type Sto
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAiSeats';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
-import { registerGameAiRuntime, resolveNextAiAction, resolveOnlineAiDecisionView } from '../../engine/ai';
+import { registerGameAiRuntime, resolveNextAiAction, resolveNextAiDispatch, resolveOnlineAiDecisionView } from '../../engine/ai';
 import {
     buildAiProgressMarker,
     LocalGameProvider,
@@ -687,6 +687,190 @@ describe('resolveNextAiAction 在线视角', () => {
         expect(resolution).toBeNull();
     });
 
+    it('共享态未阻断且无交互时，private overlay 的旧交互必须判定为过期并阻止 AI 出手', async () => {
+        const gameId = '__test_online_ai_private_overlay_stale_hidden_interaction__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { id?: string; playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (!interaction || interaction.playerId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: `respond-${playerId}`,
+                    kind: 'interaction-choice',
+                    label: `由 ${playerId} 响应`,
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 12,
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: false,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const staleSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 12,
+                interaction: {
+                    current: {
+                        id: 'stale-hidden-choice',
+                        playerId: '1',
+                    },
+                    queue: [],
+                    isBlocked: false,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedState,
+            matchId: 'match-online-ai-private-overlay-stale-hidden-interaction',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                sharedState,
+                privateOverlay: staleSeatState,
+                playerId,
+            }),
+        });
+
+        expect(resolution).toBeNull();
+    });
+
+    it('private overlay 过期时，调度层应返回 blocked 结果而不是空结果', async () => {
+        const gameId = '__test_online_ai_dispatch_blocked_result__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { id?: string; playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (!interaction || interaction.playerId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: `respond-${playerId}`,
+                    kind: 'interaction-choice',
+                    label: `由 ${playerId} 响应`,
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 12,
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: false,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const staleSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                phase: 'defensiveRoll',
+                turnNumber: 12,
+                interaction: {
+                    current: {
+                        id: 'stale-hidden-choice',
+                        playerId: '1',
+                    },
+                    queue: [],
+                    isBlocked: false,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const dispatchResult = await resolveNextAiDispatch({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedState,
+            matchId: 'match-online-ai-dispatch-blocked-result',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => resolveOnlineAiDecisionView({
+                sharedState,
+                privateOverlay: staleSeatState,
+                playerId,
+            }),
+        });
+
+        expect(dispatchResult.kind).toBe('blocked');
+        if (dispatchResult.kind !== 'blocked') {
+            return;
+        }
+        expect(dispatchResult.playerId).toBe('1');
+        expect(dispatchResult.blockedReason).toBe('stale-private-overlay');
+        expect(dispatchResult.visibility).toBe('private-required');
+    });
+
     it('response window 当前 responder 不是 activePlayer 时，仍应允许 AI 响应', async () => {
         const gameId = '__test_online_ai_response_window_responder_not_active_player__';
         registerGameAiRuntime({
@@ -1361,18 +1545,23 @@ describe('resolveNextAiAction 在线视角', () => {
 });
 
 describe('submitOnlineAiResolution', () => {
+
     it('batch confirmed 后会回写对应 seat 的最新状态', () => {
         const updateLatestState = vi.fn();
+        const resync = vi.fn();
         const sendBatch = vi.fn((_batchId, _commands, onConfirmed) => {
             onConfirmed?.({ sys: { phase: 'playCards' } });
         });
+
         const lastAiAttemptKeyRef = { current: null as string | null };
 
         submitOnlineAiResolution({
             client: {
                 sendBatch,
                 updateLatestState,
+                resync,
             },
+
             resolution: {
                 playerId: '1',
                 attemptKey: 'attempt-confirmed',
@@ -1395,6 +1584,7 @@ describe('submitOnlineAiResolution', () => {
 
     it('batch rejected 后会清空 attemptKey 并安排重试；unauthorized 不重试', () => {
         const retry = vi.fn();
+        const resync = vi.fn();
         const lastAiAttemptKeyRef = { current: null as string | null };
         let rejectHandler: ((reason: string) => void) | undefined;
         const sendBatch = vi.fn((_batchId, _commands, _onConfirmed, onRejected) => {
@@ -1405,7 +1595,9 @@ describe('submitOnlineAiResolution', () => {
             client: {
                 sendBatch,
                 updateLatestState: vi.fn(),
+                resync,
             },
+
             resolution: {
                 playerId: '1',
                 attemptKey: 'attempt-rejected',
@@ -1423,13 +1615,16 @@ describe('submitOnlineAiResolution', () => {
 
         rejectHandler?.('command_failed');
         expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(resync).toHaveBeenCalledTimes(1);
         expect(retry).toHaveBeenCalledTimes(1);
 
         submitOnlineAiResolution({
             client: {
                 sendBatch,
                 updateLatestState: vi.fn(),
+                resync,
             },
+
             resolution: {
                 playerId: '1',
                 attemptKey: 'attempt-unauthorized',
@@ -1447,12 +1642,14 @@ describe('submitOnlineAiResolution', () => {
 
         rejectHandler?.('unauthorized');
         expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(resync).toHaveBeenCalledTimes(1);
         expect(retry).toHaveBeenCalledTimes(1);
     });
 
     it('confirmed / rejected 回调应透传给调用方', () => {
         const onConfirmed = vi.fn();
         const onRejected = vi.fn();
+        const resync = vi.fn();
         let rejectHandler: ((reason: string) => void) | undefined;
         const sendBatch = vi.fn((_batchId, _commands, confirmed, rejected) => {
             confirmed?.({ sys: { phase: 'playCards' } });
@@ -1463,6 +1660,7 @@ describe('submitOnlineAiResolution', () => {
             client: {
                 sendBatch,
                 updateLatestState: vi.fn(),
+                resync,
             },
             resolution: {
                 playerId: '1',

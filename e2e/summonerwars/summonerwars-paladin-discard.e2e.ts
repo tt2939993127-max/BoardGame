@@ -569,6 +569,36 @@ const prepareHolyArrowState = (coreState: any) => {
   return next;
 };
 
+const findHolyArrowAttackPair = (coreState: any): { archer: { row: number; col: number }; enemy: { row: number; col: number } } | null => {
+  const board = coreState?.board as Array<Array<{ unit?: { owner?: string; card?: { abilities?: string[] } } }>> | undefined;
+  if (!board) return null;
+  const adjs = [
+    { row: -1, col: 0 },
+    { row: 1, col: 0 },
+    { row: 0, col: -1 },
+    { row: 0, col: 1 },
+  ];
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 6; col++) {
+      const unit = board[row]?.[col]?.unit;
+      if (!unit || unit.owner !== '0' || !unit.card?.abilities?.includes('holy_arrow')) continue;
+      for (const d of adjs) {
+        const r = row + d.row;
+        const c = col + d.col;
+        if (r < 0 || r >= 8 || c < 0 || c >= 6) continue;
+        const enemy = board[r]?.[c]?.unit;
+        if (enemy && enemy.owner === '1') {
+          return {
+            archer: { row, col },
+            enemy: { row: r, col: c },
+          };
+        }
+      }
+    }
+  }
+  return null;
+};
+
 const prepareHolyArrowDuplicateNameState = (coreState: any) => {
   const next = prepareHolyArrowState(coreState);
   const player = next.players?.['0'];
@@ -807,13 +837,15 @@ test.describe('圣堂骑士弃牌技能', () => {
     const magicDisplay = hostPage.getByTestId('sw-player-magic-0');
     const initialMagic = parseInt(await magicDisplay.innerText());
 
-    // 点击城塞弓箭手（通过 data-unit-name 精确匹配）
-    const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
+    const pair = findHolyArrowAttackPair(await readCoreState(hostPage));
+    if (!pair) throw new Error('未找到可触发 holy_arrow 的弓箭手-敌方相邻对');
+    // 点击城塞弓箭手（使用准备状态里的真实坐标，避免误点不可攻击单位）
+    const archer = hostPage.locator(`[data-testid="sw-unit-${pair.archer.row}-${pair.archer.col}"][data-owner="0"]`).first();
     await expect(archer).toBeVisible({ timeout: 5000 });
     await archer.click();
 
     // 点击相邻敌方单位（触发攻击前弃牌）
-    const enemyUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="1"]').first();
+    const enemyUnit = hostPage.locator(`[data-testid="sw-unit-${pair.enemy.row}-${pair.enemy.col}"][data-owner="1"]`).first();
     await expect(enemyUnit).toBeVisible({ timeout: 5000 });
     await enemyUnit.click();
 
@@ -873,50 +905,60 @@ test.describe('圣堂骑士弃牌技能', () => {
     const { hostPage, guestPage, hostContext, guestContext } = match;
 
     try {
-      console.log('[holy-arrow-skip] setup-ready');
       const coreState = await readCoreState(hostPage);
       const holyArrowCore = prepareHolyArrowState(coreState);
       await applyCoreState(hostPage, holyArrowCore);
       await closeDebugPanelIfOpen(hostPage);
       await waitForPhase(hostPage, 'attack');
-      console.log('[holy-arrow-skip] state-applied');
 
       const initialMagic = Number((await readCoreState(hostPage)).players?.['0']?.magic ?? 0);
 
-      const archer = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"][data-unit-name="城塞弓箭手"]').first();
+      const pair = findHolyArrowAttackPair(await readCoreState(hostPage));
+      if (!pair) throw new Error('未找到可触发 holy_arrow 的弓箭手-敌方相邻对');
+      const archer = hostPage.locator(`[data-testid="sw-unit-${pair.archer.row}-${pair.archer.col}"][data-owner="0"]`).first();
       await expect(archer).toBeVisible({ timeout: 5000 });
       await archer.click();
-      console.log('[holy-arrow-skip] archer-clicked');
 
-      const enemyUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="1"]').first();
+      const enemyUnit = hostPage.locator(`[data-testid="sw-unit-${pair.enemy.row}-${pair.enemy.col}"][data-owner="1"]`).first();
       await expect(enemyUnit).toBeVisible({ timeout: 5000 });
       await enemyUnit.click();
-      console.log('[holy-arrow-skip] enemy-clicked');
 
       const confirmDiscardBtn = hostPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i });
       const skipButton = hostPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i }).first();
       await expect(confirmDiscardBtn).toBeVisible({ timeout: 8000 });
       await expect(skipButton).toBeVisible({ timeout: 3000 });
-      console.log('[holy-arrow-skip] prompt-visible');
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'holy-arrow-skip-owner-visible', {
+          subdir: 'summonerwars/summonerwars-paladin-discard.e2e/圣光箭：可以跳过弃牌直接攻击',
+        }),
+      });
+      await guestPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'holy-arrow-skip-guest-hidden', {
+          subdir: 'summonerwars/summonerwars-paladin-discard.e2e/圣光箭：可以跳过弃牌直接攻击',
+        }),
+      });
 
       await expect(guestPage.locator('button').filter({ hasText: /Confirm Discard|确认弃牌/i })).toHaveCount(0);
       await expect(guestPage.locator('button').filter({ hasText: /^Skip$|^跳过$/i })).toHaveCount(0);
-      console.log('[holy-arrow-skip] guest-hidden-confirmed');
 
       await skipButton.click();
-      console.log('[holy-arrow-skip] skip-clicked');
       await expect(confirmDiscardBtn).toBeHidden({ timeout: 5000 });
       await expect(skipButton).toBeHidden({ timeout: 5000 });
       await hostPage.waitForTimeout(1200);
       await expect(confirmDiscardBtn).toBeHidden();
       await expect(skipButton).toBeHidden();
-      console.log('[holy-arrow-skip] prompt-cleared');
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'holy-arrow-skip-after-closeout', {
+          subdir: 'summonerwars/summonerwars-paladin-discard.e2e/圣光箭：可以跳过弃牌直接攻击',
+        }),
+      });
 
       await expect.poll(async () => {
         const core = await readCoreState(hostPage);
         return Number(core.players?.['0']?.magic ?? 0);
       }, { timeout: 5000 }).toBe(initialMagic);
-      console.log('[holy-arrow-skip] assertion-finished');
     } finally {
       void hostContext.close().catch(() => {});
       void guestContext.close().catch(() => {});

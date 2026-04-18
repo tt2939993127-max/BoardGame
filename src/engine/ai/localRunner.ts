@@ -31,10 +31,39 @@ interface ResolveNextAiActionArgs {
      * 在线房间里，每个 AI seat 都有自己的 transport client 和 playerView。
      * 如果继续基于“当前主玩家”的过滤状态再套一层 playerView，
      * AI 会看不到只对自己可见的交互，导致 simple-choice 永远不响应。
-     * 返回 null / canDecide=false 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到错误视角”。
+     * 若 seat 的专属视角尚未就绪，resolveNextAiDispatch 会返回 blocked，
+     * 而不是回退到错误视角继续决策。
      */
     visibleStateResolver?: (playerId: string) => MatchState<unknown> | ResolvedOnlineAiDecisionView | null | undefined;
 }
+
+export interface AiBlockedResolution {
+    kind: 'blocked';
+    playerId: string;
+    blockedReason: 'missing-visible-state' | 'missing-private-overlay' | 'stale-private-overlay';
+    visibility: 'shared' | 'private-required' | 'unknown';
+    blockedKey: string;
+    diagnostics: {
+        sharedPhase: string | null;
+        privatePhase: string | null;
+        sharedTurnNumber: number | null;
+        privateTurnNumber: number | null;
+        sharedCurrentPlayerId: string | null;
+        privateCurrentPlayerId: string | null;
+    } | null;
+}
+
+export interface AiIdleResolution {
+    kind: 'idle';
+    idleReason: 'runtime-unavailable' | 'no-action';
+}
+
+export interface AiActionResolution {
+    kind: 'action';
+    resolution: AiResolution;
+}
+
+export type AiDispatchResult = AiActionResolution | AiBlockedResolution | AiIdleResolution;
 
 function shouldUseRemoteDecision(args: {
     runtime: ReturnType<typeof getGameAiRuntime>;
@@ -235,21 +264,65 @@ async function resolveRemoteAction(args: {
 export async function resolveNextAiAction(
     args: ResolveNextAiActionArgs,
 ): Promise<AiResolution | null> {
+    const result = await resolveNextAiDispatch(args);
+    return result.kind === 'action' ? result.resolution : null;
+}
+
+export async function resolveNextAiDispatch(
+    args: ResolveNextAiActionArgs,
+): Promise<AiDispatchResult> {
     const runtime = getGameAiRuntime(args.engineConfig.gameId);
-    if (!runtime) return null;
+    if (!runtime) {
+        return {
+            kind: 'idle',
+            idleReason: 'runtime-unavailable',
+        };
+    }
 
     const decisionBudgetMs = args.decisionBudgetMs ?? 250;
     const rulesVersion = args.rulesVersion ?? null;
+    let firstBlocked: AiBlockedResolution | null = null;
 
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
         if (seatController.type === 'human') continue;
 
         const resolvedVisibleState = args.visibleStateResolver?.(playerId);
         if (resolvedVisibleState === null) {
+            if (!firstBlocked) {
+                firstBlocked = {
+                    kind: 'blocked',
+                    playerId,
+                    blockedReason: 'missing-visible-state',
+                    visibility: 'unknown',
+                    blockedKey: `${playerId}:missing-visible-state`,
+                    diagnostics: null,
+                };
+            }
             continue;
         }
 
         if (isResolvedOnlineAiDecisionView(resolvedVisibleState) && !resolvedVisibleState.canDecide) {
+            if (!firstBlocked) {
+                const blockedReason = resolvedVisibleState.blockedReason ?? 'missing-visible-state';
+                firstBlocked = {
+                    kind: 'blocked',
+                    playerId,
+                    blockedReason,
+                    visibility: resolvedVisibleState.visibility,
+                    blockedKey: [
+                        playerId,
+                        resolvedVisibleState.visibility,
+                        blockedReason,
+                        resolvedVisibleState.diagnostics.sharedTurnNumber ?? 'no-shared-turn',
+                        resolvedVisibleState.diagnostics.sharedPhase ?? 'no-shared-phase',
+                        resolvedVisibleState.diagnostics.sharedCurrentPlayerId ?? 'no-shared-player',
+                        resolvedVisibleState.diagnostics.privateTurnNumber ?? 'no-seat-turn',
+                        resolvedVisibleState.diagnostics.privatePhase ?? 'no-seat-phase',
+                        resolvedVisibleState.diagnostics.privateCurrentPlayerId ?? 'no-seat-player',
+                    ].join(':'),
+                    diagnostics: resolvedVisibleState.diagnostics,
+                };
+            }
             continue;
         }
 
@@ -279,10 +352,13 @@ export async function resolveNextAiAction(
                     responderIndex: context.responseWindow?.currentResponderIndex ?? null,
                 });
                 return {
-                    playerId,
-                    action: fallbackAction,
-                    attemptKey,
-                    source: seatController.type === 'remote-ai' ? 'remote-ai-fallback' : 'local-ai',
+                    kind: 'action',
+                    resolution: {
+                        playerId,
+                        action: fallbackAction,
+                        attemptKey,
+                        source: seatController.type === 'remote-ai' ? 'remote-ai-fallback' : 'local-ai',
+                    },
                 };
             }
             continue;
@@ -315,10 +391,13 @@ export async function resolveNextAiAction(
             if (!action) continue;
 
             return {
-                playerId,
-                action,
-                attemptKey,
-                source: 'local-ai',
+                kind: 'action',
+                resolution: {
+                    playerId,
+                    action,
+                    attemptKey,
+                    source: 'local-ai',
+                },
             };
         }
 
@@ -335,10 +414,13 @@ export async function resolveNextAiAction(
             if (!action) continue;
 
             return {
-                playerId,
-                action,
-                attemptKey,
-                source: 'remote-ai-fallback',
+                kind: 'action',
+                resolution: {
+                    playerId,
+                    action,
+                    attemptKey,
+                    source: 'remote-ai-fallback',
+                },
             };
         }
 
@@ -350,14 +432,24 @@ export async function resolveNextAiAction(
         if (!remoteResolution.action) continue;
 
         return {
-            playerId,
-            action: remoteResolution.action,
-            attemptKey,
-            source: remoteResolution.usedFallback ? 'remote-ai-fallback' : 'remote-ai',
+            kind: 'action',
+            resolution: {
+                playerId,
+                action: remoteResolution.action,
+                attemptKey,
+                source: remoteResolution.usedFallback ? 'remote-ai-fallback' : 'remote-ai',
+            },
         };
     }
 
-    return null;
+    if (firstBlocked) {
+        return firstBlocked;
+    }
+
+    return {
+        kind: 'idle',
+        idleReason: 'no-action',
+    };
 }
 
 export const resolveNextLocalAiAction = resolveNextAiAction;
