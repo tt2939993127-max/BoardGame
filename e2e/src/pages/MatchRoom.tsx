@@ -464,7 +464,6 @@ const OnlineAiSeatBridge = ({
                 } else {
                     staleSeatRecoveryRef.current = null;
                 }
-                lastAiAttemptKeyRef.current = null;
                 return;
             }
 
@@ -503,7 +502,6 @@ const OnlineAiSeatBridge = ({
                     staleSeatRecoveryRef.current = null;
                 }
                 staleSeatDecisionKeyRef.current = null;
-                lastAiAttemptKeyRef.current = null;
                 return;
             }
 
