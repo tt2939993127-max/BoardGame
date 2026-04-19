@@ -273,6 +273,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **并发改动默认存在**：默认假设工作区里始终有其他 AI 或用户并发改动，禁止把“工作区干净”当作前提；看到陌生改动时，不得擅自回滚、清空、隐藏或覆盖。
 - **“看着删 / 该删的删该留的留 / 帮我整理改动”默认是“先看内容再决定”，不是回滚授权（强制）**：用户这样说时，必须先逐个查看实际 diff / 文件内容，再输出“保留 / 可删 / 待确认”的判断与理由；**除非用户当轮明确要求删除、回滚、按 HEAD 覆盖或清空具体目标**，否则不得执行 `git restore`、`git checkout --`、`git clean`、覆盖回写、批量恢复到 HEAD 等会抹掉现有改动的操作。只要内容没看过或性质不明，就默认保留，不得先斩后奏。
 - **Git 回退和 stash 默认禁止**：未经用户明确许可，禁止执行 `git stash*`、历史回滚、`git restore`、`git checkout --` 等会影响现有工作区状态的命令；修 bug 必须通过编辑工具直接改代码。
+- **默认无必要不使用变基**：未获用户明确要求时，不执行 `git pull --rebase` 或其他 `rebase` 操作。
 - **merge / push 要走项目门禁**：`git merge` 前必须读 `docs/git-merge-checklist.md`；`--no-verify` 默认禁止，仅在文档/配置/样式且无逻辑变更，或用户明确要求无校验推进时才可例外。
 - **高风险 UI/规则文件合并不得只看静态门禁（强制）**：`Board.tsx`、游戏 `ui/`、共享交互组件、规则文档、agent 规则文件、关键测试断言文件，一旦在 merge 中发生冲突或大幅 diff，必须做语义对比与关键交互验证；禁止仅凭 `merge:audit` / lint / typecheck / 页面可打开收口。
 - **每次 push 前必须同步主分支**：每次 `git push` 前必须先 `git fetch origin`，再把 `origin/main` 合并进当前分支；禁止为此擅自切换到 `main`，若需要 `rebase/squash` 仍需用户明确确认。
