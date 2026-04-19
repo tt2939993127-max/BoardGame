@@ -20,6 +20,7 @@ import {
     grantContextualExtraAction,
     grantContextualExtraMinion,
     grantExtraAction,
+    addTempPower,
     returnMadnessCard,
     recoverCardsFromDiscard,
     buildValidatedMoveEvents,
@@ -60,6 +61,41 @@ function getDeferredPostScoringEvents(
 
 /** 注册扩展包基地能力*/
 export function registerExpansionBaseAbilities(): void {
+    // ── 竞技场（Arena）───────────────────────────────────────────
+    // 第一次在此基地打出随从后，可选：额外打行动 或 抽一张牌
+    registerBaseAbility('base_arena', 'onMinionPlayed', (ctx) => {
+        const player = ctx.state.players[ctx.playerId];
+        if (!player || !ctx.matchState) return { events: [] };
+        const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
+        if (playedAtBase !== 1) return { events: [] };
+
+        const options: PromptOption<Record<string, unknown>>[] = [
+            { id: 'extra-action', label: '额外打出行动', value: { choice: 'extra_action' }, displayMode: 'button' as const },
+            { id: 'draw-card', label: '抽一张牌', value: { choice: 'draw_card' }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ];
+        const interaction = createSimpleChoice(
+            `base_arena_${ctx.playerId}_${ctx.now}`,
+            ctx.playerId,
+            '竞技场：选择额外打行动或抽牌',
+            options,
+            { sourceId: 'base_arena', targetType: 'button' },
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    });
+
+    // ── 名人堂（Hall of Fame）───────────────────────────────────
+    // 第一次在此基地打出的随从获得回合内 +2 力量
+    registerBaseAbility('base_hall_of_fame', 'onMinionPlayed', (ctx) => {
+        if (!ctx.minionUid) return { events: [] };
+        const player = ctx.state.players[ctx.playerId];
+        if (!player) return { events: [] };
+        const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
+        if (playedAtBase !== 1) return { events: [] };
+        return {
+            events: [addTempPower(ctx.minionUid, ctx.baseIndex, 2, 'base_hall_of_fame', ctx.now)],
+        };
+    });
 
     // ── 疯人院（The Asylum）──────────────────────────────────────
     // "在一个玩家打出一个随从到这后，该玩家可以将一张手牌移出游戏（放入盒子），在你的一个随从上放置一个+1力量指示物"
@@ -654,6 +690,29 @@ export function registerExpansionBaseAbilities(): void {
 
 /** 注册扩展包基地能力的交互解决处理函数 */
 export function registerExpansionBaseInteractionHandlers(): void {
+    registerInteractionHandler('base_arena', (state, playerId, value, _iData, random, timestamp) => {
+        const selected = value as { skip?: boolean; choice?: 'extra_action' | 'draw_card' };
+        if (selected.skip) return { state, events: [] };
+
+        if (selected.choice === 'extra_action') {
+            return {
+                state,
+                events: [grantContextualExtraAction(
+                    { playerId, now: timestamp },
+                    'base_arena',
+                )],
+            };
+        }
+
+        if (selected.choice === 'draw_card') {
+            return {
+                state,
+                events: buildStandardDrawEvents(state.core, playerId, 1, random, timestamp),
+            };
+        }
+
+        return { state, events: [] };
+    });
 
     // 疯人院：先选手牌，再选择一个自己的随从放置 +1 力量指示物
     registerInteractionHandler('base_the_asylum', (state, playerId, value, _iData, _random, timestamp) => {

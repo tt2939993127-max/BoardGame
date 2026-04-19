@@ -915,6 +915,7 @@ describe('resolveNextAiAction 在线视角', () => {
             sys: {
                 phase: 'defensiveRoll',
                 turnNumber: 9,
+                eventStream: { nextId: 42 },
                 interaction: { current: null, queue: [], isBlocked: false },
                 responseWindow: {
                     current: {
@@ -935,6 +936,7 @@ describe('resolveNextAiAction 在线视角', () => {
             sys: {
                 phase: 'defensiveRoll',
                 turnNumber: 9,
+                eventStream: { nextId: 42 },
                 interaction: { current: null, queue: [], isBlocked: false },
                 responseWindow: {
                     current: {

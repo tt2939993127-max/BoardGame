@@ -1,14 +1,14 @@
 ## 1. 合同与 workflow
 
-- [ ] 1.1 固化 `wangling.png / wangling_base.png` 的 truth-source 合同、atlas 几何与索引表
-- [ ] 1.2 更新 `.windsurf/skills/data-entry-workflow/SKILL.md`，补齐 Smash Up 的 `intake` / `implementation` 分流规则
-- [ ] 1.3 收紧 `docs/games/smashup/workflows/smashup-faction-intake.md` 为 intake-only 文档
-- [ ] 1.4 新增 `docs/games/smashup/workflows/smashup-faction-implementation.md`，定义逐派系实施、验证与统一收口流程
+- [x] 1.1 固化 `wangling.png / wangling_base.png` 的 truth-source 合同、atlas 几何与索引表
+- [x] 1.2 更新 `.windsurf/skills/data-entry-workflow/SKILL.md`，补齐 Smash Up 的 `intake` / `implementation` 分流规则
+- [x] 1.3 收紧 `docs/games/smashup/workflows/smashup-faction-intake.md` 为 intake-only 文档
+- [x] 1.4 新增 `docs/games/smashup/workflows/smashup-faction-implementation.md`，定义逐派系实施、验证与统一收口流程
 
 ## 2. 运行时接入
 
-- [ ] 2.1 新增 `wangling` card/base atlas 槽位，并接入 `ids.ts`、`atlasCatalog.ts` 与相关预览/预加载链路
-- [ ] 2.2 接入 `Mermaids / Skeletons / World Champs` 的 faction metadata、card/base 数据与 locale
+- [x] 2.1 新增 `wangling` card/base atlas 槽位，并接入 `ids.ts`、`atlasCatalog.ts` 与相关预览/预加载链路
+- [x] 2.2 接入 `Mermaids / Skeletons / World Champs` 的 faction metadata、card/base 数据与 locale
 - [ ] 2.3 为 `World Champs` 逐张建立“直接复用 / 复制改名 / 全新实现”的裁定表，并按裁定落地
 
 ## 3. 玩法实现

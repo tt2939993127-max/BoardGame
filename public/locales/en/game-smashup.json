@@ -450,6 +450,18 @@
     "vikings_pod": {
       "name": "Vikings",
       "description": "Force discards and burials, then turn them into extra payoff."
+    },
+    "mermaids": {
+      "name": "Mermaids",
+      "description": "Control bases with movement tricks and power suppression."
+    },
+    "skeletons": {
+      "name": "Skeletons",
+      "description": "Bury and recycle low-power minions from the discard pile."
+    },
+    "world_champs": {
+      "name": "World Champs",
+      "description": "A mixed all-star roster focused on extra actions and tempo bursts."
     }
   },
   "tutorial": {
@@ -3405,6 +3417,206 @@
     },
     "*": {
       "type": "cards.*.type"
+    },
+    "mermaids_ultimate_song": {
+      "name": "Ultimate Song",
+      "effectText": "Move one of your minions here to another base. Then play an extra action there."
+    },
+    "mermaids_captive_audience": {
+      "name": "Captive Audience",
+      "effectText": "Move another player’s minion here to another base of your choice."
+    },
+    "mermaids_becalmed_shores": {
+      "name": "Becalmed Shores",
+      "effectText": "Play on a base. Ongoing: During your turn, other players’ minions here have -1 power. Talent: Move one of your minions here to another base."
+    },
+    "mermaids_siren_song": {
+      "name": "Siren Song",
+      "effectText": "Choose a base. Move a minion there to another base."
+    },
+    "mermaids_toll_bay": {
+      "name": "Toll Bay",
+      "effectText": "This turn, whenever another player moves a minion to a base where you have a minion, you may draw a card."
+    },
+    "mermaids_shipwreck_cove": {
+      "name": "Shipwreck Cove",
+      "effectText": "Play on a base. Special: After this base scores, you may play an extra minion on the replacement base."
+    },
+    "mermaids_charmed": {
+      "name": "Charmed",
+      "effectText": "Play on a minion. This turn, it contributes no power to its controller’s total."
+    },
+    "mermaids_desert_island": {
+      "name": "Desert Island",
+      "effectText": "Play on a base. Ongoing: Each player keeps at most one minion here; the rest return to owners’ hands."
+    },
+    "mermaids_siren": {
+      "name": "Siren",
+      "abilityText": "Ongoing: During your turn, other players’ minions here have -1 power."
+    },
+    "mermaids_charmer": {
+      "name": "Charmer",
+      "abilityText": "Talent: Move another player’s minion here to another base."
+    },
+    "mermaids_temptress": {
+      "name": "Temptress",
+      "abilityText": "Ongoing: This minion has +1 power for each of your other minions here."
+    },
+    "mermaids_mermaid_queen": {
+      "name": "Mermaid Queen",
+      "abilityText": "You may move an opponent’s minion here to another base."
+    },
+    "skeletons_gravestones": {
+      "name": "Gravestones",
+      "effectText": "Play on a base. Special: After this base scores, you may bury a power 3 or less minion from your discard pile on the replacement base."
+    },
+    "skeletons_burst_forth": {
+      "name": "Burst Forth",
+      "effectText": "Special: Before a base scores, you may uncover and play one of your buried minions there."
+    },
+    "skeletons_dig_em_up": {
+      "name": "Dig ’em Up",
+      "effectText": "Uncover and play one of your buried cards from any base."
+    },
+    "skeletons_place_em_down": {
+      "name": "Place ‘em Down",
+      "effectText": "Bury a power 3 or less minion from your hand on a base."
+    },
+    "skeletons_graveyard": {
+      "name": "Graveyard",
+      "effectText": "Play on a base. Talent: Bury a power 3 or less minion from your discard pile here."
+    },
+    "skeletons_hearse_fleet": {
+      "name": "Hearse Fleet",
+      "effectText": "At a base where you have a minion, bury up to two power 3 or less minions from your discard pile."
+    },
+    "skeletons_spooky_scary": {
+      "name": "Spooky, Scary...",
+      "effectText": "Put another player’s power 3 or less minion on a base into the discard pile."
+    },
+    "skeletons_grave_goods": {
+      "name": "Grave Goods",
+      "effectText": "Return a power 3 or less minion from your discard pile to your hand."
+    },
+    "skeletons_returned_one": {
+      "name": "Returned One",
+      "abilityText": "You may bury a power 3 or less minion from your hand here."
+    },
+    "skeletons_revenant": {
+      "name": "Revenant",
+      "abilityText": "Special: Once per turn, when your power 3 or less minion goes to the discard pile from another base, you may bury it on any base."
+    },
+    "skeletons_gravetender": {
+      "name": "Gravetender",
+      "abilityText": "Ongoing: This minion has +1 power for each buried card you have here."
+    },
+    "skeletons_lord_of_bones": {
+      "name": "Lord of Bones",
+      "abilityText": "Ongoing: This minion has +1 power for each power 3 or less minion you have here. Talent: Bury a power 3 or less minion from your discard pile here."
+    },
+    "world_champs_sheriff": {
+      "name": "Sheriff",
+      "abilityText": "Special: Before this base scores, this minion may duel another player’s minion here. Destroy the losing minion."
+    },
+    "world_champs_aramis": {
+      "name": "Aramis",
+      "abilityText": "Ongoing: Once during your turn, after you play an action that directly affects this minion, you may play another such action as an extra action."
+    },
+    "world_champs_stoneford": {
+      "name": "Stoneford",
+      "abilityText": "Search your deck for an action card, put it into your hand, then shuffle."
+    },
+    "world_champs_akye_the_turtle": {
+      "name": "Akye the Turtle",
+      "abilityText": "You may put a card from your hand into another player’s hand to draw two cards."
+    },
+    "world_champs_diva": {
+      "name": "Diva",
+      "abilityText": "Ongoing: Once each turn, when a standard action directly affects one or more of your other minions here, you may choose this minion to be affected the same way."
+    },
+    "world_champs_shield_maiden": {
+      "name": "Shield Maiden",
+      "abilityText": "Reveal the top card of another player’s deck. If it is an action or a minion of power 3 or less, put it into your hand. Otherwise, return it."
+    },
+    "world_champs_calicoin": {
+      "name": "Calicoin",
+      "abilityText": "You may place a +1 power counter on another minion here."
+    },
+    "world_champs_mummy": {
+      "name": "Mummy",
+      "abilityText": "Ongoing: After this base scores, you may bury this minion on another base."
+    },
+    "world_champs_rainbow_girl": {
+      "name": "Rainbow Girl",
+      "abilityText": "Your other minions here gain +1 power until end of turn."
+    },
+    "world_champs_samurai_chan": {
+      "name": "Samurai-Chan",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, draw a card."
+    },
+    "world_champs_bewitched": {
+      "name": "Bewitched",
+      "effectText": "Play on a minion. Ongoing: This minion has +2 power. If it leaves play, transfer this action to another minion."
+    },
+    "world_champs_eh": {
+      "name": "Eh?",
+      "effectText": "Special: After you play your first action in a turn, you may play this card as an extra action. One of your minions gains +1 power until end of turn, and you may return this card to your hand instead of discarding it."
+    },
+    "world_champs_fast_as_lightning": {
+      "name": "Fast as Lightning",
+      "effectText": "Choose a minion. Until end of turn, it gains +2 power, and if it would go to the discard pile, return it to its owner’s hand instead."
+    },
+    "world_champs_fighting_spirit_prize": {
+      "name": "Fighting Spirit Prize",
+      "effectText": "Draw two cards and place two +1 power counters total on your minions."
+    },
+    "world_champs_high_speed_chase": {
+      "name": "High-Speed Chase",
+      "effectText": "Play on a base. Talent: Transfer this action to another base to move one of your minions from here to there. That minion gains +3 power until end of turn."
+    },
+    "world_champs_its_blitzin_time": {
+      "name": "It’s Blitzin’ Time!",
+      "effectText": "One of your minions gains +3 power until end of turn."
+    },
+    "world_champs_kaiju_conflict": {
+      "name": "Kaiju Conflict",
+      "effectText": "Play two extra actions."
+    },
+    "world_champs_mouse_bird_and_sausage": {
+      "name": "Mouse, Bird and Sausage",
+      "effectText": "Choose up to two minions of the same faction at a base to each gain +2 power until end of turn."
+    },
+    "world_champs_shark_tattoo": {
+      "name": "Shark Tattoo",
+      "effectText": "Play on one of your minions. Place a +1 power counter on it. Ongoing: At the start of your turn, if this is your only minion here, place a +1 power counter on it."
+    },
+    "world_champs_smart_set_up": {
+      "name": "Smart Set-Up",
+      "effectText": "Play on another player’s minion. Ongoing: After the first time each turn a minion is played here, draw a card."
+    },
+    "base_mermaid_pool": {
+      "name": "Mermaid Pool",
+      "abilityText": "On your turn, if you have a minion here, you may move another player’s minion here."
+    },
+    "base_mermaid_reef": {
+      "name": "Mermaid Reef",
+      "abilityText": "During your turn, other players’ minions here contribute 1 less power to their controller’s total."
+    },
+    "base_boneyard": {
+      "name": "Boneyard",
+      "abilityText": "Once during your turn, after one of your power 3 or less minions goes to the discard pile from another base, you may bury it here."
+    },
+    "base_ossuary": {
+      "name": "Ossuary",
+      "abilityText": "On your turn, you may bury a power 3 or less minion from your discard pile here."
+    },
+    "base_arena": {
+      "name": "Arena",
+      "abilityText": "After the first time you play a minion here during your turn, you may play an extra action or draw a card."
+    },
+    "base_hall_of_fame": {
+      "name": "Hall of Fame",
+      "abilityText": "The first minion you play here during your turn gains +2 power until end of turn."
     }
   },
   "endgame": {

@@ -51,6 +51,9 @@ import { SAMURAI_CARDS } from './factions/samurai';
 import { SAMURAI_POD_CARDS } from './factions/samurai_pod';
 import { VIKINGS_CARDS } from './factions/vikings';
 import { VIKINGS_POD_CARDS } from './factions/vikings_pod';
+import { MERMAIDS_CARDS } from './factions/mermaids';
+import { SKELETONS_CARDS } from './factions/skeletons';
+import { WORLD_CHAMPS_CARDS } from './factions/world_champs';
 
 // ============================================================================
 // 注册表
@@ -172,6 +175,9 @@ registerCards(SAMURAI_CARDS);
 registerCards(SAMURAI_POD_CARDS);
 registerCards(VIKINGS_CARDS);
 registerCards(VIKINGS_POD_CARDS);
+registerCards(MERMAIDS_CARDS);
+registerCards(SKELETONS_CARDS);
+registerCards(WORLD_CHAMPS_CARDS);
 // POD 版本阵营（最新英文 POD 版本）
 registerCards(NINJA_POD_CARDS);
 registerCards(TITAN_CARD_DEFS);
@@ -768,6 +774,67 @@ export const BASE_CARDS_MONSTER_SMASH: BaseCardDef[] = [
     },
 ];
 registerBases(BASE_CARDS_MONSTER_SMASH);
+
+// ============================================================================
+// 扩展基地 (10th Anniversary - wangling_base)
+// ============================================================================
+export const BASE_CARDS_10TH_ANNIVERSARY: BaseCardDef[] = [
+    {
+        id: 'base_mermaid_pool',
+        name: '美人鱼池',
+        nameEn: 'Mermaid Pool',
+        breakpoint: 23,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.MERMAIDS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 0 },
+    },
+    {
+        id: 'base_mermaid_reef',
+        name: '美人鱼礁',
+        nameEn: 'Mermaid Reef',
+        breakpoint: 17,
+        vpAwards: [3, 1, 1],
+        faction: SMASHUP_FACTION_IDS.MERMAIDS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 1 },
+    },
+    {
+        id: 'base_boneyard',
+        name: '白骨场',
+        nameEn: 'Boneyard',
+        breakpoint: 22,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.SKELETONS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 2 },
+    },
+    {
+        id: 'base_ossuary',
+        name: '藏骨堂',
+        nameEn: 'Ossuary',
+        breakpoint: 20,
+        vpAwards: [3, 2, 1],
+        faction: SMASHUP_FACTION_IDS.SKELETONS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 3 },
+    },
+    {
+        id: 'base_arena',
+        name: '竞技场',
+        nameEn: 'Arena',
+        breakpoint: 23,
+        vpAwards: [4, 3, 1],
+        faction: SMASHUP_FACTION_IDS.WORLD_CHAMPS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 4 },
+    },
+    {
+        id: 'base_hall_of_fame',
+        name: '名人堂',
+        nameEn: 'Hall of Fame',
+        breakpoint: 20,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.WORLD_CHAMPS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE6, index: 5 },
+    },
+];
+registerBases(BASE_CARDS_10TH_ANNIVERSARY);
 registerPodBaseSkeletons();
 
 /**

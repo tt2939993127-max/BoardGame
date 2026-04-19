@@ -7,8 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { getAllCardDefs, getAllBaseDefs, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
+import { getAllCardDefs, getAllBaseDefs, getCardDef, getFactionCards, resolveCardName, resolveCardText } from '../data/cards';
 import { resolveI18nKeys } from '../ui/PromptOverlay';
+import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 describe('SmashUp 卡牌 i18n 完整性', () => {
   const zhCN = JSON.parse(
@@ -348,5 +349,39 @@ describe('SmashUp 卡牌 i18n 完整性', () => {
     expect(en.cards.base_longhouse_pod.abilityText).toBe(
       'On your turn, you may place a card from your hand on top of your deck to give one of your minions here +2 power until the end of the turn.',
     );
+  });
+
+  it('10th Anniversary 三派系已接入卡牌与基地 locale', () => {
+    const newFactions = [
+      SMASHUP_FACTION_IDS.MERMAIDS,
+      SMASHUP_FACTION_IDS.SKELETONS,
+      SMASHUP_FACTION_IDS.WORLD_CHAMPS,
+    ];
+
+    for (const factionId of newFactions) {
+      const defs = getFactionCards(factionId);
+      const totalCopies = defs.reduce((sum, def) => sum + (def.count ?? 1), 0);
+      expect(defs.length).toBeGreaterThanOrEqual(12);
+      expect(totalCopies).toBe(20);
+      expect(typeof zhCN.factions?.[factionId]?.name).toBe('string');
+      expect(typeof en.factions?.[factionId]?.name).toBe('string');
+      expect(typeof zhCN.factions?.[factionId]?.description).toBe('string');
+      expect(typeof en.factions?.[factionId]?.description).toBe('string');
+    }
+
+    const newBaseIds = [
+      'base_mermaid_pool',
+      'base_mermaid_reef',
+      'base_boneyard',
+      'base_ossuary',
+      'base_arena',
+      'base_hall_of_fame',
+    ];
+    for (const baseId of newBaseIds) {
+      expect(typeof zhCN.cards?.[baseId]?.name).toBe('string');
+      expect(typeof zhCN.cards?.[baseId]?.abilityText).toBe('string');
+      expect(typeof en.cards?.[baseId]?.name).toBe('string');
+      expect(typeof en.cards?.[baseId]?.abilityText).toBe('string');
+    }
   });
 });
