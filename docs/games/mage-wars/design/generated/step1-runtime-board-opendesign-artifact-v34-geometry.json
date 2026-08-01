@@ -1,0 +1,301 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "zones": [
+    {
+      "id": "a1",
+      "left": 612,
+      "top": 58,
+      "right": 932,
+      "bottom": 378,
+      "width": 320,
+      "height": 320,
+      "cx": 772,
+      "cy": 218
+    },
+    {
+      "id": "b1",
+      "left": 932,
+      "top": 58,
+      "right": 1252,
+      "bottom": 378,
+      "width": 320,
+      "height": 320,
+      "cx": 1092,
+      "cy": 218
+    },
+    {
+      "id": "a2",
+      "left": 612,
+      "top": 378,
+      "right": 932,
+      "bottom": 698,
+      "width": 320,
+      "height": 320,
+      "cx": 772,
+      "cy": 538
+    },
+    {
+      "id": "b2",
+      "left": 932,
+      "top": 378,
+      "right": 1252,
+      "bottom": 698,
+      "width": 320,
+      "height": 320,
+      "cx": 1092,
+      "cy": 538
+    },
+    {
+      "id": "a3",
+      "left": 612,
+      "top": 698,
+      "right": 932,
+      "bottom": 1018,
+      "width": 320,
+      "height": 320,
+      "cx": 772,
+      "cy": 858
+    },
+    {
+      "id": "b3",
+      "left": 932,
+      "top": 698,
+      "right": 1252,
+      "bottom": 1018,
+      "width": 320,
+      "height": 320,
+      "cx": 1092,
+      "cy": 858
+    }
+  ],
+  "cards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "a2",
+      "rect": {
+        "left": 737.2944946289062,
+        "top": 452.09344482421875,
+        "right": 854.7055053710938,
+        "bottom": 612.9065551757812,
+        "width": 117.4110107421875,
+        "height": 160.8131103515625,
+        "cx": 796,
+        "cy": 532.5
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "西锁骑士，当前火球术目标",
+      "zoneId": "b2",
+      "rect": {
+        "left": 1029.29443359375,
+        "top": 438.09344482421875,
+        "right": 1146.70556640625,
+        "bottom": 598.9065551757812,
+        "width": 117.4111328125,
+        "height": 160.8131103515625,
+        "cx": 1088,
+        "cy": 518.5
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "火烙魔婴",
+      "zoneId": "a3",
+      "rect": {
+        "left": 731.9683837890625,
+        "top": 771.1767578125,
+        "right": 852.0316162109375,
+        "bottom": 933.8232421875,
+        "width": 120.063232421875,
+        "height": 162.646484375,
+        "cx": 792,
+        "cy": 852.5
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "b3",
+      "rect": {
+        "left": 1033.9683837890625,
+        "top": 761.1767578125,
+        "right": 1154.0316162109375,
+        "bottom": 923.8232421875,
+        "width": 120.063232421875,
+        "height": 162.646484375,
+        "cx": 1094,
+        "cy": 842.5
+      },
+      "centerInZone": true
+    }
+  ],
+  "arena": {
+    "left": 612,
+    "top": 58,
+    "right": 1252,
+    "bottom": 1018,
+    "width": 640,
+    "height": 960,
+    "cx": 932,
+    "cy": 538
+  },
+  "workbench": {
+    "left": 1318,
+    "top": 608,
+    "right": 1866,
+    "bottom": 1032,
+    "width": 548,
+    "height": 424,
+    "cx": 1592,
+    "cy": 820
+  },
+  "currentSpell": {
+    "left": 1314.9647216796875,
+    "top": 655.862548828125,
+    "right": 1569.0352783203125,
+    "bottom": 1010.137451171875,
+    "width": 254.070556640625,
+    "height": 354.27490234375,
+    "cx": 1442,
+    "cy": 833
+  },
+  "dice": {
+    "left": 1154,
+    "top": 398,
+    "right": 1282,
+    "bottom": 494,
+    "width": 128,
+    "height": 96,
+    "cx": 1218,
+    "cy": 446
+  },
+  "result": {
+    "left": 1044,
+    "top": 610,
+    "right": 1184.8125,
+    "bottom": 644,
+    "width": 140.8125,
+    "height": 34,
+    "cx": 1114.40625,
+    "cy": 627
+  },
+  "target": {
+    "left": 1029.29443359375,
+    "top": 438.09344482421875,
+    "right": 1146.70556640625,
+    "bottom": 598.9065551757812,
+    "width": 117.4111328125,
+    "height": 160.8131103515625,
+    "cx": 1088,
+    "cy": 518.5
+  },
+  "visibleDice": [
+    {
+      "cls": "attack-die die-a",
+      "rect": {
+        "left": 1149.261962890625,
+        "top": 423.26202392578125,
+        "right": 1198.738037109375,
+        "bottom": 472.73797607421875,
+        "width": 49.47607421875,
+        "height": 49.4759521484375,
+        "cx": 1174,
+        "cy": 448
+      }
+    },
+    {
+      "cls": "attack-die die-b",
+      "rect": {
+        "left": 1187.4111328125,
+        "top": 405.4111633300781,
+        "right": 1232.5888671875,
+        "bottom": 450.5888366699219,
+        "width": 45.177734375,
+        "height": 45.17767333984375,
+        "cx": 1210,
+        "cy": 428
+      }
+    },
+    {
+      "cls": "attack-die die-c",
+      "rect": {
+        "left": 1220.798583984375,
+        "top": 422.79852294921875,
+        "right": 1271.201416015625,
+        "bottom": 473.20147705078125,
+        "width": 50.40283203125,
+        "height": 50.4029541015625,
+        "cx": 1246,
+        "cy": 448
+      }
+    },
+    {
+      "cls": "effect-die",
+      "rect": {
+        "left": 1232,
+        "top": 464,
+        "right": 1274,
+        "bottom": 506,
+        "width": 42,
+        "height": 42,
+        "cx": 1253,
+        "cy": 485
+      }
+    }
+  ],
+  "arenaSize": {
+    "width": 640,
+    "height": 960
+  },
+  "currentSpellSize": {
+    "width": 254.070556640625,
+    "height": 354.27490234375
+  },
+  "workbenchInRightBottom": true,
+  "diceDistanceToTargetCenter": 148.84975646604195,
+  "diceTargetOverlap": 0,
+  "resultTargetOverlap": 0,
+  "fieldOverlapByWorkbench": [
+    {
+      "alt": "烈焰狱鬼",
+      "workbenchOverlap": 0,
+      "diceOverlap": 0,
+      "resultOverlap": 0
+    },
+    {
+      "alt": "西锁骑士，当前火球术目标",
+      "workbenchOverlap": 0,
+      "diceOverlap": 0,
+      "resultOverlap": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "workbenchOverlap": 0,
+      "diceOverlap": 0,
+      "resultOverlap": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "workbenchOverlap": 0,
+      "diceOverlap": 0,
+      "resultOverlap": 0
+    }
+  ],
+  "forbiddenTerms": {
+    "hand": 0,
+    "opponentHand": 0,
+    "chineseHand": 0,
+    "confirmText": 0,
+    "cancelText": 0,
+    "submitText": 0,
+    "nextText": 0,
+    "explanatoryCopy": 0
+  },
+  "fireballImageCount": 1,
+  "bottomMixedZoneAbsent": true,
+  "imageCount": 27
+}

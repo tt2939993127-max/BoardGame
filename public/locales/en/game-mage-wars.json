@@ -1,0 +1,136 @@
+{
+  "title": "Mage Wars",
+  "description": "A 2-player spell tactics game. This foundation locks the apprentice arena, mage state, spellbook zones, and event-driven spell FX contract.",
+  "players": "2 players",
+  "arena": {
+    "mode": "Apprentice Arena",
+    "actionStage": "Action phase",
+    "selectTarget": "Select target",
+    "standardArenaAlt": "Mage Wars standard arena",
+    "zoneAria": "{{zone}} zone",
+    "source": "Source",
+    "legalMove": "Move",
+    "legalTarget": "Target",
+    "legalTargetShort": "Target",
+    "creatures": "Creatures {{count}}",
+    "conjurations": "Conjurations {{count}}"
+  },
+  "player": {
+    "label": "Player {{player}}",
+    "you": "You",
+    "opponent": "Opponent",
+    "seat": "Seat {{seat}}",
+    "active": "Acting"
+  },
+  "mages": {
+    "beastmaster_apprentice": "Apprentice Beastmaster",
+    "priestess_apprentice": "Apprentice Priestess",
+    "warlock_apprentice": "Apprentice Warlock",
+    "wizard_apprentice": "Apprentice Wizard"
+  },
+  "stats": {
+    "life": "Life",
+    "mana": "Mana",
+    "channeling": "Channeling",
+    "damage": "Damage",
+    "lifeShort": "Life {{value}}",
+    "manaShort": "Mana {{value}}",
+    "channelingShort": "Chan {{value}}",
+    "damageShort": "Dmg {{value}}"
+  },
+  "phases": {
+    "reset": "Reset",
+    "channel": "Channel",
+    "upkeep": "Upkeep",
+    "planning": "Planning",
+    "deployment": "Deployment",
+    "initiativeQuickcast": "Initiative Quickcast",
+    "creatureAction": "Creature Action",
+    "finalQuickcast": "Final Quickcast"
+  },
+  "zones": {
+    "a1": "Left Front",
+    "b1": "Right Front",
+    "a2": "Left Middle",
+    "b2": "Right Middle",
+    "a3": "Left Rear",
+    "b3": "Right Rear"
+  },
+  "status": {
+    "title": "Current State",
+    "turn": "Turn",
+    "current": "Current Player",
+    "fx": "Spell FX",
+    "fxRequired": "Event driven"
+  },
+  "zonesPanel": {
+    "title": "Private And Attached Zones",
+    "spellbook": "Spellbook",
+    "prepared": "Prepared Spells",
+    "equipment": "Equipment",
+    "enchantments": "Enchantments"
+  },
+  "tokens": {
+    "actionReady": "Action ready",
+    "actionSpent": "Action spent",
+    "quickcastReady": "Quickcast ready",
+    "quickcastSpent": "Quickcast spent",
+    "guard": "Guard",
+    "damage": "Damage",
+    "burn": "Burn"
+  },
+  "privateZones": {
+    "selfPlans": "Your prepared spells / spellbook",
+    "opponentPlans": "Opponent prepared spells",
+    "opponentPlansWithCount": "Opponent prepared {{count}}",
+    "spellbookCount": "{{count}} cards in spellbook",
+    "hiddenPrepared": "Hidden prepared spell",
+    "emptySlot": "Empty prepared slot",
+    "spell": "Spell",
+    "hiddenInfo": "Hidden information",
+    "spellbook": "Spellbook",
+    "preparedSpells": "Prepared spells",
+    "preparedSpellsWithCount": "Your prepared {{count}} / {{total}}",
+    "preparedSpell": "Prepared spell",
+    "discardPile": "Discard pile",
+    "discardPileWithCount": "Discard {{count}}",
+    "discardPileAria": "Public discard pile, {{count}} cards",
+    "emptyDiscardPile": "Empty discard pile"
+  },
+  "dice": {
+    "title": "Dice tray",
+    "attack": "Attack die",
+    "effect": "12-sided effect die",
+    "effectShort": "d12",
+    "settlement": "Dice ready"
+  },
+  "actionDock": {
+    "title": "Current Action",
+    "yourWindow": "You can take the current legal action",
+    "noManualAction": "Waiting for phase advance",
+    "waiting": "Waiting for the current player",
+    "quickcastOpen": "Quickcast window open",
+    "quickcastTiming": "Quickcast waits for its timing window"
+  },
+  "actions": {
+    "move": "Move mage",
+    "guard": "Guard",
+    "attack": "Basic attack",
+    "endTurn": "End Turn"
+  },
+  "error": {
+    "unsupportedCommand": "This command is not in the foundation implementation scope yet."
+  },
+  "spellbook": {
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageSummary": "{{page}} / {{total}}",
+    "categories": {
+      "all": "All",
+      "attack": "Attack",
+      "enchantment": "Enchant",
+      "creature": "Creature",
+      "equipment": "Gear"
+    }
+  }
+}

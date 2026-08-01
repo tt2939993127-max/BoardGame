@@ -1,0 +1,160 @@
+{
+  "generatedAt": "2026-07-31T09:39:10.016Z",
+  "htmlPath": "D:/codex-home/tools/open-design/.od/projects/mage-wars-ui-design/mage-wars-step1-annotated-saturated-v57.html",
+  "screenshotPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\step1-annotated-saturated-opendesign-artifact-v57.png",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "boxes": {
+    "arena": {
+      "x": 240,
+      "y": 30,
+      "width": 1440,
+      "height": 850
+    },
+    "targetField": {
+      "x": 1126.828857421875,
+      "y": 345.7875671386719,
+      "width": 136.34228515625,
+      "height": 188.42483520507812
+    },
+    "impField": {
+      "x": 538.274169921875,
+      "y": 621.7242431640625,
+      "width": 139.45166015625,
+      "height": 190.551513671875
+    },
+    "vineField": {
+      "x": 1144.828857421875,
+      "y": 625.78759765625,
+      "width": 136.34228515625,
+      "height": 188.4248046875
+    },
+    "bookCards": [
+      {
+        "x": 606,
+        "y": 819,
+        "width": 166,
+        "height": 234,
+        "text": "",
+        "aria": "",
+        "alt": "法力失效"
+      },
+      {
+        "x": 784,
+        "y": 889,
+        "width": 116,
+        "height": 164,
+        "text": "",
+        "aria": "",
+        "alt": "格挡"
+      },
+      {
+        "x": 912,
+        "y": 889,
+        "width": 116,
+        "height": 164,
+        "text": "",
+        "aria": "",
+        "alt": "狱火长鞭"
+      },
+      {
+        "x": 1040,
+        "y": 889,
+        "width": 116,
+        "height": 164,
+        "text": "",
+        "aria": "",
+        "alt": "单体治疗"
+      }
+    ],
+    "bookFocus": {
+      "x": 606,
+      "y": 819,
+      "width": 166,
+      "height": 234
+    },
+    "planCards": [
+      {
+        "x": 1388,
+        "y": 795,
+        "width": 188,
+        "height": 265,
+        "text": "",
+        "aria": "",
+        "alt": "火球术"
+      },
+      {
+        "x": 1262,
+        "y": 902,
+        "width": 112,
+        "height": 158,
+        "text": "",
+        "aria": "",
+        "alt": "法师祸咒"
+      }
+    ],
+    "sourceCard": {
+      "x": 1388,
+      "y": 795,
+      "width": 188,
+      "height": 265
+    },
+    "discard": {
+      "x": 1594,
+      "y": 906,
+      "width": 78.984375,
+      "height": 50
+    },
+    "resolutionLayer": {
+      "x": 1268,
+      "y": 378,
+      "width": 288,
+      "height": 118
+    },
+    "damageToken": {
+      "x": 1226.054931640625,
+      "y": 463.054931640625,
+      "width": 37.89013671875,
+      "height": 37.89013671875
+    },
+    "burnToken": {
+      "x": 1263.3062744140625,
+      "y": 449.3062438964844,
+      "width": 39.387451171875,
+      "height": 39.38751220703125
+    },
+    "turnEnd": {
+      "x": 1700,
+      "y": 1000,
+      "width": 168,
+      "height": 52
+    }
+  },
+  "checks": {
+    "bookCardVsImp": false,
+    "bookCardVsVine": false,
+    "sourceVsVine": false,
+    "sourceVsTurnEnd": false,
+    "planCardVsVine": false,
+    "discardVsPlanCards": false,
+    "discardVsSource": false,
+    "discardVsTurnEnd": false,
+    "diceVsTargetField": false,
+    "damageVsTargetField": true,
+    "burnVsTargetField": false,
+    "forbiddenVisibleText": [],
+    "largeConstantResidue": false
+  },
+  "ratio": {
+    "arenaArea": 1224000,
+    "bookFocusArea": 38844,
+    "sourceCardArea": 49820,
+    "targetFieldCardArea": 25690,
+    "bookFocusWidthToArenaWidth": 0.115,
+    "sourceWidthToArenaWidth": 0.131,
+    "sourceWidthToFieldWidth": 1.379,
+    "bookFocusWidthToFieldWidth": 1.218
+  }
+}

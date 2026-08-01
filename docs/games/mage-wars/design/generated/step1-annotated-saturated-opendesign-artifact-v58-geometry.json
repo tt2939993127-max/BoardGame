@@ -1,0 +1,713 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "title": "Mage Wars Annotated Saturated Layout v58",
+  "imageStatus": [
+    {
+      "alt": "标准竞技场半场",
+      "src": "refs/mage-wars-step1/standard-arena.jpg",
+      "complete": true,
+      "naturalWidth": 3210,
+      "naturalHeight": 2407
+    },
+    {
+      "alt": "烈焰狱鬼",
+      "src": "refs/mage-wars-step1/spell-2803-flaming-hellion.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "西锁骑士",
+      "src": "refs/mage-wars-step1/spell-2909-knight-of-westlock.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "火烙魔婴",
+      "src": "refs/mage-wars-step1/spell-2801-firebrand-imp.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "src": "refs/mage-wars-step1/spell-2224-conjuration.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "攻击骰重击面",
+      "src": "refs/mage-wars-step1/attack-die-face-crit.png",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "alt": "攻击骰二伤面",
+      "src": "refs/mage-wars-step1/attack-die-face-2.png",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "alt": "攻击骰一伤面",
+      "src": "refs/mage-wars-step1/attack-die-face-1.png",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "alt": "攻击骰空白面",
+      "src": "refs/mage-wars-step1/attack-die-face-blank.png",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "alt": "效果骰 12 面",
+      "src": "refs/mage-wars-step1/effect-die-d12-face.png",
+      "complete": true,
+      "naturalWidth": 329,
+      "naturalHeight": 329
+    },
+    {
+      "alt": "伤害 token",
+      "src": "refs/mage-wars-step1/damage-token-front.png",
+      "complete": true,
+      "naturalWidth": 283,
+      "naturalHeight": 283
+    },
+    {
+      "alt": "燃烧 token",
+      "src": "refs/mage-wars-step1/burn-token.png",
+      "complete": true,
+      "naturalWidth": 497,
+      "naturalHeight": 497
+    },
+    {
+      "alt": "邪术师法师牌",
+      "src": "refs/mage-wars-step1/mage-warlock-card.png",
+      "complete": true,
+      "naturalWidth": 360,
+      "naturalHeight": 508
+    },
+    {
+      "alt": "行动标记",
+      "src": "refs/mage-wars-step1/action-marker-red-front.png",
+      "complete": true,
+      "naturalWidth": 86,
+      "naturalHeight": 78
+    },
+    {
+      "alt": "快速施法标记",
+      "src": "refs/mage-wars-step1/quickcast-marker-front.png",
+      "complete": true,
+      "naturalWidth": 80,
+      "naturalHeight": 80
+    },
+    {
+      "alt": "女祭司法师牌",
+      "src": "refs/mage-wars-step1/mage-priestess-card.png",
+      "complete": true,
+      "naturalWidth": 360,
+      "naturalHeight": 508
+    },
+    {
+      "alt": "守卫 token",
+      "src": "refs/mage-wars-step1/guard-token.png",
+      "complete": true,
+      "naturalWidth": 339,
+      "naturalHeight": 339
+    },
+    {
+      "alt": "对手已计划法术卡背",
+      "src": "refs/mage-wars-step1/spell-card-back.jpg",
+      "complete": true,
+      "naturalWidth": 992,
+      "naturalHeight": 1391
+    },
+    {
+      "alt": "对手第二张已计划法术卡背",
+      "src": "refs/mage-wars-step1/spell-card-back.jpg",
+      "complete": true,
+      "naturalWidth": 992,
+      "naturalHeight": 1391
+    },
+    {
+      "alt": "火球术",
+      "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 437
+    },
+    {
+      "alt": "法师祸咒",
+      "src": "refs/mage-wars-step1/spell-1804-mage-bane.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "格挡",
+      "src": "refs/mage-wars-step1/spell-1806-block.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "法力失效",
+      "src": "refs/mage-wars-step1/spell-1901-nullify.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "单体治疗",
+      "src": "refs/mage-wars-step1/spell-3408-heal.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "狱火长鞭",
+      "src": "refs/mage-wars-step1/spell-3701-lash-of-hellfire.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "奥秘法杖",
+      "src": "refs/mage-wars-step1/spell-3704-equipment.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "风龙皮甲",
+      "src": "refs/mage-wars-step1/spell-3708-wind-wyvern-hide.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "偏移护腕",
+      "src": "refs/mage-wars-step1/spell-3715-deflection-bracers.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "灰衣天使",
+      "src": "refs/mage-wars-step1/spell-2907-gray-angel.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "alt": "火球术",
+      "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 437
+    },
+    {
+      "alt": "法师祸咒",
+      "src": "refs/mage-wars-step1/spell-1804-mage-bane.png",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    }
+  ],
+  "bookCards": [
+    {
+      "index": 0,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：火球术；当前焦点，同尺寸高亮，悬停检视完整卡面",
+      "rect": {
+        "x": 424,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 516,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：法师祸咒",
+      "rect": {
+        "x": 524,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 616,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 2,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：格挡",
+      "rect": {
+        "x": 624,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 716,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 3,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：法力失效",
+      "rect": {
+        "x": 724,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 816,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 4,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：单体治疗",
+      "rect": {
+        "x": 824,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 916,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 5,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：狱火长鞭",
+      "rect": {
+        "x": 924,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 1016,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 6,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：奥秘法杖",
+      "rect": {
+        "x": 1024,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 1116,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 7,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：风龙皮甲",
+      "rect": {
+        "x": 1124,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 1216,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 8,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：偏移护腕",
+      "rect": {
+        "x": 1224,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 1316,
+        "bottom": 1040
+      }
+    },
+    {
+      "index": 9,
+      "text": "",
+      "alt": null,
+      "aria": "法术书第 1 页：灰衣天使",
+      "rect": {
+        "x": 1324,
+        "y": 907,
+        "width": 92,
+        "height": 133,
+        "right": 1416,
+        "bottom": 1040
+      }
+    }
+  ],
+  "planCards": [
+    {
+      "index": 0,
+      "text": "来源",
+      "alt": null,
+      "aria": "已计划法术：火球术；同尺寸来源高亮，悬停检视完整卡面",
+      "rect": {
+        "x": 1706,
+        "y": 867,
+        "width": 78,
+        "height": 113,
+        "right": 1784,
+        "bottom": 980
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": null,
+      "aria": "已计划法术：法师祸咒",
+      "rect": {
+        "x": 1618,
+        "y": 867,
+        "width": 78,
+        "height": 113,
+        "right": 1696,
+        "bottom": 980
+      }
+    }
+  ],
+  "mageCards": [
+    {
+      "index": 0,
+      "text": "",
+      "alt": "邪术师法师牌",
+      "aria": null,
+      "rect": {
+        "x": 44,
+        "y": 698,
+        "width": 110,
+        "height": 155,
+        "right": 154,
+        "bottom": 853
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": "女祭司法师牌",
+      "aria": null,
+      "rect": {
+        "x": 1766,
+        "y": 70,
+        "width": 110,
+        "height": 155,
+        "right": 1876,
+        "bottom": 225
+      }
+    }
+  ],
+  "fieldCards": [
+    {
+      "index": 0,
+      "text": "",
+      "alt": "烈焰狱鬼",
+      "aria": null,
+      "rect": {
+        "x": 535,
+        "y": 349,
+        "width": 139,
+        "height": 191,
+        "right": 675,
+        "bottom": 539
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": "西锁骑士",
+      "aria": null,
+      "rect": {
+        "x": 1127,
+        "y": 346,
+        "width": 136,
+        "height": 188,
+        "right": 1263,
+        "bottom": 534
+      }
+    },
+    {
+      "index": 2,
+      "text": "",
+      "alt": "火烙魔婴",
+      "aria": null,
+      "rect": {
+        "x": 538,
+        "y": 622,
+        "width": 139,
+        "height": 191,
+        "right": 678,
+        "bottom": 812
+      }
+    },
+    {
+      "index": 3,
+      "text": "",
+      "alt": "缠绕藤蔓",
+      "aria": null,
+      "rect": {
+        "x": 1145,
+        "y": 626,
+        "width": 136,
+        "height": 188,
+        "right": 1281,
+        "bottom": 814
+      }
+    }
+  ],
+  "dice": [
+    {
+      "index": 0,
+      "text": "",
+      "alt": "攻击骰重击面",
+      "aria": null,
+      "rect": {
+        "x": 1265,
+        "y": 381,
+        "width": 50,
+        "height": 50,
+        "right": 1315,
+        "bottom": 431
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": "攻击骰二伤面",
+      "aria": null,
+      "rect": {
+        "x": 1316,
+        "y": 381,
+        "width": 50,
+        "height": 50,
+        "right": 1366,
+        "bottom": 431
+      }
+    },
+    {
+      "index": 2,
+      "text": "",
+      "alt": "攻击骰一伤面",
+      "aria": null,
+      "rect": {
+        "x": 1365,
+        "y": 379,
+        "width": 53,
+        "height": 53,
+        "right": 1419,
+        "bottom": 433
+      }
+    },
+    {
+      "index": 3,
+      "text": "",
+      "alt": "攻击骰空白面",
+      "aria": null,
+      "rect": {
+        "x": 1418,
+        "y": 381,
+        "width": 49,
+        "height": 49,
+        "right": 1468,
+        "bottom": 431
+      }
+    },
+    {
+      "index": 4,
+      "text": "",
+      "alt": "效果骰 12 面",
+      "aria": null,
+      "rect": {
+        "x": 1468,
+        "y": 374,
+        "width": 63,
+        "height": 63,
+        "right": 1532,
+        "bottom": 438
+      }
+    }
+  ],
+  "tokens": [
+    {
+      "index": 0,
+      "text": "",
+      "alt": "伤害 token",
+      "aria": null,
+      "rect": {
+        "x": 1226,
+        "y": 463,
+        "width": 38,
+        "height": 38,
+        "right": 1264,
+        "bottom": 501
+      }
+    },
+    {
+      "index": 1,
+      "text": "",
+      "alt": "燃烧 token",
+      "aria": null,
+      "rect": {
+        "x": 1263,
+        "y": 449,
+        "width": 39,
+        "height": 39,
+        "right": 1303,
+        "bottom": 489
+      }
+    },
+    {
+      "index": 2,
+      "text": "",
+      "alt": "行动标记",
+      "aria": null,
+      "rect": {
+        "x": 44,
+        "y": 997,
+        "width": 30,
+        "height": 30,
+        "right": 74,
+        "bottom": 1027
+      }
+    },
+    {
+      "index": 3,
+      "text": "",
+      "alt": "快速施法标记",
+      "aria": null,
+      "rect": {
+        "x": 82,
+        "y": 997,
+        "width": 30,
+        "height": 30,
+        "right": 112,
+        "bottom": 1027
+      }
+    },
+    {
+      "index": 4,
+      "text": "",
+      "alt": "守卫 token",
+      "aria": null,
+      "rect": {
+        "x": 1846,
+        "y": 369,
+        "width": 30,
+        "height": 30,
+        "right": 1876,
+        "bottom": 399
+      }
+    }
+  ],
+  "areas": {
+    "arena": {
+      "x": 240,
+      "y": 30,
+      "width": 1440,
+      "height": 850,
+      "right": 1680,
+      "bottom": 880
+    },
+    "bookBrowser": {
+      "x": 410,
+      "y": 862,
+      "width": 1084,
+      "height": 204,
+      "right": 1494,
+      "bottom": 1066
+    },
+    "bookRow": {
+      "x": 424,
+      "y": 894,
+      "width": 1012,
+      "height": 146,
+      "right": 1436,
+      "bottom": 1040
+    },
+    "pageRail": {
+      "x": 1442,
+      "y": 910,
+      "width": 44,
+      "height": 126,
+      "right": 1486,
+      "bottom": 1036
+    },
+    "planZone": {
+      "x": 1608,
+      "y": 833,
+      "width": 260,
+      "height": 155,
+      "right": 1868,
+      "bottom": 988
+    },
+    "turnEnd": {
+      "x": 1700,
+      "y": 1000,
+      "width": 168,
+      "height": 52,
+      "right": 1868,
+      "bottom": 1052
+    },
+    "discard": {
+      "x": 1591,
+      "y": 994,
+      "width": 79,
+      "height": 50,
+      "right": 1670,
+      "bottom": 1044
+    },
+    "resolutionLayer": {
+      "x": 1268,
+      "y": 378,
+      "width": 288,
+      "height": 118,
+      "right": 1556,
+      "bottom": 496
+    },
+    "targetRing": {
+      "x": 1112,
+      "y": 332,
+      "width": 166,
+      "height": 214,
+      "right": 1278,
+      "bottom": 546
+    },
+    "rivalPrepared": {
+      "x": 58,
+      "y": 54,
+      "width": 78,
+      "height": 112,
+      "right": 136,
+      "bottom": 166
+    }
+  },
+  "visibleText": "行动环节\n选择目标\n可选\n掷骰预备\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n行动中\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫\n对手已计划 2\n全部\n攻击\n结界\n生物\n装备\n⌃\n1 / 3\n⌄\n法术书 30\n10 / 页\n己方已计划 2 / 2\n来源\n弃牌 3\n回合结束"
+}

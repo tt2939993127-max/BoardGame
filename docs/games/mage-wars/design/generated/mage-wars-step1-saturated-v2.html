@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mage Wars Step 1 Saturated Board V2</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --gold: #f4c56a;
+      --red: #d44a37;
+      --blue: #58a6d8;
+      --green: #5bd185;
+      --ink: #15110d;
+      --paper: rgba(237, 220, 177, .92);
+      --shadow: 0 18px 42px rgba(0,0,0,.38);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #15100b;
+      font-family: "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+      overflow: hidden;
+    }
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(244, 197, 106, .13), transparent 38%),
+        radial-gradient(circle at 8% 90%, rgba(132, 44, 26, .35), transparent 35%),
+        linear-gradient(120deg, #2a1710, #12100c 48%, #23150d);
+      color: #f8efd8;
+    }
+    .arena-wrap {
+      position: absolute;
+      left: 330px;
+      top: 92px;
+      width: 1180px;
+      height: 885px;
+      filter: drop-shadow(0 28px 48px rgba(0,0,0,.5));
+    }
+    .arena {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 8px;
+      transform: rotate(-1.1deg);
+      transform-origin: center;
+    }
+    .half-mask {
+      position: absolute;
+      left: 584px;
+      top: 5px;
+      width: 590px;
+      height: 874px;
+      border-radius: 5px;
+      background: rgba(0,0,0,.42);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.06);
+      transform: rotate(-1.1deg);
+      pointer-events: none;
+    }
+    .grid-lines {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      width: 575px;
+      height: 860px;
+      transform: rotate(-1.1deg);
+      pointer-events: none;
+    }
+    .grid-lines::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, transparent 49.6%, rgba(91,209,133,.64) 49.8%, rgba(91,209,133,.64) 50.2%, transparent 50.4%),
+        linear-gradient(0deg, transparent 33.0%, rgba(91,209,133,.45) 33.2%, rgba(91,209,133,.45) 33.5%, transparent 33.7%),
+        linear-gradient(0deg, transparent 66.1%, rgba(91,209,133,.45) 66.3%, rgba(91,209,133,.45) 66.6%, transparent 66.8%);
+      border: 2px solid rgba(91,209,133,.58);
+      border-radius: 8px;
+      box-shadow: 0 0 28px rgba(91,209,133,.22);
+    }
+    .phase-strip {
+      position: absolute;
+      left: 610px;
+      top: 26px;
+      width: 700px;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: rgba(18, 12, 7, .52);
+      border-radius: 999px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.26);
+      backdrop-filter: blur(5px);
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    .phase-strip b { color: var(--gold); }
+    .zone-note {
+      position: absolute;
+      left: 50px;
+      top: 30px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(21,17,13,.56);
+      color: #ffe4a3;
+      font-size: 17px;
+    }
+    .card {
+      position: absolute;
+      width: 96px;
+      height: 135px;
+      transform: rotate(var(--r, 0deg));
+      filter: drop-shadow(0 10px 12px rgba(0,0,0,.48));
+      border-radius: 7px;
+    }
+    .card-face {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 7px;
+      display: block;
+    }
+    .card-name {
+      position: absolute;
+      left: 50%;
+      bottom: -23px;
+      transform: translateX(-50%);
+      min-width: max-content;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(22,14,8,.78);
+      color: #fff1d2;
+      font-size: 14px;
+      white-space: nowrap;
+      box-shadow: 0 4px 10px rgba(0,0,0,.24);
+    }
+    .legal .card-face { outline: 4px solid rgba(93, 223, 143, .92); box-shadow: 0 0 28px rgba(93,223,143,.58); }
+    .illegal .card-face { filter: grayscale(.45) brightness(.58); outline: 3px solid rgba(223, 80, 62, .62); }
+    .selected .card-face { outline: 4px solid rgba(244,197,106,.95); box-shadow: 0 0 34px rgba(244,197,106,.6); }
+    .warlock { left: 132px; top: 595px; --r: 3deg; width: 88px; height: 124px; }
+    .priestess { left: 440px; top: 92px; --r: -6deg; width: 88px; height: 124px; }
+    .imp { left: 270px; top: 560px; --r: -4deg; }
+    .hellion { left: 292px; top: 392px; --r: 4deg; }
+    .angel { left: 405px; top: 340px; --r: -3deg; }
+    .knight { left: 502px; top: 500px; --r: 4deg; }
+    .archer { left: 410px; top: 615px; --r: -5deg; }
+    .vine { left: 182px; top: 236px; --r: 5deg; }
+    .attachment {
+      position: absolute;
+      width: 54px;
+      height: 76px;
+      border-radius: 5px;
+      filter: drop-shadow(0 4px 7px rgba(0,0,0,.34));
+    }
+    .att-warlock-1 { left: 105px; top: 704px; transform: rotate(-8deg); }
+    .att-warlock-2 { left: 145px; top: 714px; transform: rotate(6deg); }
+    .att-priestess-1 { left: 514px; top: 96px; transform: rotate(6deg); }
+    .att-priestess-2 { left: 546px; top: 108px; transform: rotate(11deg); }
+    .att-priestess-3 { left: 580px; top: 122px; transform: rotate(16deg); }
+    .token {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
+      filter: drop-shadow(0 5px 6px rgba(0,0,0,.44));
+    }
+    .quick-token { left: 210px; top: 587px; width: 36px; height: 36px; }
+    .guard { left: 478px; top: 318px; }
+    .damage-a { left: 572px; top: 570px; width: 34px; height: 34px; }
+    .damage-b { left: 548px; top: 592px; width: 34px; height: 34px; }
+    .ready-imp { left: 330px; top: 550px; width: 38px; height: 38px; }
+    .burn {
+      position: absolute;
+      left: 350px;
+      top: 636px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #2a0802;
+      background: linear-gradient(90deg, #ffca4d, #ff5c2d);
+      font-weight: 800;
+      font-size: 13px;
+      box-shadow: 0 0 18px rgba(255,95,41,.5);
+    }
+    .target-ray {
+      position: absolute;
+      left: 463px;
+      top: 590px;
+      width: 480px;
+      height: 8px;
+      transform: rotate(-22deg);
+      transform-origin: left center;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,214,87,.0), rgba(255,167,39,.95), rgba(255,79,39,.18));
+      box-shadow: 0 0 18px rgba(255,102,34,.78), 0 0 46px rgba(255,174,48,.34);
+      pointer-events: none;
+    }
+    .target-label {
+      position: absolute;
+      left: 1010px;
+      top: 372px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(18, 12, 7, .72);
+      color: #eafee8;
+      font-size: 15px;
+      box-shadow: 0 0 18px rgba(91,209,133,.28);
+    }
+    .illegal-label {
+      position: absolute;
+      left: 610px;
+      top: 705px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(70, 28, 24, .76);
+      color: #ffd0c8;
+      font-size: 14px;
+    }
+    .status-board {
+      position: absolute;
+      width: 330px;
+      height: 174px;
+      object-fit: cover;
+      border-radius: 8px;
+      filter: drop-shadow(0 10px 24px rgba(0,0,0,.42));
+    }
+    .status-warlock { left: 36px; top: 844px; }
+    .status-priestess { right: 32px; top: 42px; }
+    .mage-card-small {
+      position: absolute;
+      width: 95px;
+      height: 134px;
+      border-radius: 7px;
+      object-fit: cover;
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.45));
+    }
+    .warlock-panel-card { left: 52px; top: 804px; }
+    .priestess-panel-card { right: 255px; top: 66px; }
+    .meter {
+      position: absolute;
+      width: 188px;
+      height: 16px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.35);
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+    }
+    .meter span { display: block; height: 100%; border-radius: inherit; }
+    .hp-w { left: 160px; top: 872px; }
+    .hp-w span { width: 75%; background: linear-gradient(90deg, #5bd185, #d9c75c); }
+    .mana-w { left: 160px; top: 898px; }
+    .mana-w span { width: 56%; background: linear-gradient(90deg, #369fe5, #87dafc); }
+    .hp-p { right: 47px; top: 70px; }
+    .hp-p span { width: 82%; background: linear-gradient(90deg, #5bd185, #f2d061); }
+    .mana-p { right: 47px; top: 96px; }
+    .mana-p span { width: 48%; background: linear-gradient(90deg, #369fe5, #87dafc); }
+    .pip {
+      position: absolute;
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      box-shadow: 0 2px 4px rgba(0,0,0,.45);
+    }
+    .black { background: #151515; border: 1px solid rgba(255,255,255,.25); }
+    .red { background: #a92219; border: 1px solid rgba(255,216,190,.35); }
+    .warlock-pips .pip { left: calc(178px + var(--i) * 18px); top: 925px; }
+    .priestess-pips .pip { right: calc(77px + var(--i) * 18px); top: 123px; }
+    .status-label {
+      position: absolute;
+      font-size: 14px;
+      color: #fff4d6;
+      text-shadow: 0 2px 3px rgba(0,0,0,.55);
+    }
+    .sw { left: 160px; top: 812px; }
+    .sp { right: 50px; top: 148px; }
+    .plan-area {
+      position: absolute;
+      left: 424px;
+      bottom: 22px;
+      height: 168px;
+      display: flex;
+      gap: 22px;
+      align-items: flex-end;
+    }
+    .plan-card {
+      position: relative;
+      width: 108px;
+      height: 152px;
+      filter: drop-shadow(0 12px 18px rgba(0,0,0,.45));
+    }
+    .plan-card img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
+    .plan-card.selected img { outline: 4px solid var(--gold); box-shadow: 0 0 32px rgba(244,197,106,.55); }
+    .plan-card .cap {
+      position: absolute;
+      left: 50%;
+      bottom: -24px;
+      transform: translateX(-50%);
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(18,12,7,.8);
+      color: #fff3cf;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .spellbook-tab {
+      position: relative;
+      width: 88px;
+      height: 122px;
+      padding: 16px 10px;
+      border-radius: 9px;
+      background: linear-gradient(160deg, rgba(81, 46, 24, .82), rgba(34, 20, 12, .92));
+      box-shadow: var(--shadow);
+      color: #ffdfa0;
+      text-align: center;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .opp-plan {
+      position: absolute;
+      right: 422px;
+      top: 56px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .opp-plan img {
+      width: 70px;
+      height: 98px;
+      object-fit: cover;
+      border-radius: 6px;
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.45));
+      transform: rotate(var(--r));
+    }
+    .action-rail {
+      position: absolute;
+      right: 38px;
+      bottom: 212px;
+      width: 338px;
+      padding: 20px;
+      border-radius: 18px;
+      background: linear-gradient(160deg, rgba(32,22,14,.72), rgba(16,12,10,.82));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+    .action-rail h1 {
+      margin: 0 0 10px;
+      font-size: 25px;
+      color: #ffe5a8;
+      letter-spacing: 0;
+    }
+    .action-rail .line {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,.09);
+      color: #f3dec0;
+      font-size: 16px;
+    }
+    .action-rail .line b { color: #ffffff; }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .btn {
+      flex: 1;
+      height: 46px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 800;
+      box-shadow: 0 8px 16px rgba(0,0,0,.25);
+    }
+    .confirm { background: linear-gradient(90deg, #d94731, #f2a249); color: #fff8e5; }
+    .cancel { background: rgba(255,255,255,.12); color: #f8e7c8; }
+    .response {
+      position: absolute;
+      left: 726px;
+      top: 128px;
+      width: 458px;
+      min-height: 70px;
+      padding: 14px 18px;
+      border-radius: 999px;
+      background: rgba(18, 13, 10, .72);
+      color: #f9ead1;
+      box-shadow: 0 14px 32px rgba(0,0,0,.36), 0 0 24px rgba(88,166,216,.18);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 19px;
+      backdrop-filter: blur(6px);
+    }
+    .response img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; }
+    .dice-layer {
+      position: absolute;
+      left: 1068px;
+      top: 668px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 18px;
+      background: rgba(17, 12, 8, .54);
+      box-shadow: 0 10px 24px rgba(0,0,0,.32);
+      backdrop-filter: blur(5px);
+    }
+    .die {
+      width: 54px;
+      height: 54px;
+      border-radius: 11px;
+      background: #ead7b4;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.42), 0 6px 12px rgba(0,0,0,.38);
+      transform: rotate(var(--r));
+    }
+    .die img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(1.1) contrast(1.05);
+    }
+    .effect-die {
+      width: 58px;
+      height: 58px;
+      clip-path: polygon(50% 0%, 93% 24%, 93% 76%, 50% 100%, 7% 76%, 7% 24%);
+      background: radial-gradient(circle at 35% 24%, #9ee2ff, #1d63b7 58%, #0b2f64);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #e5f9ff;
+      font-size: 21px;
+      box-shadow: 0 0 20px rgba(88,166,216,.52);
+    }
+    .result-chip {
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: rgba(255, 215, 120, .16);
+      color: #fff0c8;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .legend {
+      position: absolute;
+      left: 36px;
+      top: 42px;
+      width: 260px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(23, 16, 10, .58);
+      box-shadow: 0 12px 28px rgba(0,0,0,.28);
+      backdrop-filter: blur(5px);
+      font-size: 15px;
+      color: #f0dfbf;
+    }
+    .legend b { color: #ffe4a0; }
+    .legend .short { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { padding: 4px 7px; border-radius: 999px; background: rgba(255,255,255,.11); }
+    .equip-row {
+      position: absolute;
+      left: 36px;
+      bottom: 205px;
+      display: flex;
+      gap: 10px;
+    }
+    .equip-row.right {
+      left: auto;
+      right: 38px;
+      top: 186px;
+      bottom: auto;
+    }
+    .equip-card {
+      width: 62px;
+      height: 88px;
+      border-radius: 6px;
+      object-fit: cover;
+      filter: drop-shadow(0 7px 10px rgba(0,0,0,.4));
+    }
+    .small-caption {
+      position: absolute;
+      left: 36px;
+      bottom: 298px;
+      font-size: 14px;
+      color: #ffe7b2;
+    }
+    .small-caption.right { left: auto; right: 44px; top: 164px; bottom: auto; }
+    .no-long-copy {
+      position: absolute;
+      left: 782px;
+      bottom: 28px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: rgba(255,244,215,.85);
+      background: rgba(20,14,8,.38);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="phase-strip"><b>行动环节</b><span>邪术师快速施法窗口</span><span>火球术：选择目标</span></div>
+    <section class="legend">
+      <b>学徒模式 2x3</b>
+      <div>只使用标准竞技场半场；斜向不计距离。</div>
+      <div class="short"><span class="chip">绿色：合法目标</span><span class="chip">红色：非法 / 降噪</span></div>
+    </section>
+    <div class="arena-wrap">
+      <img class="arena" src="refs/mage-wars-step1/standard-arena.jpg" alt="标准竞技场">
+      <div class="half-mask"></div>
+      <div class="grid-lines"></div>
+      <div class="zone-note">可用半场候选：2x3</div>
+      <div class="target-ray"></div>
+
+    <div class="card warlock selected">
+      <img class="card-face" src="refs/mage-wars-step1/mage-warlock-card.png" alt="邪术师">
+      <div class="card-name">邪术师</div>
+
+    </div>
+
+    <div class="card priestess legal">
+      <img class="card-face" src="refs/mage-wars-step1/mage-priestess-card.png" alt="女祭司">
+      <div class="card-name">女祭司</div>
+
+    </div>
+
+    <div class="card imp illegal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2801-firebrand-imp.png" alt="火烙魔婴">
+      <div class="card-name">火烙魔婴</div>
+
+    </div>
+
+    <div class="card hellion illegal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2803-flaming-hellion.png" alt="烈焰狱鬼">
+      <div class="card-name">烈焰狱鬼</div>
+
+    </div>
+
+    <div class="card angel legal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2907-gray-angel.png" alt="灰衣天使">
+      <div class="card-name">灰衣天使</div>
+
+    </div>
+
+    <div class="card knight legal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2909-knight-of-westlock.png" alt="西锁骑士">
+      <div class="card-name">西锁骑士</div>
+
+    </div>
+
+    <div class="card archer legal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2816-royal-archer.png" alt="皇家箭手">
+      <div class="card-name">皇家箭手</div>
+
+    </div>
+
+    <div class="card vine legal">
+      <img class="card-face" src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="缠绕藤蔓">
+      <div class="card-name">缠绕藤蔓</div>
+
+    </div>
+      <img class="attachment att-warlock-1" src="refs/mage-wars-step1/spell-card-back.jpg" alt="邪术师隐性结界">
+      <img class="attachment att-warlock-2" src="refs/mage-wars-step1/spell-3701-lash-of-hellfire.png" alt="狱火长鞭">
+      <img class="attachment att-priestess-1" src="refs/mage-wars-step1/spell-card-back.jpg" alt="女祭司隐性结界">
+      <img class="attachment att-priestess-2" src="refs/mage-wars-step1/spell-card-back.jpg" alt="女祭司隐性结界">
+      <img class="attachment att-priestess-3" src="refs/mage-wars-step1/spell-3715-deflection-bracers.png" alt="偏移护腕">
+      <img class="token quick-token" src="refs/mage-wars-step1/quickcast-marker-front.png" alt="快速施法标记">
+      <img class="token guard" src="refs/mage-wars-step1/guard-token.png" alt="守卫">
+      <img class="token damage-a" src="refs/mage-wars-step1/damage-token-front.png" alt="伤害">
+      <img class="token damage-b" src="refs/mage-wars-step1/damage-token-front.png" alt="伤害">
+      <img class="token ready-imp" src="refs/mage-wars-step1/ready-token-front.png" alt="就绪">
+      <div class="burn">燃烧 1</div>
+      <div class="target-label">合法目标：范围 0-2</div>
+      <div class="illegal-label">己方生物：不可作为火球术目标</div>
+    </div>
+
+    <img class="status-board status-warlock" src="refs/mage-wars-step1/mage-status-board.png" alt="邪术师状态板">
+    <img class="status-board status-priestess" src="refs/mage-wars-step1/mage-status-board.png" alt="女祭司状态板">
+    <img class="mage-card-small warlock-panel-card" src="refs/mage-wars-step1/mage-warlock-card.png" alt="邪术师法师牌">
+    <img class="mage-card-small priestess-panel-card" src="refs/mage-wars-step1/mage-priestess-card.png" alt="女祭司法师牌">
+    <div class="meter hp-w"><span></span></div>
+    <div class="meter mana-w"><span></span></div>
+    <div class="meter hp-p"><span></span></div>
+    <div class="meter mana-p"><span></span></div>
+    <div class="warlock-pips"><span class="pip black " style="--i:0"></span><span class="pip black " style="--i:1"></span><span class="pip black " style="--i:2"></span><span class="pip black " style="--i:3"></span><span class="pip black " style="--i:4"></span><span class="pip red " style="--i:0"></span><span class="pip red " style="--i:1"></span><span class="pip red " style="--i:2"></span></div>
+    <div class="priestess-pips"><span class="pip black " style="--i:0"></span><span class="pip black " style="--i:1"></span><span class="pip black " style="--i:2"></span><span class="pip black " style="--i:3"></span><span class="pip red " style="--i:0"></span><span class="pip red " style="--i:1"></span></div>
+    <div class="status-label sw">生命 18 / 24　法力 18 → 10　聚魔 10</div>
+    <div class="status-label sp">生命 20 / 24　法力 13　聚魔 10</div>
+
+    <div class="small-caption">邪术师公开装备 / 附件</div>
+    <div class="equip-row">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-3701-lash-of-hellfire.png" alt="狱火长鞭">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-card-back.jpg" alt="隐性结界">
+    </div>
+    <div class="small-caption right">女祭司公开装备 / 隐性结界</div>
+    <div class="equip-row right">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-3708-wind-wyvern-hide.png" alt="风龙皮甲">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-3715-deflection-bracers.png" alt="偏移护腕">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-card-back.jpg" alt="隐性结界">
+      <img class="equip-card" src="refs/mage-wars-step1/spell-card-back.jpg" alt="隐性结界">
+    </div>
+
+    <section class="plan-area">
+      <div class="spellbook-tab">法术书</div>
+      <div class="plan-card selected"><img class="" src="refs/mage-wars-step1/spell-1700-fireball.png" alt="火球术"><div class="cap">火球术</div></div>
+      <div class="plan-card"><img class="" src="refs/mage-wars-step1/spell-1804-mage-bane.png" alt="法师祸咒"><div class="cap">法师祸咒</div></div>
+      <div class="spellbook-tab">弃牌堆</div>
+    </section>
+    <section class="opp-plan">
+      <img class="" src="refs/mage-wars-step1/spell-card-back.jpg" alt="对手计划法术">
+      <img class="" src="refs/mage-wars-step1/spell-card-back.jpg" alt="对手计划法术">
+      <span style="color:#ffe5a8;font-weight:800;">女祭司计划区</span>
+    </section>
+
+    <section class="action-rail">
+      <h1>火球术选目标</h1>
+      <div class="line"><span>施法者</span><b>邪术师</b></div>
+      <div class="line"><span>行动</span><b>快速施法标记将翻面</b></div>
+      <div class="line"><span>法力预扣</span><b>18 → 10</b></div>
+      <div class="line"><span>当前目标</span><b>灰衣天使 / 可改选</b></div>
+      <div class="line"><span>支付后</span><b>进入法术反制</b></div>
+      <div class="buttons"><div class="btn confirm">确认施法</div><div class="btn cancel">取消</div></div>
+    </section>
+
+    <section class="response">
+      <img class="" src="refs/mage-wars-step1/spell-card-back.jpg" alt="隐藏结界卡背">
+      <div><b>等待女祭司反制</b><br><span style="font-size:15px;color:#d8c4a6;">对手只暴露卡背与响应状态，不泄露结界名。</span></div>
+    </section>
+
+    <section class="dice-layer">
+      <div class="die" style="--r:-8deg"><img class="" src="refs/mage-wars-step1/attack-die-texture.png" alt="攻击骰"></div>
+      <div class="die" style="--r:5deg"><img class="" src="refs/mage-wars-step1/attack-die-texture.png" alt="攻击骰"></div>
+      <div class="die" style="--r:11deg"><img class="" src="refs/mage-wars-step1/attack-die-texture.png" alt="攻击骰"></div>
+      <div class="effect-die">12</div>
+      <div class="result-chip">命中预览：伤害 + 燃烧</div>
+    </section>
+    <div class="no-long-copy">常驻主 UI 只保留短状态；规则正文进入卡牌放大 / 帮助层。</div>
+  </main>
+</body>
+</html>

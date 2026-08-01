@@ -1,0 +1,638 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "mage-wars",
+  "basePrefix": "official/i18n/zh-CN/mage-wars/",
+  "files": {
+    "board/compressed/standard-arena": {
+      "variants": {
+        "webp": {
+          "sha256": "06d2f15d14de3490afd32712a91d0e72db1780cd95535dfeee55b279c69855b3",
+          "bytes": 3226870,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "board/standard-arena": {
+      "variants": {
+        "jpg": {
+          "sha256": "d365f1e9a99c60386f22267870b9d3081f1fddf7dbdbcf1daf2585fa08878b95",
+          "bytes": 2904371,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "boards/mage-status/compressed/mage-status-board": {
+      "variants": {
+        "webp": {
+          "sha256": "94b50ecce38b55d60b0d439ce7d36e6d97cc303c377ce6bf3a1892b95c2e4b0e",
+          "bytes": 2918312,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "boards/mage-status/mage-status-board": {
+      "variants": {
+        "png": {
+          "sha256": "ce186fa186e917624b9c060bc55c18f3ca44432ff67a996f7e5840a2245bab4b",
+          "bytes": 11406216,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/backs/compressed/spell-card-back": {
+      "variants": {
+        "webp": {
+          "sha256": "d1ecf11b8a213bad65af52b2101326e7f58728cf7cb12955ab8ddb0757a0ffb7",
+          "bytes": 743198,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/backs/compressed/wall-card-back": {
+      "variants": {
+        "webp": {
+          "sha256": "2537c5768b075ec8ca182250c9fb786638cec4dcca037b3311e0838b0f520967",
+          "bytes": 684814,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/backs/spell-card-back": {
+      "variants": {
+        "jpg": {
+          "sha256": "3d51171b2794f48c888bf875aad5b612146322a985b36352079c6bf2b1dddfa4",
+          "bytes": 2048510,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "cards/backs/wall-card-back": {
+      "variants": {
+        "jpg": {
+          "sha256": "a5fdc25e2443af648a5e503f9716fdb6ee53aa02d9063413eb3e8639fbe9a55b",
+          "bytes": 615166,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "cards/mages/compressed/mages-core-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "f59b17c4f035f11207c355a90ea6f6a9f85731aab97e46e654adb667f2af85b8",
+          "bytes": 7107814,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/mages/mages-core-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "0d5009dd12a8240ef1fb5f75e874e52491f4c49c19247e0d9ca00a6fb79b2d7b",
+          "bytes": 41227349,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-attack-core-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "8314360501476c2078df9ef65fa00ff0f5f2f3e80f80228877d77269bf70db3e",
+          "bytes": 6087612,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-conjuration-core-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "f5b73063c1e4230b02be049d163a0e5bdff33331f89ccc058ee9032ae9962f81",
+          "bytes": 6718506,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-creature-core-a-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "15c63551b2660d48256f19617ce6071012a508159680089aef27610128fe5a34",
+          "bytes": 6986780,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-creature-core-b-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "d67963a18ec2b1c2e09bc5d7b8890d5da052f13debe9a683d8c5998b3fffeb83",
+          "bytes": 6954730,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-enchantment-core-a-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "7d76406e95b53a4d2170332b892d1cc77a92c891399d7d2172cda09ab3be40b5",
+          "bytes": 6774028,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-enchantment-core-b-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "0759ce8201c33f09b0557127a911231df46a86250a4df69fad58ef399f3388a9",
+          "bytes": 7091738,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-equipment-core-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "5a2ee2b1120163d7d91df402264091121c65388a15fffbc9ae299e19bf3e5353",
+          "bytes": 6528396,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-incantation-core-a-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "f841ee56285c0de61f39cb6e4da9a31db46cdc4649ddcd7af05b9f200c39b3b8",
+          "bytes": 6999104,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-incantation-core-b-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "990a65c088c9e21737e0e102e2c5af2779598604fcd32afd02ea4721a74a72f0",
+          "bytes": 7117398,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/compressed/spell-incantation-core-c-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "edacf23aab46969a068d8d4e05bdf25cfb2c49d47deb2307d0951d7a42825207",
+          "bytes": 1823968,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/spells/spell-attack-core-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "0f2260b5e3e1601614123e2c644cd5c4a6d1b6a69698cb99400fc2c1b63abe63",
+          "bytes": 37289080,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-conjuration-core-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "d3ff013c82ba33188428f5e227773f5c706bfa802c3f0968a72d60711439c09c",
+          "bytes": 40139859,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-creature-core-a-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "409fa2a08333fe9a270aeae9407e6b60d676c3ff5760988b5e43030416f93efb",
+          "bytes": 40497360,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-creature-core-b-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "70ae37ac5a0e1951ffb5c5407184acce7faafd8fe612384e52fe9ec1dd0a8d27",
+          "bytes": 40427409,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-enchantment-core-a-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "017c65360ef6f3231bc7fb978b5e6e8543a359d2bc367e08b355e8a670af6202",
+          "bytes": 40761569,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-enchantment-core-b-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "d6a3d9220d6e11c88b1020193662f0764e334f0278c4f2ac70fd0eb338d0f6a3",
+          "bytes": 41205970,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-equipment-core-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "da584dd0b194a45913542e5a86b173803aeb5e691f2338eb075abe2b4cff00e3",
+          "bytes": 39861566,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-incantation-core-a-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "6852bc07bd2cdd3a16a8152bd33ab3006fd68099a28c5a19ec672b0a3f825e34",
+          "bytes": 40389306,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-incantation-core-b-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "17039e81fb48443731ef9d6b0064ceea7fd884d2b9e668104ec1e788768ab9fa",
+          "bytes": 40588760,
+          "mime": "image/png"
+        }
+      }
+    },
+    "cards/spells/spell-incantation-core-c-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "6d4faf252a53802b84e451154377f430fe3673a0718ee066eb92c76996d09406",
+          "bytes": 10496419,
+          "mime": "image/png"
+        }
+      }
+    },
+    "dice/attack-die-texture": {
+      "variants": {
+        "png": {
+          "sha256": "3d77f99c84d3bda6c70fbd284a939c71e78f683cad1afdd4928401682b630912",
+          "bytes": 47428,
+          "mime": "image/png"
+        }
+      }
+    },
+    "dice/compressed/attack-die-texture": {
+      "variants": {
+        "webp": {
+          "sha256": "92427f153cd617d81d1670bad77dc4d6766161bba2009b315fcc6cd0998456f8",
+          "bytes": 31720,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "dice/compressed/effect-die-d12-face": {
+      "variants": {
+        "webp": {
+          "sha256": "16b74e234e2aae109d57f7181b8e2e7b14de6b11c767887e08ee4cb748b3ed04",
+          "bytes": 63228,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "dice/effect-die-d12-face": {
+      "variants": {
+        "png": {
+          "sha256": "9161c1037c5037b6b11e6a7037b4a7d9114bc02f802e94c98dd982ef1b5d7250",
+          "bytes": 310177,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/action-marker-blue-back": {
+      "variants": {
+        "png": {
+          "sha256": "1b279491455c6ea54a9ad935b6b900f5794cd6a31b36331547b069850a2bb0ed",
+          "bytes": 474,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/action-marker-blue-front": {
+      "variants": {
+        "png": {
+          "sha256": "2b851a732d0fec469f41fdb5b4f21fda5a6160e66834e1639ac8a74cb2eeebdb",
+          "bytes": 2957,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/action-marker-red-back": {
+      "variants": {
+        "png": {
+          "sha256": "2da468cf83eacc04558482d4e99d391bbefafbd8164b557ca26510dce603a809",
+          "bytes": 475,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/action-marker-red-front": {
+      "variants": {
+        "png": {
+          "sha256": "33b4ec5d3bc4d0349f802cf927fde099425c18deef9f11f17d3b908b2a7963b3",
+          "bytes": 3170,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/compressed/action-marker-blue-back": {
+      "variants": {
+        "webp": {
+          "sha256": "bd3b89c9dee103cf2eed56d5cd2bc309d4b8a911b5ab33c3c7dcf5b5027a6507",
+          "bytes": 94,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/compressed/action-marker-blue-front": {
+      "variants": {
+        "webp": {
+          "sha256": "d12376c243c064131c88003a2bd7eb4425d438eebeba8430e13b24b735449c3e",
+          "bytes": 2198,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/compressed/action-marker-red-back": {
+      "variants": {
+        "webp": {
+          "sha256": "2fef56b1ee044ccb090c113fdc5a9623ce00c633f06ba40ab006f6676fbf11c5",
+          "bytes": 98,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/compressed/action-marker-red-front": {
+      "variants": {
+        "webp": {
+          "sha256": "9f9e44f64f1d49f7e5b7d217374ab864604a2e76641ef070035daf51f2aaf87e",
+          "bytes": 2360,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/compressed/ready-token-back": {
+      "variants": {
+        "webp": {
+          "sha256": "55e6cad67d47416fba53b2ce3009d7e14acc0dd62f5458700e88d608fd046103",
+          "bytes": 60836,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/compressed/ready-token-front": {
+      "variants": {
+        "webp": {
+          "sha256": "16b74e234e2aae109d57f7181b8e2e7b14de6b11c767887e08ee4cb748b3ed04",
+          "bytes": 63228,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/action/ready-token-back": {
+      "variants": {
+        "png": {
+          "sha256": "a038b74cdd3bc1aa077491bd70ad7c08ce1b14c2ee0221770f051b515e496a29",
+          "bytes": 284383,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/action/ready-token-front": {
+      "variants": {
+        "png": {
+          "sha256": "9161c1037c5037b6b11e6a7037b4a7d9114bc02f802e94c98dd982ef1b5d7250",
+          "bytes": 310177,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/channeling/channeling-token-back": {
+      "variants": {
+        "png": {
+          "sha256": "01a53b64184f6f32eb66848c7b8b451aaeead91239b44e3586d3555819ef7d5c",
+          "bytes": 289999,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/channeling/channeling-token-front": {
+      "variants": {
+        "png": {
+          "sha256": "eabfe1caa5d11e49bae164b9a937530fe6a8efc6b2e0206dc3871d940c469daa",
+          "bytes": 209028,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/channeling/compressed/channeling-token-back": {
+      "variants": {
+        "webp": {
+          "sha256": "c8c56c03386d52e31fcfa51811eb1d72deab9fc41e4af2f4151ad8e837ec5362",
+          "bytes": 54376,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/channeling/compressed/channeling-token-front": {
+      "variants": {
+        "webp": {
+          "sha256": "81428cb42ab6cd0742c0c89075b1d657aef82da0eae5f3b79feff3b35b9e0721",
+          "bytes": 43274,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/damage/compressed/damage-token-back": {
+      "variants": {
+        "webp": {
+          "sha256": "21d2a554c10543f84025326ddd549da85c71de84fada9872c7bef555825cc79d",
+          "bytes": 63796,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/damage/compressed/damage-token-front": {
+      "variants": {
+        "webp": {
+          "sha256": "13102de3e9e631777d5e3548781b5367325b690dac05bfecf0309c08eb757dde",
+          "bytes": 30990,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/damage/damage-token-back": {
+      "variants": {
+        "png": {
+          "sha256": "2f2d58c2147bb0924eb98fb57cf24c1a1a2cc82e36feffb5dab28aeb8eaa2722",
+          "bytes": 319178,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/damage/damage-token-front": {
+      "variants": {
+        "png": {
+          "sha256": "e5cc8921ac176ce7efa1f6980a6c995f5ab4f4a7be9d092366edbc2a1d43dd2e",
+          "bytes": 165431,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/quickcast/compressed/quickcast-marker-back": {
+      "variants": {
+        "webp": {
+          "sha256": "9d8bd037f9899ae973d797dd78389d0d3fa951d9c29d36469199bad2d07df5e1",
+          "bytes": 70,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/quickcast/compressed/quickcast-marker-front": {
+      "variants": {
+        "webp": {
+          "sha256": "d6160ca4801be4fbcdc3bb8b4611503d27ae42a5fdcec6133a1f645c75d17522",
+          "bytes": 2996,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/quickcast/quickcast-marker-back": {
+      "variants": {
+        "jpg": {
+          "sha256": "e30a36274e27b22af531b7666c2f5f3878581af49a5fab8d5d960d627dba48d2",
+          "bytes": 471,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "tokens/quickcast/quickcast-marker-front": {
+      "variants": {
+        "png": {
+          "sha256": "73b77e91398aea7d6d581d17ac74a044c6ddb806aa8c41b989a41acbf023846d",
+          "bytes": 5999,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/burn-token": {
+      "variants": {
+        "png": {
+          "sha256": "216eb5e57ee2e44f056aff9d0e58d15ee4ddc3fa0564540753c0fe501c92159b",
+          "bytes": 665684,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/compressed/burn-token": {
+      "variants": {
+        "webp": {
+          "sha256": "b8ee9be03f89fd5d4d4d8b2046276abb725984d80f20a5c89d83a21d5544a705",
+          "bytes": 124326,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/compressed/daze-token": {
+      "variants": {
+        "webp": {
+          "sha256": "dc96c9bbbb0fbf8bce3c5f5dbd413f0abbc6702a12cf350d31ba9738914198ef",
+          "bytes": 142450,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/compressed/guard-token": {
+      "variants": {
+        "webp": {
+          "sha256": "e1dfad88931f6240763eb0eb7b7810976b5fad8333eacd782713a2dcd5768dde",
+          "bytes": 53170,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/compressed/rot-token": {
+      "variants": {
+        "webp": {
+          "sha256": "f411b3208a0d3d867a8754f40746ed28288dbff93cbe6d5b79035baf5dc887a5",
+          "bytes": 125060,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/compressed/sleep-token": {
+      "variants": {
+        "webp": {
+          "sha256": "10b641409d78c6e2fd38e784412436c4909a6fa0e3f996d04534ec3404423936",
+          "bytes": 141504,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/compressed/stun-token": {
+      "variants": {
+        "webp": {
+          "sha256": "4f9cd752c8d9222999d9287b3448b605f0e1c8b743ea882144af2dbfef7cb823",
+          "bytes": 122006,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/daze-token": {
+      "variants": {
+        "png": {
+          "sha256": "b00146bca5095395ee71ec10bf18d478ee07f786998a863dddc5ce6177cbbbec",
+          "bytes": 725313,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/guard-token": {
+      "variants": {
+        "png": {
+          "sha256": "0fc78acd735cbde2c8c6b7a9e6d8f1129043920ba432486d9479f4fa6ac11eec",
+          "bytes": 237612,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/rot-token": {
+      "variants": {
+        "png": {
+          "sha256": "dfabdeba1db8909d2cfbb227f42ae5d0b915349dbe138bd34eab66bd057318b3",
+          "bytes": 653700,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/sleep-token": {
+      "variants": {
+        "png": {
+          "sha256": "83c900fe89d7deabce7de9bc94834f9866f23044b91168e462a94dfbe2e7c3ae",
+          "bytes": 727073,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/stun-token": {
+      "variants": {
+        "png": {
+          "sha256": "4be3b2ed19070e4b4417482b2df0cf9394d744636db4f3b4614e0cc25cd50766",
+          "bytes": 651320,
+          "mime": "image/png"
+        }
+      }
+    }
+  }
+}

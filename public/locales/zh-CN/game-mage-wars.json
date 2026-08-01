@@ -1,0 +1,136 @@
+{
+  "title": "法师战争",
+  "description": "2 人法术战棋。首轮 foundation 锁定学徒竞技场、法师状态、法术书与事件驱动特效合同。",
+  "players": "2 人",
+  "arena": {
+    "mode": "学徒竞技场",
+    "actionStage": "行动环节",
+    "selectTarget": "选择目标",
+    "standardArenaAlt": "法师战争标准竞技场",
+    "zoneAria": "{{zone}} 区域",
+    "source": "来源",
+    "legalMove": "可移动",
+    "legalTarget": "可选目标",
+    "legalTargetShort": "可选",
+    "creatures": "生物 {{count}}",
+    "conjurations": "召唤物 {{count}}"
+  },
+  "player": {
+    "label": "玩家 {{player}}",
+    "you": "你",
+    "opponent": "对手",
+    "seat": "{{seat}} 号位",
+    "active": "行动中"
+  },
+  "mages": {
+    "beastmaster_apprentice": "驯兽师学徒",
+    "priestess_apprentice": "女祭司学徒",
+    "warlock_apprentice": "邪术师学徒",
+    "wizard_apprentice": "巫师学徒"
+  },
+  "stats": {
+    "life": "生命",
+    "mana": "法力",
+    "channeling": "聚魔",
+    "damage": "伤害",
+    "lifeShort": "命 {{value}}",
+    "manaShort": "法 {{value}}",
+    "channelingShort": "聚 {{value}}",
+    "damageShort": "伤 {{value}}"
+  },
+  "phases": {
+    "reset": "重置",
+    "channel": "聚魔",
+    "upkeep": "维持",
+    "planning": "计划",
+    "deployment": "部署",
+    "initiativeQuickcast": "先手快速施法",
+    "creatureAction": "生物行动",
+    "finalQuickcast": "最终快速施法"
+  },
+  "zones": {
+    "a1": "左前区",
+    "b1": "右前区",
+    "a2": "左中区",
+    "b2": "右中区",
+    "a3": "左后区",
+    "b3": "右后区"
+  },
+  "status": {
+    "title": "当前状态",
+    "turn": "回合",
+    "current": "当前玩家",
+    "fx": "法术特效",
+    "fxRequired": "事件驱动"
+  },
+  "zonesPanel": {
+    "title": "私有与附着区",
+    "spellbook": "法术书",
+    "prepared": "计划法术",
+    "equipment": "装备",
+    "enchantments": "结界"
+  },
+  "tokens": {
+    "actionReady": "行动可用",
+    "actionSpent": "行动已用",
+    "quickcastReady": "快速施法可用",
+    "quickcastSpent": "快速施法已用",
+    "guard": "守卫",
+    "damage": "伤害",
+    "burn": "燃烧"
+  },
+  "privateZones": {
+    "selfPlans": "己方计划 / 法术书",
+    "opponentPlans": "对手计划",
+    "opponentPlansWithCount": "对手已计划 {{count}}",
+    "spellbookCount": "法术书 {{count}} 张",
+    "hiddenPrepared": "隐藏计划",
+    "emptySlot": "空计划槽",
+    "spell": "法术",
+    "hiddenInfo": "隐藏信息",
+    "spellbook": "法术书",
+    "preparedSpells": "已计划法术",
+    "preparedSpellsWithCount": "己方已计划 {{count}} / {{total}}",
+    "preparedSpell": "已计划法术",
+    "discardPile": "弃牌堆",
+    "discardPileWithCount": "弃牌 {{count}}",
+    "discardPileAria": "公开弃牌堆，{{count}} 张",
+    "emptyDiscardPile": "空弃牌堆"
+  },
+  "dice": {
+    "title": "骰盘",
+    "attack": "攻击骰",
+    "effect": "12 面效果骰",
+    "effectShort": "d12",
+    "settlement": "掷骰预备"
+  },
+  "actionDock": {
+    "title": "当前行动",
+    "yourWindow": "你可以执行当前合法动作",
+    "noManualAction": "等待阶段推进",
+    "waiting": "等待当前玩家行动",
+    "quickcastOpen": "快速施法窗口开放",
+    "quickcastTiming": "快速施法等待指定时机"
+  },
+  "actions": {
+    "move": "移动法师",
+    "guard": "守卫",
+    "attack": "基础攻击",
+    "endTurn": "回合结束"
+  },
+  "error": {
+    "unsupportedCommand": "当前命令尚未进入 foundation 实现范围。"
+  },
+  "spellbook": {
+    "previousPage": "上一页",
+    "nextPage": "下一页",
+    "pageSummary": "{{page}} / {{total}}",
+    "categories": {
+      "all": "全部",
+      "attack": "攻击",
+      "enchantment": "结界",
+      "creature": "生物",
+      "equipment": "装备"
+    }
+  }
+}

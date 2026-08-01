@@ -85,6 +85,24 @@
         }
       }
     },
+    "mage-wars/apprentice-spell-atlases": {
+      "variants": {
+        "json": {
+          "sha256": "fcbe9e38cbcf5e1e18bd7c6b13e9825f69176e5834b97123f8f27f436f7a0106",
+          "bytes": 33682,
+          "mime": "application/json"
+        }
+      }
+    },
+    "mage-wars/mages-core-atlas": {
+      "variants": {
+        "json": {
+          "sha256": "c9ed6f6402c7851b317e8c6d16479d119f2be1dd15af6432f01aeadafa922b16",
+          "bytes": 2956,
+          "mime": "application/json"
+        }
+      }
+    },
     "smashup/2833984701": {
       "variants": {
         "json": {

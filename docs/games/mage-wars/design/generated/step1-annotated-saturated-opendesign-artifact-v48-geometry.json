@@ -1,0 +1,581 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "title": "Mage Wars Annotated Saturated Layout v48",
+  "labels": {
+    "hasHandZh": false,
+    "hasConfirmExecuteCancelZh": false,
+    "hasOpponentPlanned": true,
+    "hasOwnPlanned": true,
+    "hasSpellbook": true,
+    "hasFireball": true,
+    "hasWestlock": true
+  },
+  "elements": {
+    "rivalPrepared": [
+      {
+        "selector": ".rival-prepared",
+        "className": "rival-prepared",
+        "text": "对手已计划 2",
+        "alt": "",
+        "src": "",
+        "left": 58,
+        "top": 54,
+        "right": 222,
+        "bottom": 161,
+        "width": 164,
+        "height": 107,
+        "centerX": 140,
+        "centerY": 108
+      }
+    ],
+    "ownPrepared": [
+      {
+        "selector": ".plan-zone",
+        "className": "plan-zone",
+        "text": "己方已计划 火球术 法师祸咒 已计划 2 / 2",
+        "alt": "",
+        "src": "",
+        "left": 1632,
+        "top": 776,
+        "right": 1878,
+        "bottom": 952,
+        "width": 246,
+        "height": 176,
+        "centerX": 1755,
+        "centerY": 864
+      }
+    ],
+    "pageCorners": [
+      {
+        "selector": ".page-corner",
+        "className": "page-corner prev",
+        "text": "‹",
+        "alt": "",
+        "src": "",
+        "left": 497,
+        "top": 1006,
+        "right": 543,
+        "bottom": 1036,
+        "width": 46,
+        "height": 30,
+        "centerX": 520,
+        "centerY": 1021
+      },
+      {
+        "selector": ".page-corner",
+        "className": "page-corner next",
+        "text": "›",
+        "alt": "",
+        "src": "",
+        "left": 548,
+        "top": 1006,
+        "right": 594,
+        "bottom": 1036,
+        "width": 46,
+        "height": 30,
+        "centerX": 571,
+        "centerY": 1021
+      }
+    ],
+    "currentSource": [
+      {
+        "selector": ".current-source",
+        "className": "current-source",
+        "text": "已选法术 来自已计划法术",
+        "alt": "",
+        "src": "",
+        "left": 1182,
+        "top": 744,
+        "right": 1332,
+        "bottom": 982,
+        "width": 150,
+        "height": 238,
+        "centerX": 1257,
+        "centerY": 863
+      }
+    ],
+    "sourceCard": [
+      {
+        "selector": ".source-card",
+        "className": "source-card",
+        "text": "",
+        "alt": "火球术",
+        "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+        "left": 1189,
+        "top": 765,
+        "right": 1325,
+        "bottom": 957,
+        "width": 136,
+        "height": 192,
+        "centerX": 1257,
+        "centerY": 861,
+        "naturalWidth": 310,
+        "naturalHeight": 437,
+        "complete": true
+      }
+    ],
+    "targetField": [
+      {
+        "selector": ".target-field",
+        "className": "field-card target-field",
+        "text": "",
+        "alt": "西锁骑士",
+        "src": "refs/mage-wars-step1/spell-2909-knight-of-westlock.png",
+        "left": 1127,
+        "top": 298,
+        "right": 1255,
+        "bottom": 474,
+        "width": 128,
+        "height": 176,
+        "centerX": 1191,
+        "centerY": 386,
+        "naturalWidth": 310,
+        "naturalHeight": 436,
+        "complete": true
+      }
+    ],
+    "targetRing": [
+      {
+        "selector": ".target-ring",
+        "className": "corner-ring target-ring",
+        "text": "",
+        "alt": "",
+        "src": "",
+        "left": 1116,
+        "top": 286,
+        "right": 1266,
+        "bottom": 484,
+        "width": 150,
+        "height": 198,
+        "centerX": 1191,
+        "centerY": 385
+      }
+    ],
+    "resolutionLayer": [
+      {
+        "selector": ".resolution-layer",
+        "className": "resolution-layer",
+        "text": "掷骰预备 7",
+        "alt": "",
+        "src": "",
+        "left": 1274,
+        "top": 350,
+        "right": 1554,
+        "bottom": 468,
+        "width": 280,
+        "height": 118,
+        "centerX": 1414,
+        "centerY": 409
+      }
+    ],
+    "attackDice": [
+      {
+        "selector": ".attack-die",
+        "className": "attack-die",
+        "text": "",
+        "alt": "攻击骰重击面",
+        "src": "refs/mage-wars-step1/attack-die-face-crit.png",
+        "left": 1271,
+        "top": 353,
+        "right": 1321,
+        "bottom": 403,
+        "width": 50,
+        "height": 50,
+        "centerX": 1296,
+        "centerY": 378,
+        "naturalWidth": 180,
+        "naturalHeight": 180,
+        "complete": true
+      },
+      {
+        "selector": ".attack-die",
+        "className": "attack-die",
+        "text": "",
+        "alt": "攻击骰二伤面",
+        "src": "refs/mage-wars-step1/attack-die-face-2.png",
+        "left": 1322,
+        "top": 353,
+        "right": 1372,
+        "bottom": 403,
+        "width": 50,
+        "height": 50,
+        "centerX": 1347,
+        "centerY": 378,
+        "naturalWidth": 180,
+        "naturalHeight": 180,
+        "complete": true
+      },
+      {
+        "selector": ".attack-die",
+        "className": "attack-die",
+        "text": "",
+        "alt": "攻击骰一伤面",
+        "src": "refs/mage-wars-step1/attack-die-face-1.png",
+        "left": 1371,
+        "top": 351,
+        "right": 1425,
+        "bottom": 405,
+        "width": 53,
+        "height": 53,
+        "centerX": 1398,
+        "centerY": 378,
+        "naturalWidth": 180,
+        "naturalHeight": 180,
+        "complete": true
+      },
+      {
+        "selector": ".attack-die",
+        "className": "attack-die",
+        "text": "",
+        "alt": "攻击骰空白面",
+        "src": "refs/mage-wars-step1/attack-die-face-blank.png",
+        "left": 1424,
+        "top": 353,
+        "right": 1474,
+        "bottom": 403,
+        "width": 49,
+        "height": 49,
+        "centerX": 1449,
+        "centerY": 378,
+        "naturalWidth": 180,
+        "naturalHeight": 180,
+        "complete": true
+      }
+    ],
+    "effectDie": [
+      {
+        "selector": ".effect-die",
+        "className": "effect-die",
+        "text": "7",
+        "alt": "",
+        "src": "",
+        "left": 1478,
+        "top": 350,
+        "right": 1534,
+        "bottom": 406,
+        "width": 56,
+        "height": 56,
+        "centerX": 1506,
+        "centerY": 378
+      }
+    ],
+    "tokens": [
+      {
+        "selector": ".target-token, .tokens img",
+        "className": "target-token token-damage",
+        "text": "",
+        "alt": "伤害 token",
+        "src": "refs/mage-wars-step1/damage-token-front.png",
+        "left": 1228,
+        "top": 424,
+        "right": 1266,
+        "bottom": 462,
+        "width": 38,
+        "height": 38,
+        "centerX": 1247,
+        "centerY": 443,
+        "naturalWidth": 283,
+        "naturalHeight": 283,
+        "complete": true
+      },
+      {
+        "selector": ".target-token, .tokens img",
+        "className": "target-token token-burn",
+        "text": "",
+        "alt": "燃烧 token",
+        "src": "refs/mage-wars-step1/burn-token.png",
+        "left": 1269,
+        "top": 411,
+        "right": 1309,
+        "bottom": 451,
+        "width": 39,
+        "height": 39,
+        "centerX": 1289,
+        "centerY": 431,
+        "naturalWidth": 497,
+        "naturalHeight": 497,
+        "complete": true
+      },
+      {
+        "selector": ".target-token, .tokens img",
+        "className": "",
+        "text": "",
+        "alt": "行动标记",
+        "src": "refs/mage-wars-step1/action-marker-red-front.png",
+        "left": 44,
+        "top": 1040,
+        "right": 76,
+        "bottom": 1072,
+        "width": 32,
+        "height": 32,
+        "centerX": 60,
+        "centerY": 1056,
+        "naturalWidth": 86,
+        "naturalHeight": 78,
+        "complete": true
+      },
+      {
+        "selector": ".target-token, .tokens img",
+        "className": "",
+        "text": "",
+        "alt": "快速施法标记",
+        "src": "refs/mage-wars-step1/quickcast-marker-front.png",
+        "left": 84,
+        "top": 1040,
+        "right": 116,
+        "bottom": 1072,
+        "width": 32,
+        "height": 32,
+        "centerX": 100,
+        "centerY": 1056,
+        "naturalWidth": 80,
+        "naturalHeight": 80,
+        "complete": true
+      },
+      {
+        "selector": ".target-token, .tokens img",
+        "className": "",
+        "text": "",
+        "alt": "守卫 token",
+        "src": "refs/mage-wars-step1/guard-token.png",
+        "left": 1844,
+        "top": 400,
+        "right": 1876,
+        "bottom": 432,
+        "width": 32,
+        "height": 32,
+        "centerX": 1860,
+        "centerY": 416,
+        "naturalWidth": 339,
+        "naturalHeight": 339,
+        "complete": true
+      }
+    ],
+    "playerZone": [],
+    "planLink": [],
+    "sourceRing": [],
+    "roundBtn": [],
+    "impField": [
+      {
+        "selector": ".imp-field",
+        "className": "field-card imp-field",
+        "text": "",
+        "alt": "火烙魔婴",
+        "src": "refs/mage-wars-step1/spell-2801-firebrand-imp.png",
+        "left": 540,
+        "top": 535,
+        "right": 670,
+        "bottom": 713,
+        "width": 131,
+        "height": 178,
+        "centerX": 605,
+        "centerY": 624,
+        "naturalWidth": 310,
+        "naturalHeight": 436,
+        "complete": true
+      }
+    ]
+  },
+  "images": [
+    {
+      "src": "refs/mage-wars-step1/standard-arena.jpg",
+      "alt": "标准竞技场半场",
+      "complete": true,
+      "naturalWidth": 3210,
+      "naturalHeight": 2407
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2803-flaming-hellion.png",
+      "alt": "烈焰狱鬼",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2909-knight-of-westlock.png",
+      "alt": "西锁骑士",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2801-firebrand-imp.png",
+      "alt": "火烙魔婴",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2224-conjuration.png",
+      "alt": "缠绕藤蔓",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/attack-die-face-crit.png",
+      "alt": "攻击骰重击面",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "src": "refs/mage-wars-step1/attack-die-face-2.png",
+      "alt": "攻击骰二伤面",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "src": "refs/mage-wars-step1/attack-die-face-1.png",
+      "alt": "攻击骰一伤面",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "src": "refs/mage-wars-step1/attack-die-face-blank.png",
+      "alt": "攻击骰空白面",
+      "complete": true,
+      "naturalWidth": 180,
+      "naturalHeight": 180
+    },
+    {
+      "src": "refs/mage-wars-step1/damage-token-front.png",
+      "alt": "伤害 token",
+      "complete": true,
+      "naturalWidth": 283,
+      "naturalHeight": 283
+    },
+    {
+      "src": "refs/mage-wars-step1/burn-token.png",
+      "alt": "燃烧 token",
+      "complete": true,
+      "naturalWidth": 497,
+      "naturalHeight": 497
+    },
+    {
+      "src": "refs/mage-wars-step1/mage-warlock-card.png",
+      "alt": "邪术师法师牌",
+      "complete": true,
+      "naturalWidth": 360,
+      "naturalHeight": 508
+    },
+    {
+      "src": "refs/mage-wars-step1/action-marker-red-front.png",
+      "alt": "行动标记",
+      "complete": true,
+      "naturalWidth": 86,
+      "naturalHeight": 78
+    },
+    {
+      "src": "refs/mage-wars-step1/quickcast-marker-front.png",
+      "alt": "快速施法标记",
+      "complete": true,
+      "naturalWidth": 80,
+      "naturalHeight": 80
+    },
+    {
+      "src": "refs/mage-wars-step1/mage-priestess-card.png",
+      "alt": "女祭司法师牌",
+      "complete": true,
+      "naturalWidth": 360,
+      "naturalHeight": 508
+    },
+    {
+      "src": "refs/mage-wars-step1/guard-token.png",
+      "alt": "守卫 token",
+      "complete": true,
+      "naturalWidth": 339,
+      "naturalHeight": 339
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-card-back.jpg",
+      "alt": "对手已计划法术卡背",
+      "complete": true,
+      "naturalWidth": 992,
+      "naturalHeight": 1391
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-card-back.jpg",
+      "alt": "对手第二张已计划法术卡背",
+      "complete": true,
+      "naturalWidth": 992,
+      "naturalHeight": 1391
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+      "alt": "火球术",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 437
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+      "alt": "火球术",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 437
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-1806-block.png",
+      "alt": "格挡",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-3701-lash-of-hellfire.png",
+      "alt": "狱火长鞭",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2907-gray-angel.png",
+      "alt": "灰衣天使",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-3408-heal.png",
+      "alt": "单体治疗",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2909-knight-of-westlock.png",
+      "alt": "西锁骑士缩略",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+      "alt": "火球术",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 437
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-1804-mage-bane.png",
+      "alt": "法师祸咒",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    },
+    {
+      "src": "refs/mage-wars-step1/spell-2803-flaming-hellion.png",
+      "alt": "弃牌堆顶牌",
+      "complete": true,
+      "naturalWidth": 310,
+      "naturalHeight": 436
+    }
+  ],
+  "brokenResponses": []
+}

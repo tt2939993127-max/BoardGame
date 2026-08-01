@@ -1,0 +1,325 @@
+{
+  "version": "v45",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "bodyText": "行动环节　选择目标\n目标\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n行动中\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫\n \n对手已计划 2\n当前来源\n已计划法术\n2 / 2\n火球术\n法师祸咒\n法术书 30\n第 1 / 5 页\n全部\n攻击\n结界\n生物\n装备\n火球术\n格挡\n狱火长鞭\n灰衣天使\n分类 / 分页\n‹\n›\n目标\n西锁骑士\nB2\n执行攻击\n取消选择\n弃牌堆 3",
+  "forbidden": {
+    "defaultHoldingAreaTerm": 0,
+    "cardFieldRewrite": 0,
+    "instructionCopy": 0
+  },
+  "imageCount": 21,
+  "diceCount": 0,
+  "zones": [
+    {
+      "label": "A1",
+      "rect": {
+        "left": 318,
+        "top": 42,
+        "right": 928,
+        "bottom": 258.65625,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 623,
+        "cy": 150.328125
+      }
+    },
+    {
+      "label": "B1",
+      "rect": {
+        "left": 928,
+        "top": 42,
+        "right": 1538,
+        "bottom": 258.65625,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 1233,
+        "cy": 150.328125
+      }
+    },
+    {
+      "label": "A2",
+      "rect": {
+        "left": 318,
+        "top": 258.65625,
+        "right": 928,
+        "bottom": 475.3125,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 623,
+        "cy": 366.984375
+      }
+    },
+    {
+      "label": "B2",
+      "rect": {
+        "left": 928,
+        "top": 258.65625,
+        "right": 1538,
+        "bottom": 475.3125,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 1233,
+        "cy": 366.984375
+      }
+    },
+    {
+      "label": "A3",
+      "rect": {
+        "left": 318,
+        "top": 475.328125,
+        "right": 928,
+        "bottom": 691.984375,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 623,
+        "cy": 583.65625
+      }
+    },
+    {
+      "label": "B3",
+      "rect": {
+        "left": 928,
+        "top": 475.328125,
+        "right": 1538,
+        "bottom": 691.984375,
+        "width": 610,
+        "height": 216.65625,
+        "cx": 1233,
+        "cy": 583.65625
+      }
+    }
+  ],
+  "fieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "a2",
+      "rect": {
+        "left": 529.7369384765625,
+        "top": 285.02593994140625,
+        "right": 656.2630615234375,
+        "bottom": 456.97406005859375,
+        "width": 126.526123046875,
+        "height": 171.9481201171875,
+        "cx": 593,
+        "cy": 371
+      },
+      "centerInsideZone": true,
+      "overlapWithZone": 21755.929003626108,
+      "area": 21755.929003626108,
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "zoneId": "b2",
+      "rect": {
+        "left": 1079.1392822265625,
+        "top": 283.9914855957031,
+        "right": 1202.8607177734375,
+        "bottom": 454.0085144042969,
+        "width": 123.721435546875,
+        "height": 170.01702880859375,
+        "cx": 1141,
+        "cy": 369
+      },
+      "centerInsideZone": true,
+      "overlapWithZone": 21034.75087161362,
+      "area": 21034.75087161362,
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "zoneId": "a3",
+      "rect": {
+        "left": 529.7369384765625,
+        "top": 503.02593994140625,
+        "right": 656.2630615234375,
+        "bottom": 674.9740600585938,
+        "width": 126.526123046875,
+        "height": 171.9481201171875,
+        "cx": 593,
+        "cy": 589
+      },
+      "centerInsideZone": true,
+      "overlapWithZone": 21755.929003626108,
+      "area": 21755.929003626108,
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "b3",
+      "rect": {
+        "left": 1079.1392822265625,
+        "top": 501.9914855957031,
+        "right": 1202.8607177734375,
+        "bottom": 672.0084838867188,
+        "width": 123.721435546875,
+        "height": 170.01699829101562,
+        "cx": 1141,
+        "cy": 586.9999847412109
+      },
+      "centerInsideZone": true,
+      "overlapWithZone": 21034.747095935047,
+      "area": 21034.747095935047,
+      "overlapWithWorkbench": 0
+    }
+  ],
+  "workbench": {
+    "left": 318,
+    "top": 708,
+    "right": 1538,
+    "bottom": 1060,
+    "width": 1220,
+    "height": 352,
+    "cx": 928,
+    "cy": 884
+  },
+  "sourceCard": {
+    "left": 342,
+    "top": 711,
+    "right": 580,
+    "bottom": 1045,
+    "width": 238,
+    "height": 334,
+    "cx": 461,
+    "cy": 878
+  },
+  "plannedCards": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 612,
+        "top": 768,
+        "right": 730,
+        "bottom": 934,
+        "width": 118,
+        "height": 166,
+        "cx": 671,
+        "cy": 851
+      }
+    },
+    {
+      "alt": "法师祸咒",
+      "rect": {
+        "left": 744,
+        "top": 768,
+        "right": 862,
+        "bottom": 934,
+        "width": 118,
+        "height": 166,
+        "cx": 803,
+        "cy": 851
+      }
+    }
+  ],
+  "bookCards": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 904,
+        "top": 807,
+        "right": 996,
+        "bottom": 937,
+        "width": 92,
+        "height": 130,
+        "cx": 950,
+        "cy": 872
+      }
+    },
+    {
+      "alt": "格挡",
+      "rect": {
+        "left": 1008,
+        "top": 807,
+        "right": 1100,
+        "bottom": 937,
+        "width": 92,
+        "height": 130,
+        "cx": 1054,
+        "cy": 872
+      }
+    },
+    {
+      "alt": "狱火长鞭",
+      "rect": {
+        "left": 1112,
+        "top": 807,
+        "right": 1204,
+        "bottom": 937,
+        "width": 92,
+        "height": 130,
+        "cx": 1158,
+        "cy": 872
+      }
+    },
+    {
+      "alt": "灰衣天使",
+      "rect": {
+        "left": 1216,
+        "top": 807,
+        "right": 1308,
+        "bottom": 937,
+        "width": 92,
+        "height": 130,
+        "cx": 1262,
+        "cy": 872
+      }
+    }
+  ],
+  "target": {
+    "left": 1340,
+    "top": 732,
+    "right": 1514,
+    "bottom": 978,
+    "width": 174,
+    "height": 246,
+    "cx": 1427,
+    "cy": 855
+  },
+  "confirm": {
+    "left": 1340,
+    "top": 856,
+    "right": 1514,
+    "bottom": 912,
+    "width": 174,
+    "height": 56,
+    "cx": 1427,
+    "cy": 884
+  },
+  "cancel": {
+    "left": 1340,
+    "top": 922,
+    "right": 1514,
+    "bottom": 978,
+    "width": 174,
+    "height": 56,
+    "cx": 1427,
+    "cy": 950
+  },
+  "sourceInside": true,
+  "plannedInside": true,
+  "bookInside": true,
+  "targetInside": true,
+  "commandDistanceToTarget": 29,
+  "workbenchOverlapsFieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "area": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "area": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "area": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "area": 0
+    }
+  ],
+  "sourceToTargetDistance": 590.5116425609236
+}

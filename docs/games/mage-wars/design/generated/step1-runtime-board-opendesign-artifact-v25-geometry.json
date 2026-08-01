@@ -1,0 +1,245 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "zones": [
+    {
+      "id": "A1",
+      "left": 920,
+      "top": 78,
+      "right": 1180,
+      "bottom": 338,
+      "width": 260,
+      "height": 260,
+      "cx": 1050,
+      "cy": 208
+    },
+    {
+      "id": "B1",
+      "left": 1180,
+      "top": 78,
+      "right": 1440,
+      "bottom": 338,
+      "width": 260,
+      "height": 260,
+      "cx": 1310,
+      "cy": 208
+    },
+    {
+      "id": "A2",
+      "left": 920,
+      "top": 338,
+      "right": 1180,
+      "bottom": 598,
+      "width": 260,
+      "height": 260,
+      "cx": 1050,
+      "cy": 468
+    },
+    {
+      "id": "B2",
+      "left": 1180,
+      "top": 338,
+      "right": 1440,
+      "bottom": 598,
+      "width": 260,
+      "height": 260,
+      "cx": 1310,
+      "cy": 468
+    },
+    {
+      "id": "A3",
+      "left": 920,
+      "top": 598,
+      "right": 1180,
+      "bottom": 858,
+      "width": 260,
+      "height": 260,
+      "cx": 1050,
+      "cy": 728
+    },
+    {
+      "id": "B3",
+      "left": 1180,
+      "top": 598,
+      "right": 1440,
+      "bottom": 858,
+      "width": 260,
+      "height": 260,
+      "cx": 1310,
+      "cy": 728
+    }
+  ],
+  "cards": [
+    {
+      "alt": "西锁骑士，当前火球术目标",
+      "zoneId": "B2",
+      "rect": {
+        "left": 1215.2884521484375,
+        "top": 402.79229736328125,
+        "right": 1312.7115478515625,
+        "bottom": 537.2077026367188,
+        "width": 97.423095703125,
+        "height": 134.4154052734375,
+        "cx": 1264,
+        "cy": 470
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "烈焰魔物",
+      "zoneId": "A2",
+      "rect": {
+        "left": 990.1658325195312,
+        "top": 384.0126953125,
+        "right": 1089.8341064453125,
+        "bottom": 519.9873046875,
+        "width": 99.66827392578125,
+        "height": 135.974609375,
+        "cx": 1039.9999694824219,
+        "cy": 452
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "火印魔婴",
+      "zoneId": "A3",
+      "rect": {
+        "left": 976.6102294921875,
+        "top": 647.6306762695312,
+        "right": 1077.3897705078125,
+        "bottom": 784.3693237304688,
+        "width": 100.779541015625,
+        "height": 136.7386474609375,
+        "cx": 1027,
+        "cy": 716
+      },
+      "centerInZone": true
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "B3",
+      "rect": {
+        "left": 1210.8553466796875,
+        "top": 659.1898193359375,
+        "right": 1307.1446533203125,
+        "bottom": 792.8101806640625,
+        "width": 96.289306640625,
+        "height": 133.620361328125,
+        "cx": 1259,
+        "cy": 726
+      },
+      "centerInZone": true
+    }
+  ],
+  "dice": {
+    "left": 1318,
+    "top": 384,
+    "right": 1482,
+    "bottom": 526,
+    "width": 164,
+    "height": 142,
+    "cx": 1400,
+    "cy": 455
+  },
+  "target": {
+    "left": 1215.2884521484375,
+    "top": 402.79229736328125,
+    "right": 1312.7115478515625,
+    "bottom": 537.2077026367188,
+    "width": 97.423095703125,
+    "height": 134.4154052734375,
+    "cx": 1264,
+    "cy": 470
+  },
+  "diceDistanceToTargetCenter": 136.8247053715081,
+  "playerIdentity": {
+    "selfCardAboveName": true,
+    "rivalCardAboveName": true
+  },
+  "spellAreas": {
+    "preparedSeparatedFromCandidates": true,
+    "preparedInsideRail": true,
+    "candidatesInsideRail": false,
+    "railInViewport": true,
+    "rivalZoneOutsideArena": true,
+    "currentPreparedAlt": "火球术，当前施放中",
+    "candidateAlts": [
+      "炼狱火鞭候选",
+      "法师祸咒候选",
+      "格挡候选",
+      "法力失效候选",
+      "装备候选"
+    ],
+    "fireballOnlyInPrepared": true
+  },
+  "forbiddenTerms": {
+    "hand": 0,
+    "opponentHand": 0,
+    "chineseHand": 0
+  },
+  "buttonMinSize": [
+    {
+      "text": "全部",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "攻击",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "结界",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "生物",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "装备",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "咒语",
+      "width": 48,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "‹",
+      "width": 44,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "›",
+      "width": 44,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "确认",
+      "width": 86,
+      "height": 44,
+      "pass44": true
+    },
+    {
+      "text": "取消",
+      "width": 86,
+      "height": 44,
+      "pass44": true
+    }
+  ],
+  "imageCount": 40
+}

@@ -9,18 +9,20 @@ import manifest2 from './dicethrone/manifest';
 import { engineConfig as engineConfig2 } from './dicethrone/game';
 import manifest3 from './fantasyrealms/manifest';
 import { engineConfig as engineConfig3 } from './fantasyrealms/game';
-import manifest4 from './qidahen/manifest';
-import { engineConfig as engineConfig4 } from './qidahen/game';
-import manifest5 from './smashup/manifest';
-import { engineConfig as engineConfig5 } from './smashup/game';
-import manifest6 from './splendor/manifest';
-import { engineConfig as engineConfig6 } from './splendor/game';
-import manifest7 from './summonerwars/manifest';
-import { engineConfig as engineConfig7 } from './summonerwars/game';
-import manifest8 from './the-gang/manifest';
-import { engineConfig as engineConfig8 } from './the-gang/game';
-import manifest9 from './tictactoe/manifest';
-import { engineConfig as engineConfig9 } from './tictactoe/game';
+import manifest4 from './mage-wars/manifest';
+import { engineConfig as engineConfig4 } from './mage-wars/game';
+import manifest5 from './qidahen/manifest';
+import { engineConfig as engineConfig5 } from './qidahen/game';
+import manifest6 from './smashup/manifest';
+import { engineConfig as engineConfig6 } from './smashup/game';
+import manifest7 from './splendor/manifest';
+import { engineConfig as engineConfig7 } from './splendor/game';
+import manifest8 from './summonerwars/manifest';
+import { engineConfig as engineConfig8 } from './summonerwars/game';
+import manifest9 from './the-gang/manifest';
+import { engineConfig as engineConfig9 } from './the-gang/game';
+import manifest10 from './tictactoe/manifest';
+import { engineConfig as engineConfig10 } from './tictactoe/game';
 
 const entry0: GameServerManifestEntry = {
     manifest: manifest0,
@@ -72,6 +74,11 @@ const entry9: GameServerManifestEntry = {
     engineConfig: engineConfig9,
 };
 
+const entry10: GameServerManifestEntry = {
+    manifest: manifest10,
+    engineConfig: engineConfig10,
+};
+
 export const GAME_SERVER_MANIFEST: GameServerManifestEntry[] = [
     entry0,
     entry1,
@@ -83,6 +90,7 @@ export const GAME_SERVER_MANIFEST: GameServerManifestEntry[] = [
     entry7,
     entry8,
     entry9,
+    entry10,
 ];
 
 export const GAME_SERVER_MANIFEST_BY_ID: Record<string, GameServerManifestEntry> = Object.fromEntries(

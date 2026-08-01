@@ -1,0 +1,293 @@
+{
+  "version": "v46",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "forbidden": {
+    "defaultHoldingAreaTerm": 0,
+    "cardFieldRewrite": 0,
+    "instructionCopy": 0
+  },
+  "imageCount": 21,
+  "diceCount": 0,
+  "confirmControls": 0,
+  "bottomPanelLike": false,
+  "zones": [
+    {
+      "label": "A1",
+      "rect": {
+        "left": 300,
+        "top": 40,
+        "right": 960,
+        "bottom": 270.65625,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 630,
+        "cy": 155.328125
+      }
+    },
+    {
+      "label": "B1",
+      "rect": {
+        "left": 960,
+        "top": 40,
+        "right": 1620,
+        "bottom": 270.65625,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 1290,
+        "cy": 155.328125
+      }
+    },
+    {
+      "label": "A2",
+      "rect": {
+        "left": 300,
+        "top": 270.65625,
+        "right": 960,
+        "bottom": 501.3125,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 630,
+        "cy": 385.984375
+      }
+    },
+    {
+      "label": "B2",
+      "rect": {
+        "left": 960,
+        "top": 270.65625,
+        "right": 1620,
+        "bottom": 501.3125,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 1290,
+        "cy": 385.984375
+      }
+    },
+    {
+      "label": "A3",
+      "rect": {
+        "left": 300,
+        "top": 501.328125,
+        "right": 960,
+        "bottom": 731.984375,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 630,
+        "cy": 616.65625
+      }
+    },
+    {
+      "label": "B3",
+      "rect": {
+        "left": 960,
+        "top": 501.328125,
+        "right": 1620,
+        "bottom": 731.984375,
+        "width": 660,
+        "height": 230.65625,
+        "cx": 1290,
+        "cy": 616.65625
+      }
+    }
+  ],
+  "fieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "a2",
+      "rect": {
+        "left": 533.5827026367188,
+        "top": 302.92535400390625,
+        "right": 664.4172973632812,
+        "bottom": 481.07464599609375,
+        "width": 130.8345947265625,
+        "height": 178.1492919921875,
+        "cx": 599,
+        "cy": 392
+      },
+      "centerInsideZone": true,
+      "overlapWithOpenLayer": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "zoneId": "b2",
+      "rect": {
+        "left": 1132.035888671875,
+        "top": 299.92352294921875,
+        "right": 1259.964111328125,
+        "bottom": 476.07647705078125,
+        "width": 127.92822265625,
+        "height": 176.1529541015625,
+        "cx": 1196,
+        "cy": 388
+      },
+      "centerInsideZone": true,
+      "overlapWithOpenLayer": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "zoneId": "a3",
+      "rect": {
+        "left": 533.5827026367188,
+        "top": 534.9253540039062,
+        "right": 664.4172973632812,
+        "bottom": 713.0746459960938,
+        "width": 130.8345947265625,
+        "height": 178.1492919921875,
+        "cx": 599,
+        "cy": 624
+      },
+      "centerInsideZone": true,
+      "overlapWithOpenLayer": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "b3",
+      "rect": {
+        "left": 1132.035888671875,
+        "top": 531.9235229492188,
+        "right": 1259.964111328125,
+        "bottom": 708.0764770507812,
+        "width": 127.92822265625,
+        "height": 176.1529541015625,
+        "cx": 1196,
+        "cy": 620
+      },
+      "centerInsideZone": true,
+      "overlapWithOpenLayer": 0
+    }
+  ],
+  "allFieldCardsInZone": true,
+  "openLayer": {
+    "left": 300,
+    "top": 722,
+    "right": 1620,
+    "bottom": 1062,
+    "width": 1320,
+    "height": 340,
+    "cx": 960,
+    "cy": 892
+  },
+  "sourceCard": {
+    "left": 326,
+    "top": 731,
+    "right": 556,
+    "bottom": 1054,
+    "width": 230,
+    "height": 323,
+    "cx": 441,
+    "cy": 892.5
+  },
+  "plannedCards": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 592,
+        "top": 826,
+        "right": 714,
+        "bottom": 998,
+        "width": 122,
+        "height": 172,
+        "cx": 653,
+        "cy": 912
+      }
+    },
+    {
+      "alt": "法师祸咒",
+      "rect": {
+        "left": 728,
+        "top": 826,
+        "right": 850,
+        "bottom": 998,
+        "width": 122,
+        "height": 172,
+        "cx": 789,
+        "cy": 912
+      }
+    }
+  ],
+  "bookCards": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 914,
+        "top": 885,
+        "right": 1006,
+        "bottom": 1015,
+        "width": 92,
+        "height": 130,
+        "cx": 960,
+        "cy": 950
+      }
+    },
+    {
+      "alt": "格挡",
+      "rect": {
+        "left": 1018,
+        "top": 885,
+        "right": 1110,
+        "bottom": 1015,
+        "width": 92,
+        "height": 130,
+        "cx": 1064,
+        "cy": 950
+      }
+    },
+    {
+      "alt": "狱火长鞭",
+      "rect": {
+        "left": 1122,
+        "top": 885,
+        "right": 1214,
+        "bottom": 1015,
+        "width": 92,
+        "height": 130,
+        "cx": 1168,
+        "cy": 950
+      }
+    },
+    {
+      "alt": "灰衣天使",
+      "rect": {
+        "left": 1226,
+        "top": 885,
+        "right": 1318,
+        "bottom": 1015,
+        "width": 92,
+        "height": 130,
+        "cx": 1272,
+        "cy": 950
+      }
+    }
+  ],
+  "targetSummary": {
+    "left": 1394,
+    "top": 810,
+    "right": 1604,
+    "bottom": 923,
+    "width": 210,
+    "height": 113,
+    "cx": 1499,
+    "cy": 866.5
+  },
+  "openLayerOverlapsFieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "area": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "area": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "area": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "area": 0
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "source": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v21.html",
+  "route": "open-design-artifact-files-plus-playwright-render",
+  "mediaGenerate": false,
+  "implementation": "blocked",
+  "variants": [
+    {
+      "id": "v22a-rules-tactical",
+      "focus": "boardgame-ui-imagegen + game-design / rules-first tactical grid",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22a-rules-tactical.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22a-rules-tactical.png"
+    },
+    {
+      "id": "v22b-spellbook-operations",
+      "focus": "hicks-law + user-centered-design / spellbook browsing and planning",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22b-spellbook-operations.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22b-spellbook-operations.png"
+    },
+    {
+      "id": "v22c-cast-resolution",
+      "focus": "visual-player-guidance + fitts-law / current cast and dice resolution",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22c-cast-resolution.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22c-cast-resolution.png"
+    }
+  ]
+}

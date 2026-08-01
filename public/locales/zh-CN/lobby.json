@@ -61,6 +61,9 @@
         "cardia": {
           "summary": "在卡牌与魔法的世界中，构筑你的卡组，赢得荣耀。"
         },
+        "mage-wars": {
+          "summary": "在学徒竞技场中计划法术、调度法力，并用事件驱动特效呈现施法结果。"
+        },
         "dicethrone": {
           "summary": "建立王权，争夺荣耀，成为统治者。"
         },
@@ -480,6 +483,11 @@
     "cardia": {
       "title": "卡迪亚",
       "description": "四大派系争夺印戒与统治权。打出卡牌、触发能力，在一场场遭遇中智胜对手。",
+      "players": "2 人"
+    },
+    "mage-wars": {
+      "title": "法师战争",
+      "description": "2 人法术战棋。当前 foundation 锁定学徒竞技场、法师状态、法术书区域和事件驱动法术特效。",
       "players": "2 人"
     },
     "qidahen": {

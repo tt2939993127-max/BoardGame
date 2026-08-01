@@ -1,0 +1,264 @@
+{
+  "generatedAt": "2026-07-31T13:55:08.974Z",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "boxes": {
+    ".mage-panel.own": {
+      "x": 44,
+      "y": 698,
+      "width": 248,
+      "height": 329,
+      "right": 292,
+      "bottom": 1027,
+      "text": "邪术师\n    生命17\n    法力14\n    聚魔10\n    行动中"
+    },
+    ".book-browser": {
+      "x": 292,
+      "y": 794,
+      "width": 1298,
+      "height": 288,
+      "right": 1590,
+      "bottom": 1082,
+      "text": "全部\n        攻击\n        结界\n        生物\n        装备\n      \n      \n        \n        \n        \n        \n        \n        \n        \n        \n      \n      \n        ⌃\n        1 / 4\n        ⌄"
+    },
+    ".bookmark-tabs": {
+      "x": 298,
+      "y": 872,
+      "width": 58,
+      "height": 158,
+      "right": 356,
+      "bottom": 1030,
+      "text": "全部\n        攻击\n        结界\n        生物\n        装备"
+    },
+    ".book-row": {
+      "x": 366,
+      "y": 808,
+      "width": 1166,
+      "height": 256,
+      "right": 1532,
+      "bottom": 1064,
+      "text": ""
+    },
+    ".book-card img": {
+      "x": 366,
+      "y": 861,
+      "width": 136,
+      "height": 192,
+      "right": 502,
+      "bottom": 1053,
+      "text": ""
+    },
+    ".book-page-rail": {
+      "x": 1536,
+      "y": 852,
+      "width": 50,
+      "height": 202,
+      "right": 1586,
+      "bottom": 1054,
+      "text": "⌃\n        1 / 4\n        ⌄"
+    },
+    ".page-index": {
+      "x": 1540,
+      "y": 944,
+      "width": 42,
+      "height": 18,
+      "right": 1582,
+      "bottom": 962,
+      "text": "1 / 4"
+    },
+    ".plan-zone": {
+      "x": 1648,
+      "y": 810,
+      "width": 224,
+      "height": 184,
+      "right": 1872,
+      "bottom": 994,
+      "text": "己方已计划 2 / 2\n    \n      来源"
+    },
+    ".plan-title": {
+      "x": 1648,
+      "y": 810,
+      "width": 224,
+      "height": 19,
+      "right": 1872,
+      "bottom": 829,
+      "text": "己方已计划 2 / 2"
+    },
+    ".plan-slots": {
+      "x": 1648,
+      "y": 837,
+      "width": 224,
+      "height": 139,
+      "right": 1872,
+      "bottom": 976,
+      "text": "来源"
+    },
+    ".source-badge": {
+      "x": 1828,
+      "y": 843,
+      "width": 32,
+      "height": 18,
+      "right": 1860,
+      "bottom": 861,
+      "text": "来源"
+    },
+    ".discard": {
+      "x": 1591,
+      "y": 1012,
+      "width": 79,
+      "height": 50,
+      "right": 1670,
+      "bottom": 1062,
+      "text": "弃牌 3"
+    },
+    ".turn-end": {
+      "x": 1700,
+      "y": 1010,
+      "width": 168,
+      "height": 52,
+      "right": 1868,
+      "bottom": 1062,
+      "text": "回合结束"
+    },
+    ".arena": {
+      "x": 240,
+      "y": 30,
+      "width": 1440,
+      "height": 850,
+      "right": 1680,
+      "bottom": 880,
+      "text": ""
+    },
+    ".target-field": {
+      "x": 1127,
+      "y": 346,
+      "width": 136,
+      "height": 188,
+      "right": 1263,
+      "bottom": 534,
+      "text": ""
+    },
+    ".resolution-layer": {
+      "x": 1268,
+      "y": 378,
+      "width": 288,
+      "height": 118,
+      "right": 1556,
+      "bottom": 496,
+      "text": "掷骰预备"
+    }
+  },
+  "bookImages": [
+    {
+      "x": 366,
+      "y": 861,
+      "width": 136,
+      "height": 192,
+      "right": 502,
+      "bottom": 1053,
+      "text": "火球术"
+    },
+    {
+      "x": 512,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 648,
+      "bottom": 1061,
+      "text": "法师祸咒"
+    },
+    {
+      "x": 658,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 794,
+      "bottom": 1061,
+      "text": "格挡"
+    },
+    {
+      "x": 804,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 940,
+      "bottom": 1061,
+      "text": "法力失效"
+    },
+    {
+      "x": 950,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 1086,
+      "bottom": 1061,
+      "text": "单体治疗"
+    },
+    {
+      "x": 1096,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 1232,
+      "bottom": 1061,
+      "text": "狱火长鞭"
+    },
+    {
+      "x": 1242,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 1378,
+      "bottom": 1061,
+      "text": "奥秘法杖"
+    },
+    {
+      "x": 1388,
+      "y": 869,
+      "width": 136,
+      "height": 192,
+      "right": 1524,
+      "bottom": 1061,
+      "text": "风龙皮甲"
+    }
+  ],
+  "planImages": [
+    {
+      "x": 1770,
+      "y": 837,
+      "width": 96,
+      "height": 136,
+      "right": 1866,
+      "bottom": 973,
+      "text": "火球术"
+    },
+    {
+      "x": 1664,
+      "y": 837,
+      "width": 96,
+      "height": 136,
+      "right": 1760,
+      "bottom": 973,
+      "text": "法师祸咒"
+    }
+  ],
+  "imageFailures": [],
+  "forbidden": [],
+  "relation": {
+    "bookImageCount": 8,
+    "planImageCount": 2,
+    "bookBottomGap": 27,
+    "tabsLeftOfFirstCard": true,
+    "tabsOverlapOwnMagePanel": false,
+    "firstBookCardOverlapsOwnMagePanel": false,
+    "pageRailAtRightOfCards": true,
+    "planOverlapsTurnEnd": false,
+    "planOverlapsDiscard": false,
+    "pageRailOverlapsPlanZone": false,
+    "lastBookCardOverlapsPageRail": false,
+    "lastBookCardOverlapsPlanZone": false,
+    "badgeOverlapsPlanTitle": false
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "source": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v21.html",
+  "route": "open-design-artifact-file-plus-playwright-render",
+  "mediaGenerate": false,
+  "implementation": "blocked",
+  "mobile": "blocked",
+  "output": {
+    "id": "v2-option-c-casting",
+    "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-v2-option-c-casting.html",
+    "jsonPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-v2-option-c-casting.html.artifact.json",
+    "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-drafts-v2\\mage-wars-v2-option-c-casting.png",
+    "geometryPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-drafts-v2\\mage-wars-v2-option-c-casting-geometry.json",
+    "auditPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-drafts-v2\\mage-wars-v2-option-c-casting-audit.md"
+  },
+  "checks": {
+    "forbiddenInArtifactNoComments": 0,
+    "forbiddenInVisibleText": 0,
+    "hasSpellbookBrowser": true,
+    "diceCenterDistanceToTarget": 144.77,
+    "castResultCenterDistanceToTarget": 149.68,
+    "zoneResults": [
+      {
+        "label": "西锁骑士，当前火球术目标",
+        "zoneId": "B2",
+        "centerInsideOwn": true,
+        "ownRatio": 1,
+        "maxOtherRatio": 0
+      },
+      {
+        "label": "火印魔婴",
+        "zoneId": "A3",
+        "centerInsideOwn": true,
+        "ownRatio": 1,
+        "maxOtherRatio": 0
+      },
+      {
+        "label": "烈焰魔物",
+        "zoneId": "A2",
+        "centerInsideOwn": true,
+        "ownRatio": 1,
+        "maxOtherRatio": 0
+      },
+      {
+        "label": "缠绕藤蔓",
+        "zoneId": "B3",
+        "centerInsideOwn": true,
+        "ownRatio": 1,
+        "maxOtherRatio": 0
+      }
+    ]
+  }
+}

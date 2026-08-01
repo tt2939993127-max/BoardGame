@@ -1,0 +1,130 @@
+{
+  "imageFailures": [],
+  "forbidden": [],
+  "bookBrowser": {
+    "x": 294,
+    "y": 724,
+    "w": 1310,
+    "h": 344,
+    "text": "全部 攻击 结界 生物 装备 ‹ 1 / 4 › 法术书 308 / 页"
+  },
+  "bookCards": [
+    {
+      "x": 312,
+      "y": 812,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 472,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 632,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 792,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 952,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 1112,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 1272,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    },
+    {
+      "x": 1432,
+      "y": 820,
+      "w": 148,
+      "h": 209,
+      "text": ""
+    }
+  ],
+  "visibleBookCardCount": 8,
+  "firstCard": {
+    "x": 312,
+    "y": 812,
+    "w": 148,
+    "h": 209,
+    "text": ""
+  },
+  "lastCard": {
+    "x": 1432,
+    "y": 820,
+    "w": 148,
+    "h": 209,
+    "text": ""
+  },
+  "bookFooter": {
+    "x": 314,
+    "y": 1048,
+    "w": 87,
+    "h": 15,
+    "text": "法术书 308 / 页"
+  },
+  "bookPageRail": {
+    "x": 1498,
+    "y": 1044,
+    "w": 92,
+    "h": 22,
+    "text": "‹ 1 / 4 ›"
+  },
+  "pageTurn": [
+    {
+      "x": 1502,
+      "y": 1044,
+      "w": 22,
+      "h": 22,
+      "text": "‹"
+    },
+    {
+      "x": 1568,
+      "y": 1044,
+      "w": 22,
+      "h": 22,
+      "text": "›"
+    }
+  ],
+  "pageIndex": {
+    "x": 1528,
+    "y": 1046,
+    "w": 36,
+    "h": 18,
+    "text": "1 / 4"
+  },
+  "paginationVisibleArea": 2024,
+  "cardVisibleArea": 30932,
+  "paginationToCardArea": 0.065,
+  "gapFromCardBottomToPaginationTop": 15,
+  "gapFromCardBottomToFooterTop": 19,
+  "labels": {
+    "pageIndex": "1 / 4",
+    "footer": "法术书 308 / 页"
+  }
+}

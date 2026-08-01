@@ -1,0 +1,244 @@
+{
+  "version": "v44",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "forbidden": {
+    "hand": 0,
+    "printedFieldRewrite": 0,
+    "longInstructionCopy": 0
+  },
+  "zones": [
+    {
+      "label": "A1",
+      "rect": {
+        "left": 330,
+        "top": 52,
+        "right": 840,
+        "bottom": 258,
+        "width": 510,
+        "height": 206,
+        "cx": 585,
+        "cy": 155
+      }
+    },
+    {
+      "label": "B1",
+      "rect": {
+        "left": 840,
+        "top": 52,
+        "right": 1350,
+        "bottom": 258,
+        "width": 510,
+        "height": 206,
+        "cx": 1095,
+        "cy": 155
+      }
+    },
+    {
+      "label": "A2",
+      "rect": {
+        "left": 330,
+        "top": 258,
+        "right": 840,
+        "bottom": 464,
+        "width": 510,
+        "height": 206,
+        "cx": 585,
+        "cy": 361
+      }
+    },
+    {
+      "label": "B2",
+      "rect": {
+        "left": 840,
+        "top": 258,
+        "right": 1350,
+        "bottom": 464,
+        "width": 510,
+        "height": 206,
+        "cx": 1095,
+        "cy": 361
+      }
+    },
+    {
+      "label": "A3",
+      "rect": {
+        "left": 330,
+        "top": 464,
+        "right": 840,
+        "bottom": 670,
+        "width": 510,
+        "height": 206,
+        "cx": 585,
+        "cy": 567
+      }
+    },
+    {
+      "label": "B3",
+      "rect": {
+        "left": 840,
+        "top": 464,
+        "right": 1350,
+        "bottom": 670,
+        "width": 510,
+        "height": 206,
+        "cx": 1095,
+        "cy": 567
+      }
+    }
+  ],
+  "fieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "a2",
+      "rect": {
+        "left": 532.1474609375,
+        "top": 283.3289794921875,
+        "right": 645.8525390625,
+        "bottom": 438.6710205078125,
+        "width": 113.705078125,
+        "height": 155.342041015625,
+        "cx": 589,
+        "cy": 361
+      }
+    },
+    {
+      "alt": "西锁骑士，已选目标",
+      "zoneId": "b2",
+      "rect": {
+        "left": 957.414794921875,
+        "top": 286.1960144042969,
+        "right": 1068.585205078125,
+        "bottom": 439.8039855957031,
+        "width": 111.17041015625,
+        "height": 153.60797119140625,
+        "cx": 1013,
+        "cy": 363
+      }
+    },
+    {
+      "alt": "火烙魔婴，当前来源",
+      "zoneId": "a3",
+      "rect": {
+        "left": 532.1474609375,
+        "top": 483.3289794921875,
+        "right": 645.8525390625,
+        "bottom": 638.6710205078125,
+        "width": 113.705078125,
+        "height": 155.342041015625,
+        "cx": 589,
+        "cy": 561
+      }
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "b3",
+      "rect": {
+        "left": 957.414794921875,
+        "top": 486.1960144042969,
+        "right": 1068.585205078125,
+        "bottom": 639.803955078125,
+        "width": 111.17041015625,
+        "height": 153.60794067382812,
+        "cx": 1013,
+        "cy": 562.9999847412109
+      }
+    }
+  ],
+  "bodyText": "行动环节　选来源 → 点目标 → 同台确认\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n行动中\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫\n已选目标\n西锁骑士\nB2\n执行攻击\n重选目标\n当前来源\n生物攻击\n已计划法术\n装备攻击\n检视法术书\n弃牌堆",
+  "imageCount": 17,
+  "diceCount": 0,
+  "workbench": {
+    "left": 432,
+    "top": 692,
+    "right": 1522,
+    "bottom": 1056,
+    "width": 1090,
+    "height": 364,
+    "cx": 977,
+    "cy": 874
+  },
+  "sourceCard": {
+    "left": 454,
+    "top": 694,
+    "right": 714,
+    "bottom": 1054,
+    "width": 260,
+    "height": 360,
+    "cx": 584,
+    "cy": 874
+  },
+  "targetSummary": {
+    "left": 738,
+    "top": 758,
+    "right": 1022,
+    "bottom": 909,
+    "width": 284,
+    "height": 151,
+    "cx": 880,
+    "cy": 833.5
+  },
+  "confirm": {
+    "left": 1032,
+    "top": 758,
+    "right": 1284,
+    "bottom": 816,
+    "width": 252,
+    "height": 58,
+    "cx": 1158,
+    "cy": 787
+  },
+  "cancel": {
+    "left": 1032,
+    "top": 828,
+    "right": 1284,
+    "bottom": 886,
+    "width": 252,
+    "height": 58,
+    "cx": 1158,
+    "cy": 857
+  },
+  "sourceField": {
+    "left": 532.1474609375,
+    "top": 483.3289794921875,
+    "right": 645.8525390625,
+    "bottom": 638.6710205078125,
+    "width": 113.705078125,
+    "height": 155.342041015625,
+    "cx": 589,
+    "cy": 561
+  },
+  "targetField": {
+    "left": 957.414794921875,
+    "top": 286.1960144042969,
+    "right": 1068.585205078125,
+    "bottom": 439.8039855957031,
+    "width": 111.17041015625,
+    "height": 153.60797119140625,
+    "cx": 1013,
+    "cy": 363
+  },
+  "workbenchChildrenInside": true,
+  "confirmToTargetDistance": 281.8621116787426,
+  "sourceToTargetDistance": 467.9529890918531,
+  "fieldOverlapWithWorkbench": [
+    {
+      "alt": "烈焰狱鬼",
+      "area": 0
+    },
+    {
+      "alt": "西锁骑士，已选目标",
+      "area": 0
+    },
+    {
+      "alt": "火烙魔婴，当前来源",
+      "area": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "area": 0
+    }
+  ]
+}

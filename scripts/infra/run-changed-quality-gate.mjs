@@ -1780,30 +1780,7 @@ for (const file of files) {
   console.log(`- ${file}`);
 }
 
-const taskGuard = acquireTaskGuard({
-  name: 'quality-gate',
-  conflicts: ['e2e-run'],
-  command: process.argv.join(' '),
-  metadata: {
-    mode,
-    baseRef,
-    fileCount: files.length,
-  },
-});
-
-try {
-  const globalBudgetHandle = await acquireGlobalHeavyBudget({
-    group: 'quality-gate',
-    command: process.argv.join(' '),
-    metadata: {
-      mode,
-      baseRef,
-      fileCount: files.length,
-    },
-  });
-
-  try {
-  mkdirSync(CACHE_DIR, { recursive: true });
+mkdirSync(CACHE_DIR, { recursive: true });
   runEncodingGuard(files);
   runAssetPipelineGuard(files);
   runAtlasContractGuard(files, { repoRoot });
@@ -1844,6 +1821,29 @@ try {
     }
   }
 
+const taskGuard = acquireTaskGuard({
+  name: 'quality-gate',
+  conflicts: ['e2e-run'],
+  command: process.argv.join(' '),
+  metadata: {
+    mode,
+    baseRef,
+    fileCount: files.length,
+  },
+});
+
+try {
+  const globalBudgetHandle = await acquireGlobalHeavyBudget({
+    group: 'quality-gate',
+    command: process.argv.join(' '),
+    metadata: {
+      mode,
+      baseRef,
+      fileCount: files.length,
+    },
+  });
+
+  try {
   const startedAt = Date.now();
   const durations = [];
   const commandCache = shouldUsePrePushCache()

@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-07-31T13:33:27.281Z",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "boxes": {
+    ".book-browser": {
+      "x": 246,
+      "y": 724,
+      "width": 1358,
+      "height": 318,
+      "text": "全部\n        攻击\n        结界\n        生物\n        装备\n      \n      \n        \n        \n        \n        \n        \n        \n        \n        \n      \n      \n        ⌃\n        1 / 4\n        ⌄"
+    },
+    ".bookmark-tabs": {
+      "x": 252,
+      "y": 766,
+      "width": 58,
+      "height": 158,
+      "text": "全部\n        攻击\n        结界\n        生物\n        装备"
+    },
+    ".book-row": {
+      "x": 320,
+      "y": 738,
+      "width": 1226,
+      "height": 266,
+      "text": ""
+    },
+    ".book-page-rail": {
+      "x": 1550,
+      "y": 842,
+      "width": 50,
+      "height": 202,
+      "text": "⌃\n        1 / 4\n        ⌄"
+    },
+    ".page-index": {
+      "x": 1554,
+      "y": 934,
+      "width": 42,
+      "height": 18,
+      "text": "1 / 4"
+    },
+    ".plan-zone": {
+      "x": 1608,
+      "y": 847,
+      "width": 260,
+      "height": 155,
+      "text": "己方已计划 2 / 2\n    \n      来源"
+    },
+    ".discard": {
+      "x": 1591,
+      "y": 1012,
+      "width": 79,
+      "height": 50,
+      "text": "弃牌 3"
+    },
+    ".turn-end": {
+      "x": 1700,
+      "y": 1010,
+      "width": 168,
+      "height": 52,
+      "text": "回合结束"
+    },
+    ".arena": {
+      "x": 240,
+      "y": 30,
+      "width": 1440,
+      "height": 850,
+      "text": ""
+    },
+    ".target-field": {
+      "x": 1127,
+      "y": 346,
+      "width": 136,
+      "height": 188,
+      "text": ""
+    },
+    ".resolution-layer": {
+      "x": 1268,
+      "y": 378,
+      "width": 288,
+      "height": 118,
+      "text": "掷骰预备"
+    }
+  },
+  "imageFailures": [],
+  "forbidden": [],
+  "relation": {
+    "tabsLeftOfFirstCard": true,
+    "pageRailAtRightOfCards": true
+  }
+}

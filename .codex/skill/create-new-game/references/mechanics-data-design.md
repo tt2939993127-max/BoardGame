@@ -425,6 +425,8 @@ interface Card {
 
 新游戏的卡牌、单位、事件、建筑、token、派系、牌组构成、起始部署、素材引用和能力绑定等静态事实，默认先建模为 `GameConfigPackage`，再由运行时加载、校验和物化。详细边界以 `docs/ai-rules/game-config-package.md` 为准。
 
+配置包属于数据驱动录入的完成口径，不是阶段 2 之后的可选架构补充。复查“数据录入是否完成”时，必须同时检查现有规则字段、素材 / atlas、运行时配置、setup、token / 骰子 / 区域、manifest 和能力绑定是否有同一套真相源；若暂不配置包化，只能写成 `config-package-deferred`，并说明当前临时真相源与后续迁移范围。
+
 最低要求：
 
 1. OpenSpec proposal 或 design 必须说明是否使用配置包；使用时写清数据源格式、schema 范围和表格审查范围。

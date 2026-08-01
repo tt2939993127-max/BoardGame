@@ -1,0 +1,215 @@
+{
+  "viewport": "1920x1080",
+  "audits": [
+    {
+      "id": "v22a-rules-tactical",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22a-rules-tactical.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22a-rules-tactical.png",
+      "mediaGenerate": false,
+      "forbiddenInArtifactNoComments": 0,
+      "forbiddenInVisibleText": 0,
+      "hasSpellbookBrowser": true,
+      "candidateCount": 5,
+      "tabLabels": [
+        "全部",
+        "攻击",
+        "结界",
+        "生物",
+        "装备",
+        "咒语"
+      ],
+      "pagerText": "‹ 1/4 ›",
+      "hudTransforms": [
+        "none",
+        "none"
+      ],
+      "mageCardTransforms": [
+        "none",
+        "none"
+      ],
+      "spellbookRect": {
+        "left": 492,
+        "top": 892,
+        "width": 810,
+        "height": 178,
+        "right": 1302,
+        "bottom": 1070,
+        "cx": 897,
+        "cy": 981
+      },
+      "spellbookOverlapSelfMage": 0,
+      "spellbookOverlapSelfHud": 0,
+      "diceCenterDistanceToTarget": 139.09,
+      "zoneResults": [
+        {
+          "label": "西锁骑士，当前火球术目标",
+          "zoneId": "B2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "火印魔婴",
+          "zoneId": "A3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "烈焰魔物",
+          "zoneId": "A2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "缠绕藤蔓",
+          "zoneId": "B3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        }
+      ]
+    },
+    {
+      "id": "v22b-spellbook-operations",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22b-spellbook-operations.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22b-spellbook-operations.png",
+      "mediaGenerate": false,
+      "forbiddenInArtifactNoComments": 0,
+      "forbiddenInVisibleText": 0,
+      "hasSpellbookBrowser": true,
+      "candidateCount": 5,
+      "tabLabels": [
+        "全部",
+        "攻击",
+        "结界",
+        "生物",
+        "装备",
+        "咒语"
+      ],
+      "pagerText": "‹ 1/4 ›",
+      "hudTransforms": [
+        "none",
+        "none"
+      ],
+      "mageCardTransforms": [
+        "none",
+        "none"
+      ],
+      "spellbookRect": {
+        "left": 420,
+        "top": 882,
+        "width": 990,
+        "height": 188,
+        "right": 1410,
+        "bottom": 1070,
+        "cx": 915,
+        "cy": 976
+      },
+      "spellbookOverlapSelfMage": 0,
+      "spellbookOverlapSelfHud": 0,
+      "diceCenterDistanceToTarget": 139.09,
+      "zoneResults": [
+        {
+          "label": "西锁骑士，当前火球术目标",
+          "zoneId": "B2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "火印魔婴",
+          "zoneId": "A3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "烈焰魔物",
+          "zoneId": "A2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "缠绕藤蔓",
+          "zoneId": "B3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        }
+      ]
+    },
+    {
+      "id": "v22c-cast-resolution",
+      "htmlPath": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\mage-wars-step1-runtime-board-v22c-cast-resolution.html",
+      "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-variants\\step1-runtime-board-opendesign-artifact-v22c-cast-resolution.png",
+      "mediaGenerate": false,
+      "forbiddenInArtifactNoComments": 0,
+      "forbiddenInVisibleText": 0,
+      "hasSpellbookBrowser": true,
+      "candidateCount": 5,
+      "tabLabels": [
+        "全部",
+        "攻击",
+        "结界",
+        "生物",
+        "装备",
+        "咒语"
+      ],
+      "pagerText": "‹ 1/4 ›",
+      "hudTransforms": [
+        "none",
+        "none"
+      ],
+      "mageCardTransforms": [
+        "none",
+        "none"
+      ],
+      "spellbookRect": {
+        "left": 438,
+        "top": 920,
+        "width": 820,
+        "height": 152,
+        "right": 1258,
+        "bottom": 1072,
+        "cx": 848,
+        "cy": 996
+      },
+      "spellbookOverlapSelfMage": 0,
+      "spellbookOverlapSelfHud": 0,
+      "diceCenterDistanceToTarget": 139.27,
+      "zoneResults": [
+        {
+          "label": "西锁骑士，当前火球术目标",
+          "zoneId": "B2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "火印魔婴",
+          "zoneId": "A3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "烈焰魔物",
+          "zoneId": "A2",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        },
+        {
+          "label": "缠绕藤蔓",
+          "zoneId": "B3",
+          "centerInsideOwn": true,
+          "ownRatio": 1,
+          "maxOtherRatio": 0
+        }
+      ]
+    }
+  ]
+}

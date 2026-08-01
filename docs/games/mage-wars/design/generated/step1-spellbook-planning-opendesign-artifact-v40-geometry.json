@@ -1,0 +1,420 @@
+{
+  "version": "v40",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "zones": [
+    {
+      "label": "A1",
+      "rect": {
+        "left": 52,
+        "top": 84,
+        "right": 383,
+        "bottom": 394,
+        "width": 331,
+        "height": 310,
+        "cx": 217.5,
+        "cy": 239
+      }
+    },
+    {
+      "label": "B1",
+      "rect": {
+        "left": 383,
+        "top": 84,
+        "right": 714,
+        "bottom": 394,
+        "width": 331,
+        "height": 310,
+        "cx": 548.5,
+        "cy": 239
+      }
+    },
+    {
+      "label": "A2",
+      "rect": {
+        "left": 52,
+        "top": 394,
+        "right": 383,
+        "bottom": 704,
+        "width": 331,
+        "height": 310,
+        "cx": 217.5,
+        "cy": 549
+      }
+    },
+    {
+      "label": "B2",
+      "rect": {
+        "left": 383,
+        "top": 394,
+        "right": 714,
+        "bottom": 704,
+        "width": 331,
+        "height": 310,
+        "cx": 548.5,
+        "cy": 549
+      }
+    },
+    {
+      "label": "A3",
+      "rect": {
+        "left": 52,
+        "top": 704,
+        "right": 383,
+        "bottom": 1014,
+        "width": 331,
+        "height": 310,
+        "cx": 217.5,
+        "cy": 859
+      }
+    },
+    {
+      "label": "B3",
+      "rect": {
+        "left": 383,
+        "top": 704,
+        "right": 714,
+        "bottom": 1014,
+        "width": 331,
+        "height": 310,
+        "cx": 548.5,
+        "cy": 859
+      }
+    }
+  ],
+  "fieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "",
+      "rect": {
+        "left": 173.6102294921875,
+        "top": 486.6306457519531,
+        "right": 274.3897705078125,
+        "bottom": 623.3693237304688,
+        "width": 100.779541015625,
+        "height": 136.73867797851562,
+        "cx": 224,
+        "cy": 554.9999847412109
+      }
+    },
+    {
+      "alt": "西锁骑士",
+      "zoneId": "",
+      "rect": {
+        "left": 487.7252502441406,
+        "top": 476.3999328613281,
+        "right": 586.2747192382812,
+        "bottom": 611.60009765625,
+        "width": 98.54946899414062,
+        "height": 135.20016479492188,
+        "cx": 536.9999847412109,
+        "cy": 544.0000152587891
+      }
+    },
+    {
+      "alt": "火烙魔婴",
+      "zoneId": "",
+      "rect": {
+        "left": 176.6102294921875,
+        "top": 789.6306762695312,
+        "right": 277.3897705078125,
+        "bottom": 926.3693237304688,
+        "width": 100.779541015625,
+        "height": 136.7386474609375,
+        "cx": 227,
+        "cy": 858
+      }
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "",
+      "rect": {
+        "left": 487.7252502441406,
+        "top": 782.39990234375,
+        "right": 586.2747192382812,
+        "bottom": 917.60009765625,
+        "width": 98.54946899414062,
+        "height": 135.2001953125,
+        "cx": 536.9999847412109,
+        "cy": 850
+      }
+    }
+  ],
+  "forbidden": {
+    "invalidPrivateZoneName": 0,
+    "duplicatedPrintedFields": 0,
+    "longInstructionCopy": 0
+  },
+  "bodyText": "准备环节　计划法术\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n计划中\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n等待\n \n对手已计划 2\n法术书 30\n全部\n攻击\n结界\n生物\n咒语\n装备\n‹\n第 1 / 3 页\n›\n已计划 1\n空槽\n弃牌堆 3\n完成计划\n撤销",
+  "imageCount": 28,
+  "diceCount": 0,
+  "book": {
+    "left": 760,
+    "top": 82,
+    "right": 1824,
+    "bottom": 1014,
+    "width": 1064,
+    "height": 932,
+    "cx": 1292,
+    "cy": 548
+  },
+  "candidates": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 760,
+        "top": 168,
+        "right": 888,
+        "bottom": 348,
+        "width": 128,
+        "height": 180,
+        "cx": 824,
+        "cy": 258
+      },
+      "selected": true
+    },
+    {
+      "alt": "法师祸咒",
+      "rect": {
+        "left": 908,
+        "top": 176,
+        "right": 1036,
+        "bottom": 356,
+        "width": 128,
+        "height": 180,
+        "cx": 972,
+        "cy": 266
+      },
+      "selected": false
+    },
+    {
+      "alt": "格挡",
+      "rect": {
+        "left": 1056,
+        "top": 176,
+        "right": 1184,
+        "bottom": 356,
+        "width": 128,
+        "height": 180,
+        "cx": 1120,
+        "cy": 266
+      },
+      "selected": false
+    },
+    {
+      "alt": "法力失效",
+      "rect": {
+        "left": 1204,
+        "top": 176,
+        "right": 1332,
+        "bottom": 356,
+        "width": 128,
+        "height": 180,
+        "cx": 1268,
+        "cy": 266
+      },
+      "selected": false
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "rect": {
+        "left": 760,
+        "top": 374,
+        "right": 888,
+        "bottom": 554,
+        "width": 128,
+        "height": 180,
+        "cx": 824,
+        "cy": 464
+      },
+      "selected": false
+    },
+    {
+      "alt": "火烙魔婴",
+      "rect": {
+        "left": 908,
+        "top": 374,
+        "right": 1036,
+        "bottom": 554,
+        "width": 128,
+        "height": 180,
+        "cx": 972,
+        "cy": 464
+      },
+      "selected": false
+    },
+    {
+      "alt": "钢爪灰熊",
+      "rect": {
+        "left": 1056,
+        "top": 374,
+        "right": 1184,
+        "bottom": 554,
+        "width": 128,
+        "height": 180,
+        "cx": 1120,
+        "cy": 464
+      },
+      "selected": false
+    },
+    {
+      "alt": "烈焰狱鬼",
+      "rect": {
+        "left": 1204,
+        "top": 374,
+        "right": 1332,
+        "bottom": 554,
+        "width": 128,
+        "height": 180,
+        "cx": 1268,
+        "cy": 464
+      },
+      "selected": false
+    },
+    {
+      "alt": "灰衣天使",
+      "rect": {
+        "left": 760,
+        "top": 572,
+        "right": 888,
+        "bottom": 752,
+        "width": 128,
+        "height": 180,
+        "cx": 824,
+        "cy": 662
+      },
+      "selected": false
+    },
+    {
+      "alt": "西锁骑士",
+      "rect": {
+        "left": 908,
+        "top": 572,
+        "right": 1036,
+        "bottom": 752,
+        "width": 128,
+        "height": 180,
+        "cx": 972,
+        "cy": 662
+      },
+      "selected": false
+    },
+    {
+      "alt": "单体治疗",
+      "rect": {
+        "left": 1056,
+        "top": 572,
+        "right": 1184,
+        "bottom": 752,
+        "width": 128,
+        "height": 180,
+        "cx": 1120,
+        "cy": 662
+      },
+      "selected": false
+    },
+    {
+      "alt": "狱火长鞭",
+      "rect": {
+        "left": 1204,
+        "top": 572,
+        "right": 1332,
+        "bottom": 752,
+        "width": 128,
+        "height": 180,
+        "cx": 1268,
+        "cy": 662
+      },
+      "selected": false
+    }
+  ],
+  "focus": {
+    "left": 1322,
+    "top": 174,
+    "right": 1640,
+    "bottom": 622,
+    "width": 318,
+    "height": 448,
+    "cx": 1481,
+    "cy": 398
+  },
+  "prepared": [
+    {
+      "text": "已计划 1",
+      "rect": {
+        "left": 1672,
+        "top": 174,
+        "right": 1824,
+        "bottom": 384,
+        "width": 152,
+        "height": 210,
+        "cx": 1748,
+        "cy": 279
+      }
+    },
+    {
+      "text": "空槽",
+      "rect": {
+        "left": 1672,
+        "top": 400,
+        "right": 1824,
+        "bottom": 610,
+        "width": 152,
+        "height": 210,
+        "cx": 1748,
+        "cy": 505
+      }
+    }
+  ],
+  "arena": {
+    "left": 52,
+    "top": 84,
+    "right": 714,
+    "bottom": 1014,
+    "width": 662,
+    "height": 930,
+    "cx": 383,
+    "cy": 549
+  },
+  "categoryCount": 6,
+  "pager": {
+    "left": 1646.53125,
+    "top": 97,
+    "right": 1824,
+    "bottom": 131,
+    "width": 177.46875,
+    "height": 34,
+    "cx": 1735.265625,
+    "cy": 114
+  },
+  "primary": {
+    "left": 1478,
+    "top": 950,
+    "right": 1668.25,
+    "bottom": 1006,
+    "width": 190.25,
+    "height": 56,
+    "cx": 1573.125,
+    "cy": 978
+  },
+  "fieldOverlapWithBook": [
+    {
+      "alt": "烈焰狱鬼",
+      "area": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "area": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "area": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "area": 0
+    }
+  ]
+}

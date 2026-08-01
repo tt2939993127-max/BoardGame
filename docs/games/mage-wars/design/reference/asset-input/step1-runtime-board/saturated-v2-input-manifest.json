@@ -1,0 +1,129 @@
+{
+  "status": "historical-open-design-source/superseded-by-open-design-artifact-v6",
+  "generatedAt": "2026-07-28T02:05:30.229Z",
+  "localRefs": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\reference\\asset-input\\step1-runtime-board",
+  "odRefs": "D:\\codex-home\\tools\\open-design\\.od\\projects\\mage-wars-ui-design\\refs\\mage-wars-step1",
+  "htmlPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\mage-wars-step1-saturated-v2.html",
+  "cropped": [
+    {
+      "file": "spell-1804-mage-bane.png",
+      "cardId": 1804,
+      "name": "法师祸咒",
+      "role": "邪术师计划法术：法师祸咒",
+      "atlas": "spell-enchantment-core-a-atlas",
+      "frame": "1804",
+      "size": "310x436",
+      "sha16": "dd0706b48c940a14"
+    },
+    {
+      "file": "spell-1806-block.png",
+      "cardId": 1806,
+      "name": "格挡",
+      "role": "女祭司隐性防御结界候选：格挡",
+      "atlas": "spell-enchantment-core-a-atlas",
+      "frame": "1806",
+      "size": "310x436",
+      "sha16": "dcb0780021453c68"
+    },
+    {
+      "file": "spell-1901-nullify.png",
+      "cardId": 1901,
+      "name": "法力失效",
+      "role": "女祭司反制结界候选：法力失效",
+      "atlas": "spell-enchantment-core-b-atlas",
+      "frame": "1901",
+      "size": "310x436",
+      "sha16": "8fe93c58c80a7f31"
+    },
+    {
+      "file": "spell-2224-conjuration.png",
+      "cardId": 2224,
+      "name": "缠绕藤蔓",
+      "role": "魔物对象：缠绕藤蔓",
+      "atlas": "spell-conjuration-core-atlas",
+      "frame": "2224",
+      "size": "310x436",
+      "sha16": "2e8d20c25492278a"
+    },
+    {
+      "file": "spell-2801-firebrand-imp.png",
+      "cardId": 2801,
+      "name": "火烙魔婴",
+      "role": "邪术师生物：火烙魔婴",
+      "atlas": "spell-creature-core-a-atlas",
+      "frame": "2801",
+      "size": "310x436",
+      "sha16": "ad7ce68308cd8c8f"
+    },
+    {
+      "file": "spell-2803-flaming-hellion.png",
+      "cardId": 2803,
+      "name": "烈焰狱鬼",
+      "role": "邪术师生物：烈焰狱鬼",
+      "atlas": "spell-creature-core-a-atlas",
+      "frame": "2803",
+      "size": "310x436",
+      "sha16": "24ace5aea141ac5c"
+    },
+    {
+      "file": "spell-2816-royal-archer.png",
+      "cardId": 2816,
+      "name": "皇家箭手",
+      "role": "女祭司生物：皇家箭手",
+      "atlas": "spell-creature-core-a-atlas",
+      "frame": "2816",
+      "size": "310x436",
+      "sha16": "2201c60befe98535"
+    },
+    {
+      "file": "spell-2907-gray-angel.png",
+      "cardId": 2907,
+      "name": "灰衣天使",
+      "role": "女祭司生物：灰衣天使",
+      "atlas": "spell-creature-core-b-atlas",
+      "frame": "2907",
+      "size": "310x436",
+      "sha16": "793ba241788d7c2e"
+    },
+    {
+      "file": "spell-2909-knight-of-westlock.png",
+      "cardId": 2909,
+      "name": "西锁骑士",
+      "role": "女祭司生物：西锁骑士",
+      "atlas": "spell-creature-core-b-atlas",
+      "frame": "2909",
+      "size": "310x436",
+      "sha16": "de94b4998a8bf5fc"
+    },
+    {
+      "file": "spell-3701-lash-of-hellfire.png",
+      "cardId": 3701,
+      "name": "狱火长鞭",
+      "role": "邪术师装备：狱火长鞭",
+      "atlas": "spell-equipment-core-atlas",
+      "frame": "3701",
+      "size": "310x436",
+      "sha16": "a9b2bfde62305796"
+    },
+    {
+      "file": "spell-3708-wind-wyvern-hide.png",
+      "cardId": 3708,
+      "name": "风龙皮甲",
+      "role": "女祭司装备：风龙皮甲",
+      "atlas": "spell-equipment-core-atlas",
+      "frame": "3708",
+      "size": "310x436",
+      "sha16": "b2126a8ecbfc3b2c"
+    },
+    {
+      "file": "spell-3715-deflection-bracers.png",
+      "cardId": 3715,
+      "name": "偏移护腕",
+      "role": "女祭司装备：偏移护腕",
+      "atlas": "spell-equipment-core-atlas",
+      "frame": "3715",
+      "size": "310x436",
+      "sha16": "2857df8e867aab6c"
+    }
+  ]
+}

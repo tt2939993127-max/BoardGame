@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mage Wars UI 草稿方案 A-D</title>
+  <style>
+    :root {
+      --table: #19150f;
+      --felt: #2b2418;
+      --ink: #f1e5cf;
+      --muted: #c4a877;
+      --line: rgba(231, 202, 145, .32);
+      --hot: #f2b544;
+      --danger: #c74e36;
+      --mana: #3979a7;
+      --life: #a84236;
+      --ok: #6aa76e;
+      --soft: rgba(20, 15, 9, .66);
+      --panel: rgba(32, 24, 14, .78);
+      --panel2: rgba(48, 38, 24, .72);
+      --shadow: 0 28px 60px rgba(0, 0, 0, .38);
+      font-family: "Georgia", "Times New Roman", "Microsoft YaHei", serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 50% 25%, #43331f, #18120c 55%, #0d0a07);
+      color: var(--ink);
+    }
+
+    .gallery {
+      width: 3960px;
+      min-height: 2310px;
+      padding: 48px;
+      display: grid;
+      grid-template-columns: repeat(2, 1920px);
+      gap: 48px;
+    }
+
+    .frame {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(165, 112, 48, .18), transparent 34%),
+        radial-gradient(circle at 80% 82%, rgba(71, 40, 20, .28), transparent 35%),
+        linear-gradient(135deg, #2b2014, #120f0a 58%, #23170e);
+      box-shadow: var(--shadow);
+    }
+
+    .frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .018) 1px, transparent 1px);
+      background-size: 44px 44px, 44px 44px;
+      opacity: .22;
+      pointer-events: none;
+    }
+
+    .draft-tag {
+      position: absolute;
+      top: 22px;
+      left: 28px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px 9px;
+      background: rgba(12, 9, 6, .72);
+      color: #ffe8b4;
+      font-size: 18px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      border-left: 5px solid var(--hot);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .25);
+    }
+
+    .draft-tag strong {
+      font-size: 28px;
+      line-height: 1;
+      color: #fff6d7;
+    }
+
+    .stage {
+      position: absolute;
+      inset: 70px 36px 42px;
+    }
+
+    .arena {
+      position: absolute;
+      overflow: hidden;
+      background: #302415;
+      box-shadow: inset 0 0 0 1px rgba(255, 238, 186, .12), 0 30px 70px rgba(0, 0, 0, .32);
+    }
+
+    .arena img.arena-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: .78;
+      filter: contrast(1.08) saturate(.82) brightness(.9);
+    }
+
+    .arena-grid {
+      position: absolute;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 8px;
+      padding: 16px;
+    }
+
+    .zone {
+      position: relative;
+      background: rgba(64, 48, 30, .28);
+      outline: 1px solid rgba(255, 231, 165, .28);
+      outline-offset: -1px;
+    }
+
+    .zone.active {
+      background: rgba(184, 126, 44, .24);
+      box-shadow: inset 0 0 24px rgba(230, 164, 61, .22);
+    }
+
+    .zone.target {
+      background: rgba(148, 52, 34, .24);
+      outline-color: rgba(246, 176, 82, .76);
+      box-shadow: inset 0 0 0 2px rgba(246, 176, 82, .45), inset 0 0 30px rgba(200, 81, 39, .24);
+    }
+
+    .zone-code {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      color: rgba(255, 239, 195, .62);
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .card {
+      position: absolute;
+      width: var(--w, 84px);
+      aspect-ratio: .71;
+      background: rgba(26, 17, 10, .9);
+      box-shadow: 0 9px 18px rgba(0, 0, 0, .34);
+      overflow: hidden;
+    }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card.selected {
+      box-shadow: 0 0 0 3px rgba(246, 178, 72, .82), 0 0 26px rgba(246, 178, 72, .35), 0 10px 18px rgba(0, 0, 0, .45);
+    }
+
+    .token {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      object-fit: cover;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
+    }
+
+    .status-strip, .phase-strip, .hud, .dock, .spellbook, .prepared-row, .resolve-band, .micro-discard {
+      position: absolute;
+      background: var(--panel);
+      backdrop-filter: blur(1px);
+      box-shadow: 0 16px 34px rgba(0, 0, 0, .22);
+    }
+
+    .phase-strip {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      font-size: 19px;
+      color: #f7dfaf;
+      border-left: 4px solid var(--hot);
+    }
+
+    .phase-strip .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 14px rgba(106, 167, 110, .62);
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-width: 300px;
+      padding: 10px 12px;
+    }
+
+    .hud-card {
+      width: 54px;
+      height: 76px;
+      object-fit: cover;
+      box-shadow: 0 5px 10px rgba(0, 0, 0, .35);
+    }
+
+    .hud-title {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: #ffe8b8;
+      white-space: nowrap;
+    }
+
+    .bar {
+      position: relative;
+      height: 12px;
+      margin: 7px 0;
+      background: rgba(0, 0, 0, .32);
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      width: var(--v, 60%);
+      background: var(--c, var(--life));
+    }
+
+    .hud-num {
+      font-size: 17px;
+      line-height: 1.35;
+      color: #f6d99e;
+      text-align: right;
+    }
+
+    .dock {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      color: #f6dfb1;
+    }
+
+    .dock .small {
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .button {
+      height: 48px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #b87332, #815127);
+      color: #fff1ca;
+      font-size: 20px;
+      font-weight: 700;
+      box-shadow: inset 0 1px rgba(255, 255, 255, .2), 0 10px 20px rgba(0, 0, 0, .22);
+    }
+
+    .button.secondary {
+      background: rgba(83, 67, 43, .84);
+      color: #ecd2a0;
+    }
+
+    .spellbook {
+      padding: 13px 16px 15px;
+      display: grid;
+      gap: 11px;
+      align-content: start;
+    }
+
+    .book-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #ffe6b2;
+      font-size: 18px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tab {
+      min-width: 52px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 233, 177, .1);
+      color: #e8c98f;
+      font-size: 16px;
+    }
+
+    .tab.on {
+      background: rgba(219, 148, 54, .32);
+      color: #fff1c9;
+    }
+
+    .spell-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .spell-card {
+      position: relative;
+      width: var(--sw, 86px);
+      aspect-ratio: .71;
+      background: #21160d;
+      overflow: hidden;
+      box-shadow: 0 8px 14px rgba(0, 0, 0, .28);
+      flex: 0 0 auto;
+    }
+
+    .spell-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .spell-card.active {
+      transform: translateY(-8px);
+      box-shadow: 0 0 0 3px rgba(244, 184, 80, .85), 0 16px 22px rgba(0, 0, 0, .35);
+    }
+
+    .prepared-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .prepared-slot {
+      width: 112px;
+      height: 158px;
+      background: rgba(24, 17, 10, .9);
+      display: grid;
+      place-items: center;
+      color: #d9b982;
+      font-size: 15px;
+      position: relative;
+      box-shadow: inset 0 0 0 1px rgba(244, 217, 150, .2);
+      overflow: hidden;
+    }
+
+    .prepared-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .prepared-slot .slot-label {
+      position: absolute;
+      left: 6px;
+      bottom: 6px;
+      right: 6px;
+      padding: 3px 5px;
+      background: rgba(16, 10, 5, .82);
+      color: #ffe7aa;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .micro-discard {
+      width: 92px;
+      height: 124px;
+      display: grid;
+      place-items: center;
+      color: #e8c98f;
+      font-size: 15px;
+      text-align: center;
+      padding: 8px;
+    }
+
+    .dice {
+      position: absolute;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 9px;
+      background: rgba(18, 12, 7, .76);
+      box-shadow: 0 14px 28px rgba(0, 0, 0, .32);
+      z-index: 12;
+    }
+
+    .die {
+      width: 42px;
+      height: 42px;
+      background: #e3cfac;
+      object-fit: cover;
+      box-shadow: inset 0 0 0 1px rgba(71, 38, 12, .42);
+    }
+
+    .damage-badge {
+      position: absolute;
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle, #e5b469, #a9472d 64%, #4a1b14);
+      color: #fff5d1;
+      font-size: 25px;
+      font-weight: 800;
+      z-index: 14;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, .38);
+    }
+
+    .path-line {
+      position: absolute;
+      height: 4px;
+      transform-origin: left center;
+      background: linear-gradient(90deg, rgba(251, 212, 124, 0), rgba(251, 212, 124, .75), rgba(198, 72, 44, .72));
+      box-shadow: 0 0 14px rgba(251, 181, 78, .45);
+      z-index: 8;
+    }
+
+    .mini-note {
+      position: absolute;
+      padding: 7px 10px;
+      background: rgba(22, 14, 8, .76);
+      color: #f5d9a5;
+      font-size: 16px;
+      z-index: 13;
+      box-shadow: 0 10px 22px rgba(0, 0, 0, .24);
+    }
+
+    .resource-pill {
+      display: grid;
+      gap: 4px;
+      padding: 8px 10px;
+      background: rgba(16, 12, 8, .64);
+      min-width: 82px;
+      text-align: center;
+    }
+
+    .resource-pill strong {
+      color: #fff1c8;
+      font-size: 22px;
+    }
+
+    .resource-pill span {
+      color: #c8aa74;
+      font-size: 13px;
+    }
+
+    .callout {
+      position: absolute;
+      max-width: 360px;
+      padding: 12px 14px;
+      background: rgba(24, 17, 10, .82);
+      color: #f4d9aa;
+      font-size: 17px;
+      line-height: 1.35;
+      z-index: 16;
+      border-left: 4px solid rgba(240, 180, 72, .85);
+    }
+
+    .legend {
+      position: absolute;
+      right: 26px;
+      top: 24px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: #d8bb86;
+      font-size: 15px;
+      z-index: 20;
+      opacity: .86;
+    }
+
+    .legend i {
+      width: 13px;
+      height: 13px;
+      background: rgba(244, 179, 66, .48);
+      display: inline-block;
+    }
+
+    .overview-title {
+      grid-column: 1 / -1;
+      height: 86px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #f8dfad;
+      font-size: 32px;
+      padding: 0 12px;
+    }
+
+    .overview-title small {
+      font-size: 20px;
+      color: #cdb17e;
+    }
+
+    .thumb {
+      transform-origin: top left;
+      transform: scale(.475);
+      width: 1920px;
+      height: 1080px;
+    }
+
+    .overview-wrap {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Common object placements */
+    .warlock { --w: 92px; }
+    .priestess { --w: 88px; }
+    .creature { --w: 78px; }
+    .vine { --w: 76px; }
+    .angel { --w: 76px; }
+
+    /* A - board first */
+    .a .arena { left: 240px; top: 80px; width: 1120px; height: 720px; }
+    .a .arena-grid { left: 505px; top: 56px; width: 560px; height: 610px; }
+    .a .phase-strip { right: 60px; top: 30px; width: 430px; }
+    .a .dock { right: 72px; top: 315px; width: 260px; }
+    .a .spellbook { left: 490px; right: 72px; bottom: 34px; height: 172px; }
+    .a .prepared-row { left: 170px; bottom: 36px; width: 292px; height: 180px; }
+    .a .hud.self { left: 174px; top: 740px; }
+    .a .hud.opp { left: 112px; top: 96px; }
+    .a .micro-discard.self { left: 72px; bottom: 54px; }
+    .a .micro-discard.opp { right: 412px; top: 84px; height: 98px; }
+    .a .dice { left: 1034px; top: 418px; }
+    .a .damage-badge { left: 1114px; top: 350px; }
+    .a .path-line { left: 824px; top: 428px; width: 245px; transform: rotate(-6deg); }
+
+    /* B - spellbook first */
+    .b .arena { left: 230px; top: 72px; width: 1030px; height: 575px; }
+    .b .arena-grid { left: 464px; top: 46px; width: 504px; height: 494px; }
+    .b .phase-strip { right: 78px; top: 90px; width: 300px; }
+    .b .dock { right: 80px; bottom: 78px; width: 252px; height: 250px; }
+    .b .spellbook { left: 74px; right: 360px; bottom: 44px; height: 330px; }
+    .b .prepared-row { left: 805px; top: 594px; width: 292px; height: 174px; z-index: 17; background: rgba(20, 13, 7, .82); }
+    .b .hud.self { left: 112px; top: 620px; }
+    .b .hud.opp { left: 112px; top: 90px; }
+    .b .micro-discard.self { right: 386px; bottom: 80px; }
+    .b .dice { left: 960px; top: 324px; }
+    .b .damage-badge { left: 1030px; top: 272px; }
+    .b .path-line { left: 792px; top: 344px; width: 215px; transform: rotate(-4deg); }
+
+    /* C - cast resolution first */
+    .c .arena { left: 220px; top: 98px; width: 1010px; height: 640px; }
+    .c .arena-grid { left: 450px; top: 58px; width: 496px; height: 535px; }
+    .c .resolve-band { left: 488px; top: 298px; width: 850px; height: 210px; background: linear-gradient(90deg, rgba(30, 19, 10, .72), rgba(72, 43, 20, .4), rgba(30, 19, 10, .72)); box-shadow: 0 20px 42px rgba(0,0,0,.22); z-index: 7; pointer-events: none; }
+    .c .phase-strip { left: 586px; top: 32px; width: 510px; }
+    .c .dock { right: 76px; top: 360px; width: 260px; height: 228px; }
+    .c .spellbook { left: 420px; right: 74px; bottom: 38px; height: 188px; }
+    .c .prepared-row { left: 84px; bottom: 40px; width: 300px; height: 188px; }
+    .c .hud.self { left: 104px; top: 732px; }
+    .c .hud.opp { right: 80px; top: 88px; }
+    .c .micro-discard.self { right: 360px; bottom: 72px; height: 102px; }
+    .c .dice { left: 932px; top: 384px; transform: scale(1.16); }
+    .c .damage-badge { left: 1054px; top: 334px; transform: scale(1.15); }
+    .c .path-line { left: 675px; top: 408px; width: 360px; transform: rotate(-7deg); }
+
+    /* D - accessible operator */
+    .d .arena { left: 86px; top: 92px; width: 1120px; height: 660px; }
+    .d .arena-grid { left: 515px; top: 60px; width: 530px; height: 542px; }
+    .d .phase-strip { left: 86px; top: 28px; width: 470px; }
+    .d .dock { right: 70px; top: 92px; width: 392px; height: 660px; padding: 18px; gap: 14px; }
+    .d .spellbook { left: 86px; right: 70px; bottom: 42px; height: 202px; }
+    .d .prepared-row { left: 1126px; bottom: 62px; width: 290px; height: 160px; z-index: 12; }
+    .d .hud.self { left: 118px; top: 714px; }
+    .d .hud.opp { left: 118px; top: 108px; }
+    .d .dice { left: 946px; top: 392px; }
+    .d .damage-badge { left: 1030px; top: 336px; }
+    .d .path-line { left: 760px; top: 416px; width: 245px; transform: rotate(-5deg); }
+
+    .overview-page {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      padding: 28px;
+      background: #15100a;
+    }
+
+    .overview-page .overview-title {
+      padding: 0 8px;
+      height: 54px;
+      font-size: 28px;
+    }
+
+    .overview-page .tile {
+      position: relative;
+      width: 900px;
+      height: 506px;
+      overflow: hidden;
+      background: #120d08;
+      box-shadow: 0 16px 38px rgba(0, 0, 0, .36);
+    }
+
+    .overview-page .tile .frame {
+      transform-origin: top left;
+      transform: scale(.46875);
+    }
+
+    .overview-page .tile-label {
+      position: absolute;
+      left: 16px;
+      top: 14px;
+      z-index: 50;
+      padding: 8px 12px;
+      background: rgba(10, 7, 4, .78);
+      color: #ffe8b0;
+      font-size: 20px;
+      border-left: 5px solid var(--hot);
+    }
+
+    .overview-page .tile small {
+      color: #c9ac78;
+      margin-left: 8px;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="gallery" id="gallery">
+    <section class="frame a" id="draft-a" data-name="A 战场棋盘优先">
+      <div class="draft-tag"><strong>A</strong><span>战场棋盘优先 / low-fidelity</span></div>
+      <div class="legend"><i></i>棋盘区域是第一视觉，法术书只保留底部浏览</div>
+      <div class="stage">
+        <div class="phase-strip"><span class="dot"></span><span>施法行动 · 己方选择目标</span></div>
+        <div class="arena">
+          <img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" />
+          <div class="arena-grid">
+            <div class="zone"><span class="zone-code">A1</span></div>
+            <div class="zone"><span class="zone-code">B1</span></div>
+            <div class="zone active"><span class="zone-code">A2</span></div>
+            <div class="zone target"><span class="zone-code">B2</span></div>
+            <div class="zone"><span class="zone-code">A3</span></div>
+            <div class="zone"><span class="zone-code">B3</span></div>
+          </div>
+          <div class="card warlock selected" style="left:630px;top:342px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div>
+          <div class="card priestess" style="left:895px;top:248px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div>
+          <div class="card creature" style="left:764px;top:166px"><img src="refs/mage-wars-step1/spell-2801-firebrand-imp.png" alt="" /></div>
+          <div class="card angel" style="left:905px;top:430px"><img src="refs/mage-wars-step1/spell-2907-gray-angel.png" alt="" /></div>
+          <img class="token" src="refs/mage-wars-step1/guard-token.png" style="left:862px;top:417px" alt="" />
+        </div>
+        <div class="path-line"></div>
+        <div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-2.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-blank.png" alt="" /></div>
+        <div class="damage-badge">7</div>
+        <div class="hud opp"><img class="hud-card" src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /><div><div class="hud-title">对手 女祭司</div><div class="bar"><span style="--v:72%;--c:var(--life)"></span></div><div class="bar"><span style="--v:46%;--c:var(--mana)"></span></div></div><div class="hud-num">18/24<br />法力 7</div></div>
+        <div class="hud self"><img class="hud-card" src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /><div><div class="hud-title">己方 邪术师</div><div class="bar"><span style="--v:84%;--c:var(--life)"></span></div><div class="bar"><span style="--v:64%;--c:var(--mana)"></span></div></div><div class="hud-num">21/24<br />法力 10</div></div>
+        <div class="prepared-row"><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /><span class="slot-label">已计划 1</span></div><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-3704-equipment.png" alt="" /><span class="slot-label">已计划 2</span></div></div>
+        <div class="spellbook">
+          <div class="book-head"><span>法术书候选</span><div class="tabs"><span class="tab on">攻击</span><span class="tab">结界</span><span class="tab">生物</span><span class="tab">装备</span><span class="tab">咒语</span></div><span>1/4</span></div>
+          <div class="spell-row"><div class="spell-card active"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-1806-block.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-1901-nullify.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3408-heal.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2909-knight-of-westlock.png" alt="" /></div></div>
+        </div>
+        <div class="dock"><div class="small">目标已选：B2 女祭司</div><div class="button">确认施放</div><div class="button secondary">取消选择</div><div class="small">骰子留在目标旁，右侧只放动作</div></div>
+        <div class="micro-discard self">己方<br />弃牌堆</div><div class="micro-discard opp">对手<br />弃牌堆</div>
+      </div>
+    </section>
+
+    <section class="frame b" id="draft-b" data-name="B 法术书工作台优先">
+      <div class="draft-tag"><strong>B</strong><span>法术书工作台优先 / low-fidelity</span></div>
+      <div class="legend"><i></i>底部候选、分类、分页和已计划槽是第一判断点</div>
+      <div class="stage">
+        <div class="phase-strip"><span class="dot"></span><span>计划阶段 · 从法术书准备 2 张</span></div>
+        <div class="arena">
+          <img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" />
+          <div class="arena-grid">
+            <div class="zone"><span class="zone-code">A1</span></div><div class="zone"><span class="zone-code">B1</span></div><div class="zone active"><span class="zone-code">A2</span></div><div class="zone target"><span class="zone-code">B2</span></div><div class="zone"><span class="zone-code">A3</span></div><div class="zone"><span class="zone-code">B3</span></div>
+          </div>
+          <div class="card warlock selected" style="left:600px;top:270px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div>
+          <div class="card priestess" style="left:820px;top:206px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div>
+          <div class="card creature" style="left:710px;top:132px"><img src="refs/mage-wars-step1/spell-2803-flaming-hellion.png" alt="" /></div>
+          <div class="card angel" style="left:836px;top:360px"><img src="refs/mage-wars-step1/spell-2909-knight-of-westlock.png" alt="" /></div>
+        </div>
+        <div class="path-line"></div><div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-1.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-crit2.png" alt="" /></div><div class="damage-badge">5</div>
+        <div class="hud opp"><img class="hud-card" src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /><div><div class="hud-title">对手 女祭司</div><div class="bar"><span style="--v:68%;--c:var(--life)"></span></div><div class="bar"><span style="--v:42%;--c:var(--mana)"></span></div></div><div class="hud-num">17/24<br />法力 6</div></div>
+        <div class="hud self"><img class="hud-card" src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /><div><div class="hud-title">己方 邪术师</div><div class="bar"><span style="--v:88%;--c:var(--life)"></span></div><div class="bar"><span style="--v:70%;--c:var(--mana)"></span></div></div><div class="hud-num">22/24<br />法力 11</div></div>
+        <div class="prepared-row"><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /><span class="slot-label">已计划 1</span></div><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-card-back.jpg" alt="" /><span class="slot-label">已计划 2</span></div></div>
+        <div class="spellbook">
+          <div class="book-head"><span>法术书工作台</span><div class="tabs"><span class="tab">攻击</span><span class="tab on">结界</span><span class="tab">生物</span><span class="tab">魔物</span><span class="tab">装备</span><span class="tab">咒语</span></div><span>2/4</span></div>
+          <div class="spell-row"><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-1804-mage-bane.png" alt="" /></div><div class="spell-card active" style="--sw:108px"><img src="refs/mage-wars-step1/spell-1901-nullify.png" alt="" /></div><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-1806-block.png" alt="" /></div><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-3708-wind-wyvern-hide.png" alt="" /></div><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-3715-deflection-bracers.png" alt="" /></div><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="" /></div><div class="spell-card" style="--sw:108px"><img src="refs/mage-wars-step1/spell-3408-heal.png" alt="" /></div></div>
+        </div>
+        <div class="dock"><div class="small">准备槽：2/2</div><div class="button">确认计划</div><div class="button secondary">上一页 / 下一页</div><div class="small">工作台强，但目标仍在棋盘本体</div></div>
+        <div class="micro-discard self">公开<br />弃牌堆</div>
+      </div>
+    </section>
+
+    <section class="frame c" id="draft-c" data-name="C 施法结算舞台优先">
+      <div class="draft-tag"><strong>C</strong><span>施法结算舞台优先 / low-fidelity</span></div>
+      <div class="legend"><i></i>来源 → 目标 → 骰子 → 伤害在同一条主舞台链路</div>
+      <div class="stage">
+        <div class="phase-strip"><span class="dot"></span><span>攻击法术结算 · 火球术命中</span></div>
+        <div class="arena">
+          <img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" />
+          <div class="arena-grid">
+            <div class="zone"><span class="zone-code">A1</span></div><div class="zone"><span class="zone-code">B1</span></div><div class="zone active"><span class="zone-code">A2</span></div><div class="zone target"><span class="zone-code">B2</span></div><div class="zone"><span class="zone-code">A3</span></div><div class="zone"><span class="zone-code">B3</span></div>
+          </div>
+          <div class="card warlock selected" style="left:592px;top:320px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div>
+          <div class="card priestess" style="left:815px;top:270px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div>
+          <div class="card creature" style="left:720px;top:144px"><img src="refs/mage-wars-step1/spell-2801-firebrand-imp.png" alt="" /></div>
+          <div class="card vine" style="left:884px;top:468px"><img src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="" /></div>
+        </div>
+        <div class="resolve-band"></div>
+        <div class="path-line"></div>
+        <div class="card selected" style="--w:126px;left:596px;top:330px;z-index:14"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div>
+        <div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-2.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-1.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-blank.png" alt="" /></div>
+        <div class="damage-badge">8</div>
+        <div class="mini-note" style="left:1088px;top:428px">燃烧</div>
+        <div class="hud opp"><img class="hud-card" src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /><div><div class="hud-title">对手 女祭司</div><div class="bar"><span style="--v:60%;--c:var(--life)"></span></div><div class="bar"><span style="--v:42%;--c:var(--mana)"></span></div></div><div class="hud-num">15/24<br />法力 6</div></div>
+        <div class="hud self"><img class="hud-card" src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /><div><div class="hud-title">己方 邪术师</div><div class="bar"><span style="--v:84%;--c:var(--life)"></span></div><div class="bar"><span style="--v:52%;--c:var(--mana)"></span></div></div><div class="hud-num">21/24<br />法力 8</div></div>
+        <div class="prepared-row"><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /><span class="slot-label">已计划 1</span></div><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-3701-lash-of-hellfire.png" alt="" /><span class="slot-label">已计划 2</span></div></div>
+        <div class="spellbook"><div class="book-head"><span>法术书候选</span><div class="tabs"><span class="tab on">攻击</span><span class="tab">生物</span><span class="tab">装备</span><span class="tab">咒语</span></div><span>施法态压缩</span></div><div class="spell-row"><div class="spell-card active"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3408-heal.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2816-royal-archer.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3704-equipment.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2907-gray-angel.png" alt="" /></div></div></div>
+        <div class="dock"><div class="small">按钮稳定，不承载骰子</div><div class="button">结算继续</div><div class="button secondary">取消 / 回退</div></div>
+        <div class="micro-discard self">弃牌堆</div>
+      </div>
+    </section>
+
+    <section class="frame d" id="draft-d" data-name="D 可访问专家操控优先">
+      <div class="draft-tag"><strong>D</strong><span>可访问专家操控优先 / low-fidelity</span></div>
+      <div class="legend"><i></i>右侧是稳定动作和短原因，目标选择仍发生在棋盘对象</div>
+      <div class="stage">
+        <div class="phase-strip"><span class="dot"></span><span>施法阶段 · 焦点清晰</span></div>
+        <div class="arena">
+          <img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" />
+          <div class="arena-grid">
+            <div class="zone"><span class="zone-code">A1</span></div><div class="zone"><span class="zone-code">B1</span></div><div class="zone active"><span class="zone-code">A2</span></div><div class="zone target"><span class="zone-code">B2</span></div><div class="zone"><span class="zone-code">A3</span></div><div class="zone"><span class="zone-code">B3</span></div>
+          </div>
+          <div class="card warlock selected" style="left:642px;top:320px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div>
+          <div class="card priestess" style="left:870px;top:262px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div>
+          <div class="card angel" style="left:915px;top:448px"><img src="refs/mage-wars-step1/spell-2907-gray-angel.png" alt="" /></div>
+          <div class="card creature" style="left:760px;top:160px"><img src="refs/mage-wars-step1/spell-2802-creature.png" alt="" /></div>
+        </div>
+        <div class="path-line"></div><div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit2.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-1.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-topblank.png" alt="" /></div><div class="damage-badge">6</div>
+        <div class="hud opp"><img class="hud-card" src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /><div><div class="hud-title">对手 女祭司</div><div class="bar"><span style="--v:66%;--c:var(--life)"></span></div><div class="bar"><span style="--v:42%;--c:var(--mana)"></span></div></div><div class="hud-num">16/24<br />法力 6</div></div>
+        <div class="hud self"><img class="hud-card" src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /><div><div class="hud-title">己方 邪术师</div><div class="bar"><span style="--v:86%;--c:var(--life)"></span></div><div class="bar"><span style="--v:58%;--c:var(--mana)"></span></div></div><div class="hud-num">21/24<br />法力 9</div></div>
+        <div class="spellbook"><div class="book-head"><span>法术书候选</span><div class="tabs"><span class="tab on">攻击</span><span class="tab">结界</span><span class="tab">生物</span><span class="tab">装备</span><span class="tab">咒语</span></div><span>1/4</span></div><div class="spell-row"><div class="spell-card active"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-1806-block.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3408-heal.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3704-equipment.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2907-gray-angel.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="" /></div></div></div>
+        <div class="prepared-row"><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /><span class="slot-label">已计划 1</span></div><div class="prepared-slot"><img src="refs/mage-wars-step1/spell-card-back.jpg" alt="" /><span class="slot-label">已计划 2</span></div></div>
+        <div class="dock"><div class="resource-pill"><strong>9</strong><span>可用法力</span></div><div class="resource-pill"><strong>-8</strong><span>本次费用</span></div><div class="small">目标：B2 女祭司</div><div class="button">确认施放</div><div class="button secondary">取消</div><div class="button secondary">跳过快速施法</div><div class="small">非法对象点击只给短原因；骰子仍在目标旁</div></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="frame overview-page" id="draft-overview">
+    <div class="overview-title">Mage Wars UI 四套低保真草稿对比 <small>Open Design artifact / 非最终验收稿 / 禁止生图</small></div>
+    <div class="tile"><div class="tile-label">1. A 战场棋盘优先 <small>区域与目标最强</small></div><div class="frame a">
+      <div class="draft-tag"><strong>A</strong><span>战场棋盘优先</span></div><div class="arena"><img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" /><div class="arena-grid"><div class="zone"></div><div class="zone"></div><div class="zone active"></div><div class="zone target"></div><div class="zone"></div><div class="zone"></div></div><div class="card warlock selected" style="left:630px;top:342px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div><div class="card priestess" style="left:895px;top:248px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div></div><div class="dock"><div class="button">确认施放</div></div><div class="spellbook"><div class="book-head"><span>法术书候选</span><span>1/4</span></div><div class="spell-row"><div class="spell-card active"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-1806-block.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-1901-nullify.png" alt="" /></div></div></div><div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit.png" alt="" /></div></div></div>
+    <div class="tile"><div class="tile-label">2. B 法术书工作台优先 <small>分类与分页最强</small></div><div class="frame b">
+      <div class="draft-tag"><strong>B</strong><span>法术书工作台优先</span></div><div class="arena"><img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" /><div class="arena-grid"><div class="zone"></div><div class="zone"></div><div class="zone active"></div><div class="zone target"></div><div class="zone"></div><div class="zone"></div></div><div class="card warlock selected" style="left:600px;top:270px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div><div class="card priestess" style="left:820px;top:206px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div></div><div class="spellbook"><div class="book-head"><span>法术书工作台</span><span>2/4</span></div><div class="spell-row"><div class="spell-card"><img src="refs/mage-wars-step1/spell-1804-mage-bane.png" alt="" /></div><div class="spell-card active"><img src="refs/mage-wars-step1/spell-1901-nullify.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-3408-heal.png" alt="" /></div><div class="spell-card"><img src="refs/mage-wars-step1/spell-2224-conjuration.png" alt="" /></div></div></div><div class="dock"><div class="button">确认计划</div></div></div></div>
+    <div class="tile"><div class="tile-label">3. C 施法结算舞台优先 <small>来源到结果最强</small></div><div class="frame c">
+      <div class="draft-tag"><strong>C</strong><span>施法结算舞台优先</span></div><div class="arena"><img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" /><div class="arena-grid"><div class="zone"></div><div class="zone"></div><div class="zone active"></div><div class="zone target"></div><div class="zone"></div><div class="zone"></div></div><div class="card warlock selected" style="left:592px;top:320px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div><div class="card priestess" style="left:815px;top:270px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div></div><div class="resolve-band"></div><div class="card selected" style="--w:126px;left:596px;top:330px;z-index:14"><img src="refs/mage-wars-step1/spell-1700-fireball.png" alt="" /></div><div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit.png" alt="" /><img class="die" src="refs/mage-wars-step1/attack-die-face-2.png" alt="" /></div><div class="damage-badge">8</div><div class="dock"><div class="button">结算继续</div></div><div class="spellbook"><div class="book-head"><span>法术书候选</span><span>施法态</span></div></div></div></div>
+    <div class="tile"><div class="tile-label">4. D 可访问专家操控优先 <small>稳定动作最强</small></div><div class="frame d">
+      <div class="draft-tag"><strong>D</strong><span>可访问专家操控优先</span></div><div class="arena"><img class="arena-img" src="refs/mage-wars-step1/standard-arena.jpg" alt="" /><div class="arena-grid"><div class="zone"></div><div class="zone"></div><div class="zone active"></div><div class="zone target"></div><div class="zone"></div><div class="zone"></div></div><div class="card warlock selected" style="left:642px;top:320px"><img src="refs/mage-wars-step1/mage-warlock-card.png" alt="" /></div><div class="card priestess" style="left:870px;top:262px"><img src="refs/mage-wars-step1/mage-priestess-card.png" alt="" /></div></div><div class="dock"><div class="resource-pill"><strong>9</strong><span>法力</span></div><div class="button">确认施放</div><div class="button secondary">取消</div></div><div class="spellbook"><div class="book-head"><span>法术书候选</span><span>1/4</span></div></div><div class="dice"><img class="die" src="refs/mage-wars-step1/attack-die-face-crit2.png" alt="" /></div></div></div>
+  </section>
+</body>
+</html>

@@ -1,0 +1,284 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "zones": [
+    {
+      "id": "a1",
+      "left": 500,
+      "top": 45,
+      "right": 830,
+      "bottom": 375,
+      "width": 330,
+      "height": 330,
+      "cx": 665,
+      "cy": 210
+    },
+    {
+      "id": "b1",
+      "left": 830,
+      "top": 45,
+      "right": 1160,
+      "bottom": 375,
+      "width": 330,
+      "height": 330,
+      "cx": 995,
+      "cy": 210
+    },
+    {
+      "id": "a2",
+      "left": 500,
+      "top": 375,
+      "right": 830,
+      "bottom": 705,
+      "width": 330,
+      "height": 330,
+      "cx": 665,
+      "cy": 540
+    },
+    {
+      "id": "b2",
+      "left": 830,
+      "top": 375,
+      "right": 1160,
+      "bottom": 705,
+      "width": 330,
+      "height": 330,
+      "cx": 995,
+      "cy": 540
+    },
+    {
+      "id": "a3",
+      "left": 500,
+      "top": 705,
+      "right": 830,
+      "bottom": 1035,
+      "width": 330,
+      "height": 330,
+      "cx": 665,
+      "cy": 870
+    },
+    {
+      "id": "b3",
+      "left": 830,
+      "top": 705,
+      "right": 1160,
+      "bottom": 1035,
+      "width": 330,
+      "height": 330,
+      "cx": 995,
+      "cy": 870
+    }
+  ],
+  "cards": [
+    {
+      "alt": "烈焰狱鬼",
+      "zoneId": "a2",
+      "rect": {
+        "left": 625.173583984375,
+        "top": 471.0257873535156,
+        "right": 746.826416015625,
+        "bottom": 638.9742431640625,
+        "width": 121.65283203125,
+        "height": 167.94845581054688,
+        "cx": 686,
+        "cy": 555.0000152587891
+      },
+      "centerInZone": true,
+      "zoneOverlap": 1
+    },
+    {
+      "alt": "西锁骑士，当前目标",
+      "zoneId": "b2",
+      "rect": {
+        "left": 923.173583984375,
+        "top": 453.0257873535156,
+        "right": 1044.826416015625,
+        "bottom": 620.9742431640625,
+        "width": 121.65283203125,
+        "height": 167.94845581054688,
+        "cx": 984,
+        "cy": 537.0000152587891
+      },
+      "centerInZone": true,
+      "zoneOverlap": 1
+    },
+    {
+      "alt": "火烙魔婴",
+      "zoneId": "a3",
+      "rect": {
+        "left": 621.7879638671875,
+        "top": 792.076904296875,
+        "right": 746.2120361328125,
+        "bottom": 961.923095703125,
+        "width": 124.424072265625,
+        "height": 169.84619140625,
+        "cx": 684,
+        "cy": 877
+      },
+      "centerInZone": true,
+      "zoneOverlap": 1
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "b3",
+      "rect": {
+        "left": 925.7879638671875,
+        "top": 778.076904296875,
+        "right": 1050.2120361328125,
+        "bottom": 947.923095703125,
+        "width": 124.424072265625,
+        "height": 169.84619140625,
+        "cx": 988,
+        "cy": 863
+      },
+      "centerInZone": true,
+      "zoneOverlap": 1
+    }
+  ],
+  "arena": {
+    "left": 500,
+    "top": 45,
+    "right": 1160,
+    "bottom": 1035,
+    "width": 660,
+    "height": 990,
+    "cx": 830,
+    "cy": 540
+  },
+  "workbench": {
+    "left": 1090,
+    "top": 420,
+    "right": 1715,
+    "bottom": 994,
+    "width": 625,
+    "height": 574,
+    "cx": 1402.5,
+    "cy": 707
+  },
+  "sourceCard": {
+    "left": 1104.210205078125,
+    "top": 465.3281555175781,
+    "right": 1421.789794921875,
+    "bottom": 907.671875,
+    "width": 317.57958984375,
+    "height": 442.3437194824219,
+    "cx": 1263,
+    "cy": 686.5000152587891
+  },
+  "targetPanel": {
+    "left": 1440,
+    "top": 532,
+    "right": 1604,
+    "bottom": 668,
+    "width": 164,
+    "height": 136,
+    "cx": 1522,
+    "cy": 600
+  },
+  "confirmButton": {
+    "left": 1440,
+    "top": 684,
+    "right": 1604,
+    "bottom": 740,
+    "width": 164,
+    "height": 56,
+    "cx": 1522,
+    "cy": 712
+  },
+  "cancelButton": {
+    "left": 1440,
+    "top": 750,
+    "right": 1604,
+    "bottom": 806,
+    "width": 164,
+    "height": 56,
+    "cx": 1522,
+    "cy": 778
+  },
+  "target": {
+    "left": 923.173583984375,
+    "top": 453.0257873535156,
+    "right": 1044.826416015625,
+    "bottom": 620.9742431640625,
+    "width": 121.65283203125,
+    "height": 167.94845581054688,
+    "cx": 984,
+    "cy": 537.0000152587891
+  },
+  "tether": {
+    "left": 1036,
+    "top": 500,
+    "right": 1154,
+    "bottom": 630,
+    "width": 118,
+    "height": 130,
+    "cx": 1095,
+    "cy": 565
+  },
+  "targetChip": {
+    "left": 1040,
+    "top": 471,
+    "right": 1106,
+    "bottom": 503,
+    "width": 66,
+    "height": 32,
+    "cx": 1073,
+    "cy": 487
+  },
+  "rail": {
+    "left": 1126,
+    "top": 856,
+    "right": 1646,
+    "bottom": 988,
+    "width": 520,
+    "height": 132,
+    "cx": 1386,
+    "cy": 922
+  },
+  "visibleDice": [],
+  "sourceCardSize": {
+    "width": 317.57958984375,
+    "height": 442.3437194824219
+  },
+  "arenaSize": {
+    "width": 660,
+    "height": 990
+  },
+  "sourceTargetDistance": 316.5300143746245,
+  "targetPanelTargetDistance": 541.6761007072333,
+  "confirmDistanceToTargetPanel": 112,
+  "confirmDistanceToSource": 260.2522799550505,
+  "targetChipTargetOverlap": 154.4453125,
+  "workbenchOverlapsFieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "workbenchOverlap": 0
+    },
+    {
+      "alt": "西锁骑士，当前目标",
+      "workbenchOverlap": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "workbenchOverlap": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "workbenchOverlap": 0
+    }
+  ],
+  "workbenchChildrenInside": true,
+  "sourceCardTouchesArena": true,
+  "forbiddenTerms": {
+    "englishHand": 0,
+    "opponentHand": 0,
+    "chineseHand": 0,
+    "duplicatedCardFields": 0,
+    "longExplanatoryCopy": 0
+  },
+  "fireballImageCount": 1,
+  "currentBodyText": "行动环节　快速施法　目标确认\n已选\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n快速\n附件\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫\n附件\n \n已计划 2\n弃牌堆 2\n已计划法术\n已选目标\n西锁骑士\nB2\n确认施放\n取消选择\n 法术书 31\n 已计划 2/2\n 弃牌堆 3",
+  "imageCount": 23
+}

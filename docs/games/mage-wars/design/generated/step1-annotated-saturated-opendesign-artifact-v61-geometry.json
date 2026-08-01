@@ -1,0 +1,774 @@
+{
+  "source": "D:/codex-home/tools/open-design/.od/projects/mage-wars-ui-design/mage-wars-step1-annotated-saturated-v61.html",
+  "screenshot": "D:/gongzuo/webgame/BoardGame/.worktrees/mage-wars/docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v61.png",
+  "generatedAt": "2026-07-31T12:24:31.226Z",
+  "checks": {
+    "imagesLoaded": true,
+    "noForbiddenVisibleText": true,
+    "hasReadableSpellbookLabels": true,
+    "bookCardCount": 8,
+    "bookCardImageSizes": [
+      {
+        "index": 0,
+        "alt": "火球术",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 1,
+        "alt": "法师祸咒",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 2,
+        "alt": "格挡",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 3,
+        "alt": "法力失效",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 4,
+        "alt": "单体治疗",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 5,
+        "alt": "狱火长鞭",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 6,
+        "alt": "奥秘法杖",
+        "width": 120,
+        "height": 169
+      },
+      {
+        "index": 7,
+        "alt": "风龙皮甲",
+        "width": 120,
+        "height": 169
+      }
+    ],
+    "bookVisualPadDisplay": "none",
+    "bookCardProtectedOverlapsClear": true,
+    "intentionalBookCardsArenaOverlapArea": 106488
+  },
+  "overlaps": {
+    "bookCards_vs_targetField": {
+      "left": 1126.828857421875,
+      "top": 778,
+      "right": 1263.171142578125,
+      "bottom": 534.21240234375,
+      "width": 136.34228515625,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_targetField": {
+      "left": 1126.828857421875,
+      "top": 750,
+      "right": 1263.171142578125,
+      "bottom": 534.21240234375,
+      "width": 136.34228515625,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_allyField": {
+      "left": 535.274169921875,
+      "top": 778,
+      "right": 674.725830078125,
+      "bottom": 539.2757568359375,
+      "width": 139.45166015625,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_allyField": {
+      "left": 535.274169921875,
+      "top": 750,
+      "right": 674.725830078125,
+      "bottom": 539.2757568359375,
+      "width": 139.45166015625,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_impField": {
+      "left": 538.274169921875,
+      "top": 778,
+      "right": 677.725830078125,
+      "bottom": 725.2757568359375,
+      "width": 139.45166015625,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_impField": {
+      "left": 538.274169921875,
+      "top": 750,
+      "right": 677.725830078125,
+      "bottom": 725.2757568359375,
+      "width": 139.45166015625,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_vineField": {
+      "left": 1144.828857421875,
+      "top": 778,
+      "right": 1281.171142578125,
+      "bottom": 724.21240234375,
+      "width": 136.34228515625,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_vineField": {
+      "left": 1144.828857421875,
+      "top": 750,
+      "right": 1281.171142578125,
+      "bottom": 724.21240234375,
+      "width": 136.34228515625,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_resolutionLayer": {
+      "left": 1268,
+      "top": 778,
+      "right": 1414,
+      "bottom": 496,
+      "width": 146,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_resolutionLayer": {
+      "left": 1268,
+      "top": 750,
+      "right": 1498,
+      "bottom": 496,
+      "width": 230,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_damageToken": {
+      "left": 1226.054931640625,
+      "top": 778,
+      "right": 1263.945068359375,
+      "bottom": 500.945068359375,
+      "width": 37.89013671875,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_damageToken": {
+      "left": 1226.054931640625,
+      "top": 750,
+      "right": 1263.945068359375,
+      "bottom": 500.945068359375,
+      "width": 37.89013671875,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_burnToken": {
+      "left": 1263.3062744140625,
+      "top": 778,
+      "right": 1302.6937255859375,
+      "bottom": 488.6937561035156,
+      "width": 39.387451171875,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_burnToken": {
+      "left": 1263.3062744140625,
+      "top": 750,
+      "right": 1302.6937255859375,
+      "bottom": 488.6937561035156,
+      "width": 39.387451171875,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_rivalPrepared": {
+      "left": 370,
+      "top": 778,
+      "right": 136,
+      "bottom": 166,
+      "width": 0,
+      "height": 0,
+      "area": 0
+    },
+    "bookRow_vs_rivalPrepared": {
+      "left": 370,
+      "top": 750,
+      "right": 136,
+      "bottom": 166,
+      "width": 0,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_planZone": {
+      "left": 1608,
+      "top": 835,
+      "right": 1414,
+      "bottom": 957,
+      "width": 0,
+      "height": 122,
+      "area": 0
+    },
+    "bookCards_vs_discard": {
+      "left": 1591.015625,
+      "top": 994,
+      "right": 1414,
+      "bottom": 957,
+      "width": 0,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_turnEnd": {
+      "left": 1700,
+      "top": 1000,
+      "right": 1414,
+      "bottom": 957,
+      "width": 0,
+      "height": 0,
+      "area": 0
+    },
+    "bookCards_vs_arena": {
+      "left": 370,
+      "top": 778,
+      "right": 1414,
+      "bottom": 880,
+      "width": 1044,
+      "height": 102,
+      "area": 106488
+    }
+  },
+  "raw": {
+    "title": "Mage Wars Annotated Saturated Layout v61",
+    "bodyText": "行动环节\n选择目标\n可选\n掷骰预备\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n行动中\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫\n对手已计划 2\n全部\n攻击\n结界\n生物\n装备\n⌃\n1 / 4\n⌄\n法术书 30\n8 / 页\n己方已计划 2 / 2\n来源\n弃牌 3\n回合结束",
+    "images": [
+      {
+        "src": "refs/mage-wars-step1/standard-arena.jpg",
+        "alt": "标准竞技场半场",
+        "complete": true,
+        "naturalWidth": 3210,
+        "naturalHeight": 2407
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-2803-flaming-hellion.png",
+        "alt": "烈焰狱鬼",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-2909-knight-of-westlock.png",
+        "alt": "西锁骑士",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-2801-firebrand-imp.png",
+        "alt": "火烙魔婴",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-2224-conjuration.png",
+        "alt": "缠绕藤蔓",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/attack-die-face-crit.png",
+        "alt": "攻击骰重击面",
+        "complete": true,
+        "naturalWidth": 180,
+        "naturalHeight": 180
+      },
+      {
+        "src": "refs/mage-wars-step1/attack-die-face-2.png",
+        "alt": "攻击骰二伤面",
+        "complete": true,
+        "naturalWidth": 180,
+        "naturalHeight": 180
+      },
+      {
+        "src": "refs/mage-wars-step1/attack-die-face-1.png",
+        "alt": "攻击骰一伤面",
+        "complete": true,
+        "naturalWidth": 180,
+        "naturalHeight": 180
+      },
+      {
+        "src": "refs/mage-wars-step1/attack-die-face-blank.png",
+        "alt": "攻击骰空白面",
+        "complete": true,
+        "naturalWidth": 180,
+        "naturalHeight": 180
+      },
+      {
+        "src": "refs/mage-wars-step1/effect-die-d12-face.png",
+        "alt": "效果骰 12 面",
+        "complete": true,
+        "naturalWidth": 329,
+        "naturalHeight": 329
+      },
+      {
+        "src": "refs/mage-wars-step1/damage-token-front.png",
+        "alt": "伤害 token",
+        "complete": true,
+        "naturalWidth": 283,
+        "naturalHeight": 283
+      },
+      {
+        "src": "refs/mage-wars-step1/burn-token.png",
+        "alt": "燃烧 token",
+        "complete": true,
+        "naturalWidth": 497,
+        "naturalHeight": 497
+      },
+      {
+        "src": "refs/mage-wars-step1/mage-warlock-card.png",
+        "alt": "邪术师法师牌",
+        "complete": true,
+        "naturalWidth": 360,
+        "naturalHeight": 508
+      },
+      {
+        "src": "refs/mage-wars-step1/action-marker-red-front.png",
+        "alt": "行动标记",
+        "complete": true,
+        "naturalWidth": 86,
+        "naturalHeight": 78
+      },
+      {
+        "src": "refs/mage-wars-step1/quickcast-marker-front.png",
+        "alt": "快速施法标记",
+        "complete": true,
+        "naturalWidth": 80,
+        "naturalHeight": 80
+      },
+      {
+        "src": "refs/mage-wars-step1/mage-priestess-card.png",
+        "alt": "女祭司法师牌",
+        "complete": true,
+        "naturalWidth": 360,
+        "naturalHeight": 508
+      },
+      {
+        "src": "refs/mage-wars-step1/guard-token.png",
+        "alt": "守卫 token",
+        "complete": true,
+        "naturalWidth": 339,
+        "naturalHeight": 339
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-card-back.jpg",
+        "alt": "对手已计划法术卡背",
+        "complete": true,
+        "naturalWidth": 992,
+        "naturalHeight": 1391
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-card-back.jpg",
+        "alt": "对手第二张已计划法术卡背",
+        "complete": true,
+        "naturalWidth": 992,
+        "naturalHeight": 1391
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+        "alt": "火球术",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 437
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1804-mage-bane.png",
+        "alt": "法师祸咒",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1806-block.png",
+        "alt": "格挡",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1901-nullify.png",
+        "alt": "法力失效",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-3408-heal.png",
+        "alt": "单体治疗",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-3701-lash-of-hellfire.png",
+        "alt": "狱火长鞭",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-3704-equipment.png",
+        "alt": "奥秘法杖",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-3708-wind-wyvern-hide.png",
+        "alt": "风龙皮甲",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1700-fireball.png",
+        "alt": "火球术",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 437
+      },
+      {
+        "src": "refs/mage-wars-step1/spell-1804-mage-bane.png",
+        "alt": "法师祸咒",
+        "complete": true,
+        "naturalWidth": 310,
+        "naturalHeight": 436
+      }
+    ],
+    "failedImages": [],
+    "bookBrowser": {
+      "left": 350,
+      "top": 704,
+      "right": 1568,
+      "bottom": 1034,
+      "width": 1218,
+      "height": 330,
+      "area": 401940
+    },
+    "bookRow": {
+      "left": 370,
+      "top": 750,
+      "right": 1498,
+      "bottom": 960,
+      "width": 1128,
+      "height": 210,
+      "area": 236880
+    },
+    "bookCards": [
+      {
+        "index": 0,
+        "text": "",
+        "alt": "火球术",
+        "left": 370,
+        "top": 788,
+        "right": 490,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 1,
+        "text": "",
+        "alt": "法师祸咒",
+        "left": 502,
+        "top": 788,
+        "right": 622,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 2,
+        "text": "",
+        "alt": "格挡",
+        "left": 634,
+        "top": 788,
+        "right": 754,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 3,
+        "text": "",
+        "alt": "法力失效",
+        "left": 766,
+        "top": 788,
+        "right": 886,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 4,
+        "text": "",
+        "alt": "单体治疗",
+        "left": 898,
+        "top": 788,
+        "right": 1018,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 5,
+        "text": "",
+        "alt": "狱火长鞭",
+        "left": 1030,
+        "top": 788,
+        "right": 1150,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 6,
+        "text": "",
+        "alt": "奥秘法杖",
+        "left": 1162,
+        "top": 788,
+        "right": 1282,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      },
+      {
+        "index": 7,
+        "text": "",
+        "alt": "风龙皮甲",
+        "left": 1294,
+        "top": 788,
+        "right": 1414,
+        "bottom": 960,
+        "width": 120,
+        "height": 172,
+        "area": 20640
+      }
+    ],
+    "bookCardImages": [
+      {
+        "index": 0,
+        "alt": "火球术",
+        "left": 370,
+        "top": 778,
+        "right": 490,
+        "bottom": 947,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 1,
+        "alt": "法师祸咒",
+        "left": 502,
+        "top": 788,
+        "right": 622,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 2,
+        "alt": "格挡",
+        "left": 634,
+        "top": 788,
+        "right": 754,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 3,
+        "alt": "法力失效",
+        "left": 766,
+        "top": 788,
+        "right": 886,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 4,
+        "alt": "单体治疗",
+        "left": 898,
+        "top": 788,
+        "right": 1018,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 5,
+        "alt": "狱火长鞭",
+        "left": 1030,
+        "top": 788,
+        "right": 1150,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 6,
+        "alt": "奥秘法杖",
+        "left": 1162,
+        "top": 788,
+        "right": 1282,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      },
+      {
+        "index": 7,
+        "alt": "风龙皮甲",
+        "left": 1294,
+        "top": 788,
+        "right": 1414,
+        "bottom": 957,
+        "width": 120,
+        "height": 169,
+        "area": 20280
+      }
+    ],
+    "bookBeforeDisplay": "none",
+    "bookBeforeContent": "none",
+    "planZone": {
+      "left": 1608,
+      "top": 835,
+      "right": 1868,
+      "bottom": 990,
+      "width": 260,
+      "height": 155,
+      "area": 40300
+    },
+    "discard": {
+      "left": 1591.015625,
+      "top": 994,
+      "right": 1670,
+      "bottom": 1044,
+      "width": 78.984375,
+      "height": 50,
+      "area": 3949.21875
+    },
+    "turnEnd": {
+      "left": 1700,
+      "top": 1000,
+      "right": 1868,
+      "bottom": 1052,
+      "width": 168,
+      "height": 52,
+      "area": 8736
+    },
+    "arena": {
+      "left": 240,
+      "top": 30,
+      "right": 1680,
+      "bottom": 880,
+      "width": 1440,
+      "height": 850,
+      "area": 1224000
+    },
+    "protected": {
+      "targetField": {
+        "left": 1126.828857421875,
+        "top": 345.7875671386719,
+        "right": 1263.171142578125,
+        "bottom": 534.21240234375,
+        "width": 136.34228515625,
+        "height": 188.42483520507812,
+        "area": 25690.272612050176
+      },
+      "allyField": {
+        "left": 535.274169921875,
+        "top": 348.7242431640625,
+        "right": 674.725830078125,
+        "bottom": 539.2757568359375,
+        "width": 139.45166015625,
+        "height": 190.551513671875,
+        "area": 26572.724926829338
+      },
+      "impField": {
+        "left": 538.274169921875,
+        "top": 534.7242431640625,
+        "right": 677.725830078125,
+        "bottom": 725.2757568359375,
+        "width": 139.45166015625,
+        "height": 190.551513671875,
+        "area": 26572.724926829338
+      },
+      "vineField": {
+        "left": 1144.828857421875,
+        "top": 535.78759765625,
+        "right": 1281.171142578125,
+        "bottom": 724.21240234375,
+        "width": 136.34228515625,
+        "height": 188.4248046875,
+        "area": 25690.268451213837
+      },
+      "resolutionLayer": {
+        "left": 1268,
+        "top": 378,
+        "right": 1556,
+        "bottom": 496,
+        "width": 288,
+        "height": 118,
+        "area": 33984
+      },
+      "damageToken": {
+        "left": 1226.054931640625,
+        "top": 463.054931640625,
+        "right": 1263.945068359375,
+        "bottom": 500.945068359375,
+        "width": 37.89013671875,
+        "height": 37.89013671875,
+        "area": 1435.662460565567
+      },
+      "burnToken": {
+        "left": 1263.3062744140625,
+        "top": 449.3062438964844,
+        "right": 1302.6937255859375,
+        "bottom": 488.6937561035156,
+        "width": 39.387451171875,
+        "height": 39.38751220703125,
+        "area": 1551.3737138360739
+      },
+      "rivalPrepared": {
+        "left": 58,
+        "top": 54,
+        "right": 136,
+        "bottom": 166,
+        "width": 78,
+        "height": 112,
+        "area": 8736
+      }
+    }
+  }
+}

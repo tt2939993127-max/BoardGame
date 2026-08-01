@@ -2,7 +2,7 @@
 
 ## 定位
 
-本项目默认把 Open Design 作为设计工具入口，用来生成可落地设计产物、设计系统和前端稿。Open Design 只定义“用哪个工具接入设计链”，不定义“设计稿已经合格”。
+本项目默认把 Open Design 作为设计工具入口，用来生成可落地设计产物、设计系统和前端稿。Open Design 可以是用户明确指定的设计稿交付工具，但不自动证明“设计稿已经合格”。
 
 - **默认范围**：设计稿探索、`DESIGN.md` 设计系统、HTML / PDF / PPTX / 图片类产物，以及 Codex 通过 MCP 调用 Open Design。
 - **交付边界**：用户要“设计稿 / 视觉稿 / 效果图”时，默认交付物仍是 PNG / JPG / WebP 图片证据；imagegen 可用时走位图生图，imagegen 不可用且 Open Design 可用时自动转 Open Design artifact 候选稿。本项目固定采用“Open Design artifact + 固定视口浏览器渲染截图 + AI 图面核验 + 用户看图”的交付模式；未审计的 Open Design artifact、HTML 预览、产品运行页截图或 reference sheet 只能是工具产物 / 内部校准物，不能直接冒充设计稿。

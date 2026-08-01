@@ -1,0 +1,264 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "workbench": {
+    "left": 340,
+    "top": 732,
+    "right": 1580,
+    "bottom": 1046,
+    "width": 1240,
+    "height": 314,
+    "cx": 960,
+    "cy": 889
+  },
+  "focusCard": {
+    "left": 1046.62646484375,
+    "top": 651.6212158203125,
+    "right": 1329.37353515625,
+    "bottom": 1045.3787841796875,
+    "width": 282.7470703125,
+    "height": 393.757568359375,
+    "cx": 1188,
+    "cy": 848.5
+  },
+  "candidates": [
+    {
+      "alt": "火球术",
+      "rect": {
+        "left": 340,
+        "top": 816,
+        "right": 456,
+        "bottom": 980,
+        "width": 116,
+        "height": 164,
+        "cx": 398,
+        "cy": 898
+      },
+      "selected": true
+    },
+    {
+      "alt": "法师祸咒",
+      "rect": {
+        "left": 472,
+        "top": 824,
+        "right": 588,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 530,
+        "cy": 906
+      },
+      "selected": false
+    },
+    {
+      "alt": "格挡",
+      "rect": {
+        "left": 604,
+        "top": 824,
+        "right": 720,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 662,
+        "cy": 906
+      },
+      "selected": false
+    },
+    {
+      "alt": "法力失效",
+      "rect": {
+        "left": 736,
+        "top": 824,
+        "right": 852,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 794,
+        "cy": 906
+      },
+      "selected": false
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "rect": {
+        "left": 868,
+        "top": 824,
+        "right": 984,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 926,
+        "cy": 906
+      },
+      "selected": false
+    },
+    {
+      "alt": "火烙魔婴",
+      "rect": {
+        "left": 1000,
+        "top": 824,
+        "right": 1116,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 1058,
+        "cy": 906
+      },
+      "selected": false
+    },
+    {
+      "alt": "狱火长鞭",
+      "rect": {
+        "left": 1132,
+        "top": 824,
+        "right": 1248,
+        "bottom": 988,
+        "width": 116,
+        "height": 164,
+        "cx": 1190,
+        "cy": 906
+      },
+      "selected": false
+    }
+  ],
+  "plannedSlots": [
+    {
+      "text": " 已计划 1",
+      "rect": {
+        "left": 1374,
+        "top": 740,
+        "right": 1466,
+        "bottom": 897,
+        "width": 92,
+        "height": 157,
+        "cx": 1420,
+        "cy": 818.5
+      }
+    },
+    {
+      "text": "空槽",
+      "rect": {
+        "left": 1478,
+        "top": 740,
+        "right": 1570,
+        "bottom": 894,
+        "width": 92,
+        "height": 154,
+        "cx": 1524,
+        "cy": 817
+      }
+    }
+  ],
+  "arena": {
+    "left": 465,
+    "top": 63,
+    "right": 1155,
+    "bottom": 753,
+    "width": 690,
+    "height": 690,
+    "cx": 810,
+    "cy": 408
+  },
+  "fieldCards": [
+    {
+      "alt": "烈焰狱鬼",
+      "rect": {
+        "left": 619.6102294921875,
+        "top": 382.6306457519531,
+        "right": 720.3897705078125,
+        "bottom": 519.369384765625,
+        "width": 100.779541015625,
+        "height": 136.73873901367188,
+        "cx": 670,
+        "cy": 451.00001525878906
+      },
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "西锁骑士",
+      "rect": {
+        "left": 900.7252197265625,
+        "top": 373.3999328613281,
+        "right": 999.2747192382812,
+        "bottom": 508.6000671386719,
+        "width": 98.54949951171875,
+        "height": 135.20013427734375,
+        "cx": 949.9999694824219,
+        "cy": 441
+      },
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "火烙魔婴",
+      "rect": {
+        "left": 613.6102294921875,
+        "top": 565.630615234375,
+        "right": 714.3897705078125,
+        "bottom": 702.3693237304688,
+        "width": 100.779541015625,
+        "height": 136.73870849609375,
+        "cx": 664,
+        "cy": 633.9999694824219
+      },
+      "overlapWithWorkbench": 0
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "rect": {
+        "left": 910.7252197265625,
+        "top": 559.39990234375,
+        "right": 1009.2747192382812,
+        "bottom": 694.60009765625,
+        "width": 98.54949951171875,
+        "height": 135.2001953125,
+        "cx": 959.9999694824219,
+        "cy": 627
+      },
+      "overlapWithWorkbench": 0
+    }
+  ],
+  "categoryCount": 6,
+  "pageControls": {
+    "left": 1004,
+    "top": 742,
+    "right": 1142.53125,
+    "bottom": 776,
+    "width": 138.53125,
+    "height": 34,
+    "cx": 1073.265625,
+    "cy": 759
+  },
+  "confirm": {
+    "left": 1374,
+    "top": 912,
+    "right": 1580,
+    "bottom": 964,
+    "width": 206,
+    "height": 52,
+    "cx": 1477,
+    "cy": 938
+  },
+  "discard": {
+    "left": 1604,
+    "top": 907,
+    "right": 1714,
+    "bottom": 1038,
+    "width": 110,
+    "height": 131,
+    "cx": 1659,
+    "cy": 972.5
+  },
+  "forbiddenTerms": {
+    "englishHand": 0,
+    "opponentHand": 0,
+    "chineseHand": 0,
+    "duplicatedCardFields": 0,
+    "longExplanatoryCopy": 0
+  },
+  "candidateCount": 7,
+  "selectedCandidateCount": 1,
+  "imageCount": 23,
+  "bodyText": "准备环节　计划法术\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n可计划\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n等待\n \n对手已计划 2\n法术书 30\n全部\n攻击\n结界\n生物\n咒语\n装备\n‹\n1 / 4\n›\n 已计划 1\n空槽\n完成计划\n清空选择\n弃牌堆 3"
+}

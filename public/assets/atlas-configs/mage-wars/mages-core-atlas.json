@@ -1,0 +1,131 @@
+{
+  "schema": "mage-wars.grid-atlas.v1",
+  "gameId": "mage-wars",
+  "status": "design-asset-ready/runtime-reference-pending",
+  "sourceContract": "docs/games/mage-wars/intake/runtime-asset-plan.md",
+  "visualReview": "temp/mage-wars/asset-review/mages-core-contact.png",
+  "atlas": {
+    "id": "mages-core-atlas",
+    "deck": 26,
+    "source": "mage-wars/cards/mages/mages-core-atlas.png",
+    "compressed": "mage-wars/cards/mages/compressed/mages-core-atlas.webp",
+    "width": 4096,
+    "height": 3302,
+    "cols": 7,
+    "rows": 4
+  },
+  "frames": {
+    "warlock_apprentice_card": {
+      "cardId": 2600,
+      "name": "邪术师",
+      "deck": 26,
+      "slot": 0,
+      "col": 1,
+      "row": 1,
+      "normalized": {
+        "left": 0,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "warlock_apprentice_portrait": {
+      "cardId": 2601,
+      "name": "邪术师肖像",
+      "deck": 26,
+      "slot": 1,
+      "col": 2,
+      "row": 1,
+      "normalized": {
+        "left": 0.142857,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "wizard_apprentice_card": {
+      "cardId": 2603,
+      "name": "巫师",
+      "deck": 26,
+      "slot": 3,
+      "col": 4,
+      "row": 1,
+      "normalized": {
+        "left": 0.428571,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "wizard_apprentice_portrait": {
+      "cardId": 2602,
+      "name": "巫师肖像",
+      "deck": 26,
+      "slot": 2,
+      "col": 3,
+      "row": 1,
+      "normalized": {
+        "left": 0.285714,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "priestess_apprentice_card": {
+      "cardId": 2605,
+      "name": "女祭司",
+      "deck": 26,
+      "slot": 5,
+      "col": 6,
+      "row": 1,
+      "normalized": {
+        "left": 0.714286,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "priestess_apprentice_portrait": {
+      "cardId": 2604,
+      "name": "女祭司肖像",
+      "deck": 26,
+      "slot": 4,
+      "col": 5,
+      "row": 1,
+      "normalized": {
+        "left": 0.571429,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "beastmaster_apprentice_card": {
+      "cardId": 2606,
+      "name": "兽王",
+      "deck": 26,
+      "slot": 6,
+      "col": 7,
+      "row": 1,
+      "normalized": {
+        "left": 0.857143,
+        "top": 0,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    },
+    "beastmaster_apprentice_portrait": {
+      "cardId": 2607,
+      "name": "兽王肖像",
+      "deck": 26,
+      "slot": 7,
+      "col": 1,
+      "row": 2,
+      "normalized": {
+        "left": 0,
+        "top": 0.25,
+        "width": 0.142857,
+        "height": 0.25
+      }
+    }
+  }
+}

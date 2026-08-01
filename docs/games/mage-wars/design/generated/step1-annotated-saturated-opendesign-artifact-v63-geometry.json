@@ -1,0 +1,137 @@
+{
+  "failures": [],
+  "bookBrowser": [
+    {
+      "sel": ".book-browser",
+      "text": "全部\n        攻击\n        结界\n        生物\n        装备\n      \n      \n        \n        \n        \n        \n        \n        \n        \n        \n      \n      \n        ‹\n        1 / 4\n        ›\n      \n      法术书 308 / 页",
+      "x": 320,
+      "y": 724,
+      "w": 1260,
+      "h": 344
+    }
+  ],
+  "bookRow": [
+    {
+      "sel": ".book-row",
+      "text": "",
+      "x": 338,
+      "y": 766,
+      "w": 1224,
+      "h": 266
+    }
+  ],
+  "bookCards": [
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 338,
+      "y": 838,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 480,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 622,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 764,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 906,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 1048,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 1190,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    },
+    {
+      "sel": ".book-card img",
+      "text": "",
+      "x": 1332,
+      "y": 846,
+      "w": 130,
+      "h": 183
+    }
+  ],
+  "bookFooter": [
+    {
+      "sel": ".book-footer",
+      "text": "法术书 308 / 页",
+      "x": 340,
+      "y": 1040,
+      "w": 99,
+      "h": 16
+    }
+  ],
+  "bookPageRail": [
+    {
+      "sel": ".book-page-rail",
+      "text": "‹\n        1 / 4\n        ›",
+      "x": 1398,
+      "y": 1030,
+      "w": 164,
+      "h": 34
+    }
+  ],
+  "pageTurn": [
+    {
+      "sel": ".page-turn",
+      "text": "‹",
+      "x": 1430,
+      "y": 1030,
+      "w": 34,
+      "h": 34
+    },
+    {
+      "sel": ".page-turn",
+      "text": "›",
+      "x": 1528,
+      "y": 1030,
+      "w": 34,
+      "h": 34
+    }
+  ],
+  "pageIndex": [
+    {
+      "sel": ".page-index",
+      "text": "1 / 4",
+      "x": 1472,
+      "y": 1033,
+      "w": 48,
+      "h": 28
+    }
+  ]
+}

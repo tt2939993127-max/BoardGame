@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>法师战争主牌桌视觉预览</title>
+  <style>
+    :root {
+      --parchment: #ead9b8;
+      --muted: rgba(234, 217, 184, 0.66);
+      --dim: rgba(234, 217, 184, 0.42);
+      --gold: #c89440;
+      --gold-bright: #e7bd62;
+      --arcane: #4aa3ff;
+      --fire: #e35b2f;
+      --life: #4fbf6b;
+      --shadow: #8a58b7;
+      --danger: #c93434;
+      --table-dark: #0b0705;
+      --arena-img: url("file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1702910670704188662A394920C000036951DA1D3F7A636CC61ECFC9445.jpg");
+      --card-back: url("file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1725416402719671791BB79007C02B5E0E42D97FF6D1CF78BA3C79EF9C4.jpg");
+      font-family: "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1280px;
+      min-height: 720px;
+      overflow: hidden;
+      color: var(--parchment);
+      background:
+        radial-gradient(circle at 47% 48%, rgba(130, 86, 37, 0.36) 0 28%, rgba(15, 9, 6, 0.38) 55%, #050302 86%),
+        linear-gradient(135deg, #180d08, #090604 44%, #1a1009);
+    }
+
+    .screen {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .ambient {
+      position: absolute;
+      inset: -10vh -8vw;
+      z-index: -3;
+      background:
+        radial-gradient(circle at 20% 80%, rgba(79, 191, 107, 0.16), transparent 24%),
+        radial-gradient(circle at 77% 25%, rgba(227, 91, 47, 0.16), transparent 26%),
+        radial-gradient(circle at 51% 56%, rgba(74, 163, 255, 0.12), transparent 36%);
+      filter: blur(12px);
+    }
+
+    .cloth {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px);
+      background-size: 46px 46px;
+      opacity: 0.38;
+      mix-blend-mode: soft-light;
+    }
+
+    .brand {
+      position: absolute;
+      left: 30px;
+      top: 24px;
+      z-index: 40;
+      text-shadow: 0 5px 24px rgba(0, 0, 0, 0.82);
+      pointer-events: none;
+    }
+
+    h1 {
+      margin: 0;
+      color: #fff4d4;
+      font: 800 30px/1.05 Georgia, "Microsoft YaHei", serif;
+      letter-spacing: 0.04em;
+    }
+
+    .brand div,
+    .round div {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .round {
+      position: absolute;
+      top: 25px;
+      right: 30px;
+      z-index: 40;
+      text-align: right;
+      pointer-events: none;
+      text-shadow: 0 5px 24px rgba(0, 0, 0, 0.82);
+    }
+
+    .round b {
+      display: block;
+      color: #fff4d4;
+      font-size: 25px;
+      line-height: 1;
+    }
+
+    .phase-strip {
+      position: absolute;
+      top: 31px;
+      left: 50%;
+      width: 500px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    .phase {
+      position: relative;
+      min-width: 58px;
+      text-align: center;
+      color: rgba(234, 217, 184, 0.54);
+      font-size: 13px;
+      font-weight: 800;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.76);
+    }
+
+    .phase.active {
+      color: #fff8df;
+    }
+
+    .phase.active::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 74px;
+      height: 38px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: radial-gradient(circle at 50% 42%, rgba(231, 189, 98, 0.44), rgba(74, 163, 255, 0.22) 50%, transparent 74%);
+      box-shadow: 0 0 34px rgba(74, 163, 255, 0.26);
+      z-index: -1;
+    }
+
+    .arena {
+      position: absolute;
+      left: 50%;
+      top: 53.5%;
+      width: min(64vw, 1210px);
+      aspect-ratio: 4 / 3;
+      transform: translate(-50%, -50%);
+      border-radius: 28px;
+      background:
+        linear-gradient(rgba(7, 5, 4, 0.05), rgba(7, 5, 4, 0.32)),
+        var(--arena-img) center / cover no-repeat;
+      box-shadow:
+        0 34px 100px rgba(0, 0, 0, 0.66),
+        0 0 88px rgba(200, 148, 64, 0.16);
+      overflow: hidden;
+      z-index: 10;
+    }
+
+    .arena::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 84px rgba(0, 0, 0, 0.46);
+    }
+
+    .apprentice-grid {
+      position: absolute;
+      left: 16.2%;
+      right: 16.2%;
+      top: 18.6%;
+      bottom: 18.6%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 11px;
+      z-index: 2;
+    }
+
+    .zone {
+      position: relative;
+      border-radius: 14px;
+      background: rgba(11, 8, 6, 0.05);
+    }
+
+    .zone.valid {
+      box-shadow: inset 0 0 0 2px rgba(74, 163, 255, 0.22), 0 0 24px rgba(74, 163, 255, 0.12);
+    }
+
+    .zone.target {
+      background: rgba(227, 91, 47, 0.06);
+      box-shadow: inset 0 0 0 3px rgba(227, 91, 47, 0.46), 0 0 34px rgba(227, 91, 47, 0.24);
+    }
+
+    .zone-label {
+      position: absolute;
+      left: 11px;
+      top: 9px;
+      color: rgba(234, 217, 184, 0.52);
+      font-size: 12px;
+      font-weight: 900;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    }
+
+    .unit {
+      position: absolute;
+      min-width: 92px;
+      height: 48px;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 9px 6px 6px;
+      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(37, 29, 20, 0.92), rgba(11, 8, 6, 0.78));
+      box-shadow: 0 12px 26px rgba(0,0,0,0.42);
+      z-index: 6;
+    }
+
+    .sigil {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff8df;
+      font-weight: 900;
+      background: radial-gradient(circle at 35% 25%, rgba(255,255,255,0.32), transparent 22%), linear-gradient(135deg, var(--gold), #5a3217);
+    }
+
+    .enemy .sigil {
+      background: radial-gradient(circle at 35% 25%, rgba(255,255,255,0.26), transparent 22%), linear-gradient(135deg, var(--shadow), #321440);
+    }
+
+    .unit-name {
+      display: block;
+      color: #fff5d9;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .unit-meta {
+      margin-top: 2px;
+      display: flex;
+      gap: 6px;
+      color: rgba(234, 217, 184, 0.66);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .beastmaster { left: 17px; bottom: 16px; }
+    .wolf { right: 18px; bottom: 62px; transform: scale(.94); }
+    .warlock { right: 16px; top: 16px; }
+    .imp { left: 54px; top: 58px; transform: scale(.9); }
+
+    .token {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.55));
+    }
+
+    .unit .token {
+      position: absolute;
+      right: -9px;
+      top: -9px;
+    }
+
+    .spell-trail {
+      position: absolute;
+      left: 27%;
+      top: 64%;
+      width: 47%;
+      height: 0;
+      border-top: 5px solid rgba(74, 163, 255, 0.82);
+      transform: rotate(-24deg);
+      transform-origin: left center;
+      z-index: 7;
+      filter: drop-shadow(0 0 12px rgba(74, 163, 255, 0.92)) drop-shadow(0 0 22px rgba(227, 91, 47, 0.58));
+    }
+
+    .spell-trail::before,
+    .spell-trail::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .spell-trail::before {
+      right: -14px;
+      top: -12px;
+      width: 28px;
+      height: 28px;
+      background: radial-gradient(circle, #fff4d6 0 14%, var(--fire) 30%, rgba(227, 91, 47, 0.18) 70%, transparent 72%);
+      box-shadow: 0 0 30px rgba(227, 91, 47, 0.86);
+    }
+
+    .spell-trail::after {
+      left: 16%;
+      top: -7px;
+      width: 14px;
+      height: 14px;
+      background: radial-gradient(circle, #9ed0ff 0 20%, rgba(74, 163, 255, 0.22) 68%, transparent 72%);
+    }
+
+    .mage-hud {
+      position: absolute;
+      width: 280px;
+      z-index: 24;
+      pointer-events: none;
+      text-shadow: 0 4px 18px rgba(0,0,0,0.88);
+    }
+
+    .mage-hud.enemy-hud {
+      left: 30px;
+      top: 120px;
+    }
+
+    .mage-hud.player-hud {
+      right: 30px;
+      top: 120px;
+      text-align: left;
+    }
+
+    .mage-hud::before {
+      content: "";
+      position: absolute;
+      inset: -18px -18px auto -18px;
+      height: 190px;
+      background: radial-gradient(ellipse at 22% 18%, rgba(234, 217, 184, 0.12), rgba(15, 10, 7, 0.36) 45%, transparent 80%);
+      z-index: -1;
+    }
+
+    .player-hud::before {
+      background: radial-gradient(ellipse at 22% 18%, rgba(79, 191, 107, 0.14), rgba(15, 10, 7, 0.34) 45%, transparent 80%);
+    }
+
+    .enemy-hud::before {
+      background: radial-gradient(ellipse at 22% 18%, rgba(111, 74, 168, 0.18), rgba(15, 10, 7, 0.34) 45%, transparent 80%);
+    }
+
+    .seat {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .mage-name {
+      margin-top: 3px;
+      color: #fff4d4;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+    }
+
+    .status-word {
+      display: inline-flex;
+      margin-left: 12px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      color: #fff8df;
+      background: rgba(234, 217, 184, 0.1);
+      font-size: 13px;
+      vertical-align: 5px;
+    }
+
+    .vitals {
+      display: flex;
+      gap: 22px;
+      margin-top: 18px;
+    }
+
+    .vital b {
+      display: block;
+      color: #fff4d4;
+      font-size: 25px;
+      line-height: .9;
+    }
+
+    .vital span {
+      display: block;
+      margin-top: 7px;
+      color: rgba(234, 217, 184, 0.62);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .state-line,
+    .attachment-line {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 18px;
+      color: rgba(234, 217, 184, 0.76);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .state-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 27px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.2);
+    }
+
+    .state-chip.ready {
+      color: #ddfadd;
+      background: rgba(79, 191, 107, 0.16);
+    }
+
+    .state-chip.used {
+      color: rgba(234, 217, 184, 0.42);
+    }
+
+    .small-card {
+      width: 46px;
+      height: 66px;
+      border-radius: 7px;
+      background: #21170f center / cover no-repeat;
+      box-shadow: 0 9px 18px rgba(0,0,0,0.44);
+    }
+
+    .hidden-card,
+    .planned {
+      background-image: linear-gradient(rgba(9,6,4,0.08), rgba(9,6,4,0.28)), var(--card-back);
+    }
+
+    .equipment-card {
+      background-image: url("../../../../../temp/mage-wars/apprentice-card-crops/cardid-3700.png");
+    }
+
+    .opponent-plan {
+      position: absolute;
+      top: 106px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+      text-shadow: 0 4px 18px rgba(0,0,0,0.9);
+    }
+
+    .opponent-plan .planned {
+      width: 42px;
+      height: 59px;
+      border-radius: 7px;
+      background-size: cover;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.44);
+    }
+
+    .tiny-label {
+      color: rgba(234, 217, 184, 0.58);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .action-dock {
+      position: absolute;
+      right: 32px;
+      top: 47%;
+      width: 260px;
+      transform: translateY(-18%);
+      z-index: 35;
+      filter: drop-shadow(0 20px 40px rgba(0,0,0,0.48));
+    }
+
+    .action-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      color: #fff4d4;
+      text-shadow: 0 5px 20px rgba(0,0,0,0.88);
+    }
+
+    .action-title b {
+      font-size: 21px;
+    }
+
+    .action-title span {
+      color: rgba(234, 217, 184, 0.62);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .rune {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #fff8df;
+      font-weight: 900;
+      background: radial-gradient(circle at 34% 26%, rgba(255,255,255,.4), transparent 20%), linear-gradient(135deg, var(--arcane), #163c72);
+      box-shadow: 0 0 28px rgba(74, 163, 255, 0.34);
+    }
+
+    .action-btn {
+      height: 48px;
+      margin-top: 10px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      color: #fff6df;
+      font-size: 14px;
+      font-weight: 900;
+      background: linear-gradient(180deg, rgba(44, 34, 24, 0.88), rgba(18, 13, 9, 0.8));
+      box-shadow: inset 0 -4px 0 rgba(0,0,0,0.28), 0 8px 20px rgba(0,0,0,0.24);
+    }
+
+    .action-btn.primary {
+      color: #26170c;
+      background: linear-gradient(180deg, #f3c96d, #bd8434);
+      box-shadow: inset 0 -4px 0 rgba(82, 46, 17, 0.3), 0 12px 28px rgba(200, 148, 64, 0.26);
+    }
+
+    .action-btn.danger {
+      background: linear-gradient(180deg, rgba(135, 34, 24, 0.72), rgba(55, 13, 9, 0.84));
+    }
+
+    .target-readout {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      color: rgba(207, 230, 255, 0.86);
+      background: rgba(74, 163, 255, 0.08);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .hand {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      width: min(1040px, calc(100vw - 430px));
+      height: 140px;
+      transform: translateX(-50%);
+      z-index: 36;
+      display: grid;
+      grid-template-columns: 170px 1fr 130px;
+      align-items: end;
+      gap: 18px;
+      pointer-events: none;
+    }
+
+    .hand::before {
+      content: "";
+      position: absolute;
+      left: -44px;
+      right: -44px;
+      bottom: -32px;
+      height: 142px;
+      z-index: -1;
+      background: radial-gradient(ellipse at 50% 100%, rgba(234,217,184,0.16), rgba(10,7,5,0.46) 45%, transparent 76%);
+    }
+
+    .hand-title {
+      align-self: center;
+      text-shadow: 0 5px 20px rgba(0,0,0,0.9);
+    }
+
+    .hand-title b {
+      display: block;
+      color: #fff4d4;
+      font-size: 20px;
+    }
+
+    .hand-title span {
+      display: block;
+      margin-top: 8px;
+      color: rgba(234,217,184,0.64);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .cards {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .spell-card {
+      width: 70px;
+      height: 99px;
+      border-radius: 8px;
+      background: #21170f center / cover no-repeat;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.44);
+    }
+
+    .spell-card.selected {
+      width: 82px;
+      height: 116px;
+      transform: translateY(-8px);
+      box-shadow: 0 0 0 2px rgba(74, 163, 255, 0.74), 0 0 28px rgba(74, 163, 255, 0.34), 0 14px 28px rgba(0,0,0,0.48);
+    }
+
+    .card-1700 { background-image: url("../../../../../temp/mage-wars/apprentice-card-crops/cardid-1700.png"); }
+    .card-1816 { background-image: url("../../../../../temp/mage-wars/apprentice-card-crops/cardid-1816.png"); }
+    .card-1901 { background-image: url("../../../../../temp/mage-wars/apprentice-card-crops/cardid-1901.png"); }
+    .card-2800 { background-image: url("../../../../../temp/mage-wars/apprentice-card-crops/cardid-2800.png"); }
+    .card-back { background-image: linear-gradient(rgba(9,6,4,0.08), rgba(9,6,4,0.28)), var(--card-back); }
+
+    .plan {
+      display: grid;
+      grid-template-columns: repeat(2, 50px);
+      gap: 8px;
+      align-items: end;
+      justify-content: end;
+    }
+
+    .plan .tiny-label {
+      grid-column: 1 / -1;
+      text-align: right;
+      text-shadow: 0 4px 18px rgba(0,0,0,0.9);
+    }
+
+    .plan-card {
+      width: 50px;
+      height: 72px;
+      border-radius: 7px;
+      background: center / cover no-repeat;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.42);
+    }
+
+    .legend {
+      position: absolute;
+      left: 50%;
+      bottom: 162px;
+      transform: translateX(-50%);
+      z-index: 35;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(8, 6, 4, 0.26);
+      color: rgba(234, 217, 184, 0.62);
+      font-size: 12px;
+      font-weight: 900;
+      text-shadow: 0 3px 12px rgba(0,0,0,0.9);
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      border-radius: 50%;
+      vertical-align: -1px;
+    }
+
+    .blue { background: var(--arcane); }
+    .red { background: var(--fire); }
+    .green { background: var(--life); }
+
+    @media (max-width: 1440px) {
+      .arena { width: min(66vw, 1100px); }
+      .mage-hud { width: 248px; }
+      .action-dock { width: 232px; }
+      .hand { width: min(940px, calc(100vw - 390px)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <div class="ambient"></div>
+    <div class="cloth"></div>
+
+    <header class="brand">
+      <h1>法师战争</h1>
+      <div>学徒模式 · 2 人对决</div>
+    </header>
+
+    <div class="phase-strip" aria-label="回合阶段">
+      <div class="phase">重置</div>
+      <div class="phase">聚魔</div>
+      <div class="phase">计划</div>
+      <div class="phase active">行动</div>
+      <div class="phase">施法</div>
+      <div class="phase">结算</div>
+    </div>
+
+    <section class="round">
+      <b>第 3 回合</b>
+      <div>兽王行动中</div>
+    </section>
+
+    <section class="opponent-plan" aria-label="对手计划">
+      <span class="tiny-label">对手计划</span>
+      <div class="planned"></div>
+      <div class="planned"></div>
+      <span class="tiny-label">隐藏</span>
+    </section>
+
+    <aside class="mage-hud enemy-hud" aria-label="对手状态">
+      <div class="seat">对手</div>
+      <div class="mage-name">邪术师 <span class="status-word">已用</span></div>
+      <div class="vitals">
+        <div class="vital"><b>18</b><span>生命 / 24</span></div>
+        <div class="vital"><b>8</b><span>法力</span></div>
+        <div class="vital"><b>3</b><span>聚魔</span></div>
+      </div>
+      <div class="state-line">
+        <span class="state-chip used">快速施法</span>
+        <span class="state-chip"><img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc16274784517922581910C488293AA7FF65FA3618166528783082704A008.png" alt="" />伤害 6</span>
+      </div>
+      <div class="attachment-line">
+        <div class="small-card hidden-card"></div>
+        <span>隐性结界 ×2</span>
+      </div>
+      <div class="state-line">
+        <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1627478451792809358FAAFDD8C9A05EB031CB4859CB28B04948152A3C6.png" alt="" />
+        <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1627478451792831015544503F2A35FEE1042B4E82F6B7DDBC41783AABD.png" alt="" />
+        <span>燃烧 · 腐化</span>
+      </div>
+    </aside>
+
+    <section class="arena" aria-label="学徒竞技场">
+      <div class="apprentice-grid">
+        <div class="zone valid">
+          <span class="zone-label">A1</span>
+          <div class="unit enemy imp">
+            <div class="sigil">魔</div>
+            <div><span class="unit-name">地狱小魔</span><span class="unit-meta"><span>生命 3</span><span>燃烧</span></span></div>
+            <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1627478451792809358FAAFDD8C9A05EB031CB4859CB28B04948152A3C6.png" alt="" />
+          </div>
+        </div>
+        <div class="zone target">
+          <span class="zone-label">B1</span>
+          <div class="unit enemy warlock">
+            <div class="sigil">邪</div>
+            <div><span class="unit-name">邪术师</span><span class="unit-meta"><span>护甲 1</span><span>伤害 6</span></span></div>
+            <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc16274784517922581910C488293AA7FF65FA3618166528783082704A008.png" alt="" />
+          </div>
+        </div>
+        <div class="zone"><span class="zone-label">C1</span></div>
+        <div class="zone">
+          <span class="zone-label">A2</span>
+          <div class="unit wolf">
+            <div class="sigil">狼</div>
+            <div><span class="unit-name">丛林灰狼</span><span class="unit-meta"><span>守卫</span><span>近战 3</span></span></div>
+            <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc162747845179219110241FD9978DBED6A7FA3C3773D64C9B7BB20728A93.png" alt="" />
+          </div>
+        </div>
+        <div class="zone valid">
+          <span class="zone-label">B2</span>
+          <div class="unit beastmaster">
+            <div class="sigil">兽</div>
+            <div><span class="unit-name">兽王</span><span class="unit-meta"><span>法力 6</span><span>快速</span></span></div>
+            <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1627478451792267951C0E7FD1247835F627FE138F5BD8C025497D167CC.png" alt="" />
+          </div>
+        </div>
+        <div class="zone"><span class="zone-label">C2</span></div>
+      </div>
+      <div class="spell-trail" aria-hidden="true"></div>
+    </section>
+
+    <aside class="mage-hud player-hud" aria-label="自己状态">
+      <div class="seat">你</div>
+      <div class="mage-name">兽王 <span class="status-word">就绪</span></div>
+      <div class="vitals">
+        <div class="vital"><b>21</b><span>生命 / 24</span></div>
+        <div class="vital"><b>6</b><span>法力</span></div>
+        <div class="vital"><b>3</b><span>聚魔</span></div>
+      </div>
+      <div class="state-line">
+        <span class="state-chip ready"><img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc1627478451792267951C0E7FD1247835F627FE138F5BD8C025497D167CC.png" alt="" />行动</span>
+        <span class="state-chip ready">快速施法</span>
+      </div>
+      <div class="attachment-line">
+        <div class="small-card equipment-card"></div>
+        <span>法师魔杖 · 公开</span>
+      </div>
+      <div class="state-line">
+        <img class="token" src="file:///D:/gongzuo/webgame/gameasset/%E6%B3%95%E5%B8%88%E6%88%98%E4%BA%89/Mods/Images/httpcloud3steamusercontentcomugc162747845179219110241FD9978DBED6A7FA3C3773D64C9B7BB20728A93.png" alt="" />
+        <span>守卫在线</span>
+      </div>
+    </aside>
+
+    <section class="action-dock" aria-label="当前行动">
+      <div class="action-title">
+        <div class="rune">施</div>
+        <div><b>选择目标</b><br /><span>火球术 · 费用 8</span></div>
+      </div>
+      <div class="action-btn primary"><span>确认施法</span><span>8</span></div>
+      <div class="action-btn danger"><span>取消</span><span>Esc</span></div>
+      <div class="action-btn"><span>结束行动</span><span>→</span></div>
+      <div class="target-readout">目标：邪术师所在区域</div>
+    </section>
+
+    <section class="legend" aria-label="图例">
+      <span><i class="blue"></i>合法目标</span>
+      <span><i class="red"></i>当前目标</span>
+      <span><i class="green"></i>己方守卫</span>
+    </section>
+
+    <section class="hand" aria-label="手牌与计划">
+      <div class="hand-title">
+        <b>你的法术</b>
+        <span>手牌 5 · 法术书 24</span>
+      </div>
+      <div class="cards">
+        <div class="spell-card selected card-1700"></div>
+        <div class="spell-card card-1816"></div>
+        <div class="spell-card card-1901"></div>
+        <div class="spell-card card-2800"></div>
+        <div class="spell-card card-back"></div>
+      </div>
+      <div class="plan">
+        <span class="tiny-label">计划</span>
+        <div class="plan-card hidden-card"></div>
+        <div class="plan-card hidden-card"></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

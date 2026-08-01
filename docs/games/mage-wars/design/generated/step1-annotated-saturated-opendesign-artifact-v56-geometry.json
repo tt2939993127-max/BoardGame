@@ -1,0 +1,106 @@
+{
+  "artifact": "D:/codex-home/tools/open-design/.od/projects/mage-wars-ui-design/mage-wars-step1-annotated-saturated-v56.html",
+  "screenshot": "D:/gongzuo/webgame/BoardGame/.worktrees/mage-wars/docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v56.png",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "status": "PASS",
+  "checkedAt": "2026-07-31",
+  "cardReadability": {
+    "spellbookFocusCard": {
+      "selector": ".book-card.focus img",
+      "width": 260,
+      "height": 366,
+      "role": "readable-focus-card"
+    },
+    "plannedSourceCard": {
+      "selector": ".plan-card.source-anchor img",
+      "width": 260,
+      "height": 366,
+      "role": "readable-current-source-card"
+    },
+    "spellbookAdjacentCandidates": {
+      "width": 138,
+      "height": 194,
+      "role": "browse-only-candidates"
+    },
+    "secondaryPlannedCard": {
+      "width": 126,
+      "height": 178,
+      "role": "slot-indicator-inspect-required"
+    }
+  },
+  "rects": [
+    { "selector": ".imp-field", "x": 538, "y": 622, "w": 139, "h": 191, "right": 678, "bottom": 812 },
+    { "selector": ".vine-field", "x": 1145, "y": 626, "w": 136, "h": 188, "right": 1281, "bottom": 814 },
+    { "selector": ".target-field", "x": 1127, "y": 346, "w": 136, "h": 188, "right": 1263, "bottom": 534 },
+    { "selector": ".book-card.focus img", "x": 706, "y": 687, "w": 260, "h": 366, "right": 966, "bottom": 1053 },
+    { "selector": ".book-card:nth-child(2) img", "x": 984, "y": 859, "w": 138, "h": 194, "right": 1122, "bottom": 1053 },
+    { "selector": ".book-card:nth-child(3) img", "x": 1140, "y": 859, "w": 138, "h": 194, "right": 1278, "bottom": 1053 },
+    { "selector": ".plan-card.source-anchor img", "x": 1438, "y": 690, "w": 260, "h": 366, "right": 1698, "bottom": 1056 },
+    { "selector": ".plan-card:not(.source-anchor) img", "x": 1294, "y": 878, "w": 126, "h": 178, "right": 1420, "bottom": 1056 },
+    { "selector": ".discard", "x": 1294, "y": 790, "w": 79, "h": 50, "right": 1373, "bottom": 840 },
+    { "selector": ".turn-end", "x": 1700, "y": 1000, "w": 168, "h": 52, "right": 1868, "bottom": 1052 },
+    { "selector": ".token-damage", "x": 1226, "y": 463, "w": 38, "h": 38, "right": 1264, "bottom": 501 },
+    { "selector": ".token-burn", "x": 1263, "y": 449, "w": 39, "h": 39, "right": 1303, "bottom": 489 },
+    { "selector": ".resolution-layer", "x": 1268, "y": 378, "w": 288, "h": 118, "right": 1556, "bottom": 496 },
+    { "selector": ".rival-prepared", "x": 58, "y": 54, "w": 78, "h": 112, "right": 136, "bottom": 166 }
+  ],
+  "overlapChecks": [
+    { "name": "imp_vs_focus", "area": 0 },
+    { "name": "vine_vs_plan_source", "area": 0 },
+    { "name": "vine_vs_small_plan", "area": 0 },
+    { "name": "vine_vs_discard", "area": 0 },
+    { "name": "turn_vs_plan_source", "area": 0 },
+    { "name": "discard_vs_plan_source", "area": 0 },
+    { "name": "discard_vs_small_plan", "area": 0 },
+    { "name": "discard_vs_turn", "area": 0 },
+    { "name": "tokens_vs_source", "area": 0 },
+    { "name": "dice_vs_source", "area": 0 }
+  ],
+  "visibleTextAudit": {
+    "forbiddenTermsAbsent": [
+      "手牌",
+      "确认",
+      "执行",
+      "取消"
+    ],
+    "cardFaceFieldDuplication": "absent; card names only remain inside card artwork or non-visible alt/aria labels",
+    "visibleText": [
+      "选择目标",
+      "可选",
+      "掷骰预备",
+      "邪术师",
+      "生命",
+      "17",
+      "法力",
+      "14",
+      "聚魔",
+      "10",
+      "行动中",
+      "女祭司",
+      "19",
+      "生命",
+      "18",
+      "法力",
+      "10",
+      "聚魔",
+      "守卫",
+      "对手已计划 2",
+      "全部",
+      "攻击",
+      "结界",
+      "生物",
+      "装备",
+      "1 / 5",
+      "法术书 28",
+      "己方已计划",
+      "施法来源",
+      "2 / 2",
+      "弃牌 3",
+      "回合结束"
+    ]
+  }
+}

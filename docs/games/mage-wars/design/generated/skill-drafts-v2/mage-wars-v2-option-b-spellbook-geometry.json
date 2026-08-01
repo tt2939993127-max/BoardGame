@@ -1,0 +1,221 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "forbiddenVisibleMatches": 0,
+  "forbiddenHtmlMatches": 0,
+  "zoneRects": {
+    "A1": {
+      "left": 811.796875,
+      "top": 91.515625,
+      "width": 267.1875,
+      "height": 160.984375,
+      "right": 1078.984375,
+      "bottom": 252.5,
+      "cx": 945.390625,
+      "cy": 172.0078125
+    },
+    "B1": {
+      "left": 1086.984375,
+      "top": 91.515625,
+      "width": 267.203125,
+      "height": 160.984375,
+      "right": 1354.1875,
+      "bottom": 252.5,
+      "cx": 1220.5859375,
+      "cy": 172.0078125
+    },
+    "A2": {
+      "left": 811.796875,
+      "top": 260.5,
+      "width": 267.1875,
+      "height": 160.984375,
+      "right": 1078.984375,
+      "bottom": 421.484375,
+      "cx": 945.390625,
+      "cy": 340.9921875
+    },
+    "B2": {
+      "left": 1086.984375,
+      "top": 260.5,
+      "width": 267.203125,
+      "height": 160.984375,
+      "right": 1354.1875,
+      "bottom": 421.484375,
+      "cx": 1220.5859375,
+      "cy": 340.9921875
+    },
+    "A3": {
+      "left": 811.796875,
+      "top": 429.484375,
+      "width": 267.1875,
+      "height": 160.984375,
+      "right": 1078.984375,
+      "bottom": 590.46875,
+      "cx": 945.390625,
+      "cy": 509.9765625
+    },
+    "B3": {
+      "left": 1086.984375,
+      "top": 429.484375,
+      "width": 267.203125,
+      "height": 160.984375,
+      "right": 1354.1875,
+      "bottom": 590.46875,
+      "cx": 1220.5859375,
+      "cy": 509.9765625
+    }
+  },
+  "fieldCards": [
+    {
+      "label": "女祭司",
+      "zoneId": "B1",
+      "rect": {
+        "left": 1109.984375,
+        "top": 120.515625,
+        "width": 92,
+        "height": 146,
+        "right": 1201.984375,
+        "bottom": 266.515625,
+        "cx": 1155.984375,
+        "cy": 193.515625
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 0.904,
+      "maxOtherRatio": 0.041
+    },
+    {
+      "label": "皇家箭手",
+      "zoneId": "B1",
+      "rect": {
+        "left": 1173.984375,
+        "top": 124.515625,
+        "width": 76,
+        "height": 124,
+        "right": 1249.984375,
+        "bottom": 248.515625,
+        "cx": 1211.984375,
+        "cy": 186.515625
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "火烙魔婴",
+      "zoneId": "A2",
+      "rect": {
+        "left": 898.796875,
+        "top": 293.5,
+        "width": 76,
+        "height": 124,
+        "right": 974.796875,
+        "bottom": 417.5,
+        "cx": 936.796875,
+        "cy": 355.5
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "烈焰狱鬼",
+      "zoneId": "A2",
+      "rect": {
+        "left": 962.796875,
+        "top": 311.5,
+        "width": 76,
+        "height": 124,
+        "right": 1038.796875,
+        "bottom": 435.5,
+        "cx": 1000.796875,
+        "cy": 373.5
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 0.887,
+      "maxOtherRatio": 0.049
+    },
+    {
+      "label": "西锁骑士",
+      "zoneId": "B2",
+      "rect": {
+        "left": 1173.984375,
+        "top": 289.5,
+        "width": 96,
+        "height": 152,
+        "right": 1269.984375,
+        "bottom": 441.5,
+        "cx": 1221.984375,
+        "cy": 365.5
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 0.868,
+      "maxOtherRatio": 0.079
+    },
+    {
+      "label": "邪术师",
+      "zoneId": "A3",
+      "rect": {
+        "left": 834.796875,
+        "top": 458.484375,
+        "width": 92,
+        "height": 146,
+        "right": 926.796875,
+        "bottom": 604.484375,
+        "cx": 880.796875,
+        "cy": 531.484375
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 0.904,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "缠绕藤蔓",
+      "zoneId": "B3",
+      "rect": {
+        "left": 1173.984375,
+        "top": 462.484375,
+        "width": 76,
+        "height": 124,
+        "right": 1249.984375,
+        "bottom": 586.484375,
+        "cx": 1211.984375,
+        "cy": 524.484375
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    }
+  ],
+  "diceRect": {
+    "left": 1263.984375,
+    "top": 317.5,
+    "width": 212,
+    "height": 113,
+    "right": 1475.984375,
+    "bottom": 430.5,
+    "cx": 1369.984375,
+    "cy": 374
+  },
+  "targetRect": {
+    "left": 1173.984375,
+    "top": 289.5,
+    "width": 96,
+    "height": 152,
+    "right": 1269.984375,
+    "bottom": 441.5,
+    "cx": 1221.984375,
+    "cy": 365.5
+  },
+  "diceCenterDistanceToTarget": 148.24,
+  "candidateCount": 8,
+  "preparedCount": 2,
+  "mediaGenerate": "false",
+  "aiPreflight": {
+    "status": "PASS_FOR_AI_VISUAL_REVIEW",
+    "minOwnRatio": 0.868,
+    "allCardCentersInsideOwnZone": true,
+    "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-drafts-v2\\mage-wars-v2-option-b-spellbook.png"
+  }
+}

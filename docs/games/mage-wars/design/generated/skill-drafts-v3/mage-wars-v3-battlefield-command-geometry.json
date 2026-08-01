@@ -1,0 +1,136 @@
+{
+  "key": "command",
+  "pngPath": "D:\\gongzuo\\webgame\\BoardGame\\.worktrees\\mage-wars\\docs\\games\\mage-wars\\design\\generated\\skill-drafts-v3\\mage-wars-v3-battlefield-command.png",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "mediaGenerate": "false",
+  "visibleForbiddenMatches": [],
+  "htmlForbiddenMatches": [],
+  "fieldCards": [
+    {
+      "label": "女祭司",
+      "zoneId": "B1",
+      "rect": {
+        "left": 1053.484375,
+        "top": 167.1875,
+        "right": 1145.484375,
+        "bottom": 297.1875,
+        "width": 92,
+        "height": 130,
+        "cx": 1099.484375,
+        "cy": 232.1875
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "皇家箭手",
+      "zoneId": "B1",
+      "rect": {
+        "left": 1197.484375,
+        "top": 191.1875,
+        "right": 1275.484375,
+        "bottom": 301.1875,
+        "width": 78,
+        "height": 110,
+        "cx": 1236.484375,
+        "cy": 246.1875
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "火烙魔婴",
+      "zoneId": "A2",
+      "rect": {
+        "left": 809.59375,
+        "top": 392.71875,
+        "right": 887.59375,
+        "bottom": 502.71875,
+        "width": 78,
+        "height": 110,
+        "cx": 848.59375,
+        "cy": 447.71875
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "烈焰狱鬼",
+      "zoneId": "A2",
+      "rect": {
+        "left": 891.59375,
+        "top": 414.71875,
+        "right": 969.59375,
+        "bottom": 524.71875,
+        "width": 78,
+        "height": 110,
+        "cx": 930.59375,
+        "cy": 469.71875
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "西锁骑士",
+      "zoneId": "B2",
+      "rect": {
+        "left": 1113.484375,
+        "top": 384.71875,
+        "right": 1213.484375,
+        "bottom": 525.71875,
+        "width": 100,
+        "height": 141,
+        "cx": 1163.484375,
+        "cy": 455.21875
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "邪术师",
+      "zoneId": "A3",
+      "rect": {
+        "left": 747.59375,
+        "top": 614.25,
+        "right": 839.59375,
+        "bottom": 744.25,
+        "width": 92,
+        "height": 130,
+        "cx": 793.59375,
+        "cy": 679.25
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    },
+    {
+      "label": "缠绕藤蔓",
+      "zoneId": "B3",
+      "rect": {
+        "left": 1115.484375,
+        "top": 616.25,
+        "right": 1193.484375,
+        "bottom": 726.25,
+        "width": 78,
+        "height": 110,
+        "cx": 1154.484375,
+        "cy": 671.25
+      },
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0
+    }
+  ],
+  "minOwnRatio": 1,
+  "centersOk": true,
+  "diceDistanceToTarget": null,
+  "status": "PASS_FOR_VISUAL_REVIEW"
+}

@@ -1,0 +1,145 @@
+{
+  "zones": [
+    {
+      "zoneId": "A1",
+      "rect": {
+        "left": 958,
+        "top": 156,
+        "right": 1178.5,
+        "bottom": 373.328125,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    },
+    {
+      "zoneId": "B1",
+      "rect": {
+        "left": 1189.5,
+        "top": 156,
+        "right": 1410,
+        "bottom": 373.328125,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    },
+    {
+      "zoneId": "A2",
+      "rect": {
+        "left": 958,
+        "top": 384.328125,
+        "right": 1178.5,
+        "bottom": 601.65625,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    },
+    {
+      "zoneId": "B2",
+      "rect": {
+        "left": 1189.5,
+        "top": 384.328125,
+        "right": 1410,
+        "bottom": 601.65625,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    },
+    {
+      "zoneId": "A3",
+      "rect": {
+        "left": 958,
+        "top": 612.65625,
+        "right": 1178.5,
+        "bottom": 829.984375,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    },
+    {
+      "zoneId": "B3",
+      "rect": {
+        "left": 1189.5,
+        "top": 612.65625,
+        "right": 1410,
+        "bottom": 829.984375,
+        "width": 220.5,
+        "height": 217.328125
+      }
+    }
+  ],
+  "cards": [
+    {
+      "alt": "西锁骑士，当前火球术目标",
+      "zoneId": "B2",
+      "centerZone": "B2",
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "maxOtherZone": "A1",
+      "rect": {
+        "left": 1209.7252197265625,
+        "top": 422.3999328613281,
+        "right": 1308.2747802734375,
+        "bottom": 557.60009765625,
+        "width": 98.549560546875,
+        "height": 135.20016479492188
+      }
+    },
+    {
+      "alt": "火印魔婴",
+      "zoneId": "A3",
+      "centerZone": "A3",
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "maxOtherZone": "A1",
+      "rect": {
+        "left": 1009.5105590820312,
+        "top": 652.8822021484375,
+        "right": 1112.4893798828125,
+        "bottom": 791.1177978515625,
+        "width": 102.97882080078125,
+        "height": 138.235595703125
+      }
+    },
+    {
+      "alt": "烈焰魔物",
+      "zoneId": "A2",
+      "centerZone": "A2",
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "maxOtherZone": "A1",
+      "rect": {
+        "left": 1026.6102294921875,
+        "top": 425.6306457519531,
+        "right": 1127.3897705078125,
+        "bottom": 562.3693237304688,
+        "width": 100.779541015625,
+        "height": 136.73867797851562
+      }
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "B3",
+      "centerZone": "B3",
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "maxOtherZone": "A1",
+      "rect": {
+        "left": 1233.7252197265625,
+        "top": 654.39990234375,
+        "right": 1332.2747802734375,
+        "bottom": 789.60009765625,
+        "width": 98.549560546875,
+        "height": 135.2001953125
+      }
+    }
+  ],
+  "diceToTargetCenterDistance": 139.09,
+  "diceTargetOverlap": 0,
+  "diceActionOverlap": 0,
+  "diceRivalEdgeOverlap": 0,
+  "diceInsideArena": true,
+  "guardTargetOverlap": 0,
+  "damageTargetOverlap": 0,
+  "badImages": 0,
+  "forbiddenText": []
+}

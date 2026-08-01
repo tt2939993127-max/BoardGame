@@ -1,0 +1,99 @@
+{
+  "forbiddenHits": [],
+  "zones": 6,
+  "cards": [
+    {
+      "name": "灰衣天使",
+      "zoneId": "A1",
+      "centerInside": true,
+      "rect": {
+        "left": 426.3750915527344,
+        "top": 158.38877868652344,
+        "width": 96.21859741210938,
+        "height": 128.03492736816406
+      }
+    },
+    {
+      "name": "女祭司",
+      "zoneId": "B1",
+      "centerInside": true,
+      "rect": {
+        "left": 980.5172729492188,
+        "top": 146.27218627929688,
+        "width": 100.65289306640625,
+        "height": 138.26812744140625
+      }
+    },
+    {
+      "name": "皇家箭手",
+      "zoneId": "B1",
+      "centerInside": true,
+      "rect": {
+        "left": 1178.8065185546875,
+        "top": 214.62380981445312,
+        "width": 81.074462890625,
+        "height": 108.90863037109375
+      }
+    },
+    {
+      "name": "火烙魔婴",
+      "zoneId": "A2",
+      "centerInside": true,
+      "rect": {
+        "left": 437.1407165527344,
+        "top": 408.0450134277344,
+        "width": 96.21859741210938,
+        "height": 128.03494262695312
+      }
+    },
+    {
+      "name": "烈焰狱鬼",
+      "zoneId": "A2",
+      "centerInside": true,
+      "rect": {
+        "left": 634.957763671875,
+        "top": 449.1466369628906,
+        "width": 77.58447265625,
+        "height": 106.51919555664062
+      }
+    },
+    {
+      "name": "西锁骑士",
+      "zoneId": "B2",
+      "centerInside": true,
+      "rect": {
+        "left": 1039.9010009765625,
+        "top": 395.7582092285156,
+        "width": 111.135498046875,
+        "height": 152.60861206054688
+      }
+    },
+    {
+      "name": "邪术师",
+      "zoneId": "A3",
+      "centerInside": true,
+      "rect": {
+        "left": 456.47039794921875,
+        "top": 645.600341796875,
+        "width": 100.6529541015625,
+        "height": 138.26806640625
+      }
+    },
+    {
+      "name": "缠绕藤蔓",
+      "zoneId": "B3",
+      "centerInside": true,
+      "rect": {
+        "left": 1048.353271484375,
+        "top": 649.0384521484375,
+        "width": 94.23095703125,
+        "height": 126.704345703125
+      }
+    }
+  ],
+  "allCardCentersInside": true,
+  "diceNearTarget": true,
+  "confirmNearTarget": true,
+  "arenaCoverage": 49.6,
+  "visibleText": "行动环节 邪术师 目标确认 A1 B1 A2 火 B2 A3 B3 邪术师 生命 17/24 法力 14 聚魔 10 伤害 7 女祭司 生命 19/24 法力 18 聚魔 10 伤害 5 已计划 隐性结界 火球术 9 伤害 5 燃烧 8 目标合法 快施可用 确认施放 取消 法术书 31 已计划 弃牌堆"
+}

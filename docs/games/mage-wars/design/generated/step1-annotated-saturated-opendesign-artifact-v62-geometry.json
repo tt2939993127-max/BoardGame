@@ -1,0 +1,175 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "failedImages": [],
+  "bannedVisibleText": [],
+  "bookCardCount": 8,
+  "bookCardBoxes": [
+    {
+      "index": 0,
+      "selector": ".book-card img",
+      "alt": "火球术",
+      "x": 338,
+      "y": 808,
+      "width": 130,
+      "height": 183,
+      "right": 468,
+      "bottom": 991
+    },
+    {
+      "index": 1,
+      "selector": ".book-card img",
+      "alt": "法师祸咒",
+      "x": 480,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 610,
+      "bottom": 999
+    },
+    {
+      "index": 2,
+      "selector": ".book-card img",
+      "alt": "格挡",
+      "x": 622,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 752,
+      "bottom": 999
+    },
+    {
+      "index": 3,
+      "selector": ".book-card img",
+      "alt": "法力失效",
+      "x": 764,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 894,
+      "bottom": 999
+    },
+    {
+      "index": 4,
+      "selector": ".book-card img",
+      "alt": "单体治疗",
+      "x": 906,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 1036,
+      "bottom": 999
+    },
+    {
+      "index": 5,
+      "selector": ".book-card img",
+      "alt": "狱火长鞭",
+      "x": 1048,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 1178,
+      "bottom": 999
+    },
+    {
+      "index": 6,
+      "selector": ".book-card img",
+      "alt": "奥秘法杖",
+      "x": 1190,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 1320,
+      "bottom": 999
+    },
+    {
+      "index": 7,
+      "selector": ".book-card img",
+      "alt": "风龙皮甲",
+      "x": 1332,
+      "y": 816,
+      "width": 130,
+      "height": 183,
+      "right": 1462,
+      "bottom": 999
+    }
+  ],
+  "bookBrowser": {
+    "index": 0,
+    "selector": ".book-browser",
+    "alt": "法术书浏览",
+    "x": 320,
+    "y": 724,
+    "width": 1260,
+    "height": 344,
+    "right": 1580,
+    "bottom": 1068
+  },
+  "bookFooter": {
+    "index": 0,
+    "selector": ".book-footer",
+    "alt": "法术书 308 / 页",
+    "x": 340,
+    "y": 1030,
+    "width": 99,
+    "height": 16,
+    "right": 439,
+    "bottom": 1046
+  },
+  "pageRail": {
+    "index": 0,
+    "selector": ".book-page-rail",
+    "alt": "法术书分页",
+    "x": 1526,
+    "y": 840,
+    "width": 50,
+    "height": 190,
+    "right": 1576,
+    "bottom": 1030
+  },
+  "planZone": {
+    "index": 0,
+    "selector": ".plan-zone",
+    "alt": "已计划法术区",
+    "x": 1608,
+    "y": 847,
+    "width": 260,
+    "height": 155,
+    "right": 1868,
+    "bottom": 1002
+  },
+  "discard": {
+    "index": 0,
+    "selector": ".discard",
+    "alt": "弃牌堆入口，三张公开归档牌",
+    "x": 1591,
+    "y": 1012,
+    "width": 79,
+    "height": 50,
+    "right": 1670,
+    "bottom": 1062
+  },
+  "turnEnd": {
+    "index": 0,
+    "selector": ".turn-end",
+    "alt": "回合结束",
+    "x": 1700,
+    "y": 1010,
+    "width": 168,
+    "height": 52,
+    "right": 1868,
+    "bottom": 1062
+  },
+  "overlaps": [],
+  "bottomMostActorBottom": 1062,
+  "bottomUnusedGapPx": 18,
+  "visibleTexts": {
+    "hasSpellbook30": true,
+    "hasEightPerPage": true,
+    "hasOneOfFour": true,
+    "hasDiscard3": true,
+    "hasPlannedTwo": true
+  }
+}

@@ -1,0 +1,178 @@
+import { describe, expect, test } from 'vitest';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import type { RandomFn } from '../../../engine/types';
+import { getCardPreviewGetter } from '../../../components/game/registry/cardPreviewRegistry';
+import { getLazyRegistration } from '../../../components/common/media/cardAtlasRegistry';
+import { mageWarsCriticalImageResolver } from '../criticalImageResolver';
+import { MageWarsDomain } from '../domain';
+import {
+    APPRENTICE_MAGE_ORDER,
+    getApprenticeSpellbook,
+    getApprenticeSpellbookCount,
+} from '../domain/data/apprenticeSpellbooks';
+import { MAGE_IDS } from '../domain/ids';
+import {
+    MAGE_WARS_MAGES_ATLAS_ID,
+    getMageWarsMagePreviewRef,
+    getMageWarsRegisteredSpellCardIds,
+    getMageWarsSpellCardName,
+    getMageWarsSpellCardPreviewRef,
+} from '../ui/cardAtlas';
+import '../game';
+import manifest from '../manifest';
+
+const makeRandom = (): RandomFn => ({
+    random: () => 0.5,
+    d: (max: number) => Math.max(1, Math.ceil(max / 2)),
+    range: (min: number, max: number) => Math.floor((min + max) / 2),
+    shuffle: <T,>(array: T[]) => [...array],
+});
+
+const toCompressedAssetPath = (relativePath: string): string => {
+    const withoutExtension = relativePath.replace(/\.(avif|webp|png|jpe?g|gif)$/i, '');
+    const slashIndex = withoutExtension.lastIndexOf('/');
+    const dir = slashIndex >= 0 ? withoutExtension.slice(0, slashIndex) : '';
+    const filename = slashIndex >= 0 ? withoutExtension.slice(slashIndex + 1) : withoutExtension;
+    return path.join(
+        process.cwd(),
+        'public',
+        'assets',
+        'i18n',
+        'zh-CN',
+        dir,
+        'compressed',
+        `${filename}.webp`,
+    );
+};
+
+describe('mage-wars foundation', () => {
+    test('manifest declares enabled foundation entry with required runtime metadata', () => {
+        expect(manifest.id).toBe('mage-wars');
+        expect(manifest.enabled).toBe(true);
+        expect(manifest.statusTag).toBe('under_construction');
+        expect(manifest.allowLocalMode).toBe(false);
+        expect(manifest.playerOptions).toEqual([2]);
+        expect(manifest.mobileProfile).toBe('landscape-adapted');
+        expect(manifest.preferredOrientation).toBe('landscape');
+        expect(manifest.mobileLayoutPreset).toBe('board-shell');
+        expect(manifest.ai).toMatchObject({
+            capture: true,
+            localAi: false,
+            remoteAi: false,
+        });
+    });
+
+    test('setup creates two apprentice mages and a 2x3 arena contract', () => {
+        const core = MageWarsDomain.setup(['0', '1'], makeRandom());
+
+        expect(core.playerOrder).toEqual(['0', '1']);
+        expect(core.currentPlayerId).toBe('0');
+        expect(core.arenaMode).toBe('apprentice-2x3');
+        expect(core.arena).toHaveLength(6);
+        expect(core.players['0'].life).toBe(24);
+        expect(core.players['0'].baseMeleeDice).toBe(3);
+        expect(core.players['1'].mana).toBe(10);
+        expect(core.players['0'].spellbookCount).toBe(33);
+        expect(core.players['1'].spellbookCount).toBe(30);
+        expect(core.players['0'].discardSpellCardIds).toEqual([]);
+        expect(core.foundationStatus).toEqual({
+            intakeComplete: true,
+            openDesignArtifact: true,
+            spellFxRequired: true,
+            spellFxDriver: 'domain-events',
+        });
+    });
+
+    test('critical image resolver preloads landed runtime assets through unified paths', () => {
+        const result = mageWarsCriticalImageResolver({
+            core: MageWarsDomain.setup(['0', '1'], makeRandom()),
+            sys: { phase: 'planning' },
+        });
+
+        expect(result.phaseKey).toBe('mage-wars:planning');
+        expect(result.critical).toContain('mage-wars/board/standard-arena');
+        expect(result.critical).toContain('mage-wars/cards/mages/mages-core-atlas');
+        expect(result.critical).toContain('mage-wars/cards/backs/spell-card-back');
+        expect(result.warm).toContain('mage-wars/cards/spells/spell-attack-core-atlas');
+        expect(result.warm).toContain('mage-wars/cards/spells/spell-equipment-core-atlas');
+
+        for (const imagePath of [...result.critical, ...result.warm]) {
+            expect(imagePath).not.toContain('/compressed/');
+            expect(existsSync(toCompressedAssetPath(imagePath))).toBe(true);
+        }
+    });
+
+    test('apprentice spellbook data is sourced for all four page-5 mages', () => {
+        expect(APPRENTICE_MAGE_ORDER).toEqual([
+            MAGE_IDS.BEASTMASTER_APPRENTICE,
+            MAGE_IDS.PRIESTESS_APPRENTICE,
+            MAGE_IDS.WARLOCK_APPRENTICE,
+            MAGE_IDS.WIZARD_APPRENTICE,
+        ]);
+
+        expect(getApprenticeSpellbookCount(MAGE_IDS.BEASTMASTER_APPRENTICE)).toBe(33);
+        expect(getApprenticeSpellbookCount(MAGE_IDS.PRIESTESS_APPRENTICE)).toBe(30);
+        expect(getApprenticeSpellbookCount(MAGE_IDS.WARLOCK_APPRENTICE)).toBe(30);
+        expect(getApprenticeSpellbookCount(MAGE_IDS.WIZARD_APPRENTICE)).toBe(30);
+
+        for (const mageId of APPRENTICE_MAGE_ORDER) {
+            expect(getApprenticeSpellbook(mageId).every((entry) => entry.workshopCardIds.length > 0)).toBe(true);
+        }
+    });
+
+    test('apprentice spell atlas preview refs are registered for all sourced cards', () => {
+        const previewGetter = getCardPreviewGetter('mage-wars');
+        expect(previewGetter).toBeDefined();
+
+        const registeredSpellCardIds = getMageWarsRegisteredSpellCardIds();
+        expect(registeredSpellCardIds).toHaveLength(91);
+        expect(getMageWarsSpellCardName(1700)).toBe('火球术');
+        expect(getMageWarsSpellCardPreviewRef(1700)).toEqual({
+            type: 'atlas',
+            atlasId: 'mage-wars:spell-attack-core-atlas',
+            index: 0,
+        });
+        expect(previewGetter?.('3700')).toEqual({
+            type: 'atlas',
+            atlasId: 'mage-wars:spell-equipment-core-atlas',
+            index: 0,
+        });
+
+        const spellbookCardIds = new Set<string>();
+        for (const mageId of APPRENTICE_MAGE_ORDER) {
+            for (const entry of getApprenticeSpellbook(mageId)) {
+                entry.workshopCardIds.forEach((cardId) => spellbookCardIds.add(String(cardId)));
+            }
+        }
+
+        expect(spellbookCardIds).toHaveLength(88);
+        expect(registeredSpellCardIds).toEqual(expect.arrayContaining([...spellbookCardIds]));
+        for (const cardId of spellbookCardIds) {
+            expect(previewGetter?.(cardId)).toMatchObject({ type: 'atlas' });
+        }
+
+        // 同名多候选的旧版/对照 frame 保留在 atlas 合同中，但不是当前学徒法术书选用实例。
+        for (const alternateCardId of ['1911', '3406', '3419']) {
+            expect(spellbookCardIds.has(alternateCardId)).toBe(false);
+            expect(getMageWarsSpellCardPreviewRef(alternateCardId)).toMatchObject({ type: 'atlas' });
+        }
+    });
+
+    test('apprentice mage atlas preview refs use the official mage atlas', () => {
+        expect(getLazyRegistration(MAGE_WARS_MAGES_ATLAS_ID)).toMatchObject({
+            image: 'mage-wars/cards/mages/mages-core-atlas',
+            grid: { rows: 4, cols: 7 },
+        });
+        expect(getMageWarsMagePreviewRef(MAGE_IDS.BEASTMASTER_APPRENTICE, 'card')).toEqual({
+            type: 'atlas',
+            atlasId: MAGE_WARS_MAGES_ATLAS_ID,
+            index: 6,
+        });
+        expect(getMageWarsMagePreviewRef(MAGE_IDS.WIZARD_APPRENTICE, 'portrait')).toEqual({
+            type: 'atlas',
+            atlasId: MAGE_WARS_MAGES_ATLAS_ID,
+            index: 2,
+        });
+    });
+});

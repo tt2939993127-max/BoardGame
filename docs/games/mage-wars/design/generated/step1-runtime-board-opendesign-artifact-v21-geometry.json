@@ -1,0 +1,301 @@
+{
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "zones": [
+    {
+      "id": "A1",
+      "rect": {
+        "left": 958,
+        "top": 156,
+        "width": 226,
+        "height": 224.65625,
+        "right": 1184,
+        "bottom": 380.65625,
+        "cx": 1071,
+        "cy": 268.328125
+      }
+    },
+    {
+      "id": "B1",
+      "rect": {
+        "left": 1184,
+        "top": 156,
+        "width": 226,
+        "height": 224.65625,
+        "right": 1410,
+        "bottom": 380.65625,
+        "cx": 1297,
+        "cy": 268.328125
+      }
+    },
+    {
+      "id": "A2",
+      "rect": {
+        "left": 958,
+        "top": 380.65625,
+        "width": 226,
+        "height": 224.671875,
+        "right": 1184,
+        "bottom": 605.328125,
+        "cx": 1071,
+        "cy": 492.9921875
+      }
+    },
+    {
+      "id": "B2",
+      "rect": {
+        "left": 1184,
+        "top": 380.65625,
+        "width": 226,
+        "height": 224.671875,
+        "right": 1410,
+        "bottom": 605.328125,
+        "cx": 1297,
+        "cy": 492.9921875
+      }
+    },
+    {
+      "id": "A3",
+      "rect": {
+        "left": 958,
+        "top": 605.328125,
+        "width": 226,
+        "height": 224.671875,
+        "right": 1184,
+        "bottom": 830,
+        "cx": 1071,
+        "cy": 717.6640625
+      }
+    },
+    {
+      "id": "B3",
+      "rect": {
+        "left": 1184,
+        "top": 605.328125,
+        "width": 226,
+        "height": 224.671875,
+        "right": 1410,
+        "bottom": 830,
+        "cx": 1297,
+        "cy": 717.6640625
+      }
+    }
+  ],
+  "zoneResults": [
+    {
+      "alt": "西锁骑士，当前火球术目标",
+      "zoneId": "B2",
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "rect": {
+        "left": 1209.7252197265625,
+        "top": 422.3999328613281,
+        "width": 98.549560546875,
+        "height": 135.20016479492188,
+        "right": 1308.2747802734375,
+        "bottom": 557.60009765625,
+        "cx": 1259,
+        "cy": 490.00001525878906
+      }
+    },
+    {
+      "alt": "火印魔婴",
+      "zoneId": "A3",
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "rect": {
+        "left": 1009.5105590820312,
+        "top": 652.8822021484375,
+        "width": 102.97882080078125,
+        "height": 138.235595703125,
+        "right": 1112.4893798828125,
+        "bottom": 791.1177978515625,
+        "cx": 1060.9999694824219,
+        "cy": 722
+      }
+    },
+    {
+      "alt": "烈焰魔物",
+      "zoneId": "A2",
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "rect": {
+        "left": 1026.6102294921875,
+        "top": 425.6306457519531,
+        "width": 100.779541015625,
+        "height": 136.73867797851562,
+        "right": 1127.3897705078125,
+        "bottom": 562.3693237304688,
+        "cx": 1077,
+        "cy": 493.99998474121094
+      }
+    },
+    {
+      "alt": "缠绕藤蔓",
+      "zoneId": "B3",
+      "centerInsideOwn": true,
+      "ownRatio": 1,
+      "maxOtherRatio": 0,
+      "rect": {
+        "left": 1233.7252197265625,
+        "top": 654.39990234375,
+        "width": 98.549560546875,
+        "height": 135.2001953125,
+        "right": 1332.2747802734375,
+        "bottom": 789.60009765625,
+        "cx": 1283,
+        "cy": 722
+      }
+    }
+  ],
+  "dice": {
+    "left": 1314,
+    "top": 426,
+    "width": 168,
+    "height": 118,
+    "right": 1482,
+    "bottom": 544,
+    "cx": 1398,
+    "cy": 485
+  },
+  "target": {
+    "left": 1209.7252197265625,
+    "top": 422.3999328613281,
+    "width": 98.549560546875,
+    "height": 135.20016479492188,
+    "right": 1308.2747802734375,
+    "bottom": 557.60009765625,
+    "cx": 1259,
+    "cy": 490.00001525878906
+  },
+  "diceCenterDistanceToTarget": 139.09,
+  "spellbook": {
+    "left": 416,
+    "top": 890,
+    "width": 918,
+    "height": 178,
+    "right": 1334,
+    "bottom": 1068,
+    "cx": 875,
+    "cy": 979
+  },
+  "candidateCount": 5,
+  "candidateCards": [
+    {
+      "left": 528,
+      "top": 965,
+      "width": 66,
+      "height": 93,
+      "right": 594,
+      "bottom": 1058,
+      "cx": 561,
+      "cy": 1011.5
+    },
+    {
+      "left": 604,
+      "top": 965,
+      "width": 66,
+      "height": 93,
+      "right": 670,
+      "bottom": 1058,
+      "cx": 637,
+      "cy": 1011.5
+    },
+    {
+      "left": 680,
+      "top": 965,
+      "width": 66,
+      "height": 93,
+      "right": 746,
+      "bottom": 1058,
+      "cx": 713,
+      "cy": 1011.5
+    },
+    {
+      "left": 756,
+      "top": 965,
+      "width": 66,
+      "height": 93,
+      "right": 822,
+      "bottom": 1058,
+      "cx": 789,
+      "cy": 1011.5
+    },
+    {
+      "left": 832,
+      "top": 965,
+      "width": 66,
+      "height": 93,
+      "right": 898,
+      "bottom": 1058,
+      "cx": 865,
+      "cy": 1011.5
+    }
+  ],
+  "mageHuds": [
+    {
+      "label": "邪术师状态",
+      "rect": {
+        "left": 62,
+        "top": 770,
+        "width": 206,
+        "height": 156,
+        "right": 268,
+        "bottom": 926,
+        "cx": 165,
+        "cy": 848
+      },
+      "transform": "none"
+    },
+    {
+      "label": "女祭司状态",
+      "rect": {
+        "left": 1656,
+        "top": 78,
+        "width": 216,
+        "height": 156,
+        "right": 1872,
+        "bottom": 234,
+        "cx": 1764,
+        "cy": 156
+      },
+      "transform": "none"
+    }
+  ],
+  "mageCards": [
+    {
+      "label": "邪术师法师牌",
+      "rect": {
+        "left": 278,
+        "top": 760,
+        "width": 132,
+        "height": 186,
+        "right": 410,
+        "bottom": 946,
+        "cx": 344,
+        "cy": 853
+      },
+      "transform": "none"
+    },
+    {
+      "label": "女祭司法师牌",
+      "rect": {
+        "left": 1508,
+        "top": 70,
+        "width": 132,
+        "height": 186,
+        "right": 1640,
+        "bottom": 256,
+        "cx": 1574,
+        "cy": 163
+      },
+      "transform": "none"
+    }
+  ],
+  "bodyText": "优先快速施法\n邪术师\n施放火球术\n未用半场\nA1\nB1\nA2\nB2\nA3\nB3\n邪术师\n生命\n17\n法力\n14\n聚魔\n10\n快施\n女祭司\n19\n生命\n18\n法力\n10\n聚魔\n守卫存在\n法术书 31\n全部\n攻击\n结界\n生物\n装备\n咒语\n‹\n1/4\n›\n已计划 2/2\n弃牌堆 3\n法术书\n弃牌堆 2\n已计划 2\n火球术 → 西锁骑士\n8\n费用\n确认\n取消\n9\n攻击骰 ×6 + 效果 9\n附件\n附件"
+}

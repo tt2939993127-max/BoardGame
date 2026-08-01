@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>法师战争 UI Foundation Brief</title>
+  <style>
+    :root {
+      --bg: #15110d;
+      --panel: rgba(24,22,18,.88);
+      --parchment: #e8d8b7;
+      --ink: #2d2117;
+      --brass: #b88a3d;
+      --arcane: #4aa3ff;
+      --fire: #e35b2f;
+      --life: #4fbf6b;
+      --shadow: #6f4aa8;
+      --danger: #c93434;
+      --line: rgba(232,216,183,.24);
+      font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+    }
+    body {
+      margin: 0;
+      color: var(--parchment);
+      background: radial-gradient(circle at 50% 40%, #2d2117 0, var(--bg) 58%, #080604 100%);
+    }
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+    h1, h2, h3 { margin: 0; line-height: 1.15; }
+    h1 { font-size: 34px; color: #fff4d6; }
+    h2 { margin-top: 30px; font-size: 22px; color: #f0c56d; }
+    h3 { margin-top: 18px; font-size: 16px; color: #9ed0ff; }
+    p, li { line-height: 1.65; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.24);
+    }
+    .arena {
+      aspect-ratio: 4 / 3;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 8px;
+      padding: 18px;
+      background: linear-gradient(135deg, rgba(184,138,61,.18), rgba(74,163,255,.10));
+      border: 1px solid rgba(184,138,61,.45);
+      border-radius: 8px;
+    }
+    .zone {
+      position: relative;
+      border: 1px solid rgba(232,216,183,.28);
+      background: rgba(232,216,183,.06);
+      min-height: 78px;
+    }
+    .zone:nth-child(1), .zone:nth-child(12) { box-shadow: inset 0 0 0 2px rgba(74,163,255,.55); }
+    .zone.target { box-shadow: inset 0 0 0 2px var(--fire), 0 0 24px rgba(227,91,47,.35); }
+    .mage {
+      position: absolute;
+      width: 32px;
+      height: 44px;
+      border-radius: 4px;
+      background: linear-gradient(#f5dfaa, #845c2c);
+      border: 1px solid #fff0c4;
+      box-shadow: 0 0 14px rgba(184,138,61,.6);
+    }
+    .mage.p1 { left: 10px; bottom: 10px; }
+    .mage.p2 { right: 10px; top: 10px; }
+    .fx {
+      position: absolute;
+      left: 44px;
+      right: 44px;
+      top: 50%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--arcane), var(--fire));
+      box-shadow: 0 0 18px var(--arcane), 0 0 28px var(--fire);
+      transform: rotate(-7deg);
+    }
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .tag {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin: 4px 6px 4px 0;
+      font-size: 12px;
+      color: #fff4d6;
+      background: rgba(255,255,255,.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: #f0c56d; background: rgba(184,138,61,.10); }
+    code { color: #9ed0ff; }
+    @media (max-width: 860px) {
+      main { padding: 18px; }
+      .hero, .hud-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="panel">
+        <h1>法师战争 UI Foundation</h1>
+        <p>历史 brief 已降级为失败参考。下一稿必须用现有素材构建桌面牌桌合同：中央竞技场、双方状态、法术书、已计划法术、弃牌堆、附件、状态 token 和事件驱动法术 FX。</p>
+        <span class="tag">React 主 UI</span>
+        <span class="tag">Open Design artifact</span>
+        <span class="tag">不走生图</span>
+        <span class="tag">法术 FX 硬需求</span>
+      </div>
+      <div class="panel">
+        <div class="arena" aria-label="法师战争竞技场布局示意">
+          <div class="zone"><div class="mage p2"></div></div>
+          <div class="zone"></div>
+          <div class="zone target"><div class="fx"></div></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"></div>
+          <div class="zone"><div class="mage p1"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <h2>结构合同</h2>
+    <div class="hud-grid">
+      <div class="panel"><h3>中央竞技场</h3><p>使用标准竞技场素材，叠加区域热区、对象层和 FX 层；区域选择必须点对象本体。</p></div>
+      <div class="panel"><h3>玩家状态</h3><p>生命、伤害、法力、聚魔、行动/快速施法标记贴近各自法师，不做远离棋盘的统计墙。</p></div>
+      <div class="panel"><h3>法术书与已计划法术</h3><p>自己的法术书入口、最多两张已计划法术和弃牌堆在底部固定槽；对手只看卡背或数量，不泄露身份。</p></div>
+    </div>
+
+    <h2>法术 FX 合同</h2>
+    <table>
+      <tr><th>阶段</th><th>表现</th><th>来源</th></tr>
+      <tr><td>起手</td><td>施法者、魔宠或再生点发光 / 符文圈</td><td>已验证施法事件</td></tr>
+      <tr><td>目标锁定</td><td>目标区域、生物、墙体或宿主高亮</td><td>目标解析事件</td></tr>
+      <tr><td>路径/扩散</td><td>火球、治疗、推斥、召唤、结界展示的运动轨迹</td><td>结算事件</td></tr>
+      <tr><td>命中</td><td>伤害、治疗、状态、召唤或翻开结界的落点反馈</td><td>reduce 后状态变化</td></tr>
+    </table>
+
+    <h2>禁止项</h2>
+    <ul>
+      <li>不把 TTS 桌面当最终视觉风格。</li>
+      <li>不把已有卡图、token 图替换成文字壳。</li>
+      <li>不在常驻主 UI 写规则解释正文。</li>
+      <li>不让失败命令播放成功法术特效。</li>
+      <li>不因为 Open Design artifact 存在就跳过真实页面截图验收。</li>
+    </ul>
+  </main>
+</body>
+</html>

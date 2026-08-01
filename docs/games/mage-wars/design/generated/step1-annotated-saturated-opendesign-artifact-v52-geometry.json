@@ -1,0 +1,146 @@
+{
+  "url": "file:///D:/codex-home/tools/open-design/.od/projects/mage-wars-ui-design/mage-wars-step1-annotated-saturated-v52.html",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "textChecks": {
+    "hasHandText": false,
+    "hasConfirmExecuteCancel": false
+  },
+  "counts": {
+    "brokenImages": 0,
+    "discardImages": 0,
+    "fireballImgs": 1,
+    "westlockImgs": 1,
+    "attackDice": 4,
+    "effectDice": 1,
+    "tokens": 5,
+    "targetSummary": 0,
+    "actionPath": 0
+  },
+  "boxes": {
+    ".arena": {
+      "x": 240,
+      "y": 30,
+      "width": 1440,
+      "height": 850,
+      "right": 1680,
+      "bottom": 880
+    },
+    ".book-browser": {
+      "x": 420,
+      "y": 802,
+      "width": 790,
+      "height": 238,
+      "right": 1210,
+      "bottom": 1040
+    },
+    ".plan-zone": {
+      "x": 1228,
+      "y": 734,
+      "width": 344,
+      "height": 286,
+      "right": 1572,
+      "bottom": 1020
+    },
+    ".discard": {
+      "x": 1510,
+      "y": 972,
+      "width": 79,
+      "height": 50,
+      "right": 1589,
+      "bottom": 1022
+    },
+    ".turn-end": {
+      "x": 1700,
+      "y": 1000,
+      "width": 168,
+      "height": 52,
+      "right": 1868,
+      "bottom": 1052
+    },
+    ".resolution-layer": {
+      "x": 1268,
+      "y": 378,
+      "width": 288,
+      "height": 118,
+      "right": 1556,
+      "bottom": 496
+    },
+    ".target-field": {
+      "x": 1127,
+      "y": 346,
+      "width": 136,
+      "height": 188,
+      "right": 1263,
+      "bottom": 534
+    },
+    ".target-ring": {
+      "x": 1112,
+      "y": 332,
+      "width": 166,
+      "height": 214,
+      "right": 1278,
+      "bottom": 546
+    },
+    ".token-damage": {
+      "x": 1226,
+      "y": 463,
+      "width": 38,
+      "height": 38,
+      "right": 1264,
+      "bottom": 501
+    },
+    ".token-burn": {
+      "x": 1263,
+      "y": 449,
+      "width": 39,
+      "height": 39,
+      "right": 1303,
+      "bottom": 489
+    },
+    ".mage-panel.own": {
+      "x": 44,
+      "y": 724,
+      "width": 248,
+      "height": 360,
+      "right": 292,
+      "bottom": 1084
+    },
+    ".mage-panel.rival": {
+      "x": 1628,
+      "y": 70,
+      "width": 248,
+      "height": 360,
+      "right": 1876,
+      "bottom": 430
+    },
+    ".rival-prepared": {
+      "x": 58,
+      "y": 54,
+      "width": 78,
+      "height": 112,
+      "right": 136,
+      "bottom": 166
+    },
+    ".stage-chip": {
+      "x": 820,
+      "y": 16,
+      "width": 280,
+      "height": 34,
+      "right": 1100,
+      "bottom": 50
+    }
+  },
+  "overlapChecks": {
+    "bookOverlapsArena": true,
+    "planOverlapsArena": true,
+    "resolutionOverlapsTargetCard": false,
+    "planOverlapsTargetCard": false,
+    "bookOverlapsTargetCard": false,
+    "discardOverlapsPlan": true,
+    "turnEndOverlapsPlan": false
+  },
+  "brokenImages": []
+}
