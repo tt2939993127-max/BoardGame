@@ -386,13 +386,48 @@ export function validate(
             const player = core.players[command.playerId];
             if (!player) return { valid: false, error: '玩家不存在' };
 
-            const { baseIndex, fromDiscard, fromDeck, fromStored, playAsAction } = command.payload;
+            const { baseIndex, fromDiscard, fromDeck, fromStored, playAsAction, replacementHandCardUid } = command.payload;
             if (baseIndex < 0 || baseIndex >= core.bases.length) {
                 return { valid: false, error: '无效的基地索引' };
             }
             const externalSourceCount = [fromDiscard, fromDeck, fromStored].filter(Boolean).length;
             if (externalSourceCount > 1) {
                 return { valid: false, error: '不能同时从多个外部区域打出随从' };
+            }
+
+            if (replacementHandCardUid) {
+                if (externalSourceCount > 0 || playAsAction === true) {
+                    return { valid: false, error: '跳舞企鹅只能替代普通手牌随从打出' };
+                }
+                if (replacementHandCardUid === command.payload.cardUid) {
+                    return { valid: false, error: '跳舞企鹅不能替代自己' };
+                }
+                const originalCard = player.hand.find(c => c.uid === command.payload.cardUid);
+                if (!originalCard) return { valid: false, error: '手牌中没有要被替代的随从' };
+                if (!isCardMinionLike(originalCard)) return { valid: false, error: '要被替代的牌不是随从' };
+                if (originalCard.defId === 'penguins_dancing_penguin') {
+                    return { valid: false, error: '跳舞企鹅只能替代其他随从' };
+                }
+                const replacementCard = player.hand.find(c => c.uid === replacementHandCardUid);
+                if (!replacementCard) return { valid: false, error: '手牌中没有跳舞企鹅' };
+                if (replacementCard.defId !== 'penguins_dancing_penguin' || !isCardMinionLike(replacementCard)) {
+                    return { valid: false, error: '替代牌必须是跳舞企鹅' };
+                }
+                const originalValidation = validate(state, {
+                    type: SU_COMMANDS.PLAY_MINION,
+                    playerId: command.playerId,
+                    payload: { cardUid: originalCard.uid, baseIndex },
+                });
+                if (!originalValidation.valid) return originalValidation;
+                const replacementValidation = validate(state, {
+                    type: SU_COMMANDS.PLAY_MINION,
+                    playerId: command.playerId,
+                    payload: { cardUid: replacementCard.uid, baseIndex },
+                });
+                if (!replacementValidation.valid) {
+                    return { valid: false, error: replacementValidation.error ?? '跳舞企鹅不能打到该基地' };
+                }
+                return { valid: true };
             }
 
             // 从弃牌堆打出：通过 discardPlayability 模块验证

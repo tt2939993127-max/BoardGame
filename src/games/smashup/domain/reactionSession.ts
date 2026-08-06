@@ -981,6 +981,7 @@ function executeQueuedTrigger(
         destroyedMonsterUid: trigger.destroyedMonsterUid,
         destroyedMonsterDefId: trigger.destroyedMonsterDefId,
         destroyedMonsterPower: trigger.destroyedMonsterPower,
+        triggerMinionFromDeck: trigger.triggerMinionFromDeck,
         triggerCardUid: trigger.triggerCardUid,
         triggerCardDefId: trigger.triggerCardDefId,
         triggerCardOwnerId: trigger.triggerCardOwnerId,
