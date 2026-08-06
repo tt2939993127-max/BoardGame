@@ -33,7 +33,7 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `npx vitest run src/games/smashup/__tests__/abilities/disney-factions-abilities.test.ts src/games/smashup/__tests__/disneyFactionsStatic.test.ts src/games/smashup/__tests__/criticalImageResolver.test.ts --reporter=dot` | 3 files / 30 tests passed |
+| `npx vitest run src/games/smashup/__tests__/abilities/disney-factions-abilities.test.ts src/games/smashup/__tests__/disneyFactionsStatic.test.ts src/games/smashup/__tests__/criticalImageResolver.test.ts --reporter=dot` | 3 files / 36 tests passed |
 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/runtimePromptRandomAudit.test.ts --config vitest.config.audit.ts --configLoader native` | 3 passed |
 | `npx vitest run src/games/smashup/__tests__/disneyFactionsStatic.test.ts src/games/smashup/__tests__/criticalImageResolver.test.ts` | 21 passed |
 | `npx eslint ...`（Disney 相关 TS/E2E 文件） | 0 errors |
