@@ -26,6 +26,7 @@ import {
     advanceTo,
     getCompareRollChoicePrompt,
     getCardById,
+    respondToPrompt,
     type CommandInput,
 } from './test-utils';
 import { getAbilitySlotId } from '../ui/abilitySlotMapping';
@@ -899,12 +900,14 @@ describe('cross hero battles', () => {
         it('wild west should remain available for a second loaded use in the same attack', () => {
             const wildWestCard = GUNSLINGER_CARDS.find(card => card.id === 'card-wild-west');
             expect(wildWestCard).toBeDefined();
+            const playerIds: PlayerId[] = ['0', '1'];
+            const random = createQueuedRandom([1, 2, 3, 4, 5, 1, 6, 2, 5]);
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
-                playerIds: ['0', '1'],
-                random: createQueuedRandom([1, 2, 3, 4, 5, 1, 6, 2, 5]),
+                playerIds,
+                random,
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
@@ -921,33 +924,40 @@ describe('cross hero battles', () => {
                 silent: true,
             });
 
-            const result = runner.run({
-                name: 'gunslinger wild-west multiple loaded uses',
-                commands: [
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('ROLL_DICE', '0'),
-                    cmd('CONFIRM_ROLL', '0'),
-                    cmd('RESPONSE_PASS', '0'),
-                    cmd('RESPONSE_PASS', '1'),
-                    cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
-                    cmd('PLAY_CARD', '0', { cardId: 'card-wild-west' }),
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
-                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
-                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
-                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
-                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
-                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
-                ],
-            });
+            const dispatch = (type: string, playerId: PlayerId, payload: Record<string, unknown> = {}) => {
+                expect(runner.dispatch(type, { playerId, ...payload }).success).toBe(true);
+            };
 
-            expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
-            expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(8);
-            expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
-            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
-            expect(result.finalState.sys.phase).toBe('defensiveRoll');
-            expect(result.finalState.sys.interaction.current).toBeUndefined();
+            dispatch('ADVANCE_PHASE', '0');
+            dispatch('ROLL_DICE', '0');
+            dispatch('CONFIRM_ROLL', '0');
+            dispatch('RESPONSE_PASS', '0');
+            dispatch('RESPONSE_PASS', '1');
+            dispatch('SELECT_ABILITY', '0', { abilityId: 'revolver-3' });
+            dispatch('PLAY_CARD', '0', { cardId: 'card-wild-west' });
+            dispatch('ADVANCE_PHASE', '0');
+
+            let response = respondToPrompt(runner.getState(), 'option-0', '0', random, playerIds);
+            expect(response.success).toBe(true);
+            if (!response.success) return;
+            runner.setState(response.state);
+            dispatch('REROLL_BONUS_DIE', '0', { dieIndex: 0 });
+            dispatch('SKIP_BONUS_DICE_REROLL', '0');
+
+            response = respondToPrompt(runner.getState(), 'option-0', '0', random, playerIds);
+            expect(response.success).toBe(true);
+            if (!response.success) return;
+            runner.setState(response.state);
+            dispatch('REROLL_BONUS_DIE', '0', { dieIndex: 0 });
+            dispatch('SKIP_BONUS_DICE_REROLL', '0');
+
+            const finalState = runner.getState();
+            expect(finalState.core.players['0'].tokens.loaded).toBe(0);
+            expect(finalState.core.pendingAttack?.bonusDamage).toBe(8);
+            expect(finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
+            expect(finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(finalState.sys.phase).toBe('defensiveRoll');
+            expect(getCurrentInteractionSummary(finalState).id).toBeUndefined();
         });
 
         it('base loaded choice should create single-die display settlement and add rounded damage', () => {
