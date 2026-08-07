@@ -7,7 +7,7 @@ import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { DiceThroneCore, Die, HeroState, DiceThroneEvent } from '../domain/types';
 import type { AbilityDef } from '../domain/combat';
-import { getCustomActionHandler } from '../domain/effects';
+import { getCustomActionHandler, resolveEffectsToEvents } from '../domain/effects';
 import type { CustomActionContext } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
 import { registerDiceDefinition } from '../domain/diceRegistry';
@@ -357,6 +357,32 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(1);
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0);
             expect(eventsOfType(events, 'HEAL_APPLIED')).toHaveLength(0);
+        });
+
+        it('基础伤害不足但叠加攻击修正后致死时，仍应消耗祝福并保留 1 点生命', () => {
+            const state = createState({ attackerBlessing: 1, attackerHP: 3 });
+            state.tokenDefinitions = PALADIN_TOKENS;
+
+            const events = resolveEffectsToEvents([
+                {
+                    description: '2 点基础攻击伤害',
+                    timing: 'withDamage',
+                    action: { type: 'damage', target: 'opponent', value: 2 },
+                },
+            ], 'withDamage', {
+                attackerId: '1',
+                defenderId: '0',
+                sourceAbilityId: 'test-attack-with-bonus',
+                state,
+                damageDealt: 0,
+                timestamp: 1100,
+            }, {
+                bonusDamage: 1,
+            });
+
+            const after = applyEvents(state, events, reduce);
+            expect(after.players['0'].tokens[TOKEN_IDS.BLESSING_OF_DIVINITY]).toBe(0);
+            expect(after.players['0'].resources[RESOURCE_IDS.HP]).toBe(1);
         });
     });
 });

@@ -1,5 +1,28 @@
 # Smash Up Munchkin 新派系流程审计总账
 
+## 旧结论失效 / 当前复审口径
+
+- **旧结论失效**：早期“代表性 UI / 代表链 E2E 通过”不能作为 Munchkin 新派系整体完成证明；它只覆盖当时已实现的对象和流程。
+- **失效原因**：旧证据把局部真实入口、静态录入和部分能力测试混在一起，未覆盖 8 个派系、22 张宝藏、怪物牌堆的逐卡 L2-L4、否定/清理分支和移动端逐对象图面。
+- **替代证据或替代入口**：当前以 `temp/smashup-munchkin-new-faction-flow.json` 的 C1-C7 矩阵、当前工作区真实 Smash Up E2E、领域测试、类型检查、交互审计和证据自检为准；代表链只证明对应对象，不外推整扩展。
+- **降级后当前状态**：整体保持 `in_progress`；本账本记录已通过批次、当前 UI 收尾和仍存在的功能 / 验证缺口，不是发布完成声明。
+
+## 审计范围
+
+- 本轮覆盖：Munchkin 新 UI（抽牌堆旁公共怪物 / 宝藏小牌、基地下方怪物行）、怪物 / 宝藏基础机制、8 个派系对象矩阵、当前已实现派系能力、桌面真实入口和移动端横屏压力态。
+- 不把单个代表对象的通过外推为全派系完成；逐卡 L2-L4、否定 / 清理分支和移动端逐对象验收必须逐项有证据。
+
+## 权威来源
+
+- 主真相源：`D:\gongzuo\webgame\gameasset\Smash Up! by Mervil (2833984701)-汉化图\新6扩小白`。
+- 实施真相源：当前工作区 `D:\gongzuo\webgame\BoardGame` 的 Munchkin 数据、能力、UI、测试和真实截图。
+- 收口状态真相源：`temp/smashup-munchkin-new-faction-flow.json` 与本文件最新续审记录；历史段落仅用于追踪，不覆盖当前状态。
+
+## 共享根因与残余范围
+
+- 共享根因：当前收口缺口不是单个 UI 位置问题，而是“规则对象全集、逐卡实现、分支 / 清理生命周期、真实入口证据、移动端图面”没有全部完成闭环。
+- 残余范围：C2、C4、C5、C6、C7 仍未全部通过；缺口包括未覆盖派系 / 宝藏对象的 L2-L4、负向路径与清理状态、逐对象移动端审计，以及完整批次矩阵的最终裁决。
+
 ## 基本信息
 
 - 对象：大杀四方 Munchkin / 新6扩小白扩展（8 个派系 + 宝藏牌堆 + 怪物牌堆）
@@ -1261,3 +1284,24 @@
 | 逐张 AI 图面审计 | 大英雄 4 张、斩杀 4 张、战争怒吼 3 张、骚乱 3 张 | `PASS / 92`：怪物均排在对应基地下方，选择态高亮落在真实怪物/随从/基地本体；模式选择态只显示短标题与按钮，不再出现中央重复源卡；斩杀场景的“全速航行”卡面正常，不再有白色空卡。 |
 | 布局与信息承载 | 同一 15 张截图 | `PASS / 92`：基地、基地上方持续行动、基地下方怪物行、基地下方随从、手牌、牌库、弃牌堆、记分板和结束回合入口均可读；公共怪物/宝藏仅以牌库旁小牌 + 数量显示，没有新增公共弃牌堆，也没有把同一张源卡复制到中央提示层。勇士本次夹具没有泰坦，因此泰坦与怪物行的交叉布局仍以既有“怪物行和公共小牌堆不抢原版布局”代表测试为证。 |
 | 当前范围裁决 | 本节只覆盖勇士 4 条真实入口、桌面 1440x900 和本次截图集合 | `passed_batch / scoped_debt`：勇士代表性桌面交互和图面审计已收口；不等于勇士全部卡牌的移动端、所有否定/清理分支，也不等于 Munchkin 新派系整体完成。 |
+
+## 2026-08-06 续审记录：当前工作区收尾验证与选择态堆叠合同
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 选择态堆叠合同 | `src/games/smashup/ui/BaseZone.tsx`；`src/games/smashup/__tests__/baseZone-mobile-ongoing-actions.test.tsx` | `fixed_scoped`：选择态随从仍允许重叠，但每张候选约露出 80% 卡面；旧测试中代表“半张卡重叠”的硬编码值已同步为当前布局合同。 |
+| UI 组件回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/baseZone-mobile-ongoing-actions.test.tsx src/games/smashup/__tests__/baseZoneOngoingConsumerParity.test.ts --configLoader native` | `passed`：2 个测试文件、11/11；覆盖选择态合法目标高亮、非法目标不可选、附着行动浮层收起和消费者行为对齐。 |
+| Munchkin 机制与录入回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/munchkinMechanics.test.ts src/games/smashup/__tests__/munchkinIntake.test.ts --configLoader native` | `passed`：2 个测试文件、119/119；包含怪物基础机制、宝藏混合牌种和已录入规则合同。测试中的预期命令失败日志属于“无公共宝藏可选”负向断言，测试本身通过。 |
+| 已建模派系能力回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/abilities/munchkin-clerics.test.ts src/games/smashup/__tests__/abilities/munchkin-elves.test.ts src/games/smashup/__tests__/abilities/munchkin-mages.test.ts src/games/smashup/__tests__/abilities/munchkin-orcs.test.ts src/games/smashup/__tests__/abilities/munchkin-warriors.test.ts --configLoader native` | `passed`：5 个测试文件、66/66；只覆盖当前已有能力测试文件，不外推到没有对应能力测试文件的派系。 |
+| 静态与证据门禁 | `npm run typecheck`；定向 ESLint；`npm run audit:interactions`；`npm run audit:evidence:selfcheck`；目标文件 `git diff --check` | `passed`：类型检查通过、ESLint 0 errors、交互审计 OK、证据自检 OK、差异无内容错误；ESLint warnings 仍为既有大型 E2E / PromptOverlay 警告。 |
+| 当前范围裁决 | `temp/smashup-munchkin-new-faction-flow.json` C1/C3 已通过，C2/C4/C5/C6/C7 仍未全部通过 | `in_progress`：当前核验收口了选择态 UI 单测和已实现能力的静态证据，但仍缺 8 个派系、22 张宝藏、怪物牌堆的逐卡 L2-L4、否定/清理分支、完整对象级审计和移动端逐对象验收；不能宣称 Munchkin 新派系整体完成。 |
+
+## 2026-08-06 续审记录：全量真实入口 132 条回归
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 当前工作区全量 E2E | `node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts --project=chromium` | `passed`：同一当前工作区、同一真实 Smash Up 入口、Chromium、单 worker；`Running 132 tests using 1 worker`，最终 `132 passed`，耗时约 16.9 分钟。 |
+| 本次覆盖 | 当前 `e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts` | `passed`：包含怪物行 / 公共小牌堆、移动横屏、矮人、半身人、盗贼、法师、木精灵、牧师、兽人、勇士及宝藏对象的真实手牌、卡本体、响应窗、基地 / 随从 / 怪物选择和最终状态断言。 |
+| 本次新生成截图图面复核 | 当前 `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/` | `PASS / 92`：逐张复核怪物行桌面压力态、移动横屏、法师快速攻击目标、意外派对额外基地、打劫第二步“另一个随从”、木精灵赶紧逃跑吧多选；怪物行在基地下方，公共小牌只显示在牌库旁，选择高亮落在真实基地 / 随从本体，未发现源卡遮挡或重复承载。 |
+| 对打劫旧视觉结论的复核 | `打劫可从真实手牌入口转移仆从身上的行动到己方另一个仆从/168-打劫选择己方另一个仆从.jpg` | `fixed_scoped / visual_pass`：当前图明确显示“打劫：选择你的一个仆从”，另一个合法己方随从本体可见并高亮；这只修复和证明打劫第二步，不替代其它对象的完整视觉矩阵。 |
+| 当前范围裁决 | 本次全量 E2E 与截图复核 | `passed_batch / scoped_debt`：真实入口功能回归已完成；但逐对象 L0-L4 矩阵、所有负向 / 清理分支和移动端逐对象图面仍需逐项核销，因此不能把 `132/132` 直接解释为 Munchkin 新派系整体完成。 |

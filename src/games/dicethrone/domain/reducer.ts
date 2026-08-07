@@ -372,6 +372,26 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
         }
     }
 
+    // 记录本次攻击期间实际新增到防御方身上的状态层数。
+    // 厚皮 II 在防御结算时需要据此移除一个“本次投掷阶段已施加”的状态；
+    // 被 preventStatus 护盾拦截的状态在上面的分支直接结束，不会进入记录。
+    const pendingAttack = state.pendingAttack;
+    const isIncomingStatusForCurrentAttack = Boolean(
+        pendingAttack
+        && pendingAttack.defenderId === targetId
+        && cappedNewTotal > (target.statusEffects[statusId] ?? 0)
+    );
+    const nextPendingAttack = isIncomingStatusForCurrentAttack
+        ? {
+            ...pendingAttack,
+            statusEffectsAppliedThisAttack: {
+                ...(pendingAttack.statusEffectsAppliedThisAttack ?? {}),
+                [statusId]: (pendingAttack.statusEffectsAppliedThisAttack?.[statusId] ?? 0)
+                    + (cappedNewTotal - (target.statusEffects[statusId] ?? 0)),
+            },
+        }
+        : pendingAttack;
+
     return {
         ...state,
         players: {
@@ -381,6 +401,7 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
                 statusEffects: { ...target.statusEffects, [statusId]: cappedNewTotal },
             },
         },
+        pendingAttack: nextPendingAttack,
         lastEffectSourceByPlayerId: sourceAbilityId
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
             : state.lastEffectSourceByPlayerId,
@@ -593,6 +614,7 @@ const handleDefenderSelectionResolved: EventHandler<Extract<DiceThroneEvent, { t
             settlementStage: 'preDamage',
             targetingSelectionPending: false,
             targetingSelectionResolved: true,
+            statusEffectsAppliedThisAttack: state.pendingAttack.statusEffectsAppliedThisAttack ?? {},
         },
     };
 };
@@ -668,6 +690,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
             || (Array.isArray(tokenActiveUseTiming) && tokenActiveUseTiming.includes('onOffensiveRollEnd'))
         );
     const shouldAutoResolveOffensiveRollEndChoice = isOffensiveRollEndChoice
+        && customId !== 'use-loaded'
         && customId !== 'use-ninjutsu'
         && customId !== 'use-crit'
         && customId !== 'use-accuracy';

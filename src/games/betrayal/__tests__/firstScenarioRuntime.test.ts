@@ -3882,7 +3882,7 @@ describe('Betrayal first scenario runtime', () => {
         expect(core.currentExplorer.traits.speed).toBe(3);
     });
 
-    it('即时事件效果进入翻牌确认队列，确认前不能结束回合', () => {
+    it('即时事件效果只由翻牌玩家确认，确认后不再等待其他座位', () => {
         let core = createStartedFirstScenarioCore(['0', '1']);
         core.drawOrder = ['event'];
         setNextDiscoverySymbolRoomsForAllFloors(core, 'event');
@@ -3928,16 +3928,11 @@ describe('Betrayal first scenario runtime', () => {
             resolutionId: core.pendingCardResolutionQueue[0]!.id,
         });
 
-        expect(core.pendingCardResolutionQueue[0]?.acknowledgedPlayerIds).toEqual(['0']);
+        expect(core.pendingCardResolutionQueue).toEqual([]);
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },
             createBetrayalCommand(BETRAYAL_COMMANDS.END_TURN, '0', {}),
-        )).toMatchObject({
-            valid: false,
-            error: '请先确认当前翻牌结算。',
-        });
-        core = acknowledgePendingCardResolutions(core);
-        expect(core.pendingCardResolutionQueue).toEqual([]);
+        ).valid).toBe(true);
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },
             createBetrayalCommand(BETRAYAL_COMMANDS.END_TURN, '0', {}),
@@ -20480,12 +20475,8 @@ describe('Betrayal first scenario runtime', () => {
         core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION, '0', {
             resolutionId: core.pendingCardResolutionQueue[0]!.id,
         });
-        expect(core.pendingCardResolutionQueue[0]?.acknowledgedPlayerIds).toEqual(['0']);
-        expect(core.pendingCardResolutionQueue.map((resolution) => resolution.index)).toEqual([1, 2]);
-        core = acknowledgePendingCardResolution(core, '1');
-        core = acknowledgePendingCardResolution(core, '2');
         expect(core.pendingCardResolutionQueue.map((resolution) => resolution.index)).toEqual([2]);
-        core = acknowledgePendingCardResolutions(core);
+        core = acknowledgePendingCardResolution(core, '0');
         expect(core.pendingCardResolutionQueue).toEqual([]);
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },

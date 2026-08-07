@@ -321,6 +321,88 @@ describe('AbilityOverlays', () => {
                 previewIndex: 4,
             },
             {
+                characterId: 'gunslinger',
+                slotId: 'fist',
+                baseAbilityId: 'revolver',
+                resolvedAbilityId: 'revolver',
+                abilityLevels: { revolver: 2 },
+                upgradeCardId: 'upgrade-revolver-2',
+                previewIndex: 18,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'chi',
+                baseAbilityId: 'bounty-hunter',
+                resolvedAbilityId: 'bounty-hunter',
+                abilityLevels: { 'bounty-hunter': 2 },
+                upgradeCardId: 'upgrade-bounty-hunter-2',
+                previewIndex: 19,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'sky',
+                baseAbilityId: 'showdown',
+                resolvedAbilityId: 'showdown',
+                abilityLevels: { showdown: 2 },
+                upgradeCardId: 'upgrade-showdown-2',
+                previewIndex: 20,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'sky',
+                baseAbilityId: 'showdown',
+                resolvedAbilityId: 'showdown',
+                abilityLevels: { showdown: 3 },
+                upgradeCardId: 'upgrade-showdown-3',
+                previewIndex: 21,
+                upgradeLevel: 3,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'combo',
+                baseAbilityId: 'fan-the-hammer',
+                resolvedAbilityId: 'fan-the-hammer',
+                abilityLevels: { 'fan-the-hammer': 2 },
+                upgradeCardId: 'upgrade-fan-the-hammer-2',
+                previewIndex: 22,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'calm',
+                baseAbilityId: 'take-cover',
+                resolvedAbilityId: 'take-cover',
+                abilityLevels: { 'take-cover': 2 },
+                upgradeCardId: 'upgrade-take-cover-2',
+                previewIndex: 24,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'lightning',
+                baseAbilityId: 'deadeye',
+                resolvedAbilityId: 'deadeye',
+                abilityLevels: { deadeye: 2 },
+                upgradeCardId: 'upgrade-deadeye-2',
+                previewIndex: 26,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'meditate',
+                baseAbilityId: 'duel',
+                resolvedAbilityId: 'duel',
+                abilityLevels: { duel: 2 },
+                upgradeCardId: 'upgrade-duel-2',
+                previewIndex: 28,
+            },
+            {
+                characterId: 'gunslinger',
+                slotId: 'lotus',
+                baseAbilityId: 'quick-draw',
+                resolvedAbilityId: 'quick-draw',
+                abilityLevels: { 'quick-draw': 2 },
+                upgradeCardId: 'upgrade-quick-draw',
+                previewIndex: 29,
+            },
+            {
                 characterId: 'paladin',
                 slotId: 'fist',
                 baseAbilityId: 'tithes',
@@ -342,7 +424,12 @@ describe('AbilityOverlays', () => {
         ];
 
         for (const entry of cases) {
-            const upgradeCard = getUpgradeCardForAbilityLevel(entry.characterId, entry.baseAbilityId, 2);
+            const upgradeLevel = 'upgradeLevel' in entry ? entry.upgradeLevel : 2;
+            const upgradeCard = getUpgradeCardForAbilityLevel(
+                entry.characterId,
+                entry.baseAbilityId,
+                upgradeLevel,
+            );
             expect(upgradeCard?.id, `${entry.characterId} 的升级牌应来自真实卡牌数据`).toBe(entry.upgradeCardId);
             expect(upgradeCard?.previewRef).toMatchObject({
                 type: 'atlas',
@@ -563,7 +650,7 @@ describe('AbilityOverlays', () => {
                 }
             }
         }
-        expect(checkedUpgradeCount).toBe(108);
+        expect(checkedUpgradeCount).toBe(118);
     });
 
     it('技能槽 DOM 应区分主面板和放大预览，避免升级卡飞错目标', () => {

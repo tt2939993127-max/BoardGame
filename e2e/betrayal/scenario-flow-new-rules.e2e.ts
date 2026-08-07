@@ -80,45 +80,48 @@ async function captureScenarioReaderTurn(
     "betrayal-scenario-book-real-flip-stage",
   );
 
-  await expect(turningSheet).toBeVisible();
-  await expect(turningSheet).toHaveAttribute(
-    "data-flip-implementation",
-    "home-v2-real-frame-sequence",
-  );
-  await expect(flipStage).toHaveAttribute("data-flip-animating", "true");
-  // 只有真实帧序列进入中间帧后才保存翻页中证据，不能把初始帧冒充动画。
-  let observedIntermediateFrame = false;
-  for (let sample = 0; sample < 80; sample += 1) {
-    const frame = await flipStage
-      .getAttribute("data-flip-sequence-frame")
-      .catch(() => "missing");
-    if (/^[1-7]$/.test(frame ?? "")) {
-      observedIntermediateFrame = true;
-      break;
+  // 与 Home V2 同口径冻结在 50%：截图必须证明真实中间几何态，而不是随机抓到起点/终点。
+  try {
+    await expect(turningSheet).toBeVisible();
+    await expect(turningSheet).toHaveAttribute(
+      "data-flip-implementation",
+      "turnjs-real-page-flip",
+    );
+    await expect(flipStage).toHaveAttribute("data-turn-ready", "true");
+    await expect(flipStage).toHaveAttribute("data-turn-animating", "true");
+    // 只有 turn.js 插件真实处于动画中间态时才保存翻页证据，不能把初始页或最终页冒充动画。
+    let observedPluginAnimation = false;
+    for (let sample = 0; sample < 80; sample += 1) {
+      const snapshot = await flipStage.evaluate((stage) => ({
+        rawProgress: Number.parseFloat(stage.getAttribute("data-flip-progress-raw") ?? "NaN"),
+        pluginAnimating: stage.getAttribute("data-turn-plugin-animating"),
+        pluginPage: stage.getAttribute("data-turn-plugin-page"),
+        pluginView: stage.getAttribute("data-turn-plugin-view"),
+        pageWrappers: stage.querySelectorAll(".page-wrapper").length,
+      }));
+      if (snapshot.pluginAnimating === "true" && snapshot.pageWrappers > 0 && snapshot.rawProgress >= 0.5) {
+        observedPluginAnimation = true;
+        console.log(`[betrayal-turnjs-flip-capture] ${JSON.stringify(snapshot)}`);
+        break;
+      }
+      await page.waitForTimeout(25);
     }
-    await page.waitForTimeout(25);
+    expect(observedPluginAnimation).toBe(true);
+    await saveScreenshot(page, screenshotPath);
+  } finally {
+    await page.evaluate(() => {
+      delete (window as Window & { __BG_HOME_V2_E2E_HOLD_PROGRESS__?: number }).__BG_HOME_V2_E2E_HOLD_PROGRESS__;
+    });
   }
-  expect(observedIntermediateFrame).toBe(true);
-  const flipImage = flipStage.getByTestId("home-v2-real-page-flip-sequence");
-  await expect(flipImage).toBeVisible();
-  await expect
-    .poll(() =>
-      flipImage.evaluate((element) => ({
-        complete: (element as HTMLImageElement).complete,
-        naturalWidth: (element as HTMLImageElement).naturalWidth,
-        src: (element as HTMLImageElement).currentSrc,
-      })),
-    )
-    .toMatchObject({ complete: true });
-  await expect
-    .poll(() =>
-      flipImage.evaluate((element) => (element as HTMLImageElement).naturalWidth),
-    )
-    .toBeGreaterThan(0);
-  await saveScreenshot(page, screenshotPath);
 
   // Board 在翻页完成窗口后卸载覆盖层；等待覆盖层退场就是最终页可见的边界。
   await expect(turningSheet).toHaveCount(0, { timeout: 2000 });
+}
+
+async function holdNextScenarioReaderTurnAtMidpoint(page: Page) {
+  await page.evaluate(() => {
+    (window as Window & { __BG_HOME_V2_E2E_HOLD_PROGRESS__?: number }).__BG_HOME_V2_E2E_HOLD_PROGRESS__ = 0.5;
+  });
 }
 
 async function captureScenarioReaderBodyBottom(
@@ -293,13 +296,14 @@ test.describe("山屋惊魂剧本流程新规覆盖", () => {
     await assertCinematicActionSlotLayout(openingNarration);
     await saveScreenshot(page, OPENING_NARRATION_SCREENSHOT);
 
+    await holdNextScenarioReaderTurnAtMidpoint(page);
     await heroReader.getByTestId("betrayal-scenario-reader-next-zone").click();
-    await expect(heroReader.getByTestId("betrayal-scenario-book")).toBeVisible();
     await captureScenarioReaderTurn(
       page,
       heroReader,
       HERO_READER_TURNING_SCREENSHOT,
     );
+    await expect(heroReader.getByTestId("betrayal-scenario-book")).toBeVisible();
     await expect(
       heroReader.getByTestId("betrayal-scenario-book-section-prologue"),
     ).toHaveCount(0);
@@ -374,17 +378,18 @@ test.describe("山屋惊魂剧本流程新规覆盖", () => {
     await expect(
       traitorReader.getByTestId("betrayal-scenario-book"),
     ).toHaveCount(0);
+    await holdNextScenarioReaderTurnAtMidpoint(page);
     await traitorReader
       .getByTestId("betrayal-scenario-reader-next-zone")
       .click();
-    await expect(
-      traitorReader.getByTestId("betrayal-scenario-book"),
-    ).toBeVisible();
     await captureScenarioReaderTurn(
       page,
       traitorReader,
       TRAITOR_READER_TURNING_SCREENSHOT,
     );
+    await expect(
+      traitorReader.getByTestId("betrayal-scenario-book"),
+    ).toBeVisible();
     await expect(
       traitorReader.getByTestId("betrayal-scenario-book-section-prologue"),
     ).toHaveCount(0);

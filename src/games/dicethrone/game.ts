@@ -1451,7 +1451,7 @@ const resolveDiceThroneSeatLegalOnlyRecovery = (args: {
     };
 };
 
-const resolveDiceThroneOnlineAiCurrentPlayerId = (args: {
+const resolveDiceThroneRuntimeActorId = (args: {
     state: MatchState<unknown>;
     phase: string;
     fallbackPlayerId: string | null;
@@ -1470,6 +1470,20 @@ const resolveDiceThroneOnlineAiCurrentPlayerId = (args: {
         ? pendingAttack.defenderId
         : args.fallbackPlayerId;
 };
+
+const resolveDiceThroneOnlineAiCurrentPlayerId = (args: {
+    state: MatchState<unknown>;
+    phase: string;
+    fallbackPlayerId: string | null;
+}): string | null => resolveDiceThroneRuntimeActorId(args);
+
+const resolveDiceThroneLocalRuntimeControlledPlayerId = (args: {
+    state: MatchState<unknown>;
+    fallbackPlayerId: string | null;
+}): string | null => resolveDiceThroneRuntimeActorId({
+    ...args,
+    phase: args.state.sys?.phase ?? '',
+});
 
 const resolveDiceThroneManualSetupSelectionTakeoverPlayerId = (args: {
     sharedState: MatchState<unknown>;
@@ -1537,6 +1551,7 @@ const shouldReleaseDiceThroneManualSetupAttemptFromSharedState = (args: {
 export const engineConfig = {
     ...createGameEngine(adapterConfig),
     resolveLocalPregameControlledPlayerId: resolveDiceThroneLocalPregameControlledPlayerId,
+    resolveLocalRuntimeControlledPlayerId: resolveDiceThroneLocalRuntimeControlledPlayerId,
     onlineAiRecovery: {
         activeTurnLegalActionOnlyPhases: ['offensiveRoll', 'targetingRoll', 'defensiveRoll'],
         humanTurnLegalActionProbePhases: ['defensiveRoll', 'targetingRoll'],

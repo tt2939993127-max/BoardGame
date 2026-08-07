@@ -76,7 +76,10 @@ import {
     type HiddenInteractionDescriptor,
     type ForceEndTurnStalledAiResolution,
 } from './onlineAiRecovery';
-import type { LocalPregameControlResolver } from './followCurrentTurnPlayer';
+import type {
+    LocalPregameControlResolver,
+    LocalRuntimeControlResolver,
+} from './followCurrentTurnPlayer';
 import { injectTutorialInteractionId } from './tutorialAiCommand';
 import { resolveRuntimeBuildInfo } from '../../lib/feedback/runtimeBuildInfo';
 import {
@@ -674,6 +677,8 @@ export interface GameEngineConfig<
     disableUndo?: boolean;
     /** 本地模式开局阶段由游戏声明是否需要代控某个 seat */
     resolveLocalPregameControlledPlayerId?: LocalPregameControlResolver;
+    /** 本地热座运行中由游戏声明实际操作者；在线命令不会使用此解析。 */
+    resolveLocalRuntimeControlledPlayerId?: LocalRuntimeControlResolver;
     /** 在线 AI watchdog 的游戏级恢复策略 */
     onlineAiRecovery?: {
         advancePhaseCommandType?: string;

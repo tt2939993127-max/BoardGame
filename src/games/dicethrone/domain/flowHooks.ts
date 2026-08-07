@@ -59,8 +59,9 @@ import {
 import { createDTPassiveTriggerHandler, resolveEffectsToEvents } from './effects';
 import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
+import { CP_MAX } from './types';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
-import { getPlayerAbilityBaseDamage, playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
+import { getPlayerAbilityBaseDamage, getPlayerAbilityEffects, playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
 import { evaluateTriggerCondition } from './combat';
 import { findHeroCard } from '../heroes';
 import { hasCurrentChoiceAnchor, registerChoiceEffectHandler } from './choiceEffects';
@@ -79,6 +80,8 @@ const TREANT_DIVINE_SKIP_DEBUFF_CHOICE_ID = 'treant-divine-skip-debuff';
 const POWDER_KEG_SETTLEMENT_ID = 'powder-keg-upkeep';
 const BLINDED_CHECK_SETTLEMENT_ID = 'blinded-check';
 const TIANSHi_DAZZLE_CHECK_SETTLEMENT_ID = 'tianshi-dazzle-check';
+const STATUS_CHECK_ORDER_DAZZLE_FIRST = 'status-check-order-dazzle-first';
+const STATUS_CHECK_ORDER_BLINDED_FIRST = 'status-check-order-blinded-first';
 
 const formatSeatLabel = (playerId: string): string => {
     const seatNumber = Number.parseInt(playerId, 10) + 1;
@@ -175,6 +178,30 @@ registerBonusDiceSettlementHandler(POWDER_KEG_SETTLEMENT_ID, ({ state, settlemen
     }
 
     return { totalDamage: 0, followupEvents };
+});
+
+registerChoiceEffectHandler(STATUS_CHECK_ORDER_DAZZLE_FIRST, ({ state, playerId, sourceAbilityId }) => {
+    if (!hasCurrentChoiceAnchor(state, sourceAbilityId)) return undefined;
+    if (!state.pendingAttack || state.pendingAttack.attackerId !== playerId) return undefined;
+    if (state.pendingAttack.sourceAbilityId !== sourceAbilityId) return undefined;
+    return {
+        pendingAttack: {
+            ...state.pendingAttack,
+            statusCheckOrder: 'dazzleFirst',
+        },
+    };
+});
+
+registerChoiceEffectHandler(STATUS_CHECK_ORDER_BLINDED_FIRST, ({ state, playerId, sourceAbilityId }) => {
+    if (!hasCurrentChoiceAnchor(state, sourceAbilityId)) return undefined;
+    if (!state.pendingAttack || state.pendingAttack.attackerId !== playerId) return undefined;
+    if (state.pendingAttack.sourceAbilityId !== sourceAbilityId) return undefined;
+    return {
+        pendingAttack: {
+            ...state.pendingAttack,
+            statusCheckOrder: 'blindedFirst',
+        },
+    };
 });
 
 registerBonusDiceSettlementHandler(BLINDED_CHECK_SETTLEMENT_ID, ({ settlement, timestamp }) => {
@@ -499,6 +526,68 @@ function getTotalImmediateExtraAttackStacksByStatus(
     ).reduce((sum, e) => sum + e.payload.stacks, 0);
 
     return statusInCore + appliedInEvents - removedInEvents;
+}
+
+/**
+ * 赏金属于攻击修正：攻击进入防御前，只要目标身上仍有赏金，攻击者先获得 1 CP。
+ * 伤害阶段仍由赏金的 onDamageReceived 修正负责决定是否 +1 伤害；两者必须分开，
+ * 这样防御方在伤害前移除赏金时，CP 已保留但伤害加成会消失。
+ */
+function appendBountyAttackRewardEvent(
+    core: DiceThroneCore,
+    preDefenseEvents: DiceThroneEvent[],
+    events: DiceThroneEvent[],
+    timestamp: number,
+): DiceThroneCore {
+    if (!preDefenseEvents.some(event => event.type === 'ATTACK_PRE_DEFENSE_RESOLVED')) {
+        return core;
+    }
+
+    const pendingAttack = core.pendingAttack;
+    const defenderId = pendingAttack?.defenderId;
+    if (!pendingAttack || !defenderId || pendingAttack.attackerId === defenderId) {
+        return core;
+    }
+
+    // “攻击”范围只覆盖攻击伤害；枪手的枪托击打明确是 direct 伤害，
+    // 不能因为它仍挂着 pendingAttack 就领取赏金 CP。
+    const hasDirectDamage = getPlayerAbilityEffects(
+        core,
+        pendingAttack.attackerId,
+        pendingAttack.sourceAbilityId ?? '',
+    ).some(effect => effect.action?.type === 'damage' && effect.action.damageScope === 'direct');
+    if (hasDirectDamage) {
+        return core;
+    }
+
+    const defender = core.players[defenderId];
+    const bountyStacks = Math.max(
+        defender?.tokens[TOKEN_IDS.BOUNTY] ?? 0,
+        defender?.statusEffects[TOKEN_IDS.BOUNTY] ?? 0,
+    );
+    if (bountyStacks <= 0) {
+        return core;
+    }
+
+    const currentCp = core.players[pendingAttack.attackerId]?.resources.cp ?? 0;
+    const newValue = Math.min(currentCp + 1, CP_MAX);
+    if (newValue === currentCp) {
+        return core;
+    }
+
+    const rewardEvent: CpChangedEvent = {
+        type: 'CP_CHANGED',
+        payload: {
+            playerId: pendingAttack.attackerId,
+            delta: 1,
+            newValue,
+            sourceAbilityId: pendingAttack.sourceAbilityId,
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    };
+    events.push(rewardEvent);
+    return applyEvents(core, [rewardEvent], reduce);
 }
 
 /**
@@ -1003,6 +1092,58 @@ function resolveDazzleCheckExitResult(
     };
 }
 
+function resolveBlindedAndDazzleChecks(
+    core: DiceThroneCore,
+    pendingAttack: NonNullable<DiceThroneCore['pendingAttack']>,
+    sourceCommandType: string,
+    timestamp: number,
+    random?: RandomFn,
+): PhaseExitResult | null {
+    const blindedStacks = core.players[pendingAttack.attackerId]?.statusEffects[STATUS_IDS.BLINDED] ?? 0;
+    const dazzleStacks = core.players[pendingAttack.attackerId]?.statusEffects[STATUS_IDS.DAZZLE] ?? 0;
+    const hasBlinded = blindedStacks > 0 || pendingAttack.blindedCheckResolved === true;
+    const hasDazzle = dazzleStacks > 0 || pendingAttack.dazzleCheckResolved === true;
+
+    if (hasBlinded && hasDazzle && !pendingAttack.statusCheckOrder) {
+        return {
+            events: [{
+                type: 'CHOICE_REQUESTED',
+                payload: {
+                    playerId: pendingAttack.attackerId,
+                    sourceAbilityId: pendingAttack.sourceAbilityId ?? 'status-check-order',
+                    titleKey: 'choices.statusCheckOrder.title',
+                    options: [
+                        {
+                            value: 1,
+                            customId: STATUS_CHECK_ORDER_DAZZLE_FIRST,
+                            labelKey: 'choices.statusCheckOrder.dazzleFirst',
+                        },
+                        {
+                            value: 0,
+                            customId: STATUS_CHECK_ORDER_BLINDED_FIRST,
+                            labelKey: 'choices.statusCheckOrder.blindedFirst',
+                        },
+                    ],
+                },
+                sourceCommandType,
+                timestamp,
+            } as ChoiceRequestedEvent],
+            halt: true,
+        };
+    }
+
+    const order = pendingAttack.statusCheckOrder
+        ?? (hasDazzle ? 'dazzleFirst' : 'blindedFirst');
+    const firstResult = order === 'dazzleFirst'
+        ? resolveDazzleCheckExitResult(core, pendingAttack, sourceCommandType, timestamp, random)
+        : resolveBlindedCheckExitResult(core, pendingAttack, sourceCommandType, timestamp, random);
+    if (firstResult) return firstResult;
+
+    return order === 'dazzleFirst'
+        ? resolveBlindedCheckExitResult(core, pendingAttack, sourceCommandType, timestamp, random)
+        : resolveDazzleCheckExitResult(core, pendingAttack, sourceCommandType, timestamp, random);
+}
+
 function resolveTianshiDivineArrivalUpkeepEvents(
     core: DiceThroneCore,
     playerId: string,
@@ -1328,32 +1469,17 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return resolvePostAttackFollowUp(core, events, command.type, timestamp, from as TurnPhase);
                 }
 
-                const dazzleCheckResult = resolveDazzleCheckExitResult(
+                const statusCheckResult = resolveBlindedAndDazzleChecks(
                     core,
                     core.pendingAttack,
                     command.type,
                     timestamp,
                     random,
                 );
-                if (dazzleCheckResult) {
+                if (statusCheckResult) {
                     return {
-                        ...dazzleCheckResult,
-                        events: [...events, ...(dazzleCheckResult.events ?? [])],
-                    };
-                }
-
-                // ========== 致盲判定：攻击方有致盲时投掷1骰，确认前允许改骰牌修改 ==========
-                const blindedCheckResult = resolveBlindedCheckExitResult(
-                    core,
-                    core.pendingAttack,
-                    command.type,
-                    timestamp,
-                    random,
-                );
-                if (blindedCheckResult) {
-                    return {
-                        ...blindedCheckResult,
-                        events: [...events, ...(blindedCheckResult.events ?? [])],
+                        ...statusCheckResult,
+                        events: [...events, ...(statusCheckResult.events ?? [])],
                     };
                 }
 
@@ -1436,12 +1562,18 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 const coreAfterPreDefense = preDefenseEvents.length > 0
                     ? applyEvents(core, preDefenseEvents as DiceThroneEvent[], reduce)
                     : core;
+                const coreAfterPreDefenseWithBountyReward = appendBountyAttackRewardEvent(
+                    coreAfterPreDefense,
+                    preDefenseEvents,
+                    events,
+                    timestamp,
+                );
 
                 // ========== 攻击掷骰阶段结束时 Token 使用（暴击、精准） ==========
                 // 检查攻击方是否有可用的 onOffensiveRollEnd 时机 Token
                 const attackerId = core.pendingAttack.attackerId;
                 const offensiveRollEndChoiceEvent = createOffensiveRollEndTokenChoiceEvent(
-                    coreAfterPreDefense,
+                    coreAfterPreDefenseWithBountyReward,
                     attackerId,
                     command.type,
                     timestamp,
@@ -1455,13 +1587,13 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, overrideNextPhase: 'targetingRoll' };
                 }
 
-                if (coreAfterPreDefense.pendingAttack?.isDefendable) {
+                if (coreAfterPreDefenseWithBountyReward.pendingAttack?.isDefendable) {
                     // 攻击可防御，切换到防御阶段
                     return { events, overrideNextPhase: 'defensiveRoll' };
                 }
 
                 // 攻击不可防御，直接结算
-                const attackEvents = resolveAttack(coreAfterPreDefense, random, { includePreDefense: false }, timestamp);
+                const attackEvents = resolveAttack(coreAfterPreDefenseWithBountyReward, random, { includePreDefense: false }, timestamp);
                 events.push(...attackEvents);
 
                 const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);
@@ -1693,31 +1825,17 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return resolvePostAttackFollowUp(targetingCore, events, command.type, timestamp, from as TurnPhase);
             }
 
-            const dazzleCheckResult = resolveDazzleCheckExitResult(
+            const statusCheckResult = resolveBlindedAndDazzleChecks(
                 targetingCore,
                 pendingAttack,
                 command.type,
                 timestamp,
                 random,
             );
-            if (dazzleCheckResult) {
+            if (statusCheckResult) {
                 return {
-                    ...dazzleCheckResult,
-                    events: [...events, ...(dazzleCheckResult.events ?? [])],
-                };
-            }
-
-            const blindedCheckResult = resolveBlindedCheckExitResult(
-                targetingCore,
-                pendingAttack,
-                command.type,
-                timestamp,
-                random,
-            );
-            if (blindedCheckResult) {
-                return {
-                    ...blindedCheckResult,
-                    events: [...events, ...(blindedCheckResult.events ?? [])],
+                    ...statusCheckResult,
+                    events: [...events, ...(statusCheckResult.events ?? [])],
                 };
             }
 
@@ -1786,9 +1904,15 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const coreAfterPreDefense = preDefenseEvents.length > 0
                 ? applyEvents(targetingCore, preDefenseEvents as DiceThroneEvent[], reduce)
                 : targetingCore;
+            const coreAfterPreDefenseWithBountyReward = appendBountyAttackRewardEvent(
+                coreAfterPreDefense,
+                preDefenseEvents,
+                events,
+                timestamp,
+            );
 
             const offensiveRollEndChoiceEvent = createOffensiveRollEndTokenChoiceEvent(
-                coreAfterPreDefense,
+                coreAfterPreDefenseWithBountyReward,
                 attackerId,
                 command.type,
                 timestamp,
@@ -1798,11 +1922,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return { events, halt: true };
             }
 
-            if (coreAfterPreDefense.pendingAttack?.isDefendable) {
+            if (coreAfterPreDefenseWithBountyReward.pendingAttack?.isDefendable) {
                 return { events, overrideNextPhase: 'defensiveRoll' };
             }
 
-            const attackEvents = resolveAttack(coreAfterPreDefense, random, { includePreDefense: false }, timestamp);
+            const attackEvents = resolveAttack(coreAfterPreDefenseWithBountyReward, random, { includePreDefense: false }, timestamp);
             events.push(...attackEvents);
 
             const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);

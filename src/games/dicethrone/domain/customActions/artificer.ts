@@ -228,6 +228,13 @@ function buildArtificerBotActivationChoiceRequest(
 function handleNanobotDetonate({ state, attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
+    // 进攻投掷阶段触发时，当前攻击目标身上的纳米爆弹属于这次攻击的攻击修正；
+    // 只有其他玩家身上的纳米爆弹才是独立的附属伤害。维护阶段没有当前攻击，
+    // 因此所有目标都继续按直接伤害处理。
+    const currentAttackTargetId = state.pendingAttack?.attackerId === attackerId
+        ? state.pendingAttack.defenderId
+        : undefined;
+
     if (attackerId && sourceAbilityId === 'artificer-workshop') {
         const botStatePatch = buildArtificerBotStatePatch(state, attackerId, TOKEN_IDS.NANOBOT, {
             built: true,
@@ -248,6 +255,31 @@ function handleNanobotDetonate({ state, attackerId, sourceAbilityId, timestamp }
         if (stacks <= 0) continue;
 
         const damage = getNanobombDamage(stacks);
+        if (targetId === currentAttackTargetId) {
+            // 不填写 sourceCardId：这是状态效果带来的攻击修正，不是攻击修正卡牌本体。
+            // 这样只累加 pendingAttack.bonusDamage，不污染攻击修正卡专用字段。
+            events.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: attackerId,
+                    amount: damage,
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as DiceThroneEvent);
+            events.push({
+                type: 'STATUS_REMOVED',
+                payload: {
+                    targetId,
+                    statusId: STATUS_IDS.NANOBOMB,
+                    stacks,
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp: timestamp + 0.001,
+            } as StatusRemovedEvent);
+            continue;
+        }
+
         const calc = createDamageCalculation({
             source: { playerId: 'system', abilityId: 'artificer-nanobot-detonate' },
             target: { playerId: targetId },

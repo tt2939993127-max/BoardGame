@@ -651,6 +651,48 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['1'].resources.cp).toBe(startingCp);
         });
 
+        it('已有赏金的可防御攻击应在防御结算前发放攻击者 CP', () => {
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 2, 3, 4, 5, 1, 1, 1, 1]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].tokens[TOKEN_IDS.LOADED] = 0;
+                    state.core.players['1'].tokens[TOKEN_IDS.BOUNTY] = 1;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger bounty reward precedes defense',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            const eventTypes = result.steps.flatMap(step => step.events);
+            expect(eventTypes.indexOf('CP_CHANGED')).toBeLessThan(eventTypes.indexOf('ATTACK_DEFENSE_RESOLVED'));
+        });
+
         it('showdown uses compare-roll-choice and confirms into bonus damage', () => {
             const playerIds: PlayerId[] = ['0', '1'];
             let state = createInitializedStateWithCharacters(
@@ -854,6 +896,60 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack?.bonusDiceResolved).toBeUndefined();
         });
 
+        it('wild west should remain available for a second loaded use in the same attack', () => {
+            const wildWestCard = GUNSLINGER_CARDS.find(card => card.id === 'card-wild-west');
+            expect(wildWestCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 2, 3, 4, 5, 1, 6, 2, 5]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].tokens.loaded = 2;
+                    state.core.players['0'].resources.cp = 1;
+                    state.core.players['0'].hand = [{ ...wildWestCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger wild-west multiple loaded uses',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'card-wild-west' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
+            expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(8);
+            expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(result.finalState.sys.phase).toBe('defensiveRoll');
+            expect(result.finalState.sys.interaction.current).toBeUndefined();
+        });
+
         it('base loaded choice should create single-die display settlement and add rounded damage', () => {
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
@@ -897,6 +993,8 @@ describe('cross hero battles', () => {
                 displayOnly: true,
                 attackerId: '0',
                 targetId: '1',
+                // 普通 Loaded 不承接“我又行了”的重掷；只有技能/攻击修正牌显式声明 hook 才可重掷。
+                maxRerollCount: 0,
             });
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice[0]).toMatchObject({
@@ -1553,6 +1651,7 @@ describe('cross hero battles', () => {
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.players['0'].tokens.evasive).toBe(2);
             expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.players['0'].resources.cp).toBe(1);
         });
 
         it('spin the chamber grants 1 loaded', () => {

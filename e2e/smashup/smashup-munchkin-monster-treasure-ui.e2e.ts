@@ -639,6 +639,48 @@ const buildMunchkinMonsterTreasureScene = (): SmashUpSceneConfig => ({
     },
 });
 
+const buildMunchkinRemainingMonsterCoverageScene = (): SmashUpSceneConfig => {
+    const scene = buildMunchkinMonsterTreasureScene();
+    scene.player0.hand = [];
+    scene.player0.deck = deckCards('0', 'munchkin_warriors_big_hero', 18);
+    scene.player0.factions = ['munchkin_warriors', 'aliens'];
+    scene.player0.minionsPlayed = 0;
+    scene.player0.minionLimit = 0;
+    scene.player0.actionsPlayed = 0;
+    scene.player0.actionLimit = 1;
+    scene.player1.hand = [];
+    scene.player1.deck = deckCards('1', 'pirate_first_mate', 18);
+    scene.player1.factions = ['pirates', 'ninjas'];
+    scene.extra.core.enabledExpansions = ['munchkin'];
+    scene.extra.core.turnNumber = 73;
+    scene.extra.core.nextUid = 7300;
+    scene.extra.core.titans = [];
+    scene.extra.core.monsterDeck = MUNCHKIN_MONSTER_DECK_DEF_IDS;
+    scene.extra.core.treasureDeck = [
+        'munchkin_treasure_dwarf_hireling',
+        'munchkin_treasure_halfling_hireling',
+        'munchkin_treasure_tiger_steed',
+        'munchkin_treasure_bag_of_caltrops',
+    ];
+    scene.extra.core.baseDeck = ['base_the_homeworld'];
+    scene.extra.core.bases = [
+        {
+            defId: 'base_the_mines',
+            minions: [
+                minion('remaining-monster-hero', 'munchkin_warriors_big_hero', '0', 5),
+                minion('remaining-monster-support', 'pirate_first_mate', '0', 5),
+            ],
+            ongoingActions: [],
+            monsters: [
+                { uid: 'remaining-undead-horseman', defId: 'munchkin_monster_undead_horseman' },
+                { uid: 'remaining-tutankhamen', defId: 'munchkin_monster_tutankhamen' },
+            ],
+        },
+        { defId: 'base_the_homeworld', minions: [], ongoingActions: [], monsters: [] },
+    ];
+    return scene;
+};
+
 const buildMunchkinTreasureMinionScene = (): SmashUpSceneConfig => ({
     gameId: 'smashup',
     currentPlayer: '0',
@@ -793,7 +835,7 @@ const buildMunchkinBirthdayPartyRestrictionScene = (): SmashUpSceneConfig => ({
             baseDeck: ['base_treasure_bath'],
             baseDiscard: [],
             bases: [
-                { defId: 'base_the_homeworld', minions: [], ongoingActions: [], monsters: [] },
+                { defId: 'base_birthday_party', minions: [], ongoingActions: [], monsters: [] },
                 { defId: 'base_the_mines', minions: [], ongoingActions: [], monsters: [] },
             ],
         },
@@ -3711,7 +3753,7 @@ const buildMunchkinMagicMissileScene = (): SmashUpSceneConfig => ({
                                 },
                             ],
                         },
-                        minion('magic-low-target', 'alien_invader', '1', 3),
+                        minion('magic-low-target', 'alien_invader', '1', 2),
                         minion('magic-high-target', 'munchkin_orcs_sword_lord', '1', 5),
                     ],
                     ongoingActions: [],
@@ -4565,8 +4607,8 @@ const buildMunchkinMagesTargetSelectionScene = (): SmashUpSceneConfig => ({
                 {
                     defId: 'base_mages_tower',
                     minions: [
-                        minion('mages-weak-target', 'alien_invader', '1', 2),
                         minion('mages-strong-target', 'pirate_first_mate', '1', 5),
+                        minion('mages-weak-target', 'alien_invader', '1', 2),
                     ],
                     ongoingActions: [],
                     monsters: [],
@@ -7457,6 +7499,61 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         expect(core.treasureDeck).toHaveLength(19);
     });
 
+    test('活死人骑士和图坦卡蒙可从真实怪物行逐张手动击败并领取宝藏', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinRemainingMonsterCoverageScene());
+
+        await expect(page.getByTestId('su-base-monster-row-0')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('button', { name: '击败活死人骑士' })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('button', { name: '击败图坦卡蒙' })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 4');
+        await hideSmashUpDebugPanelForEvidence(page);
+        await page.waitForTimeout(800);
+        await game.screenshot('活死人骑士和图坦卡蒙-逐张击败前', testInfo);
+
+        await clickManualMonsterChoice(page, 'remaining-undead-horseman', '活死人骑士');
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.locator('[data-monster-uid="remaining-undead-horseman"]')).toHaveCount(0);
+        await expect(page.locator('[data-monster-uid="remaining-tutankhamen"]')).toHaveCount(1);
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 2');
+        await expect(page.locator('[data-card-uid^="munchkin_treasure_"]')).toHaveCount(2);
+        await hideSmashUpDebugPanelForEvidence(page);
+        await page.waitForTimeout(800);
+        await game.screenshot('活死人骑士和图坦卡蒙-击败活死人骑士后', testInfo);
+
+        await clickManualMonsterChoice(page, 'remaining-tutankhamen', '图坦卡蒙');
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.locator('[data-monster-uid]')).toHaveCount(0);
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 0');
+        await expect(page.locator('[data-card-uid^="munchkin_treasure_"]')).toHaveCount(4);
+
+        const core = (await game.getState()).core as {
+            players: Record<string, { hand: Array<{ defId: string }> }>;
+            monsterDiscard?: string[];
+            treasureDeck?: string[];
+            bases: Array<{ monsters?: Array<{ defId: string }> }>;
+        };
+        expect(core.bases[0].monsters).toEqual([]);
+        expect(core.monsterDiscard).toEqual([
+            'munchkin_monster_undead_horseman',
+            'munchkin_monster_tutankhamen',
+        ]);
+        expect(core.players['0'].hand.map(card => card.defId)).toEqual([
+            'munchkin_treasure_dwarf_hireling',
+            'munchkin_treasure_halfling_hireling',
+            'munchkin_treasure_tiger_steed',
+            'munchkin_treasure_bag_of_caltrops',
+        ]);
+        expect(core.treasureDeck).toEqual([]);
+
+        await hideSmashUpDebugPanelForEvidence(page);
+        await page.waitForTimeout(800);
+        await game.screenshot('活死人骑士和图坦卡蒙-全部击败后', testInfo);
+    });
+
     test('Munchkin 新 UI 移动端横屏保留怪物行与公共小牌堆入口', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -8477,8 +8574,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
                 mageCard('mages-blaster-cost', 'munchkin_mages_speed_reading', 'action'),
             ],
             bases: [mageBase('base_the_mothership', [
-                minion('mages-blaster-target', 'alien_invader', '1', 2),
                 minion('mages-blaster-high', 'pirate_first_mate', '1', 5),
+                minion('mages-blaster-target', 'alien_invader', '1', 2),
             ])],
         }));
 
@@ -9160,7 +9257,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await waitForSmashUpFxToSettle(page);
         await game.screenshot('102-生日派对补上己方仆从', testInfo);
 
-        await game.selectBase(1);
+        await game.playCard('pirate_first_mate', { targetBaseIndex: 1 });
         await game.waitForNoInteraction(10000);
         await waitForSmashUpFxToSettle(page);
 
@@ -9883,6 +9980,17 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.selectInteractionOptionBy(
             (option: InteractionOption) => option.value?.cardUid === 'party-minion-1',
             '意外的派对选择额外打出海盗大副',
+        );
+        await game.waitForInteraction('smashup_immediate_extra_minion_base', 10000);
+        await expectCurrentInteractionManual(game, '意外的派对额外随从基地选择');
+        const extraBaseOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(extraBaseOptions.some((option) => option.value?.baseIndex === 1)).toBe(true);
+        expect(extraBaseOptions.some((option) => option.value?.baseIndex === 0)).toBe(false);
+        await expectManualChoiceVisible(page, '[data-base-index="1"]', '意外的派对必须显示额外随从目标基地', { forbidPromptContext: true });
+        await game.screenshot('137b-意外的派对手动选择额外随从基地', testInfo);
+        await game.selectInteractionOptionBy(
+            (option: InteractionOption) => option.value?.baseIndex === 1,
+            '意外的派对选择额外随从基地',
         );
         await game.waitForNoInteraction(10000);
         await waitForSmashUpFxToSettle(page);
@@ -11489,6 +11597,18 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             (option: InteractionOption) => option.value?.cardUid === 'munchkin_treasure_1290',
             '我的！立即打出检索到的尖刺靴',
         );
+        await game.waitForInteraction('smashup_immediate_extra_action_minion', 10000);
+        const immediateMinionOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(
+            immediateMinionOptions.some((option) => option.value?.minionUid === 'mine-host-1'),
+            '我的！立即打出尖刺靴后必须手动选择己方宿主',
+        ).toBe(true);
+        await expect(page.locator('[data-minion-uid="mine-host-1"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('88b-我的！立即打出尖刺靴时手动选择宿主', testInfo);
+        await game.selectInteractionOptionBy(
+            (option: InteractionOption) => option.value?.minionUid === 'mine-host-1',
+            '我的！选择尖刺靴的己方宿主',
+        );
         await game.waitForNoInteraction(10000);
         await waitForSmashUpFxToSettle(page);
 
@@ -11774,6 +11894,18 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
                 option.value?.cardUid === recoveredTreasureUid
                 || option.value?.defId === 'munchkin_treasure_spiky_boots',
             '打捞立即打出刚回收的尖刺靴',
+        );
+        await game.waitForInteraction('smashup_immediate_extra_action_minion', 10000);
+        const salvageImmediateMinionOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(
+            salvageImmediateMinionOptions.some((option) => option.value?.minionUid === 'salvage-host-1'),
+            '打捞立即打出尖刺靴后必须手动选择当前基地己方宿主',
+        ).toBe(true);
+        await expect(page.locator('[data-minion-uid="salvage-host-1"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('96b-打捞立即打出尖刺靴时手动选择宿主', testInfo);
+        await game.selectInteractionOptionBy(
+            (option: InteractionOption) => option.value?.minionUid === 'salvage-host-1',
+            '打捞选择尖刺靴的当前基地己方宿主',
         );
         await game.waitForNoInteraction(10000);
         await waitForSmashUpFxToSettle(page);
@@ -12654,12 +12786,12 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('25-魔法导弹附着行动可点击', testInfo);
 
         await magicMissile.click({ force: true });
-        await game.waitForInteraction('munchkin_treasure_magic_missile_destroy', 10000);
         const magnifyOverlay = page.getByTestId('su-card-magnify-overlay');
         if (await magnifyOverlay.isVisible().catch(() => false)) {
             await magnifyOverlay.click({ position: { x: 10, y: 10 }, force: true });
             await expect(magnifyOverlay).toBeHidden({ timeout: 1000 });
         }
+        await game.waitForInteraction('munchkin_treasure_magic_missile_destroy', 10000);
         await expect.poll(async () => {
             const options = await game.getInteractionOptions() as InteractionOption[];
             return options.map(option => option.value?.minionUid).filter(Boolean);

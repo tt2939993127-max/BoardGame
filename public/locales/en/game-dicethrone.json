@@ -1373,6 +1373,11 @@
     "title": "Ability Resolution Choice",
     "option": "Option {{index}}",
     "sliderLabel": "Select amount to spend",
+    "statusCheckOrder": {
+      "title": "Choose the blinded and dazzle check order",
+      "dazzleFirst": "Check dazzle first",
+      "blindedFirst": "Check blinded first"
+    },
     "evasiveOrPurify": "Choose a status effect to gain",
     "evasiveOrPurifyToken": "Choose a token to gain",
     "lotusPalmUnblockable": {
@@ -1480,6 +1485,7 @@
       "critOrAccuracy": "Choose to gain Crit or Accuracy",
     "ninjaNinjutsu": {
       "title": "Ninjutsu 6 result",
+      "bonusDamage": "+2 damage",
       "poison": "+2 damage and apply Delayed Poison",
       "undefendable": "+2 damage and make the attack undefendable"
     },

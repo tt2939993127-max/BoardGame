@@ -203,12 +203,15 @@ test.describe("山屋惊魂基本流程", () => {
     );
     await expect(turningSheet).toHaveAttribute(
       "data-flip-implementation",
-      "home-v2-real-frame-sequence",
+      "turnjs-real-page-flip",
     );
-    await expect(
-      turningSheet.getByTestId("betrayal-scenario-book-real-flip-stage"),
-    ).toBeVisible();
-    await page.waitForTimeout(60);
+    const flipStage = turningSheet.getByTestId(
+      "betrayal-scenario-book-real-flip-stage",
+    );
+    await expect(flipStage).toBeVisible();
+    await expect(flipStage).toHaveAttribute("data-turn-ready", "true");
+    await expect(flipStage).toHaveAttribute("data-turn-animating", "true");
+    await expect(flipStage).toHaveAttribute("data-turn-plugin-animating", "true");
     await saveScreenshot(page, SCENARIO_SELECT_DETAIL_TURNING_SCREENSHOT);
     await expect(turningSheet).toHaveCount(0, { timeout: 2000 });
     await expect(

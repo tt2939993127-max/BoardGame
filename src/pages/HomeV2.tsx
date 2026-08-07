@@ -332,7 +332,7 @@ export const HomeV2 = () => {
                     align="left"
                     compact
                     positionMode="absolute"
-                    positionClassName="left-[10.8%] top-[75.6%]"
+                    positionClassName="left-[10.8%] top-[77.6%]"
                     theme="book"
                 />
             </div>

@@ -90,7 +90,6 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
             removable: true,
             actions: [
                 { type: 'modifyStat', target: 'self', value: 1 },
-                { type: 'custom', target: 'self', customActionId: 'gunslinger-bounty-reward' },
             ],
         },
         frameId: TOKEN_IDS.BOUNTY,

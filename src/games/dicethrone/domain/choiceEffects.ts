@@ -182,7 +182,9 @@ registerChoiceEffectHandler('use-loaded', ({ state, playerId }) => {
         },
         pendingAttack: {
             ...updatePendingAttackSettlementStage(state.pendingAttack, 'preDamage')!,
-            offensiveRollEndTokenResolved: true,
+            // Loaded 可在同一次攻击中连续消耗多个；奖励骰结算完成后，
+            // flow hook 会重新打开攻击掷骰阶段结束时的 Token 选择。
+            offensiveRollEndTokenResolved: currentLoaded <= 1,
         },
     };
 });

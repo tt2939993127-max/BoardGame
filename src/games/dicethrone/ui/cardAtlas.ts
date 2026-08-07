@@ -5,6 +5,7 @@ import { DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { ASSETS } from './assets';
 // 直接 import src/ 下的 JSON（同步，Vite 构建时内联）
 import atlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-common.atlas.json';
+import gunslingerAtlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json';
 import treantAtlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-treant.atlas.json';
 import ninjaAtlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-ninja.atlas.json';
 import zhanshujiaAtlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-zhanshujia.atlas.json';
@@ -22,8 +23,7 @@ function parseAtlasConfig(data: unknown, label: string): SpriteAtlasConfig {
 }
 
 // @atlas-contract ability-cards-common.atlas.json 不规则网格；坐标来自图集人工采样（colStarts/rowStarts）。
-// 枪手/武士新图集存在轻微左偏，基于抽样像素对列坐标做微调修正。
-/** 默认公共配置：所有当前正式角色都沿用这份不规则网格。 */
+/** 默认公共配置：除枪手等非规则排版外的正式角色沿用这份不规则网格。 */
 export const COMMON_CARD_ATLAS_CONFIG = parseAtlasConfig(atlasConfigData, 'ability-cards-common.atlas.json');
 
 const applyGlobalOffset = (config: CardAtlasConfig, offsetX: number): CardAtlasConfig => {
@@ -34,12 +34,12 @@ const applyGlobalOffset = (config: CardAtlasConfig, offsetX: number): CardAtlasC
     };
 };
 
-// 枪手/武士图集仅有轻微左偏：按基准图集像素做小幅全局左移修正。
+// 武士图集仅有轻微左偏，按基准图集像素做小幅全局左移修正。
 // 该偏移会在 CardPreview 的尺寸缩放中等比放大到实际图集尺寸。
-const GUNSLINGER_GLOBAL_SHIFT_X = -5.0; // slot-30 CP 仍偏左，进一步左移确保 CP 完整可见
 const SAMURAI_GLOBAL_SHIFT_X = -3.97; // 对应实图约 -4px
 
-const GUNSLINGER_CARD_ATLAS_CONFIG = applyGlobalOffset(COMMON_CARD_ATLAS_CONFIG, GUNSLINGER_GLOBAL_SHIFT_X);
+// 枪手末行只有两张卡牌；第 34 格不能按 10 列规则网格裁切，必须使用逐帧配置。
+const GUNSLINGER_CARD_ATLAS_CONFIG = parseAtlasConfig(gunslingerAtlasConfigData, 'ability-cards-gunslinger.atlas.json');
 const SAMURAI_CARD_ATLAS_CONFIG = applyGlobalOffset(COMMON_CARD_ATLAS_CONFIG, SAMURAI_GLOBAL_SHIFT_X);
 const TREANT_CARD_ATLAS_CONFIG = parseAtlasConfig(treantAtlasConfigData, 'ability-cards-treant.atlas.json');
 const NINJA_CARD_ATLAS_CONFIG = parseAtlasConfig(ninjaAtlasConfigData, 'ability-cards-ninja.atlas.json');

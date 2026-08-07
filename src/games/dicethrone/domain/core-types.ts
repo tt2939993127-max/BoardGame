@@ -269,6 +269,8 @@ export interface PendingAttack {
     damageResolved?: boolean;
     /** 本次攻击对防御方造成的净掉血累计值（用于 postDamage/onHit 与 lastResolvedAttackDamage） */
     resolvedDamage?: number;
+    /** 本次攻击期间实际新增到防御方身上的状态层数（供二级防御移除本次投掷已施加的状态） */
+    statusEffectsAppliedThisAttack?: Record<string, number>;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;
     /** 攻击方骰子点数快照（用于 2/3/4/5-of-a-kind 的“相同数字”判定） */
@@ -289,6 +291,8 @@ export interface PendingAttack {
     dazzleCheckMissed?: boolean;
     /** 眩光对本次攻击主伤害的百分比修正（-50 表示伤害减半）。 */
     dazzleDamagePercent?: number;
+    /** 致盲与眩光同时存在时，攻击者选择的判定顺序。 */
+    statusCheckOrder?: 'dazzleFirst' | 'blindedFirst';
     /** 防御掷骰阶段激活飞行后，本次攻击主伤害完全免除。 */
     defensiveFlightActivated?: boolean;
     /** 攻击链内的后续选择结果（例如工匠扳手攻击的追加分支），用于交互后恢复同一条攻击。 */
@@ -298,8 +302,8 @@ export interface PendingAttack {
     /** 等本次伤害响应窗口消耗指定 token 后再授予的 token。 */
     deferredTokenGrants?: PendingDamage['deferredTokenGrants'];
     /**
-     * Loaded 奖励骰的临时加成（由攻击修正卡在本次攻击内挂载）
-     * 例：Wild West 在你花费 Loaded 时允许重掷一次，并在奖励骰收口后追加 +1。
+     * Loaded 奖励骰的本次攻击加成（由攻击修正卡在本次攻击内挂载）
+     * 例：Wild West 对本次攻击内每次花费 Loaded 都允许重掷一次，并在每次奖励骰收口后追加 +1。
      */
     loadedBonusDieBoost?: {
         allowReroll?: boolean;

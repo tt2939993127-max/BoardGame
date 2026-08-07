@@ -298,6 +298,23 @@ describe('SmashUp Munchkin intake 静态合同', () => {
         expect(MUNCHKIN_MONSTER_DECK_DEF_IDS.filter(id => id === 'munchkin_monster_fowl_fiend')).toHaveLength(4);
     });
 
+    it('8 张唯一怪物逐对象保留力量、宝藏奖励和实体牌数量合同', () => {
+        expect(MUNCHKIN_MONSTER_CARDS).toHaveLength(8);
+
+        for (const monster of MUNCHKIN_MONSTER_CARDS) {
+            expect(monster.id).toMatch(/^munchkin_monster_/);
+            expect(monster.kind).toBe('monster');
+            expect(monster.power).toEqual(expect.any(Number));
+            expect(monster.treasureReward).toEqual(expect.any(Number));
+            expect(monster.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: SMASHUP_ATLAS_IDS.MUNCHKIN_MONSTERS_CARDS,
+                index: monster.previewRef.index,
+            });
+            expect(MUNCHKIN_MONSTER_DECK_DEF_IDS.filter(id => id === monster.id)).toHaveLength(monster.count);
+        }
+    });
+
     it('选到 Munchkin 派系后初始化怪物和宝藏公共牌堆，未选时保持不显示', () => {
         expect(hasMunchkinExpansionFaction({
             '0': { factions: [SMASHUP_FACTION_IDS.MUNCHKIN_DWARVES, SMASHUP_FACTION_IDS.ALIENS] },

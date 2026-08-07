@@ -197,6 +197,26 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
         timestamp,
     } as HealAppliedEvent);
 
+    // 二级防御可移除本次投掷阶段已经施加的一个状态。
+    // 仅从攻击期间实际新增、当前仍存在且规则允许移除的状态中选择，
+    // 因此不会误删攻击开始前就有的状态，也不会误删诅咒金币。
+    const appliedStatuses = state.pendingAttack?.defenderId === targetId
+        ? state.pendingAttack.statusEffectsAppliedThisAttack ?? {}
+        : {};
+    const removableStatusId = Object.keys(appliedStatuses).find((statusId) =>
+        (appliedStatuses[statusId] ?? 0) > 0
+        && (state.players[targetId]?.statusEffects[statusId] ?? 0) > 0
+        && isRemovableStatusId(state, statusId)
+    );
+    if (removableStatusId) {
+        events.push({
+            type: 'STATUS_REMOVED',
+            payload: { targetId, statusId: removableStatusId, stacks: 1 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DiceThroneEvent);
+    }
+
     // 鑻ユ姇鍑?2 涓垨浠ヤ笂蹇冮潰锛屾巿浜堢姸鎬侀槻鎶?
     if (heartCount >= 2) {
         events.push({

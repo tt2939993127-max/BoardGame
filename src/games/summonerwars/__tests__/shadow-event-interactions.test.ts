@@ -301,6 +301,10 @@ describe('暗影精灵能力：移动后与主动交互', () => {
       card: shadowAbilityCard('shadow-veil-soldier', []),
       owner: '0',
     });
+    const friendlyHero = placeTestUnit(fixture.state.core, { row: 2, col: 1 }, {
+      card: shadowAbilityCard('shadow-veil-hero', [], { unitClass: 'champion' }),
+      owner: '0',
+    });
     fixture.state.core.board[4][4].structure = {
       cardType: 'structure',
       card: {
@@ -320,6 +324,7 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     const targetUnitOptionId = `unit:${friendlySoldier.instanceId}`;
     expect(getPromptSwType(moved.state)).toBe('shadow_tear_the_veil_select_unit');
     expect(getPromptOptionIds(moved.state)).toContain(targetUnitOptionId);
+    expect(getPromptOptionIds(moved.state)).not.toContain(`unit:${friendlyHero.instanceId}`);
     expect(getPromptOptionIds(moved.state)).not.toContain('skip');
 
     const skipped = cancelPrompt(moved.state);
@@ -351,6 +356,20 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     expect(resolved.state.core.board[3][4].unit?.instanceId).toBe(friendlySoldier.instanceId);
 
     const sourceAfterMove = resolved.state.core.board[4][3].unit!;
+    const skippedState = skipped.state;
+    const directHeroAttempt = run(skippedState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      playerId: '0',
+      payload: {
+        abilityId: 'shadow_tear_the_veil',
+        sourceUnitId: sourceAfterMove.instanceId,
+        targetUnitId: friendlyHero.instanceId,
+        gatePosition: { row: 4, col: 4 },
+        newPosition: { row: 5, col: 4 },
+      },
+    });
+    expect(directHeroAttempt.events.some((event) => event.type === SW_EVENTS.UNIT_MOVED)).toBe(false);
+
     const blocked = run(resolved.state, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       playerId: '0',
@@ -385,6 +404,7 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     });
     expect(attacked.success).toBe(true);
     expect(getPromptSwType(attacked.state)).toBe('shadow_feint_select_position');
+    expect(getPromptOptionIds(attacked.state)).toContain('pos:4,1');
     expect(getPromptOptionIds(attacked.state)).not.toContain('skip');
 
     const skipped = cancelPrompt(attacked.state);
@@ -408,7 +428,7 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     };
     const knight = shadowAbilityCard('shadow-knight-hand', ['shadow_shadow_summon', 'shadow_death_pact']);
     core.players['0'].hand.push(knight);
-    const target = placeTestUnit(core, { row: 3, col: 4 }, {
+    const target = placeTestUnit(core, { row: 3, col: 5 }, {
       card: shadowAbilityCard('shadow-summon-target', []),
       owner: '0',
     });
@@ -431,7 +451,7 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     const skipped = cancelPrompt(summoned.state);
     expect(skipped.success).toBe(true);
     expect(skipped.state.core.board[4][3].unit?.cardId).toBe(knight.id);
-    expect(skipped.state.core.board[3][4].unit?.damage).toBe(0);
+    expect(skipped.state.core.board[3][5].unit?.damage).toBe(0);
 
     const selectedTarget = run(
       summoned.state,
@@ -439,16 +459,16 @@ describe('暗影精灵能力：移动后与主动交互', () => {
     );
     expect(selectedTarget.success).toBe(true);
     expect(getPromptSwType(selectedTarget.state)).toBe('shadow_shadow_summon_select_position');
-    expect(getPromptOptionIds(selectedTarget.state)).toContain('pos:4,4');
+    expect(getPromptOptionIds(selectedTarget.state)).toContain('pos:3,4');
     expect(getPromptOptionIds(selectedTarget.state)).not.toContain('skip');
     const resolved = run(
       selectedTarget.state,
-      createPromptResponseCommand(selectedTarget.state, '0', 'pos:4,4'),
+      createPromptResponseCommand(selectedTarget.state, '0', 'pos:3,4'),
     );
     expect(resolved.success).toBe(true);
     expect(resolved.state.core.board[4][3].unit).toBeUndefined();
-    expect(resolved.state.core.board[4][4].unit?.cardId).toBe(knight.id);
-    expect(resolved.state.core.board[3][4].unit?.damage).toBe(1);
+    expect(resolved.state.core.board[3][4].unit?.cardId).toBe(knight.id);
+    expect(resolved.state.core.board[3][5].unit?.damage).toBe(1);
   });
 
   it('圣贤巡游者召唤后可选择急袭位移，跳过不会移动', () => {

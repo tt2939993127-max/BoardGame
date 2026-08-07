@@ -142,7 +142,7 @@ export const PALADIN_TOKENS: TokenDef[] = [
 
     /**
      * 神圣祝福 (Blessing of Divinity) - 免疫致死伤害
-     * 当受到致死伤害时，移除此标记，将 HP 设为 1 并回复 5 HP
+     * 当受到致死伤害时，移除此标记并将 HP 设为 1
      */
     {
         id: TOKEN_IDS.BLESSING_OF_DIVINITY,

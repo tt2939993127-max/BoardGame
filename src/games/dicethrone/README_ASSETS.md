@@ -35,8 +35,8 @@
 
 - 默认卡牌 atlas 配置：`src/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json`
 - 当前真实实现不是“所有英雄永远共享同一份配置”，而是：
-  - `monk / barbarian / pyromancer / shadow_thief / moon_elf / paladin / gunslinger / samurai` 全部复用公共网格
-- `src/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json` 现仅作为历史错误实现留档，不再是正式运行时配置
+  - `monk / barbarian / pyromancer / shadow_thief / moon_elf / paladin / samurai` 复用公共网格（武士保留轻微全局偏移）
+  - `gunslinger` 使用 `src/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json` 的逐帧配置，因为末行只有两张卡牌；把第 34 格继续按 10 列网格裁切会落到空白区域
 - 是否允许引入新的 per-hero atlas json，必须先由“原始图 + 老角色同位对照 + 真实 UI 消费链”共同证实；禁止无证据扩表。
 
 ### 2.3 路径帮助函数

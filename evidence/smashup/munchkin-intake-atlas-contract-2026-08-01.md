@@ -288,3 +288,105 @@
 | 怪物牌 | scoped-debt | 怪物如何进入基地、是否由系统控制、力量如何参与破基地、击败或得分时如何发放宝藏 / VP / 其它奖励 |
 | Munchkin 派系牌文案 | blocked-for-implementation | 当前 locale 对行动牌保留“当前仅完成静态接入”提示；后续实现前需逐卡拆子句，尤其是宝藏、怪物、诅咒、额外打出、弃牌堆回收、得分前后触发 |
 | 现有 Smash Up 引擎扩展点 | pending | 需要先对照旧派系的抽牌、额外打出、基地得分、特殊能力和响应窗口，再决定是复用 handler、扩展共享机制，还是新增 Munchkin 专用系统 |
+
+## 2026-08-06 当前实现回写：对象级 L0-L4 对账
+
+> 本节是对上面 2026-08-01 历史状态的当前回写，不删除历史结论。`PASS` 只表示该层已有直接证据；`scoped-debt` 表示当前范围仍缺对象级证据，不能被代表性截图替代。
+
+### 分层定义
+
+| 层级 | 本项目当前含义 |
+| --- | --- |
+| L0 | 数据对象存在、中文/英文名称和牌面规则字段已录入，并与牌库数量一致 |
+| L1 | 对象绑定正确图集索引，运行时资源与远端 manifest 可加载 |
+| L2 | 领域规则、选择约束、空选/否定分支和状态清理有自动化验证 |
+| L3 | 当前真实牌桌入口由玩家手动点击完成，并有状态断言和截图产物 |
+| L4 | 对当前真实入口截图逐张做玩家视角图面审计，确认无遮挡、重复源卡、错误锚点和移动端布局问题 |
+
+### 8 个普通派系
+
+| 派系 | 对象范围 | L0 | L1 | L2 | L3 | L4 | 当前裁决 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 矮人 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 领域规则与 12 张牌/2 个基地真实入口已纳入当前回归；L4 仍缺逐对象图面审计 |
+| 半身人 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 领域规则与真实入口已纳入当前回归；L4 仍缺逐对象图面审计 |
+| 盗贼 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 领域规则与真实入口已纳入当前回归；L4 仍缺逐对象图面审计 |
+| 法师 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 领域 12/12、真实入口已通过；L4 仍缺逐对象图面审计 |
+| 木精灵 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 领域 13/13、真实入口已通过；L4 仍缺逐对象图面审计 |
+| 牧师 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 真实入口已覆盖手牌、天赋、响应和基地链；L4 仍缺逐对象图面审计 |
+| 兽人 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 真实入口已覆盖保护、响应、计分清理和多步选择；L4 仍缺逐对象图面审计 |
+| 勇士 | 12 张牌、2 个基地 | PASS | PASS | PASS | PASS | scoped-debt | 真实入口已覆盖怪物选择、模式选择、计分和附着卡本体；L4 仍缺逐对象图面审计 |
+
+### 22 张宝藏
+
+| 宝藏对象 | L0 | L1 | L2 | L3 | L4 |
+| --- | --- | --- | --- | --- | --- |
+| 矮人雇佣兵 | PASS | PASS | PASS | PASS | scoped-debt |
+| 半身人雇佣兵 | PASS | PASS | PASS | PASS | scoped-debt |
+| 虎骑士 | PASS | PASS | PASS | PASS | scoped-debt |
+| 一袋铁蒺藜 | PASS | PASS | PASS | PASS | scoped-debt |
+| 尖刺靴 | PASS | PASS | PASS | PASS | scoped-debt |
+| 火箭靴 | PASS | PASS | PASS | PASS | scoped-debt |
+| 摆动的盾牌 | PASS | PASS | PASS | PASS | scoped-debt |
+| 血腥肢解电锯 | PASS | PASS | PASS | PASS | scoped-debt |
+| 大量宝藏 | PASS | PASS | PASS | PASS | scoped-debt |
+| 十字弓 | PASS | PASS | PASS | PASS | scoped-debt |
+| 地牢规则书 | PASS | PASS | PASS | PASS | scoped-debt |
+| 时间错乱的喷气背包 | PASS | PASS | PASS | PASS | scoped-debt |
+| 诱惑护膝 | PASS | PASS | PASS | PASS | scoped-debt |
+| 魔法导弹 | PASS | PASS | PASS | PASS | scoped-debt |
+| 怯懦药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 口臭药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 愚蠢勇气药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 直线跑路药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 麻痹药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 复制药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 探宝棒 | PASS | PASS | PASS | PASS | scoped-debt |
+| 许愿指环 | PASS | PASS | PASS | PASS | scoped-debt |
+
+> 宝藏 L2/L3 的直接证据为 `munchkinMechanics.test.ts`、`munchkinIntake.test.ts` 和当前工作区 `e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts` 的 132/132 全量真实入口回归；L4 不把“截图已生成”越权解释成“22 张逐对象图面已审计”。
+
+### 8 张唯一怪物
+
+| 怪物对象 | 实体张数 | L0 | L1 | L2 | L3 | L4 | 当前裁决 |
+| --- | ---: | --- | --- | --- | --- | --- | --- |
+| 宝藏龙 | 1 | PASS | PASS | PASS | PASS | scoped-debt | 通用基地、击败和宝藏奖励链已有真实入口；缺逐对象 L4 |
+| 大脚怪 | 2 | PASS | PASS | PASS | PASS | scoped-debt | 多条真实入口使用；缺逐对象 L4 |
+| 天马 | 3 | PASS | PASS | PASS | PASS | scoped-debt | 勇士战争怒吼等真实入口使用；缺逐对象 L4 |
+| 长毛巨魔 | 4 | PASS | PASS | PASS | PASS | scoped-debt | 金库计分压力态使用；缺逐对象 L4 |
+| 活死人骑士 | 1 | PASS | PASS | PASS | PASS | PASS | 当前真实怪物行逐张手动击败入口已通过；三张 1440x900 当前截图逐张审计通过 |
+| 图坦卡蒙 | 2 | PASS | PASS | PASS | PASS | PASS | 当前真实怪物行逐张手动击败入口已通过；三张 1440x900 当前截图逐张审计通过 |
+| 食尸鬼 | 3 | PASS | PASS | PASS | PASS | scoped-debt | 牧师抓鬼、法师和勇士真实入口使用；缺逐对象 L4 |
+| 鸟之冤魂 | 4 | PASS | PASS | PASS | PASS | scoped-debt | 牧师/宝藏奖励相关真实入口使用；缺逐对象 L4 |
+
+### 当前证据与残余范围
+
+| 项目 | 当前证据 | 裁决 |
+| --- | --- | --- |
+| 普通派系数据范围 | `munchkin.ts`：8 个派系、96 张唯一牌、16 个基地；`munchkinIntake.test.ts` 当前 23/23 | PASS |
+| 宝藏对象范围 | 22 张唯一牌，全部已有静态定义、规则入口和当前 E2E 引用 | PASS；L4 逐对象图面仍为 scoped-debt |
+| 怪物对象范围 | 8 张唯一怪物、20 张实体牌；新增静态测试逐对象核对力量、宝藏奖励、图集索引和实体数量；活死人骑士与图坦卡蒙真实入口 1/1 通过 | PASS；8 张对象的 L0-L3 已有证据，8 张对象的 L4 仍需逐对象补齐，当前代表图面已通过 |
+| 全 Smash Up 领域回归 | `npm run test:smashup`，当前工作区退出码 0；命令输出包含全目录通过汇总，负向断言日志为预期测试输出 | PASS |
+| 真实 UI 入口回归 | `run-e2e-single.mjs ci ... --project=chromium`，132/132 passed，单 worker，当前工作区截图已重生成 | PASS；不能替代逐对象 L4 |
+| 互动与证据门禁 | `npm run audit:interactions`、`npm run audit:evidence:selfcheck`、`npm run typecheck` | PASS |
+
+**本附录后的真实状态：** C1-C4、C6 已有直接证据；两张此前未独立夹具的普通怪物已补齐 L3/L4。C5/C7 仍保留为未完成，原因只剩 8 个派系与 22 张宝藏的 L4 逐对象审计，以及移动端逐对象范围没有被当前代表图替代收口。
+
+## 2026-08-07 续审记录：剩余两张普通怪物真实入口
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 活死人骑士 / 图坦卡蒙真实入口 | `node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "活死人骑士和图坦卡蒙" --project=chromium` | `passed`：1/1；玩家先手动点击活死人骑士，再手动点击图坦卡蒙；两次奖励分别进入手牌，两个怪物进入怪物弃牌堆，公共宝藏牌堆从 4 张收口到 0 张 |
+| 当前截图 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/活死人骑士和图坦卡蒙可从真实怪物行逐张手动击败并领取宝藏/` 下 3 张 JPG，1440x900 | `PASS / 92`：怪物行位于矿洞下方；两个怪物在基地下方横向排列且逐步收口；宝藏小牌、牌库、弃牌区、基地、泰坦槽和结束回合入口均可读；没有调试面板、中央重复源卡或异常遮挡 |
+| 首次重跑失败 | Playwright 60 秒超时，调用栈落在 `readCoreState -> ensureDebugStateTab` | `scoped_debt_resolved`：失败来自证据夹具先隐藏调试面板后又要求辅助函数重新打开调试面板，不是玩法失败；改用 `game.getState()` 读取状态并重新跑通 |
+| 当前范围裁决 | 8 张唯一怪物对象矩阵 | `L0-L3 passed`；活死人骑士与图坦卡蒙的 L4 已通过；其它 6 张怪物保留原有代表图面通过记录，整体 L4 逐对象审计仍为 scoped-debt |
+
+## 2026-08-07 当前工作区最终回归记录
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| Munchkin 真实入口全量回归 | `node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts --project=chromium` | `passed`：`Running 133 tests using 1 worker`，最终 `133 passed`，约 18.9 分钟；新增活死人骑士 / 图坦卡蒙用例位于第 2 条，其余原有 132 条全部通过 |
+| Munchkin 领域与录入回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/munchkinIntake.test.ts src/games/smashup/__tests__/munchkinMechanics.test.ts --configLoader native --reporter=dot` | `passed`：2 个文件、`120/120`；负向测试中的“当前没有可选择的宝藏牌”是预期拒绝日志，不是测试失败 |
+| 类型与交互门禁 | `npm run typecheck`、`npm run audit:interactions` | `passed`：类型检查通过；交互审计 OK，动态强制选择仅保留现有非阻塞 warning |
+| 证据完整性 | `npm run audit:evidence:selfcheck` | `passed`：检查 4 个文件、3 个审计文档，结果 OK |
+| 定向静态审查 | `npx eslint e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts src/games/smashup/__tests__/munchkinIntake.test.ts`、目标文件 `git diff --check` | `passed`：0 errors；大型 E2E 文件保留既有 103 条 `no-explicit-any` warning；差异无内容错误 |
+| 当前任务裁决 | 结合本附录全部 L0-L4 矩阵 | `in_progress`：功能、数据、资源、真实入口和新增怪物对象已通过；剩余是其它 8 个派系 / 22 张宝藏的逐对象 L4 与移动端逐对象审计，不能把 133/133 外推成整体验收完成 |

@@ -172,6 +172,12 @@ export interface DamageResult {
   sideEffectEvents: GameEvent[];
 }
 
+interface PendingOnDamageReceivedCustomAction {
+  def: any;
+  action: any;
+  stacks: number;
+}
+
 // ============================================================================
 // 伤害计算类
 // ============================================================================
@@ -246,7 +252,6 @@ export class DamageCalculation {
     }
     if (this.config.autoCollectStatus !== false) {
       this.collectSourceStatusModifiers();
-      this.collectStatusModifiers();
     }
     // 护盾默认不收集（由 reducer 统一消耗，避免双重扣减）
     if (this.config.autoCollectShields === true) {
@@ -263,6 +268,14 @@ export class DamageCalculation {
       for (const mod of this.config.additionalModifiers) {
         this.modifierStack = addModifier(this.modifierStack, mod);
       }
+    }
+
+    // 目标侧的数值修正必须先完整入栈，才能让“受到致死伤害时”这类被动
+    // 基于即将结算的总伤害判断。自定义被动本身产生的 PREVENT_DAMAGE 不参与
+    // 这次预判，避免把自己的减伤又算回触发条件。
+    if (this.config.autoCollectStatus !== false) {
+      const customActions = this.collectStatusModifiers();
+      this.collectOnDamageReceivedCustomActions(customActions);
     }
   }
   
@@ -396,15 +409,16 @@ export class DamageCalculation {
    * - removeStatus: 生成 STATUS_REMOVED 事件
    * - custom: 调用 passiveTriggerHandler，将 preventAmount 转为负值 flat modifier
    */
-  private collectStatusModifiers(): void {
-    const { target, source } = this.config;
+  private collectStatusModifiers(): PendingOnDamageReceivedCustomAction[] {
+    const { target } = this.config;
     const coreState = this.getCoreState();
     
     const targetPlayer = coreState?.players?.[target.playerId];
-    if (!targetPlayer) return;
+    if (!targetPlayer) return [];
     
     const tokenDefs = coreState?.tokenDefinitions || [];
     const timestamp = this.config.timestamp || Date.now();
+    const customActions: PendingOnDamageReceivedCustomAction[] = [];
     
     // 1. 处理 damageReduction 字段（旧机制）—— 仅从 statusEffects 收集
     if (targetPlayer.statusEffects) {
@@ -478,44 +492,8 @@ export class DamageCalculation {
           }
           
           case 'custom': {
-            const actionId = action.customActionId;
-            if (!actionId) break;
-            
-            // 未注入 handler 时跳过所有 custom 动作（向后兼容）
-            const handler = this.config.passiveTriggerHandler;
-            if (!handler) break;
-            
-            try {
-              const handlerResult = handler.handleCustomAction(actionId, {
-                targetId: target.playerId,
-                attackerId: source.playerId,
-                sourceAbilityId: source.abilityId,
-                state: this.config.state,
-                timestamp,
-                damageAmount: this.config.baseDamage,
-                tokenId: def.id,
-                tokenStacks: stacks,
-              });
-              
-              // 将 preventAmount 转为负值 flat modifier
-              if (handlerResult.preventAmount > 0) {
-                this.modifierStack = addModifier(this.modifierStack, {
-                  id: `custom-prevent-${def.id}-${actionId}`,
-                  type: 'flat',
-                  value: -handlerResult.preventAmount,
-                  priority: 25,
-                  source: def.id,
-                  description: `Status: ${def.name || def.id}`,
-                });
-              }
-              
-              // 副作用事件添加到收集列表
-              if (handlerResult.events.length > 0) {
-                this.collectedSideEffects.push(...handlerResult.events);
-              }
-            } catch (err) {
-              console.error(`[DamageCalculation] custom handler "${actionId}" 执行异常:`, err);
-              // 跳过该动作，伤害计算继续
+            if (action.customActionId) {
+              customActions.push({ def, action, stacks });
             }
             break;
           }
@@ -523,6 +501,62 @@ export class DamageCalculation {
           default:
             break;
         }
+      }
+    }
+
+    return customActions;
+  }
+
+  /**
+   * 在全部常规数值修正入栈后，执行 onDamageReceived 的自定义被动。
+   * 每个被动看到的是同一份“自定义减伤介入前”的总伤害，避免触发顺序
+   * 改变致死判定，也避免被动把自身 PREVENT_DAMAGE 算进触发条件。
+   */
+  private collectOnDamageReceivedCustomActions(
+    customActions: PendingOnDamageReceivedCustomAction[],
+  ): void {
+    if (customActions.length === 0) return;
+
+    const handler = this.config.passiveTriggerHandler;
+    if (!handler) return;
+
+    const { target, source } = this.config;
+    const timestamp = this.config.timestamp || Date.now();
+    const predictedDamage = Math.max(
+      0,
+      Math.round(applyModifiers(this.modifierStack, 0, this.config).finalValue),
+    );
+
+    for (const { def, action, stacks } of customActions) {
+      const actionId = action.customActionId;
+      try {
+        const handlerResult = handler.handleCustomAction(actionId, {
+          targetId: target.playerId,
+          attackerId: source.playerId,
+          sourceAbilityId: source.abilityId,
+          state: this.config.state,
+          timestamp,
+          damageAmount: predictedDamage,
+          tokenId: def.id,
+          tokenStacks: stacks,
+        });
+
+        if (handlerResult.preventAmount > 0) {
+          this.modifierStack = addModifier(this.modifierStack, {
+            id: `custom-prevent-${def.id}-${actionId}`,
+            type: 'flat',
+            value: -handlerResult.preventAmount,
+            priority: 25,
+            source: def.id,
+            description: `Status: ${def.name || def.id}`,
+          });
+        }
+
+        if (handlerResult.events.length > 0) {
+          this.collectedSideEffects.push(...handlerResult.events);
+        }
+      } catch (err) {
+        console.error(`[DamageCalculation] custom handler "${actionId}" 执行异常:`, err);
       }
     }
   }

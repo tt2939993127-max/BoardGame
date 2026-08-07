@@ -97,7 +97,7 @@ abilityExecutorRegistry.register('shadow_judgment', (ctx: SWAbilityContext) => {
   };
 }, { payloadContract: { required: ['targetPosition', 'amount'] } });
 
-/** 撕裂帷幕：把友方士兵/英雄传送到受伤敌方传送门旁的空格。 */
+/** 撕裂帷幕：把友方士兵传送到受伤敌方传送门旁的空格。 */
 abilityExecutorRegistry.register('shadow_tear_the_veil', (ctx: SWAbilityContext) => {
   const targetUnitId = ctx.payload.targetUnitId as string | undefined;
   const gatePosition = ctx.payload.gatePosition as CellCoord | undefined;
@@ -106,7 +106,7 @@ abilityExecutorRegistry.register('shadow_tear_the_veil', (ctx: SWAbilityContext)
 
   const target = findUnitByInstanceId(ctx, targetUnitId);
   const gate = getStructureAt(ctx.core, gatePosition);
-  if (!target || target.owner !== ctx.ownerId || !isSoldierOrChampion(target)) return { events: [] };
+  if (!target || target.owner !== ctx.ownerId || target.card.unitClass !== 'common') return { events: [] };
   if (!gate || gate.owner === ctx.ownerId || !gate.card.isGate || gate.damage <= 0) return { events: [] };
   if (manhattanDistance(ctx.sourcePosition, gatePosition) !== 1) return { events: [] };
   if (!getAdjacentCells(gatePosition).some((pos) => pos.row === newPosition.row && pos.col === newPosition.col)) return { events: [] };
@@ -160,7 +160,7 @@ abilityExecutorRegistry.register('shadow_forbidden_knowledge', (ctx: SWAbilityCo
   };
 }, { payloadContract: { required: ['targetPosition'] } });
 
-/** 佯攻：攻击后把自身推拉到选定的两格内直线位置。 */
+/** 佯攻：攻击后把自身推拉到选定的 1–2 格直线位置。 */
 abilityExecutorRegistry.register('shadow_feint', (ctx: SWAbilityContext) => {
   const newPosition = ctx.payload.newPosition as CellCoord | undefined;
   if (!newPosition) return { events: [] };
@@ -190,7 +190,6 @@ abilityExecutorRegistry.register('shadow_shadow_summon', (ctx: SWAbilityContext)
   if (!target && !targetStructure) return { events: [] };
   if (!getAdjacentCells(targetPosition).some((pos) => pos.row === newPosition.row && pos.col === newPosition.col)) return { events: [] };
   if (!isValidCoord(newPosition) || !isCellEmpty(ctx.core, newPosition)) return { events: [] };
-  if (manhattanDistance(ctx.sourcePosition, newPosition) !== 1) return { events: [] };
 
   return {
     events: [

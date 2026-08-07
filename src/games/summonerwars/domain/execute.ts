@@ -507,7 +507,7 @@ export function executeCommand(
             'huijin_quick_shot',  // 灰烬弓箭手：移动后快速射击
             'yongheng_intelligence', // 城塞参谋：移动后可抓1
             'shadow_judgment',    // 审判：消耗充能伤害相邻士兵/英雄
-            'shadow_tear_the_veil', // 撕裂帷幕：传送友方士兵/英雄
+            'shadow_tear_the_veil', // 撕裂帷幕：传送友方普通士兵
             'shadow_forbidden_knowledge', // 禁忌学识：自伤/伤害传送门后抓牌
           ];
           for (const abilityId of afterMoveChoiceAbilities) {

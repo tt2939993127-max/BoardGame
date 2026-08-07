@@ -298,9 +298,10 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             actionIndex: 0,
         }), fixedRandom);
         const next = applyEvents(state.core, events);
+        const nanobotDamageEvents = eventsOfType(events, 'DAMAGE_DEALT')
+            .filter(event => event.payload.sourceAbilityId === 'artificer-nanobot-detonate');
         const damageByTarget = Object.fromEntries(
-            eventsOfType(events, 'DAMAGE_DEALT')
-                .filter(event => event.payload.sourceAbilityId === 'artificer-nanobot-detonate')
+            nanobotDamageEvents
                 .map(event => [event.payload.targetId, event.payload.amount]),
         );
 
@@ -309,11 +310,70 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         expect(next.players['0'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
         expect(next.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
         expect(damageByTarget).toEqual({ '0': 3, '1': 5 });
+        expect(nanobotDamageEvents.every(event => (
+            event.payload.damageScope === 'direct'
+            && event.payload.unblockable === true
+        ))).toBe(true);
         expect(next.players['0'].artificerBotState?.[TOKEN_IDS.NANOBOT]).toMatchObject({
             built: true,
             upgraded: false,
             activationsUsedThisTurn: 1,
         });
+    });
+
+    it('进攻阶段激活纳米机器人时，当前攻击目标的爆弹并入攻击修正，其他目标仍为附属伤害', () => {
+        const state = createFourPlayerArtificerState();
+        setArtificerBot(state.core, '0', TOKEN_IDS.NANOBOT);
+        state.core.players['0'].tokens[TOKEN_IDS.SYNTH] = 0;
+        state.core.players['1'].statusEffects[STATUS_IDS.NANOBOMB] = 2;
+        state.core.players['3'].statusEffects[STATUS_IDS.NANOBOMB] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'maximum-power',
+            isDefendable: true,
+            damageResolved: false,
+            resolvedDamage: 0,
+            settlementStage: 'preDamage',
+        } as DiceThroneCore['pendingAttack'];
+
+        const requestEvents = resolveOffensivePreDefenseEffects(state.core, fixedRandom, 289);
+        const requestedState = applyEvents(state.core, requestEvents);
+        const request = eventsOfType(requestEvents, 'CHOICE_REQUESTED')[0];
+        const nanobotOption = request?.payload.options.find(option => (
+            option.labelKey === 'choices.artificerBotActivation.activateNanobotFree'
+        ));
+
+        expect(nanobotOption).toBeDefined();
+        if (!nanobotOption) return;
+
+        const resolution = resolveChoiceWithFollowups(requestedState, {
+            playerId: '0',
+            customId: nanobotOption.customId!,
+            sourceAbilityId: 'maximum-power',
+            value: nanobotOption.value!,
+            timestamp: 290,
+            random: fixedRandom,
+        });
+
+        const directDamage = eventsOfType(resolution.followupEvents, 'DAMAGE_DEALT')
+            .find(event => event.payload.targetId === '3');
+        expect(directDamage?.payload).toMatchObject({
+            targetId: '3',
+            amount: 1,
+            actualDamage: 1,
+            sourceAbilityId: 'artificer-nanobot-detonate',
+            damageScope: 'direct',
+            unblockable: true,
+        });
+        expect(eventsOfType(resolution.followupEvents, 'DAMAGE_DEALT')
+            .some(event => event.payload.targetId === '1')).toBe(false);
+        expect(resolution.nextState.players['1'].resources[RESOURCE_IDS.HP]).toBe(49);
+        expect(resolution.nextState.players['3'].resources[RESOURCE_IDS.HP]).toBe(49);
+        expect(resolution.nextState.pendingAttack?.bonusDamage).toBe(5);
+        expect(resolution.nextState.pendingAttack?.attackModifierBonusDamage ?? 0).toBe(0);
+        expect(resolution.nextState.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
+        expect(resolution.nextState.players['3'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
     });
 
     it('高级纳米机器人在维护阶段只需花费 1 合成器即可引爆，且不会消失', () => {
@@ -655,6 +715,7 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             isDefendable: true,
         } as DiceThroneCore['pendingAttack'];
 
+        expect(shouldOpenTokenResponse(state.core, '0', '1', 5, false, 'attack')).toBeNull();
         expect(shouldOpenTokenResponse(state.core, '0', '1', 6, false, 'attack')).toBe('defenderMitigation');
     });
 
@@ -1781,7 +1842,9 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             activationsUsedThisTurn: 1,
         });
         expect(firstResolution.nextState.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
-        expect(firstResolution.nextState.players['1'].resources[RESOURCE_IDS.HP]).toBe(45);
+        expect(firstResolution.nextState.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+        expect(firstResolution.nextState.pendingAttack?.bonusDamage).toBe(5);
+        expect(firstResolution.nextState.pendingAttack?.attackModifierBonusDamage ?? 0).toBe(0);
         expect(secondRequest?.payload.titleKey).toBe('choices.artificerBotActivation.titleSingle');
         expect(secondRequest?.payload.options.map(option => option.labelKey)).toEqual([
             'choices.artificerBotActivation.activateShockBotFree',
@@ -1806,8 +1869,9 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             upgraded: false,
             activationsUsedThisTurn: 1,
         });
-        expect(secondResolution.nextState.players['1'].resources[RESOURCE_IDS.HP]).toBe(45);
-        expect(secondResolution.nextState.pendingAttack?.bonusDamage).toBe(3);
+        expect(secondResolution.nextState.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+        expect(secondResolution.nextState.pendingAttack?.bonusDamage).toBe(8);
+        expect(secondResolution.nextState.pendingAttack?.attackModifierBonusDamage ?? 0).toBe(0);
         expect(secondResolution.nextState.pendingAttack?.preDefenseResolved).toBe(true);
         expect(secondResolution.nextState.pendingAttack?.settlementStage).toBe('preDamage');
     });

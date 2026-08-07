@@ -89,24 +89,8 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
         getGlobalLoadedRerollCount(state, attackerId),
         loadedBoost?.allowReroll ? 1 : 0,
     );
-    const clearLoadedBoostEvent = loadedBoost
-        ? ({
-            type: 'PENDING_ATTACK_UPDATED',
-            payload: {
-                attackerId,
-                patch: { loadedBonusDieBoost: undefined },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as DiceThroneEvent)
-        : null;
-
     if (maxRerollCount > 0) {
-        const events: DiceThroneEvent[] = [];
-        if (clearLoadedBoostEvent) {
-            events.push(clearLoadedBoostEvent);
-        }
-        events.push(...createBonusDiceWithReroll(
+        return createBonusDiceWithReroll(
             createLoadedChoiceContext(state, attackerId, sourceAbilityId, timestamp, random),
             {
                 diceCount: 1,
@@ -126,19 +110,14 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                 }),
             },
             () => [],
-        ));
-        return events;
+        );
     }
 
     const roll = random.d(6);
     const face = getPlayerDieFace(state, attackerId, roll) ?? '';
     const bonusDamage = Math.ceil(roll / 2);
 
-    const events: DiceThroneEvent[] = [];
-    if (clearLoadedBoostEvent) {
-        events.push(clearLoadedBoostEvent);
-    }
-    events.push(
+    return [
         {
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -174,28 +153,7 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 2,
         } as BonusDamageAddedEvent,
-    );
-    return events;
-}
-
-function handleBountyReward({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const newValue = Math.min(currentCp + 1, CP_MAX);
-    if (newValue === currentCp) {
-        return [];
-    }
-
-    return [{
-        type: 'CP_CHANGED',
-        payload: {
-            playerId: attackerId,
-            delta: 1,
-            newValue,
-            sourceAbilityId,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as CpChangedEvent];
+    ];
 }
 
 function handleShowdownBonus({ attackerId, sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
@@ -470,6 +428,34 @@ function createBountyEvent(
     } as DiceThroneEvent;
 }
 
+function createBountyAttackRewardEvent(
+    state: CustomActionContext['state'],
+    targetId: string,
+    sourceAbilityId: string,
+    timestamp: number,
+): CpChangedEvent | null {
+    const pendingAttack = state.pendingAttack;
+    if (!pendingAttack || pendingAttack.attackerId === targetId) {
+        return null;
+    }
+
+    const currentCp = state.players[pendingAttack.attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
+    const newValue = Math.min(currentCp + 1, CP_MAX);
+    if (newValue === currentCp) return null;
+
+    return {
+        type: 'CP_CHANGED',
+        payload: {
+            playerId: pendingAttack.attackerId,
+            delta: 1,
+            newValue,
+            sourceAbilityId,
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    };
+}
+
 function createSingleOpponentInteraction(
     state: CustomActionContext['state'],
     attackerId: string,
@@ -607,7 +593,11 @@ function handleMarkTheTarget(ctx: CustomActionContext): DiceThroneEvent[] {
 }
 
 function handleMarkTheTargetResolve({ targetId, state, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    return [createBountyEvent(state, targetId, sourceAbilityId, timestamp)];
+    const rewardEvent = createBountyAttackRewardEvent(state, targetId, sourceAbilityId, timestamp + 0.01);
+    return [
+        createBountyEvent(state, targetId, sourceAbilityId, timestamp),
+        ...(rewardEvent ? [rewardEvent] : []),
+    ];
 }
 
 function handleWanted(ctx: CustomActionContext): DiceThroneEvent[] {
@@ -792,9 +782,6 @@ export function registerGunslingerCustomActions(): void {
     registerCustomActionHandler('gunslinger-loaded-use', handleLoadedUse, {
         categories: ['token', 'dice'],
     });
-    registerCustomActionHandler('gunslinger-bounty-reward', handleBountyReward, {
-        categories: ['token', 'resource', 'passive'],
-    });
     registerCustomActionHandler('gunslinger-showdown-bonus', handleShowdownBonus, {
         categories: ['dice'],
     });
@@ -821,7 +808,7 @@ export function registerGunslingerCustomActions(): void {
         requiresInteraction: true,
     });
     registerCustomActionHandler('gunslinger-card-mark-the-target-resolve', handleMarkTheTargetResolve, {
-        categories: ['card', 'token'],
+        categories: ['card', 'token', 'resource'],
     });
     registerCustomActionHandler('gunslinger-card-wanted', handleWanted, {
         categories: ['card', 'token'],

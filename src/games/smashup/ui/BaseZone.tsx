@@ -1510,9 +1510,8 @@ const MinionCard: React.FC<{
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
     const bottomOverlayDefId = getMinionBottomOverlayDefId(minion);
-    // 选择态每张只额外露出半张卡高：
-    // 比常态更容易辨认候选，但不会像完整展开那样把整列拉得过高。
-    const selectionStackOffset = Number((-(layout.minionCardWidth / CARD_ASPECT_RATIO) * 0.5).toFixed(4));
+    // 选择态仍允许重叠，但每张候选至少露出大部分卡面，确保列中多个候选都能被真实点击。
+    const selectionStackOffset = Number((-(layout.minionCardWidth / CARD_ASPECT_RATIO) * 0.2).toFixed(4));
     const stackStyle = {
         marginTop: index === 0 ? 0 : layoutInlineSize(isMinionSelectMode ? selectionStackOffset : layout.minionStackOffset, layout),
         zIndex: isMinionSelectMode ? 100 + index : index + 1,

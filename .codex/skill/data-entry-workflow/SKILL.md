@@ -9,6 +9,7 @@ description: "BoardGame 数据录入与核对流程。用于图片、规则书�
 
 - 用户要求“录入数据”“根据图片补卡牌/技能/Token”“核对图片和代码”“整理真相源”“补 atlas 索引”“根据规则书/PDF/Wiki 更新文案或静态数据”时使用。
 - 这不是实现 skill；它先收紧数据录入纪律，再把任务路由到对应游戏的 workflow。
+- 当任务明确是“配置表 / 配置审查 / 字段核对 / 配置重录 / 配置修正提案”时，先使用全局 `D:\codex-home\skills\config-review-workflow\SKILL.md`；本 skill 只补图片、规则源、裁图和录入合同，不复制配置表工作流正文。
 
 ## 先读
 

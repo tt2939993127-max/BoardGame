@@ -384,6 +384,7 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             isUltimate,
             damageResolved: false,
             resolvedDamage: 0,
+            statusEffectsAppliedThisAttack: {},
             attackDiceFaceCounts: attackFaceCounts,
             attackDiceValues,
             bonusDamage: queuedAttackModifierBonusDamage,

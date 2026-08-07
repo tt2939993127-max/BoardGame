@@ -20,12 +20,14 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SERVER_PUBLISH_MANIFEST_FILE } from './publish-primary-assets.mjs';
 import { resolveActiveAssetSet } from './active-server-assets.mjs';
+import { selectRetainedReleaseIds } from './release-retention.mjs';
 
 const MANAGED_PUBLISH_PREFIXES = [
     'official/app-updates/',
     'official/mobile-packages/',
     'official/native-app-updates/',
 ];
+const RELEASE_RETENTION_COUNT = 5;
 
 const args = process.argv.slice(2);
 const readArg = (name) => {
@@ -183,6 +185,24 @@ const nextLink = path.join(assetsRoot, `.current-${releaseId}-${process.pid}`);
 symlinkSync(releaseDir, nextLink, 'dir');
 renameSync(nextLink, currentLink);
 
+const releaseIds = readdirSync(releasesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d{17}$/.test(entry.name))
+    .map((entry) => entry.name);
+const currentReleaseId = path.basename(realpathSync(currentLink));
+const retainedReleaseIds = selectRetainedReleaseIds(
+    releaseIds,
+    currentReleaseId,
+    RELEASE_RETENTION_COUNT,
+);
+const deletedReleaseIds = [];
+for (const oldReleaseId of releaseIds) {
+    if (retainedReleaseIds.has(oldReleaseId)) continue;
+    const oldReleaseDir = resolveWithin(releasesRoot, oldReleaseId);
+    rmSync(oldReleaseDir, { recursive: true, force: true });
+    deletedReleaseIds.push(oldReleaseId);
+}
+
 console.log(`serverPrimaryRelease=${releaseId}`);
 console.log(`serverPrimaryObjects=${manifest.objects.length}`);
+console.log(`serverPrimaryReleaseRetention=retained=${retainedReleaseIds.size} deleted=${deletedReleaseIds.length}`);
 console.log('assetBackupQueue=disabled');

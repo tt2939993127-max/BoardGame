@@ -105,6 +105,7 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
         category: 'debuff',
         passiveTrigger: {
             timing: 'onDamageReceived',
+            damageTriggerScope: 'opponentAttackDamage',
             removable: true,
             actions: [
                 { type: 'modifyStat', target: 'self', value: 2 },

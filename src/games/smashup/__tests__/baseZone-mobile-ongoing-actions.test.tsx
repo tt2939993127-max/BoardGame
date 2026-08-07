@@ -442,8 +442,8 @@ describe('BaseZone 移动端 ongoing 交互', () => {
         const thirdMinion = document.querySelector('[data-minion-uid="m3"]') as HTMLElement | null;
         expect(secondMinion).not.toBeNull();
         expect(thirdMinion).not.toBeNull();
-        expect(secondMinion?.style.marginTop).toBe('-3.8515vw');
-        expect(thirdMinion?.style.marginTop).toBe('-3.8515vw');
+        expect(secondMinion?.style.marginTop).toBe('-1.5406vw');
+        expect(thirdMinion?.style.marginTop).toBe('-1.5406vw');
         expect(secondMinion?.className).not.toContain('cursor-not-allowed');
         expect(thirdMinion?.className).not.toContain('cursor-not-allowed');
 

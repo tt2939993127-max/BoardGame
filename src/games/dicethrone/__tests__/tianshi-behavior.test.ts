@@ -150,6 +150,106 @@ describe('炽天使领域行为', () => {
         expect(finalCore.pendingAttack?.dazzleDamagePercent).toBe(expectedPercent);
     });
 
+    it('致盲与眩光同时存在时先由攻击者选择判定顺序', () => {
+        const state = createTianshiState();
+        state.sys.phase = 'offensiveRoll';
+        state.core.players['0'].statusEffects[STATUS_IDS.BLINDED] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.DAZZLE] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'holy-blade-3',
+            isDefendable: false,
+            damage: 8,
+            preDefenseResolved: true,
+        };
+
+        const hookResult = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: createQueuedRandom([4, 4]),
+            exitEvents: [],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const events = Array.isArray(hookResult) ? hookResult : (hookResult?.events ?? []);
+        const choice = events.find((event): event is Extract<DiceThroneEvent, { type: 'CHOICE_REQUESTED' }> => (
+            event.type === 'CHOICE_REQUESTED'
+        ));
+
+        expect(choice?.payload.titleKey).toBe('choices.statusCheckOrder.title');
+        expect(choice?.payload.options.map(option => option.customId)).toEqual([
+            'status-check-order-dazzle-first',
+            'status-check-order-blinded-first',
+        ]);
+        expect(events.some(event => event.type === 'BONUS_DIE_ROLLED')).toBe(false);
+
+        const afterChoiceRequested = applyEvents(state.core, events as DiceThroneEvent[]);
+        const afterChoice = reduce(afterChoiceRequested, {
+            type: 'CHOICE_RESOLVED',
+            payload: {
+                playerId: '0',
+                customId: 'status-check-order-dazzle-first',
+                sourceAbilityId: 'holy-blade-3',
+                value: 1,
+            },
+            sourceCommandType: 'RESOLVE_CHOICE',
+            timestamp: 101,
+        } as DiceThroneEvent);
+        expect(afterChoice.pendingAttack?.statusCheckOrder).toBe('dazzleFirst');
+    });
+
+    it.each([
+        {
+            label: '眩光先',
+            order: 'dazzleFirst' as const,
+            resolvedPatch: { dazzleCheckResolved: true, dazzleCheckMissed: false, dazzleDamagePercent: 0 },
+            expectedEffectKey: 'bonusDie.effect.blinded.hit',
+            expectedStatusId: STATUS_IDS.BLINDED,
+        },
+        {
+            label: '致盲先',
+            order: 'blindedFirst' as const,
+            resolvedPatch: { blindedCheckResolved: true, blindedCheckMissed: false },
+            expectedEffectKey: 'bonusDie.effect.tianshi.dazzle',
+            expectedStatusId: STATUS_IDS.DAZZLE,
+        },
+    ])('$label 判定成功后继续结算另一个状态', ({ order, resolvedPatch, expectedEffectKey, expectedStatusId }) => {
+        const state = createTianshiState();
+        state.sys.phase = 'offensiveRoll';
+        state.core.players['0'].statusEffects[STATUS_IDS.BLINDED] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.DAZZLE] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'holy-blade-3',
+            isDefendable: false,
+            damage: 8,
+            preDefenseResolved: true,
+            statusCheckOrder: order,
+            ...resolvedPatch,
+        };
+
+        const hookResult = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: createQueuedRandom([4]),
+            exitEvents: [],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const events = Array.isArray(hookResult) ? hookResult : (hookResult?.events ?? []);
+
+        expect(events).toContainEqual(expect.objectContaining({
+            type: 'BONUS_DIE_ROLLED',
+            payload: expect.objectContaining({ effectKey: expectedEffectKey }),
+        }));
+        expect(events).toContainEqual(expect.objectContaining({
+            type: 'STATUS_REMOVED',
+            payload: expect.objectContaining({ statusId: expectedStatusId, stacks: 1 }),
+        }));
+    });
+
     it.each([
         { label: '攻击无效', dazzleCheckMissed: true, dazzleDamagePercent: 0, amount: undefined },
         { label: '伤害减半并向上取整', dazzleCheckMissed: false, dazzleDamagePercent: -50, amount: 3 },

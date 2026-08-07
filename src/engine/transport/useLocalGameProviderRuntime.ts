@@ -106,6 +106,7 @@ export function useLocalGameProviderRuntime(args: {
         localPregameControlledPlayerId,
         followCurrentTurnPlayer: args.followCurrentTurnPlayer,
         localPlayerId: args.localPlayerId,
+        resolveLocalRuntimeControlledPlayerId: args.config.resolveLocalRuntimeControlledPlayerId,
     });
 
     useLocalProviderDebugEffects({

@@ -9,6 +9,7 @@ import type { DiceThroneCore, Die, HeroState, DiceThroneEvent } from '../domain/
 import { getCustomActionHandler } from '../domain/effects';
 import type { CustomActionContext } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
+import { reduce } from '../domain/reducer';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { barbarianDiceDefinition } from '../heroes/barbarian/diceConfig';
 
@@ -236,6 +237,83 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
 
             expect((eventsOfType(events, 'HEAL_APPLIED')[0] as any).payload.amount).toBe(2);
             expect(eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')).toHaveLength(0);
+        });
+
+        it('本次攻击在防御前已施加的状态会被移除，且后续状态仍被护盾拦截', () => {
+            const state = createState({ dice: [1, 2, 3, 4, 5].map(v => createBarbarianDie(v)) });
+            state.tokenDefinitions = [
+                { id: STATUS_IDS.POISON, category: 'debuff' },
+                { id: STATUS_IDS.DAZE, category: 'debuff' },
+            ] as any;
+            const initiated = reduce(state, {
+                type: 'ATTACK_INITIATED',
+                payload: {
+                    attackerId: '0', defenderId: '1', sourceAbilityId: 'test-attack',
+                    isDefendable: true, isUltimate: false,
+                },
+                sourceCommandType: 'TEST', timestamp: 1,
+            } as any);
+            const applied = reduce(initiated, {
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: '1', statusId: STATUS_IDS.POISON, stacks: 1, newTotal: 1,
+                    sourceAbilityId: 'test-attack',
+                },
+                sourceCommandType: 'TEST', timestamp: 2,
+            } as any);
+
+            const handler = getCustomActionHandler('barbarian-thick-skin-2')!;
+            const events = handler(buildCtx(applied, 'barbarian-thick-skin-2'));
+            expect(eventsOfType(events, 'STATUS_REMOVED')[0]?.payload).toMatchObject({
+                targetId: '1', statusId: STATUS_IDS.POISON, stacks: 1,
+            });
+
+            const afterDefense = events.reduce((current, event) => reduce(current, event), applied);
+            expect(afterDefense.players['1'].statusEffects[STATUS_IDS.POISON]).toBe(0);
+            expect(afterDefense.players['1'].damageShields).toEqual([
+                { value: 1, sourceId: 'barbarian-thick-skin-2', preventStatus: true },
+            ]);
+
+            const prevented = reduce(afterDefense, {
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: '1', statusId: STATUS_IDS.DAZE, stacks: 1, newTotal: 1,
+                    sourceAbilityId: 'test-attack',
+                },
+                sourceCommandType: 'TEST', timestamp: 3,
+            } as any);
+            expect(prevented.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
+            expect(prevented.players['1'].damageShields).toEqual([]);
+        });
+
+        it('诅咒金币即使是本次攻击施加，也不会被厚皮 II 移除', () => {
+            const state = createState({ dice: [1, 2, 3, 4, 5].map(v => createBarbarianDie(v)) });
+            state.tokenDefinitions = [{
+                id: STATUS_IDS.CURSED_COIN,
+                category: 'debuff',
+                passiveTrigger: { removable: false },
+            }] as any;
+            const initiated = reduce(state, {
+                type: 'ATTACK_INITIATED',
+                payload: {
+                    attackerId: '0', defenderId: '1', sourceAbilityId: 'test-attack',
+                    isDefendable: true, isUltimate: false,
+                },
+                sourceCommandType: 'TEST', timestamp: 1,
+            } as any);
+            const applied = reduce(initiated, {
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: '1', statusId: STATUS_IDS.CURSED_COIN, stacks: 1, newTotal: 1,
+                    sourceAbilityId: 'test-attack',
+                },
+                sourceCommandType: 'TEST', timestamp: 2,
+            } as any);
+
+            const handler = getCustomActionHandler('barbarian-thick-skin-2')!;
+            const events = handler(buildCtx(applied, 'barbarian-thick-skin-2'));
+            expect(eventsOfType(events, 'STATUS_REMOVED')).toHaveLength(0);
+            expect(eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')).toHaveLength(1);
         });
     });
 

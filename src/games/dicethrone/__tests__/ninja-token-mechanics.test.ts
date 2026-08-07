@@ -3,11 +3,11 @@ import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../doma
 import { execute } from '../domain/execute';
 import { reduce } from '../domain/reducer';
 import { diceThroneFlowHooks } from '../domain/flowHooks';
-import { resolvePostDamageEffects } from '../domain/attack';
-import { resolveEffectsToEvents } from '../domain/effects';
+import { resolveAttack, resolvePostDamageEffects } from '../domain/attack';
+import { getCustomActionHandler, resolveEffectsToEvents } from '../domain/effects';
 import { RESOURCE_IDS } from '../domain/resources';
-import { TOKEN_IDS } from '../domain/ids';
-import { DEATH_BLOSSOM_2, SLASH_2 } from '../heroes/ninja/abilities';
+import { NINJA_DICE_FACE_IDS, TOKEN_IDS } from '../domain/ids';
+import { BLINK_2, DEATH_BLOSSOM_2, SLASH_2 } from '../heroes/ninja/abilities';
 import {
     createHeroMatchup,
     createQueuedRandom,
@@ -51,6 +51,123 @@ const injectNinjutsuOffensiveRollEndPrompt = (state: ReturnType<ReturnType<typeo
 };
 
 describe('DiceThrone Ninja Token 机制', () => {
+    it('已有烟雾弹时，瞬身 II 的第二个烟雾弹应延迟到旧烟雾弹使用后获得', () => {
+        const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
+        state.core.players['0'].tokens[TOKEN_IDS.SMOKE_BOMB] = 1;
+        state.core.pendingAttack = {
+            attackerId: '1',
+            defenderId: '0',
+            sourceAbilityId: 'shattering-fist-3',
+            defenseAbilityId: 'blink-2',
+            isDefendable: true,
+            damage: 5,
+        };
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            value: index < 2 ? 6 : 1,
+            symbol: index < 2 ? NINJA_DICE_FACE_IDS.MASK : NINJA_DICE_FACE_IDS.KATANA,
+            isKept: false,
+        }));
+        state.core.rollDiceCount = 3;
+
+        const handler = getCustomActionHandler('ninja-blink-2');
+        expect(handler).toBeDefined();
+        if (!handler) return;
+
+        const events = handler({
+            ctx: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'blink-2',
+                state: state.core,
+                damageDealt: 0,
+                timestamp: 100,
+                isDefensiveContext: true,
+            },
+            targetId: '0',
+            attackerId: '0',
+            sourceAbilityId: 'blink-2',
+            state: state.core,
+            timestamp: 100,
+            random: createQueuedRandom([1]),
+            action: { type: 'custom', target: 'self', customActionId: 'ninja-blink-2' },
+        });
+
+        expect(events.some(event => event.type === 'TOKEN_GRANTED' && event.payload.tokenId === TOKEN_IDS.SMOKE_BOMB)).toBe(false);
+        expect(events).toContainEqual(expect.objectContaining({
+            type: 'PENDING_ATTACK_UPDATED',
+            payload: expect.objectContaining({
+                patch: expect.objectContaining({
+                    deferredTokenGrants: [expect.objectContaining({
+                        triggerTokenId: TOKEN_IDS.SMOKE_BOMB,
+                        targetId: '0',
+                        tokenId: TOKEN_IDS.SMOKE_BOMB,
+                        amount: 1,
+                    })],
+                }),
+            }),
+        }));
+    });
+
+    it('瞬身 II 的延迟烟雾弹会在伤害响应中使用旧烟雾弹后补回 1 个', () => {
+        const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
+        state.core.players['0'].tokens[TOKEN_IDS.SMOKE_BOMB] = 1;
+        state.core.players['0'].abilities = [BLINK_2];
+        state.core.players['1'].abilities = [{
+            id: 'test-attack',
+            name: 'test-attack',
+            type: 'offensive',
+            effects: [{
+                timing: 'withDamage',
+                action: { type: 'damage', target: 'opponent', value: 5 },
+            }],
+        }] as any;
+        state.core.pendingAttack = {
+            attackerId: '1',
+            defenderId: '0',
+            sourceAbilityId: 'test-attack',
+            defenseAbilityId: 'blink',
+            isDefendable: true,
+            preDefenseResolved: true,
+            damage: 5,
+        };
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            value: index < 2 ? 6 : 1,
+            symbol: index < 2 ? NINJA_DICE_FACE_IDS.MASK : NINJA_DICE_FACE_IDS.KATANA,
+            isKept: false,
+        }));
+        state.core.rollDiceCount = 3;
+
+        const attackEvents = resolveAttack(state.core, createQueuedRandom([1]), undefined, 100);
+        const afterAttack = applyEvents(state.core, attackEvents);
+        expect(afterAttack.pendingDamage?.deferredTokenGrants).toEqual([
+            expect.objectContaining({
+                triggerTokenId: TOKEN_IDS.SMOKE_BOMB,
+                targetId: '0',
+                tokenId: TOKEN_IDS.SMOKE_BOMB,
+                amount: 1,
+            }),
+        ]);
+
+        const useSmokeEvents = execute(
+            { core: afterAttack, sys: { phase: 'defensiveRoll' } },
+            command('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SMOKE_BOMB, amount: 1 }),
+            createQueuedRandom([2]),
+        );
+        expect(useSmokeEvents).toContainEqual(expect.objectContaining({
+            type: 'TOKEN_GRANTED',
+            payload: expect.objectContaining({
+                targetId: '0',
+                tokenId: TOKEN_IDS.SMOKE_BOMB,
+                amount: 1,
+                newTotal: 1,
+            }),
+        }));
+        const afterUse = applyEvents(afterAttack, useSmokeEvents);
+        expect(afterUse.players['0'].tokens[TOKEN_IDS.SMOKE_BOMB]).toBe(1);
+    });
+
     it('烟雾弹改为掷骰 1-3 避免本次伤害，而不是固定减伤', () => {
         const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
         state.core.players['0'].tokens[TOKEN_IDS.SMOKE_BOMB] = 1;
@@ -167,6 +284,35 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(resolveResult.state.core.pendingDamage).toBeUndefined();
         expect(resolveResult.state.core.pendingAttack?.settlementStage).toBe('preDamage');
         expect(resolveResult.state.core.pendingAttack?.isDefendable).toBe(true);
+    });
+
+    it('忍术掷出 6 后可以单独选择 +2 伤害，不附加慢性中毒或不可防御', () => {
+        const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
+        state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'slash',
+            isDefendable: true,
+            damage: 6,
+        };
+        injectNinjutsuOffensiveRollEndPrompt(state);
+
+        const useResult = respondToPrompt(state, 'option-0', '0', createQueuedRandom([6]), ['0', '1']);
+        expect(useResult.success).toBe(true);
+        if (!useResult.success) return;
+
+        const followupPrompt = getSimpleChoicePrompt(useResult.state, 'slash');
+        const bonusOption = followupPrompt.options.find(option => option.value?.customId === 'ninja-ninjutsu-bonus-damage');
+        expect(bonusOption).toBeTruthy();
+
+        const resolveResult = respondToPrompt(useResult.state, bonusOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
+        expect(resolveResult.success).toBe(true);
+        if (!resolveResult.success) return;
+
+        expect(resolveResult.state.core.pendingAttack?.bonusDamage).toBe(2);
+        expect(resolveResult.state.core.pendingAttack?.isDefendable).toBe(true);
+        expect(resolveResult.state.core.players['1'].tokens[TOKEN_IDS.DELAYED_POISON] ?? 0).toBe(0);
     });
 
     it('忍术掷出 6 后选择不可防御分支，应跳过防御并直接按加成后的伤害结算', () => {

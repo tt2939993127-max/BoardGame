@@ -19206,7 +19206,7 @@ function reduceEvent(state: BetrayalCore, event: BetrayalEvent): BetrayalCore {
             core.pendingEventChoice = null;
             core.pendingCardResolutionQueue = createPendingCardResolutionQueue({
                 playerId: event.payload.playerId,
-                requiredPlayerIds: core.playerIds,
+                requiredPlayerIds: [event.payload.playerId],
                 roomId: event.payload.roomId,
                 timestamp: event.timestamp,
                 deckKind: event.payload.deckKind,
@@ -19571,7 +19571,7 @@ function reduceEvent(state: BetrayalCore, event: BetrayalEvent): BetrayalCore {
                 ? []
                 : createPendingCardResolutionQueue({
                     playerId: event.payload.playerId,
-                    requiredPlayerIds: core.playerIds,
+                    requiredPlayerIds: [event.payload.playerId],
                     roomId: core.currentExplorer.roomId,
                     timestamp: event.timestamp,
                     deckKind: 'event',

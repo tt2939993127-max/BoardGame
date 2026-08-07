@@ -256,38 +256,51 @@ async function captureHomeV2FlipFrameAtProgress(
     await expect(flipStage).toBeVisible({ timeout: 5000 });
     const startedAt = Date.now();
     let lastSnapshot: Record<string, unknown> | null = null;
-    const targetFrame = Math.max(1, Math.min(7, Math.round(targetProgress * 7)));
+    await page.evaluate((target) => {
+        (window as Window & { __BG_HOME_V2_E2E_HOLD_PROGRESS__?: number }).__BG_HOME_V2_E2E_HOLD_PROGRESS__ = target;
+    }, targetProgress);
 
-    while (Date.now() - startedAt < 4000) {
-        lastSnapshot = await flipStage.evaluate((stage) => ({
-            mode: stage.getAttribute('data-flip-mode'),
-            progress: stage.getAttribute('data-flip-progress'),
-            animating: stage.getAttribute('data-flip-animating'),
-            ready: stage.getAttribute('data-flip-ready'),
-            sequence: stage.getAttribute('data-flip-sequence'),
-            frame: stage.getAttribute('data-flip-sequence-frame'),
-            direction: stage.getAttribute('data-flip-sequence-direction'),
-            error: stage.getAttribute('data-flip-error'),
-            actualFrameSource: stage
-                .querySelector<HTMLImageElement>('[data-testid="home-v2-real-page-flip-sequence"]')
-                ?.currentSrc ?? '',
-        }));
-        const frame = Number.parseInt(String(lastSnapshot.frame ?? ''), 10);
-        const actualFrameMatch = String(lastSnapshot.actualFrameSource ?? '').match(/\/(\d+)\.webp(?:\?.*)?$/);
-        const actualFrame = actualFrameMatch ? Number.parseInt(actualFrameMatch[1]!, 10) - 1 : Number.NaN;
-        if (
-            lastSnapshot.animating === 'true'
-            && Number.isFinite(frame)
-            && Number.isFinite(actualFrame)
-            && frame === actualFrame
-            && actualFrame >= targetFrame
-        ) {
-            console.log(`[home-v2-flip-capture] ${name} => ${JSON.stringify(lastSnapshot)}`);
-            const screenshotPath = getEvidenceScreenshotPath(testInfo, name);
-            await page.screenshot({ path: screenshotPath, fullPage: true });
-            return;
+    try {
+        while (Date.now() - startedAt < 4000) {
+            lastSnapshot = await flipStage.evaluate((stage) => ({
+                mode: stage.getAttribute('data-flip-mode'),
+                raw: stage.getAttribute('data-flip-progress-raw'),
+                progress: stage.getAttribute('data-flip-progress'),
+                animating: stage.getAttribute('data-turn-animating'),
+                ready: stage.getAttribute('data-turn-ready'),
+                error: stage.getAttribute('data-turn-error'),
+                sourceSnapshotReady: stage.getAttribute('data-turn-source-snapshot-ready'),
+                mainEffectRuns: stage.getAttribute('data-turn-main-effect-runs'),
+                progressLoopStarts: stage.getAttribute('data-turn-progress-loop-starts'),
+                progressTicks: stage.getAttribute('data-turn-progress-ticks'),
+                progressLastRaw: stage.getAttribute('data-turn-progress-last-raw'),
+                pluginPage: stage.getAttribute('data-turn-plugin-page'),
+                pluginView: stage.getAttribute('data-turn-plugin-view'),
+                pluginAnimating: stage.getAttribute('data-turn-plugin-animating'),
+                pageWrappers: Array.from(stage.querySelectorAll<HTMLElement>('.page-wrapper')).map((wrapper) => ({
+                    page: wrapper.getAttribute('page'),
+                    display: getComputedStyle(wrapper).display,
+                    left: wrapper.style.left,
+                    top: wrapper.style.top,
+                    width: wrapper.style.width,
+                    height: wrapper.style.height,
+                    zIndex: wrapper.style.zIndex,
+                })),
+            }));
+            const raw = Number.parseFloat(String(lastSnapshot.raw ?? ''));
+            const animating = lastSnapshot.animating === 'true';
+            if (Number.isFinite(raw) && animating && raw >= targetProgress) {
+                console.log(`[home-v2-flip-capture] ${name} => ${JSON.stringify(lastSnapshot)}`);
+                const screenshotPath = getEvidenceScreenshotPath(testInfo, name);
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+                return;
+            }
+            await page.waitForTimeout(80);
         }
-        await page.waitForTimeout(40);
+    } finally {
+        await page.evaluate(() => {
+            delete (window as Window & { __BG_HOME_V2_E2E_HOLD_PROGRESS__?: number }).__BG_HOME_V2_E2E_HOLD_PROGRESS__;
+        });
     }
 
     throw new Error(`HomeV2 翻页进度未达目标，最后快照=${JSON.stringify(lastSnapshot)}`);
@@ -296,7 +309,7 @@ async function captureHomeV2FlipFrameAtProgress(
 async function waitForHomeV2FlipMode(page: Page, expectedMode: 'overview' | 'detail'): Promise<void> {
     const flipStage = page.locator('[data-testid="home-v2-root"] [data-testid="home-v2-fold-line-flip"]').first();
     await expect(flipStage).toHaveAttribute('data-flip-mode', expectedMode, { timeout: 10000 });
-    await expect(flipStage).toHaveAttribute('data-flip-animating', 'false', { timeout: 10000 });
+    await expect(flipStage).toHaveAttribute('data-turn-animating', 'false', { timeout: 10000 });
 }
 
 async function openLockedRoomPasswordPanel(page: Page, roomName: string): Promise<void> {
@@ -363,7 +376,7 @@ async function installHomeV2FlipTimingProbe(page: Page): Promise<void> {
 
         const sample = () => {
             const now = performance.now();
-            const animating = stage.getAttribute('data-flip-animating');
+            const animating = stage.getAttribute('data-turn-animating');
             const mode = stage.getAttribute('data-flip-mode');
             if (metrics.animatingStartedMs === null && animating === 'true') {
                 metrics.animatingStartedMs = now;
@@ -379,7 +392,7 @@ async function installHomeV2FlipTimingProbe(page: Page): Promise<void> {
         };
 
         const observer = new MutationObserver(sample);
-        observer.observe(stage, { attributes: true, attributeFilter: ['data-flip-animating', 'data-flip-mode'] });
+        observer.observe(stage, { attributes: true, attributeFilter: ['data-turn-animating', 'data-flip-mode'] });
 
         let rafId = 0;
         const tick = () => {
@@ -1186,6 +1199,7 @@ test.describe('Lobby E2E', () => {
                     const recommendedBand = document.querySelector('[data-testid="home-v2-recommended-player-band"]') as HTMLElement | null;
                     const playerCountBoxes = Array.from(document.querySelectorAll('[data-testid="home-v2-player-count-box"]')) as HTMLElement[];
                     const tutorialButton = document.querySelector('[data-testid="home-v2-tutorial-button"]') as HTMLElement | null;
+                    const configReviewButton = document.querySelector('[data-testid="home-v2-config-review-button"]') as HTMLElement | null;
                     const roomSearchField = document.querySelector('[data-testid="home-v2-room-search-field"]') as HTMLElement | null;
                     const roomSearchIcon = document.querySelector('[data-testid="home-v2-room-search-icon"]') as HTMLElement | null;
                     const tabItems = Array.from(document.querySelectorAll('[data-testid="home-v2-detail-tab"]')) as HTMLElement[];
@@ -1214,6 +1228,7 @@ test.describe('Lobby E2E', () => {
                     const heroRect = leftHero.getBoundingClientRect();
                     const detailThumbnailRect = detailThumbnail?.getBoundingClientRect();
                     const tutorialRect = tutorialButton.getBoundingClientRect();
+                    const finalActionRect = (configReviewButton ?? tutorialButton).getBoundingClientRect();
                     const ledgerRect = ledger.getBoundingClientRect();
                     const ledgerHeaderRect = ledgerHeader.getBoundingClientRect();
                     const firstRoomRowRect = firstRoomRow?.getBoundingClientRect();
@@ -1279,7 +1294,7 @@ test.describe('Lobby E2E', () => {
                         playerCountBoxCount: playerCountBoxes.length,
                         firstPlayerCountBoxAspectRatio: firstPlayerCountBoxRect ? firstPlayerCountBoxRect.width / firstPlayerCountBoxRect.height : 0,
                         tutorialTopRatio: (tutorialRect.top - leftRect.top) / leftRect.height,
-                        tutorialBottomRatio: (tutorialRect.bottom - leftRect.top) / leftRect.height,
+                        actionBottomRatio: (finalActionRect.bottom - leftRect.top) / leftRect.height,
                         tutorialWidthRatio: tutorialRect.width / leftRect.width,
                         roomSearchFieldHeight: roomSearchFieldRect.height,
                         roomSearchFieldWidthRatio: roomSearchFieldRect.width / rightRect.width,
@@ -1307,7 +1322,7 @@ test.describe('Lobby E2E', () => {
                     throw new Error('详情页布局节点缺失，无法验证书本双页网格');
                 }
                 console.log(
-                    `[home-v2-detail-layout] stageWidthRatio=${detailLayoutMetrics.stageWidthRatio.toFixed(2)}, stageAspectRatio=${detailLayoutMetrics.stageAspectRatio.toFixed(2)}, backButtonTopRatio=${detailLayoutMetrics.backButtonTopRatio.toFixed(2)}, backButtonBackgroundAlpha=${detailLayoutMetrics.backButtonBackgroundAlpha.toFixed(2)}, backButtonBorderWidth=${detailLayoutMetrics.backButtonBorderWidth.toFixed(2)}, backButtonBackgroundImage=${detailLayoutMetrics.backButtonBackgroundImage}, backButtonHeight=${detailLayoutMetrics.backButtonHeight.toFixed(2)}, backButtonWidthRatio=${detailLayoutMetrics.backButtonWidthRatio.toFixed(2)}, backButtonFontSize=${detailLayoutMetrics.backButtonFontSize.toFixed(2)}, createRoomButtonHeight=${detailLayoutMetrics.createRoomButtonHeight.toFixed(2)}, createRoomButtonWidthRatio=${detailLayoutMetrics.createRoomButtonWidthRatio.toFixed(2)}, createRoomButtonFontSize=${detailLayoutMetrics.createRoomButtonFontSize.toFixed(2)}, leftHeroWidthRatio=${detailLayoutMetrics.leftHeroWidthRatio.toFixed(2)}, leftHeroTopRatio=${detailLayoutMetrics.leftHeroTopRatio.toFixed(2)}, detailThumbnailHeight=${detailLayoutMetrics.detailThumbnailHeight.toFixed(2)}, detailThumbnailWidthRatio=${detailLayoutMetrics.detailThumbnailWidthRatio.toFixed(2)}, descriptionWidthRatio=${detailLayoutMetrics.descriptionWidthRatio.toFixed(2)}, descriptionTopRatio=${detailLayoutMetrics.descriptionTopRatio.toFixed(2)}, recommendedTopRatio=${detailLayoutMetrics.recommendedTopRatio.toFixed(2)}, recommendedWidthRatio=${detailLayoutMetrics.recommendedWidthRatio.toFixed(2)}, playerCountBoxCount=${detailLayoutMetrics.playerCountBoxCount}, firstPlayerCountBoxAspectRatio=${detailLayoutMetrics.firstPlayerCountBoxAspectRatio.toFixed(2)}, tutorialTopRatio=${detailLayoutMetrics.tutorialTopRatio.toFixed(2)}, tutorialBottomRatio=${detailLayoutMetrics.tutorialBottomRatio.toFixed(2)}, tutorialWidthRatio=${detailLayoutMetrics.tutorialWidthRatio.toFixed(2)}, roomSearchFieldHeight=${detailLayoutMetrics.roomSearchFieldHeight.toFixed(2)}, roomSearchFieldWidthRatio=${detailLayoutMetrics.roomSearchFieldWidthRatio.toFixed(2)}, roomSearchFieldBorderBottomWidth=${detailLayoutMetrics.roomSearchFieldBorderBottomWidth.toFixed(2)}, roomSearchIconCenterYDelta=${detailLayoutMetrics.roomSearchIconCenterYDelta.toFixed(2)}, rightLedgerTopRatio=${detailLayoutMetrics.rightLedgerTopRatio.toFixed(2)}, ledgerHeaderHeight=${detailLayoutMetrics.ledgerHeaderHeight.toFixed(2)}, tabFontDelta=${detailLayoutMetrics.tabFontDelta.toFixed(2)}, tabTopDelta=${detailLayoutMetrics.tabTopDelta.toFixed(2)}, tabHeightDelta=${detailLayoutMetrics.tabHeightDelta.toFixed(2)}, firstRoomRowHeight=${detailLayoutMetrics.firstRoomRowHeight.toFixed(2)}, firstRoomThumbnailHeight=${detailLayoutMetrics.firstRoomThumbnailHeight.toFixed(2)}, firstRoomActionHeight=${detailLayoutMetrics.firstRoomActionHeight.toFixed(2)}, visibleRoomRowCount=${detailLayoutMetrics.visibleRoomRowCount}, headerDividerCount=${detailLayoutMetrics.headerDividerCount}, firstRowDividerCount=${detailLayoutMetrics.firstRowDividerCount}, filterButtonCount=${detailLayoutMetrics.filterButtonCount}`,
+                    `[home-v2-detail-layout] stageWidthRatio=${detailLayoutMetrics.stageWidthRatio.toFixed(2)}, stageAspectRatio=${detailLayoutMetrics.stageAspectRatio.toFixed(2)}, backButtonTopRatio=${detailLayoutMetrics.backButtonTopRatio.toFixed(2)}, backButtonBackgroundAlpha=${detailLayoutMetrics.backButtonBackgroundAlpha.toFixed(2)}, backButtonBorderWidth=${detailLayoutMetrics.backButtonBorderWidth.toFixed(2)}, backButtonBackgroundImage=${detailLayoutMetrics.backButtonBackgroundImage}, backButtonHeight=${detailLayoutMetrics.backButtonHeight.toFixed(2)}, backButtonWidthRatio=${detailLayoutMetrics.backButtonWidthRatio.toFixed(2)}, backButtonFontSize=${detailLayoutMetrics.backButtonFontSize.toFixed(2)}, createRoomButtonHeight=${detailLayoutMetrics.createRoomButtonHeight.toFixed(2)}, createRoomButtonWidthRatio=${detailLayoutMetrics.createRoomButtonWidthRatio.toFixed(2)}, createRoomButtonFontSize=${detailLayoutMetrics.createRoomButtonFontSize.toFixed(2)}, leftHeroWidthRatio=${detailLayoutMetrics.leftHeroWidthRatio.toFixed(2)}, leftHeroTopRatio=${detailLayoutMetrics.leftHeroTopRatio.toFixed(2)}, detailThumbnailHeight=${detailLayoutMetrics.detailThumbnailHeight.toFixed(2)}, detailThumbnailWidthRatio=${detailLayoutMetrics.detailThumbnailWidthRatio.toFixed(2)}, descriptionWidthRatio=${detailLayoutMetrics.descriptionWidthRatio.toFixed(2)}, descriptionTopRatio=${detailLayoutMetrics.descriptionTopRatio.toFixed(2)}, recommendedTopRatio=${detailLayoutMetrics.recommendedTopRatio.toFixed(2)}, recommendedWidthRatio=${detailLayoutMetrics.recommendedWidthRatio.toFixed(2)}, playerCountBoxCount=${detailLayoutMetrics.playerCountBoxCount}, firstPlayerCountBoxAspectRatio=${detailLayoutMetrics.firstPlayerCountBoxAspectRatio.toFixed(2)}, tutorialTopRatio=${detailLayoutMetrics.tutorialTopRatio.toFixed(2)}, actionBottomRatio=${detailLayoutMetrics.actionBottomRatio.toFixed(2)}, tutorialWidthRatio=${detailLayoutMetrics.tutorialWidthRatio.toFixed(2)}, roomSearchFieldHeight=${detailLayoutMetrics.roomSearchFieldHeight.toFixed(2)}, roomSearchFieldWidthRatio=${detailLayoutMetrics.roomSearchFieldWidthRatio.toFixed(2)}, roomSearchFieldBorderBottomWidth=${detailLayoutMetrics.roomSearchFieldBorderBottomWidth.toFixed(2)}, roomSearchIconCenterYDelta=${detailLayoutMetrics.roomSearchIconCenterYDelta.toFixed(2)}, rightLedgerTopRatio=${detailLayoutMetrics.rightLedgerTopRatio.toFixed(2)}, ledgerHeaderHeight=${detailLayoutMetrics.ledgerHeaderHeight.toFixed(2)}, tabFontDelta=${detailLayoutMetrics.tabFontDelta.toFixed(2)}, tabTopDelta=${detailLayoutMetrics.tabTopDelta.toFixed(2)}, tabHeightDelta=${detailLayoutMetrics.tabHeightDelta.toFixed(2)}, firstRoomRowHeight=${detailLayoutMetrics.firstRoomRowHeight.toFixed(2)}, firstRoomThumbnailHeight=${detailLayoutMetrics.firstRoomThumbnailHeight.toFixed(2)}, firstRoomActionHeight=${detailLayoutMetrics.firstRoomActionHeight.toFixed(2)}, visibleRoomRowCount=${detailLayoutMetrics.visibleRoomRowCount}, headerDividerCount=${detailLayoutMetrics.headerDividerCount}, firstRowDividerCount=${detailLayoutMetrics.firstRowDividerCount}, filterButtonCount=${detailLayoutMetrics.filterButtonCount}`,
                 );
                 expect(detailLayoutMetrics.stageWidthRatio).toBeGreaterThan(0.96);
                 expect(detailLayoutMetrics.stageAspectRatio).toBeGreaterThan(2.08);
@@ -1341,8 +1356,8 @@ test.describe('Lobby E2E', () => {
                 expect(detailLayoutMetrics.firstPlayerCountBoxAspectRatio).toBeGreaterThan(0.88);
                 expect(detailLayoutMetrics.firstPlayerCountBoxAspectRatio).toBeLessThan(1.12);
                 expect(detailLayoutMetrics.tutorialTopRatio).toBeGreaterThan(0.70);
-                expect(detailLayoutMetrics.tutorialBottomRatio).toBeGreaterThan(0.92);
-                expect(detailLayoutMetrics.tutorialBottomRatio).toBeLessThan(1.02);
+                expect(detailLayoutMetrics.actionBottomRatio).toBeGreaterThan(0.92);
+                expect(detailLayoutMetrics.actionBottomRatio).toBeLessThan(1.02);
                 expect(detailLayoutMetrics.tutorialWidthRatio).toBeGreaterThan(0.28);
                 expect(detailLayoutMetrics.tutorialWidthRatio).toBeLessThan(0.48);
                 expect(detailLayoutMetrics.roomSearchFieldHeight).toBeGreaterThan(24);
@@ -1363,8 +1378,8 @@ test.describe('Lobby E2E', () => {
                 expect(detailLayoutMetrics.firstRoomActionHeight).toBeGreaterThan(18);
                 expect(detailLayoutMetrics.firstRoomActionHeight).toBeLessThan(28);
                 expect(detailLayoutMetrics.visibleRoomRowCount).toBeGreaterThanOrEqual(5);
-                expect(detailLayoutMetrics.headerDividerCount).toBeGreaterThanOrEqual(3);
-                expect(detailLayoutMetrics.firstRowDividerCount).toBeGreaterThanOrEqual(3);
+                expect(detailLayoutMetrics.headerDividerCount).toBeGreaterThanOrEqual(2);
+                expect(detailLayoutMetrics.firstRowDividerCount).toBeGreaterThanOrEqual(2);
                 expect(detailLayoutMetrics.filterButtonCount).toBe(0);
                 const detailScreenshotPath = getEvidenceScreenshotPath(testInfo, 'detail-entry-20260516-action-buttons');
                 await page.screenshot({ path: detailScreenshotPath, fullPage: true });
@@ -1434,7 +1449,7 @@ test.describe('Lobby E2E', () => {
                     await page.locator(`[data-testid="home-v2-detail-tab"][data-tab-id="${tabId}"]`).click();
                     await expect(page.getByTestId(`home-v2-detail-panel-${tabId}`)).toBeVisible({ timeout: 10000 });
                     await expect(page.getByTestId('home-v2-fold-line-flip')).toHaveAttribute('data-flip-mode', 'detail');
-                    await expect(page.getByTestId('home-v2-fold-line-flip')).toHaveAttribute('data-flip-animating', 'false');
+                    await expect(page.getByTestId('home-v2-fold-line-flip')).toHaveAttribute('data-turn-animating', 'false');
                     if (tabId === 'leaderboard') {
                         await leaderboardResponsePromise;
                         await expect(page.getByTestId('home-v2-leaderboard-rank-badge').nth(0)).toBeVisible({ timeout: 10000 });

@@ -1,4 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import {
+    clearEvidenceScreenshotsForTest,
+    getEvidenceScreenshotPath,
+} from '../framework/evidenceScreenshots';
 import {
     BETRAYAL_COMMANDS,
     type BetrayalCore,
@@ -21,17 +25,16 @@ import {
     warmBetrayalFrontend,
 } from './betrayalTestHelpers';
 
-const EVIDENCE_DIR = 'evidence/betrayal-haunt-reveal-discovery-confirmation';
-const DISCOVERY_CONFIRM_SCREENSHOT = `${EVIDENCE_DIR}/01-先翻预兆并同屏显示作祟检定.jpg`;
-const REVEAL_READER_SCREENSHOT = `${EVIDENCE_DIR}/02-确认预兆后打开剧本书.jpg`;
-const DISCOVERY_DONE_SCREENSHOT = `${EVIDENCE_DIR}/03-关闭剧本书后回到作祟牌桌.jpg`;
-const REMOTE_VIEWER_DISCOVERY_SCREENSHOT = `${EVIDENCE_DIR}/04-旁观视角先看触发预兆和检定.jpg`;
-const SAFE_OMEN_CONFIRM_SCREENSHOT = `${EVIDENCE_DIR}/05-未触发作祟-同屏确认预兆与作祟检定.jpg`;
-const SAFE_OMEN_DONE_SCREENSHOT = `${EVIDENCE_DIR}/07-未触发作祟-确认后回恶兆前牌桌.jpg`;
-const SAFE_OMEN_MATRIX_FIRST_CARD_SCREENSHOT = `${EVIDENCE_DIR}/08-当前9张预兆矩阵-首张同屏确认.jpg`;
-const SAFE_OMEN_MATRIX_DONE_SCREENSHOT = `${EVIDENCE_DIR}/09-当前9张预兆矩阵-末张确认后持有区.jpg`;
-const HAUNT_OMEN_MATRIX_REVEAL_SCREENSHOT = `${EVIDENCE_DIR}/10-当前9张预兆触发矩阵-首张先翻预兆.jpg`;
-const HAUNT_OMEN_MATRIX_DONE_SCREENSHOT = `${EVIDENCE_DIR}/11-当前9张预兆触发矩阵-末张确认后作祟牌桌.jpg`;
+const DISCOVERY_CONFIRM_SCREENSHOT = '01-先翻预兆并同屏显示作祟检定.jpg';
+const REVEAL_READER_SCREENSHOT = '02-确认预兆后打开剧本书.jpg';
+const DISCOVERY_DONE_SCREENSHOT = '03-关闭剧本书后回到作祟牌桌.jpg';
+const REMOTE_VIEWER_DISCOVERY_SCREENSHOT = '04-旁观视角先看触发预兆和检定.jpg';
+const SAFE_OMEN_CONFIRM_SCREENSHOT = '05-未触发作祟-同屏确认预兆与作祟检定.jpg';
+const SAFE_OMEN_DONE_SCREENSHOT = '07-未触发作祟-确认后回恶兆前牌桌.jpg';
+const SAFE_OMEN_MATRIX_FIRST_CARD_SCREENSHOT = '08-当前9张预兆矩阵-首张同屏确认.jpg';
+const SAFE_OMEN_MATRIX_DONE_SCREENSHOT = '09-当前9张预兆矩阵-末张确认后持有区.jpg';
+const HAUNT_OMEN_MATRIX_REVEAL_SCREENSHOT = '10-当前9张预兆触发矩阵-首张先翻预兆.jpg';
+const HAUNT_OMEN_MATRIX_DONE_SCREENSHOT = '11-当前9张预兆触发矩阵-末张确认后作祟牌桌.jpg';
 const TEST_URL = '/play/betrayal?players=3&playerID=0&seat0=human&seat1=human&seat2=human&seed=haunt-reveal-discovery-confirmation';
 
 type OmenDiscoveryCard = BetrayalCore['possessionOrderByKind']['omen'][number];
@@ -320,7 +323,21 @@ const closeScenarioReaderIfPresent = async (page: Page): Promise<void> => {
     await expect(scenarioReader).toHaveCount(0);
 };
 
-test('普通预兆触发作祟时先确认预兆和检定，再承接作祟揭示', async ({ page, context }) => {
+async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, filename: string): Promise<void> {
+    await saveScreenshot(
+        page,
+        getEvidenceScreenshotPath(testInfo, filename, {
+            filename,
+            requireChineseName: true,
+        }),
+    );
+}
+
+test.beforeEach(async ({ page: _page }, testInfo) => {
+    await clearEvidenceScreenshotsForTest(testInfo);
+});
+
+test('普通预兆触发作祟时先确认预兆和检定，再承接作祟揭示', async ({ page, context }, testInfo) => {
     test.setTimeout(120000);
     await initBetrayalContext(context);
     const diagnostics = attachPageDiagnostics(page, 'betrayal-haunt-reveal-discovery-confirmation');
@@ -364,33 +381,33 @@ test('普通预兆触发作祟时先确认预兆和检定，再承接作祟揭�
         ],
         rejected: null,
     });
-    await saveScreenshot(page, DISCOVERY_CONFIRM_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, DISCOVERY_CONFIRM_SCREENSHOT);
 
     await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
     await expect(discoveryPanel).toHaveCount(0);
     const scenarioReader = page.getByTestId('betrayal-scenario-reader-dialog');
     await expect(scenarioReader, '确认触发来源后才自动打开一次剧本书').toBeVisible({ timeout: 10000 });
     await expect(scenarioReader).toContainText('木乃伊横行');
-    await saveScreenshot(page, REVEAL_READER_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, REVEAL_READER_SCREENSHOT);
     await page.getByTestId('betrayal-scenario-reader-close').click();
     await expect(scenarioReader).toHaveCount(0);
     await expect(page.getByTestId('betrayal-haunt-reveal-cue'), '剧本书已承接本次作祟开始后，不再追加作祟横幅').toHaveCount(0);
     await expect(page.getByTestId('betrayal-discovery-panel'), '已确认过的预兆卡关闭剧本书后不得重复弹出').toHaveCount(0);
     await expect(page.getByTestId('betrayal-open-scenario')).toBeVisible();
-    await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/恶兆后|Haunt/i);
+    await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/作祟中|恶兆后|Haunt/i);
     await expect.poll(() => readHauntDiscoveryConfirmationState(page)).toMatchObject({
         phase: 'haunt',
         pendingSteps: [],
         rejected: null,
     });
-    await saveScreenshot(page, DISCOVERY_DONE_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, DISCOVERY_DONE_SCREENSHOT);
 
     await assertNoFatalFrontendErrors([
         { label: 'betrayal-haunt-reveal-discovery-confirmation', diagnostics },
     ]);
 });
 
-test('旁观视角也先看触发预兆和检定，再本地进入剧本阅读', async ({ page, context }) => {
+test('旁观视角也先看触发预兆和检定，再本地进入剧本阅读', async ({ page, context }, testInfo) => {
     test.setTimeout(120000);
     await initBetrayalContext(context);
     const diagnostics = attachPageDiagnostics(page, 'betrayal-haunt-reveal-remote-viewer-confirmation');
@@ -420,7 +437,7 @@ test('旁观视角也先看触发预兆和检定，再本地进入剧本阅读',
         ],
         rejected: null,
     });
-    await saveScreenshot(page, REMOTE_VIEWER_DISCOVERY_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, REMOTE_VIEWER_DISCOVERY_SCREENSHOT);
 
     await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
     await expect(discoveryPanel).toHaveCount(0);
@@ -439,7 +456,7 @@ test('旁观视角也先看触发预兆和检定，再本地进入剧本阅读',
     ]);
 });
 
-test('普通预兆未触发作祟时同屏显示获得预兆和作祟检定且只需一次确认', async ({ page, context }) => {
+test('普通预兆未触发作祟时同屏显示获得预兆和作祟检定且只需一次确认', async ({ page, context }, testInfo) => {
     test.setTimeout(120000);
     await initBetrayalContext(context);
     const diagnostics = attachPageDiagnostics(page, 'betrayal-safe-omen-discovery-confirmation');
@@ -472,7 +489,7 @@ test('普通预兆未触发作祟时同屏显示获得预兆和作祟检定且�
         ],
         rejected: null,
     });
-    await saveScreenshot(page, SAFE_OMEN_CONFIRM_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, SAFE_OMEN_CONFIRM_SCREENSHOT);
 
     await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
     await expect(discoveryPanel).toHaveCount(0);
@@ -486,14 +503,14 @@ test('普通预兆未触发作祟时同屏显示获得预兆和作祟检定且�
         pendingSteps: [],
         rejected: null,
     });
-    await saveScreenshot(page, SAFE_OMEN_DONE_SCREENSHOT);
+    await saveEvidenceScreenshot(page, testInfo, SAFE_OMEN_DONE_SCREENSHOT);
 
     await assertNoFatalFrontendErrors([
         { label: 'betrayal-safe-omen-discovery-confirmation', diagnostics },
     ]);
 });
 
-test('当前9张预兆未触发作祟时均只需一次确认并进入持有区', async ({ page, context }) => {
+test('当前9张预兆未触发作祟时均只需一次确认并进入持有区', async ({ page, context }, testInfo) => {
     test.setTimeout(240000);
     await initBetrayalContext(context);
     const diagnostics = attachPageDiagnostics(page, 'betrayal-safe-omen-discovery-matrix');
@@ -536,7 +553,7 @@ test('当前9张预兆未触发作祟时均只需一次确认并进入持有区'
         });
 
         if (index === 0) {
-            await saveScreenshot(page, SAFE_OMEN_MATRIX_FIRST_CARD_SCREENSHOT);
+            await saveEvidenceScreenshot(page, testInfo, SAFE_OMEN_MATRIX_FIRST_CARD_SCREENSHOT);
         }
 
         await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
@@ -561,7 +578,7 @@ test('当前9张预兆未触发作祟时均只需一次确认并进入持有区'
         });
 
         if (index === CURRENT_OMEN_DISCOVERY_CARDS.length - 1) {
-            await saveScreenshot(page, SAFE_OMEN_MATRIX_DONE_SCREENSHOT);
+            await saveEvidenceScreenshot(page, testInfo, SAFE_OMEN_MATRIX_DONE_SCREENSHOT);
         }
     }
 
@@ -570,7 +587,7 @@ test('当前9张预兆未触发作祟时均只需一次确认并进入持有区'
     ]);
 });
 
-test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作祟承接', async ({ page, context }) => {
+test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作祟承接', async ({ page, context }, testInfo) => {
     test.setTimeout(300000);
     await initBetrayalContext(context);
     const diagnostics = attachPageDiagnostics(page, 'betrayal-haunt-omen-discovery-matrix');
@@ -619,7 +636,7 @@ test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作�
         await expect(discoveryPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-count', '4');
         await expect(discoveryPanel.getByTestId('betrayal-recent-roll-total')).toContainText('总点数');
         if (index === 0) {
-            await saveScreenshot(page, HAUNT_OMEN_MATRIX_REVEAL_SCREENSHOT);
+            await saveEvidenceScreenshot(page, testInfo, HAUNT_OMEN_MATRIX_REVEAL_SCREENSHOT);
         }
 
         await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
@@ -651,7 +668,7 @@ test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作�
         });
 
         if (index === CURRENT_OMEN_DISCOVERY_CARDS.length - 1) {
-            await saveScreenshot(page, HAUNT_OMEN_MATRIX_DONE_SCREENSHOT);
+            await saveEvidenceScreenshot(page, testInfo, HAUNT_OMEN_MATRIX_DONE_SCREENSHOT);
         }
     }
 

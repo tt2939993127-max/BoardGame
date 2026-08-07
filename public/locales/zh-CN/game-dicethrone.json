@@ -1421,6 +1421,11 @@
     "title": "技能结算选择",
     "option": "选项 {{index}}",
     "sliderLabel": "选择花费数量",
+    "statusCheckOrder": {
+      "title": "选择致盲与眩光的判定顺序",
+      "dazzleFirst": "先判定眩光",
+      "blindedFirst": "先判定致盲"
+    },
     "evasiveOrPurify": "请选择获得的状态效果",
     "evasiveOrPurifyToken": "请选择获得的道具",
     "lotusPalmUnblockable": {
@@ -1528,6 +1533,7 @@
     "critOrAccuracy": "选择获得暴击或精准标记",
     "ninjaNinjutsu": {
       "title": "忍术 6 点效果",
+      "bonusDamage": "伤害 +2",
       "poison": "伤害 +2，并施加慢性中毒",
       "undefendable": "伤害 +2，并使攻击不可防御"
     },

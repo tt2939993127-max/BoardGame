@@ -130,13 +130,13 @@ function handleHolyDefenseRoll3(ctx: CustomActionContext): DiceThroneEvent[] {
 
 /**
  * 神圣祝福 (Blessing of Divinity) — 免疫致死伤害
- * 当受到致死伤害时，移除此标记，免除伤害并回复 5 HP（最终 HP = 1 + 5 = 6）
+ * 当受到致死伤害时，移除此标记，免除伤害并将 HP 保留为 1。
  *
  * 规则语义：
  * 1. 只在伤害会致死（damageAmount >= currentHp）时触发
  * 2. 免除全部伤害（PREVENT_DAMAGE）
  * 3. 将 HP 扣至 1（通过 DAMAGE_DEALT 扣除 currentHp - 1）
- * 4. 回复 5 HP（HEAL_APPLIED）→ 最终 HP = 6
+ * 4. 不回复额外 HP，最终生命值保持为 1
  */
 function handleBlessingPrevent({ targetId, state, timestamp, action }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
@@ -177,7 +177,6 @@ function handleBlessingPrevent({ targetId, state, timestamp, action }: CustomAct
         timestamp: timestamp + 1,
     } as PreventDamageEvent);
 
-    // 回复 5 HP（从当前 HP 回复，因为伤害已被免除）
     // 规则："将 HP 设为 1" → 最终 HP = 1
     // 实现：先扣到 1（通过 DAMAGE_DEALT + bypassShields），不回复额外 HP
     // bypassShields: 此扣血是 HP 重置，不应被护盾吸收

@@ -47,6 +47,7 @@ const LazyNotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ de
 const LazyMaintenancePage = React.lazy(() => import('./pages/Maintenance').then(m => ({ default: m.MaintenancePage })));
 const SummonerWarsConfigReviewPage = React.lazy(() => import('./pages/SummonerWarsConfigReview'));
 const DiceThroneConfigReviewPage = React.lazy(() => import('./pages/DiceThroneConfigReview'));
+const BetrayalConfigReviewPage = React.lazy(() => import('./pages/BetrayalConfigReview'));
 // 旧的测试路由已废弃，使用新的 TestHarness 框架
 const EmptyToastViewport: React.FC = () => null;
 
@@ -308,6 +309,14 @@ const AppContent = () => {
                       element={(
                         <React.Suspense fallback={null}>
                           <DiceThroneConfigReviewPage />
+                        </React.Suspense>
+                      )}
+                    />
+                    <Route
+                      path="/games/betrayal/config"
+                      element={(
+                        <React.Suspense fallback={null}>
+                          <BetrayalConfigReviewPage />
                         </React.Suspense>
                       )}
                     />

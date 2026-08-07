@@ -1227,13 +1227,14 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-3">
-                                <div className="flex gap-3">
-                                    {nonSkipOptions.map((opt, idx) => (
-                                        <GameButton
-                                            key={`${idx}-${opt.id}`}
-                                            variant="primary"
-                                            size="md"
-                                            onClick={() => handleAction(opt.id, opt.disabled)}
+                                        <div className="flex gap-3">
+                                            {nonSkipOptions.map((opt, idx) => (
+                                                <GameButton
+                                                    key={`${idx}-${opt.id}`}
+                                                    data-option-id={opt.id}
+                                                    variant="primary"
+                                                    size="md"
+                                                    onClick={() => handleAction(opt.id, opt.disabled)}
                                             disabled={opt.disabled}
                                         >
                                             {opt.label}
@@ -1242,6 +1243,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 </div>
                                 {skipOption && (
                                     <GameButton
+                                        data-option-id={skipOption.id}
                                         variant="secondary"
                                         size="sm"
                                         onClick={() => handleAction(skipOption.id, skipOption.disabled)}

@@ -2643,7 +2643,7 @@ function ScenarioBookTurnSheet({
     <div
       data-testid="betrayal-scenario-book-turning-sheet"
       data-flip-direction={direction}
-      data-flip-implementation="home-v2-real-frame-sequence"
+      data-flip-implementation="turnjs-real-page-flip"
       data-flip-from-page={fromPages.map((page) => page?.id ?? "").join(",")}
       data-flip-to-page={toPages.map((page) => page?.id ?? "").join(",")}
       aria-hidden="true"
@@ -10454,6 +10454,7 @@ export default function BetrayalBoard({
       return;
     }
     autoOpenedHauntScenarioReaderKeysRef.current.add(hauntRevealAutoOpenKey);
+    setDismissedHauntRevealDiscoveryKey(hauntRevealDiscoveryKey);
     setReferenceScenarioSpreadIndex(0);
     setReferenceScenarioOpeningStageActive(true);
     setReferenceScenarioTurnDirection(null);

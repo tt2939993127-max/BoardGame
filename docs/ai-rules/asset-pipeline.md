@@ -393,6 +393,8 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 13. **游戏级 manifest 的 `basePrefix` 必须匹配清单实际目录**：位于 `public/assets/i18n/zh-CN/<gameId>/assets-manifest.json` 的清单必须指向 `official/i18n/zh-CN/<gameId>/`，不得继续引用旧的 `official/<gameId>/`。上传运行时对象、刷新 Android file-index 或打包前，必须校验本轮相关 `assets-manifest.json` 的 `basePrefix` 与所在目录一致；否则包内索引会指到旧路径并导致线上缺图。
 14. **关联游戏刷新，而不是全站重做**：资源发布后的缓存刷新 / 入口回查必须按本轮变更前缀锁定关联游戏（例如 `i18n/zh-CN/smashup/**` 只归 Smash Up）。如果服务器因 `current` symlink 或同路径 JSON 缓存需要 reload `boardgame-asset-origin.service`，可执行一次轻量 reload，但汇报口径必须写成“刷新关联游戏资源入口缓存”，不得说成全站重新发布或把无关游戏纳入验收。
 15. **该规则不分游戏**：`dicethrone`、`smashup`、`summonerwars` 以及后续新游戏都按同一口径执行。
+16. **服务器历史 release 必须有固定留存上限**：服务器素材发布完成并原子切换 `current` 后，默认只保留按发布号排序的最近 5 个 release；`current` 即使不在最近 5 个内也必须额外保留。清理目标只能是 `releases/` 下已确认不是 `current` 且不在留存集合中的历史目录，不得删除 Docker 服务、运行容器或 `current` 指向的目录。发布脚本必须在切换成功后执行同一留存策略，清理失败必须明确暴露，不能静默吞掉。
+17. **容量门禁先核对 release 占用再补救**：服务器空间不足时，必须区分上传临时归档、新 release 和历史 release 的实际占用，优先按第 16 条清理历史快照后重跑原发布流程；不得降低 `5 GiB` 最低可用空间门槛、使用旁路上传或把部分发布说成整体完成。清理后必须回查剩余 release 数量、`current` 指针和文件系统可用空间。
 
 ### 远端对象与 App 素材包的单一内容真相（强制）
 

@@ -2,7 +2,10 @@ import { useCallback, useMemo } from 'react';
 import type { MatchState } from '../types';
 import { resolveSeatPlayerDisplayName } from '../ai/seatDisplayName';
 import type { AiSeatController } from '../ai/types';
-import { resolveFollowCurrentTurnPlayerId } from './followCurrentTurnPlayer';
+import {
+    resolveFollowCurrentTurnPlayerId,
+    type LocalRuntimeControlResolver,
+} from './followCurrentTurnPlayer';
 import type { GameClientContextValue } from './reactContext';
 
 export function useLocalProviderViewModel(args: {
@@ -15,6 +18,7 @@ export function useLocalProviderViewModel(args: {
     localPregameControlledPlayerId: string | null;
     followCurrentTurnPlayer: boolean;
     localPlayerId: string | null;
+    resolveLocalRuntimeControlledPlayerId?: LocalRuntimeControlResolver;
 }): GameClientContextValue {
     const {
         state,
@@ -26,6 +30,7 @@ export function useLocalProviderViewModel(args: {
         localPregameControlledPlayerId,
         followCurrentTurnPlayer,
         localPlayerId,
+        resolveLocalRuntimeControlledPlayerId,
     } = args;
 
     const matchPlayers = useMemo(() => (
@@ -46,6 +51,13 @@ export function useLocalProviderViewModel(args: {
         }
         if (followCurrentTurnPlayer) {
             const currentTurnPlayerId = resolveFollowCurrentTurnPlayerId(state.core);
+            const runtimeControlledPlayerId = resolveLocalRuntimeControlledPlayerId?.({
+                state,
+                fallbackPlayerId: currentTurnPlayerId,
+            });
+            if (runtimeControlledPlayerId) {
+                return runtimeControlledPlayerId;
+            }
             if (currentTurnPlayerId) {
                 return currentTurnPlayerId;
             }
@@ -55,7 +67,9 @@ export function useLocalProviderViewModel(args: {
         followCurrentTurnPlayer,
         localPlayerId,
         localPregameControlledPlayerId,
+        resolveLocalRuntimeControlledPlayerId,
         state.core,
+        state,
     ]);
 
     const dispatch = useCallback((type: string, payload: unknown) => {

@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../framework';
 import type { GameTestContext } from '../framework';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 
 async function waitForCheatDispatch(page: Page): Promise<void> {
     await page.waitForFunction(
@@ -23,34 +24,56 @@ async function setupPaladinBlessingScene(page: Page, game: GameTestContext): Pro
     await game.setupScene({
         gameId: 'dicethrone',
         player0: {
-            resources: { CP: 0, HP: 1 },
+            resources: { [RESOURCE_IDS.CP]: 0, [RESOURCE_IDS.HP]: 1 },
             tokens: { [TOKEN_IDS.BLESSING_OF_DIVINITY]: 1 },
         },
         player1: {
-            resources: { HP: 50 },
+            resources: { [RESOURCE_IDS.HP]: 50 },
         },
         currentPlayer: '1',
-        phase: 'main2',
+        phase: 'offensiveRoll',
         extra: {
-            selectedCharacters: { '0': 'paladin', '1': 'barbarian' },
+            selectedCharacters: { '0': 'paladin', '1': 'moon_elf' },
             hostStarted: true,
+            rollCount: 1,
+            rollConfirmed: true,
+            dice: [
+                { id: 0, value: 1, isKept: false },
+                { id: 1, value: 1, isKept: false },
+                { id: 2, value: 1, isKept: false },
+                { id: 3, value: 1, isKept: false },
+                { id: 4, value: 1, isKept: false },
+            ],
+            pendingAttack: {
+                attackerId: '1',
+                defenderId: '0',
+                sourceAbilityId: 'longbow-5-1',
+                isDefendable: false,
+                damage: 7,
+                bonusDamage: 0,
+                attackModifierBonusDamage: 0,
+                damageResolved: false,
+                resolvedDamage: 0,
+                preDefenseResolved: true,
+                offensiveRollEndTokenResolved: true,
+            },
         },
     });
 
-    await game.waitForPhase('main2', 5000);
+    await game.waitForPhase('offensiveRoll', 5000);
     await waitForCheatDispatch(page);
 }
 
 async function readPaladinBlessingState(game: GameTestContext) {
     const player0 = await game.getPlayerState('0');
     return {
-        hp: player0?.resources?.HP ?? 0,
+        hp: player0?.resources?.[RESOURCE_IDS.HP] ?? 0,
         blessing: player0?.tokens?.[TOKEN_IDS.BLESSING_OF_DIVINITY] ?? 0,
     };
 }
 
-async function dealDamage(page: Page, targetId: string, amount: number): Promise<void> {
-    await page.evaluate(async ({ id, value }) => {
+async function resolvePreparedLethalAttack(page: Page): Promise<void> {
+    await page.evaluate(async () => {
         const harness = (window as Window & {
             __BG_TEST_HARNESS__?: {
                 command?: {
@@ -63,18 +86,15 @@ async function dealDamage(page: Page, targetId: string, amount: number): Promise
         }
 
         await harness.command.dispatch({
-            type: 'CHEAT_DEAL_DAMAGE',
-            playerId: '0',
-            payload: {
-                targetId: id,
-                amount: value,
-            },
+            type: 'ADVANCE_PHASE',
+            playerId: '1',
+            payload: {},
         });
-    }, { id: targetId, value: amount });
+    });
 }
 
 test.describe('DiceThrone 圣骑士', () => {
-    test('神圣祝福应阻止致死伤害并将生命值回到 6', async ({ page, game }) => {
+    test('神圣祝福应阻止致死伤害并将生命值保留为 1', async ({ page, game }) => {
         await setupPaladinBlessingScene(page, game);
 
         await expect.poll(async () => readPaladinBlessingState(game), { timeout: 5000 }).toMatchObject({
@@ -82,10 +102,10 @@ test.describe('DiceThrone 圣骑士', () => {
             blessing: 1,
         });
 
-        await dealDamage(page, '0', 10);
+        await resolvePreparedLethalAttack(page);
 
         await expect.poll(async () => readPaladinBlessingState(game), { timeout: 5000 }).toMatchObject({
-            hp: 6,
+            hp: 1,
             blessing: 0,
         });
     });

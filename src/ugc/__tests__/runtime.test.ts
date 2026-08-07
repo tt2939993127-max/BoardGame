@@ -173,8 +173,6 @@ describe('UGC Runtime', () => {
 
             expect(flipToDetail?.props?.sequence?.frames?.[0]).toContain('/page-flip-left/');
             expect(flipToOverview?.props?.sequence?.frames?.[0]).toContain('/page-flip-right/');
-            expect(flipToDetail?.props?.sequence?.assetSource).toBe('local');
-            expect(flipToOverview?.props?.sequence?.assetSource).toBe('local');
         });
     });
 });

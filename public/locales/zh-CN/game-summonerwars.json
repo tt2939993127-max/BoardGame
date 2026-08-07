@@ -1449,7 +1449,7 @@
     },
     "shadow_feint": {
       "name": "佯攻",
-      "description": "在本单位攻击之后，你可以将其推拉至 2 个区格。"
+      "description": "在本单位攻击之后，你可以将其推拉 1–2 个区格。"
     },
     "shadow_shadow_summon": {
       "name": "暗影召唤",

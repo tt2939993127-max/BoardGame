@@ -2481,7 +2481,10 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
 
           if (actionId === 'shadow_feint_request' && shadowSourceUnit) {
-            const destinations = getForceDestinations(newState.core, sourcePosition, 2);
+            const destinations = [
+              ...getForceDestinations(newState.core, sourcePosition, 1),
+              ...getForceDestinations(newState.core, sourcePosition, 2),
+            ];
             const options: PromptOption<SwInteractionValue>[] = destinations.map((destination) => ({
               id: `pos:${destination.position.row},${destination.position.col}`,
               label: formatCellCoord(destination.position),
