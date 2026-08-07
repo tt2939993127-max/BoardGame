@@ -11,6 +11,9 @@ const GUNSLINGER_HAND = [
     'card-just-this',
     'card-super-double',
     'card-surprise',
+    'upgrade-fan-the-hammer-2',
+    'upgrade-take-cover-2',
+    'upgrade-deadeye-2',
     'card-eat-my-lead',
 ];
 
@@ -19,6 +22,9 @@ const expectedFrameTranslateXPercent: Record<string, number> = {
     'card-just-this': -60.5914,
     'card-super-double': -40.6989,
     'card-surprise': -20.8065,
+    'upgrade-fan-the-hammer-2': -20.8065,
+    'upgrade-take-cover-2': -30.7527,
+    'upgrade-deadeye-2': -40.6989,
     'card-eat-my-lead': -10.8602,
 };
 
@@ -49,7 +55,7 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise
 }
 
 test.describe('DiceThrone - 枪手手牌图集', () => {
-    test('枪手原始四张手牌不应出现空白黑卡面', async ({ page, game }, testInfo) => {
+    test('枪手升级牌和原始手牌均应显示完整实际卡面', async ({ page, game }, testInfo) => {
         test.setTimeout(120000);
         await clearEvidenceScreenshotsForTest(testInfo);
         await game.openTestGame('dicethrone', { playerID: '0', seat1: 'human' }, OPEN_TIMEOUT_MS);
@@ -105,9 +111,12 @@ test.describe('DiceThrone - 枪手手牌图集', () => {
             expect(frameTranslations[cardId]?.hasUsableImage).toBe(true);
             expect(frameTranslations[cardId]?.translateX).toBeCloseTo(expectedFrameTranslateXPercent[cardId], 5);
         }
-        expect(frameTranslations['card-eat-my-lead']).toMatchObject({ atlasIndex: '34' });
+        expect(frameTranslations['upgrade-fan-the-hammer-2']).toMatchObject({ atlasIndex: '22' });
+        expect(frameTranslations['upgrade-take-cover-2']).toMatchObject({ atlasIndex: '23' });
+        expect(frameTranslations['upgrade-deadeye-2']).toMatchObject({ atlasIndex: '24' });
+        expect(frameTranslations['card-eat-my-lead']).toMatchObject({ atlasIndex: '31' });
 
         await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden({ timeout: 5000 });
-        await screenshot(page, testInfo, '枪手四张原始手牌均显示实际卡面');
+        await screenshot(page, testInfo, '枪手升级牌和原始手牌均显示实际卡面');
     });
 });

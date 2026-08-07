@@ -38,7 +38,7 @@ const applyGlobalOffset = (config: CardAtlasConfig, offsetX: number): CardAtlasC
 // 该偏移会在 CardPreview 的尺寸缩放中等比放大到实际图集尺寸。
 const SAMURAI_GLOBAL_SHIFT_X = -3.97; // 对应实图约 -4px
 
-// 枪手末行只有两张卡牌；第 34 格不能按 10 列规则网格裁切，必须使用逐帧配置。
+// 枪手有复合升级牌和仅两张卡的末行，必须按每张物理手牌的实际边界逐帧裁切。
 const GUNSLINGER_CARD_ATLAS_CONFIG = parseAtlasConfig(gunslingerAtlasConfigData, 'ability-cards-gunslinger.atlas.json');
 const SAMURAI_CARD_ATLAS_CONFIG = applyGlobalOffset(COMMON_CARD_ATLAS_CONFIG, SAMURAI_GLOBAL_SHIFT_X);
 const TREANT_CARD_ATLAS_CONFIG = parseAtlasConfig(treantAtlasConfigData, 'ability-cards-treant.atlas.json');
@@ -61,7 +61,7 @@ const getHeroAtlasConfig = (charId: string) => {
 };
 /**
  * 初始化 DiceThrone 所有英雄的卡牌图集（模块加载时同步注册）
- * 枪手/武士做轻微全局偏移，其余角色沿用公共 atlas。
+ * 枪手走逐帧物理手牌图集，武士做轻微全局偏移，其余角色沿用公共 atlas。
  */
 export function initDiceThroneCardAtlases() {
     for (const [, atlasId] of Object.entries(DICETHRONE_CARD_ATLAS_IDS)) {

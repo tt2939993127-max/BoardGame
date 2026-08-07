@@ -37,7 +37,11 @@ const MANUAL_CHUNK_PATTERNS: Array<[string, string[]]> = [
 ]
 const QIDAHEN_REGION_MASK_SAVE_ROUTE = '/devtools/qidahen-region-mask/save'
 const QIDAHEN_REGION_MASK_LOAD_ROUTE = '/devtools/qidahen-region-mask/load'
-const CONFIG_REVIEW_SPA_ROUTES = ['/games/summonerwars/config', '/games/dicethrone/config'] as const
+const CONFIG_REVIEW_SPA_ROUTES = [
+  '/games/summonerwars/config',
+  '/games/dicethrone/config',
+  '/games/betrayal/config',
+] as const
 const QIDAHEN_REGION_MASK_DEFAULT_OUTPUT_DIR = path.resolve(configDir, 'src/games/qidahen/data')
 const QIDAHEN_REGION_MASK_WORKSPACE_ROOT = path.resolve(configDir, 'temp/devtools/qidahen-region-mask-workspaces')
 const QIDAHEN_REGION_MASK_OUTPUT_FILES = {
@@ -777,7 +781,6 @@ export default defineConfig(({ mode }) => {
           bypass: (req) => {
             const pathname = (req.url || '/').split('?')[0] || '/'
             if ((req.method === 'GET' || req.method === 'HEAD')
-              && req.headers.accept?.includes('text/html')
               && isConfigReviewSpaRoute(pathname)) {
               return '/index.html'
             }

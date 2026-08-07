@@ -1,6 +1,18 @@
 {
   "title": "Betrayal at House on the Hill",
   "description": "A 3-6 player horror exploration board game. Enter a growing haunted house, explore rooms, find items and omens, then survive the haunt by following the scenario goals.",
+  "configReview": {
+    "back": "Back",
+    "title": "Betrayal configuration review",
+    "description": "Current values come from {{source}}. Review room doorways, rotated connections, scenario candidates, and the initial scenario here. Edits create field-level correction proposals only; they do not modify the source in the browser.",
+    "clearDrafts": "Clear drafts",
+    "submitEdits": "Submit corrections ({{count}})",
+    "searchPlaceholder": "Search rooms, scenarios, doorways, or sources...",
+    "rowSummary": "Showing {{filtered}} of {{total}} rows; {{invalid}} invalid drafts",
+    "pendingEdits": "{{count}} field changes are staged. After submission, they are saved as correction proposals; source changes still require code updates and verification.",
+    "auditCoverage": "The adapter defines {{count}} required audit fields. The table does not display an independent configuration copy; source documents and evidence are review references only.",
+    "feedbackInitialContent": "Betrayal configuration field correction: review the current value, proposed value, and source evidence."
+  },
   "players": "3-6 Players",
   "actionLog": {
     "selectExplorer": "Player {{player}} selected an explorer",

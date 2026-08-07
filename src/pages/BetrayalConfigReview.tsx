@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, PencilLine, Search, Send, Trash2 } from 'lucide-react';
 import { FeedbackModal } from '../components/system/FeedbackModal';
@@ -235,6 +236,7 @@ function ConfigEditableCell({
 
 export const BetrayalConfigReview = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation('game-betrayal');
   const table = useMemo(() => buildBetrayalConfigReviewTable(), []);
   const [typeFilter, setTypeFilter] = useState<'all' | BetrayalConfigReviewType>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -298,11 +300,11 @@ export const BetrayalConfigReview = () => {
                 onClick={() => navigate(-1)}
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-                返回
+                {t('configReview.back')}
               </button>
-              <h1 className="text-2xl font-bold">小黑屋配置表</h1>
+              <h1 className="text-2xl font-bold">{t('configReview.title')}</h1>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-[#6b4b35]">
-                当前值来自 <code>scenarioConfig.ts</code>。这里可以核对房间门位、旋转连通、剧本候选和首剧本配置；编辑只生成字段级修正提案，不会在浏览器里直接改正式源。
+                {t('configReview.description', { source: 'scenarioConfig.ts' })}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -313,7 +315,7 @@ export const BetrayalConfigReview = () => {
                 onClick={() => setPendingEdits({})}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-                清空草稿
+                {t('configReview.clearDrafts')}
               </button>
               <button
                 type="button"
@@ -323,7 +325,7 @@ export const BetrayalConfigReview = () => {
                 data-testid="betrayal-config-submit-edits"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />
-                提交修正（{validPendingEdits.length}）
+                {t('configReview.submitEdits', { count: validPendingEdits.length })}
               </button>
             </div>
           </div>
@@ -334,7 +336,7 @@ export const BetrayalConfigReview = () => {
               <input
                 className="min-w-[260px] bg-transparent outline-none"
                 value={searchTerm}
-                placeholder="搜索房间、剧本、门位、来源..."
+                placeholder={t('configReview.searchPlaceholder')}
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
             </label>
@@ -350,14 +352,18 @@ export const BetrayalConfigReview = () => {
               ))}
             </select>
             <span className="text-sm text-[#6b4b35]">
-              当前 {filteredRows.length} 行 / 全部 {table.rows.length} 行；无效草稿 {invalidEditCount} 个
+              {t('configReview.rowSummary', {
+                filtered: filteredRows.length,
+                total: table.rows.length,
+                invalid: invalidEditCount,
+              })}
             </span>
           </div>
         </header>
 
         {pendingEditList.length > 0 ? (
           <section className="rounded-lg border border-[#ba7a2a]/35 bg-[#fff2d8] px-4 py-3 text-sm text-[#5a341f]">
-            已暂存 {pendingEditList.length} 个字段修改；提交后会作为“配置修正提案”保存，正式合入仍需要回写代码并验证。
+            {t('configReview.pendingEdits', { count: pendingEditList.length })}
           </section>
         ) : null}
 
@@ -394,8 +400,9 @@ export const BetrayalConfigReview = () => {
         </section>
 
         <section className="rounded-lg border border-[#8a5a35]/20 bg-[#fff8ec] px-4 py-3 text-xs leading-5 text-[#6b4b35]">
-          字段覆盖由 adapter 统一定义：{BETRAYAL_CONFIG_REVIEW_FIELD_DEFINITIONS.filter((field) => field.requiredForAudit).length} 个必审字段。
-          表格不会展示独立配置副本；来源文档和 evidence 只作为核对证据。
+          {t('configReview.auditCoverage', {
+            count: BETRAYAL_CONFIG_REVIEW_FIELD_DEFINITIONS.filter((field) => field.requiredForAudit).length,
+          })}
         </section>
       </div>
 
@@ -407,7 +414,7 @@ export const BetrayalConfigReview = () => {
             setIsFeedbackOpen(false);
           }}
           configProposals={feedbackProposals}
-          initialContent="小黑屋配置表字段修正：请根据当前值、修改后值和来源证据审核。"
+          initialContent={t('configReview.feedbackInitialContent')}
         />
       ) : null}
     </main>
