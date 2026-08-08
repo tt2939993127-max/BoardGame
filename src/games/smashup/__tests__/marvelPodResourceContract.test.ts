@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -25,13 +24,13 @@ import { SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
 import { getSmashUpVariantSurfaceRelation } from '../domain/variantBindings';
 import type { CardDef } from '../domain/types';
 import { FACTION_METADATA } from '../ui/factionMeta';
+import { expectManifestAssetHash } from './helpers/assetManifestTestUtils';
 
 const MARVEL_WAVE_ONE_POD_PNG = 'public/assets/i18n/zh-CN/smashup/cards/marvel_wave_one_pod.png';
 const MARVEL_WAVE_ONE_POD_WEBP = 'public/assets/i18n/zh-CN/smashup/cards/compressed/marvel_wave_one_pod.webp';
 const MARVEL_VILLAINS_POD_PNG = 'public/assets/i18n/zh-CN/smashup/cards/marvel_villains_pod.png';
 const MARVEL_VILLAINS_POD_WEBP = 'public/assets/i18n/zh-CN/smashup/cards/compressed/marvel_villains_pod.webp';
 
-const sha256 = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 const POD_CASES = [
     {
@@ -150,24 +149,38 @@ describe('SmashUp 漫威 POD 资源合同', () => {
     it('两张 Marvel POD 卡图已进入根级与游戏级 manifest', () => {
         const rootManifest = JSON.parse(readFileSync('public/assets/i18n/assets-manifest.json', 'utf8'));
         const gameManifest = JSON.parse(readFileSync('public/assets/i18n/zh-CN/smashup/assets-manifest.json', 'utf8'));
-
-        expect(rootManifest.files['zh-CN/smashup/cards/marvel_wave_one_pod'].variants.png.sha256)
-            .toBe(sha256(MARVEL_WAVE_ONE_POD_PNG));
-        expect(rootManifest.files['zh-CN/smashup/cards/compressed/marvel_wave_one_pod'].variants.webp.sha256)
-            .toBe(sha256(MARVEL_WAVE_ONE_POD_WEBP));
-        expect(rootManifest.files['zh-CN/smashup/cards/marvel_villains_pod'].variants.png.sha256)
-            .toBe(sha256(MARVEL_VILLAINS_POD_PNG));
-        expect(rootManifest.files['zh-CN/smashup/cards/compressed/marvel_villains_pod'].variants.webp.sha256)
-            .toBe(sha256(MARVEL_VILLAINS_POD_WEBP));
-
-        expect(gameManifest.files['cards/marvel_wave_one_pod'].variants.png.sha256)
-            .toBe(sha256(MARVEL_WAVE_ONE_POD_PNG));
-        expect(gameManifest.files['cards/compressed/marvel_wave_one_pod'].variants.webp.sha256)
-            .toBe(sha256(MARVEL_WAVE_ONE_POD_WEBP));
-        expect(gameManifest.files['cards/marvel_villains_pod'].variants.png.sha256)
-            .toBe(sha256(MARVEL_VILLAINS_POD_PNG));
-        expect(gameManifest.files['cards/compressed/marvel_villains_pod'].variants.webp.sha256)
-            .toBe(sha256(MARVEL_VILLAINS_POD_WEBP));
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/marvel_wave_one_pod',
+            gameKey: 'cards/marvel_wave_one_pod',
+            variant: 'png',
+            localPath: MARVEL_WAVE_ONE_POD_PNG,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/compressed/marvel_wave_one_pod',
+            gameKey: 'cards/compressed/marvel_wave_one_pod',
+            variant: 'webp',
+            localPath: MARVEL_WAVE_ONE_POD_WEBP,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/marvel_villains_pod',
+            gameKey: 'cards/marvel_villains_pod',
+            variant: 'png',
+            localPath: MARVEL_VILLAINS_POD_PNG,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/compressed/marvel_villains_pod',
+            gameKey: 'cards/compressed/marvel_villains_pod',
+            variant: 'webp',
+            localPath: MARVEL_VILLAINS_POD_WEBP,
+        });
     });
 
     it('八个 Marvel POD 派系独立牌身份，玩法字段与经典版一致', () => {

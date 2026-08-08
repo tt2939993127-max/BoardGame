@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SmashUpDomain } from '../domain';
@@ -16,6 +15,7 @@ import { SU_COMMANDS } from '../domain/types';
 import { FACTION_METADATA } from '../ui/factionMeta';
 import { makeMatchState } from './helpers';
 import { runCommands } from './testRunner';
+import { expectManifestAssetHash } from './helpers/assetManifestTestUtils';
 
 const CARD_PNG = 'public/assets/i18n/zh-CN/smashup/cards/what_were_we_thinking.png';
 const CARD_WEBP = 'public/assets/i18n/zh-CN/smashup/cards/compressed/what_were_we_thinking.webp';
@@ -23,7 +23,6 @@ const BASE_PNG = 'public/assets/i18n/zh-CN/smashup/base/what_were_we_thinking_ba
 const BASE_WEBP = 'public/assets/i18n/zh-CN/smashup/base/compressed/what_were_we_thinking_bases.webp';
 const PLACEHOLDER_RULE_TEXT = /TODO|pending|Card rules pending|牌面规则|待补/i;
 
-const sha256 = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 function physicalCardCount(cards: ReadonlyArray<{ count: number }>): number {
     return cards.reduce((total, card) => total + card.count, 0);
@@ -191,24 +190,38 @@ describe('《我们到底在想什么？》四派系静态接入', () => {
     it('正式 atlas 已进入根级与游戏级 manifest', () => {
         const rootManifest = JSON.parse(readFileSync('public/assets/i18n/assets-manifest.json', 'utf8'));
         const gameManifest = JSON.parse(readFileSync('public/assets/i18n/zh-CN/smashup/assets-manifest.json', 'utf8'));
-
-        expect(rootManifest.files['zh-CN/smashup/cards/what_were_we_thinking'].variants.png.sha256)
-            .toBe(sha256(CARD_PNG));
-        expect(rootManifest.files['zh-CN/smashup/cards/compressed/what_were_we_thinking'].variants.webp.sha256)
-            .toBe(sha256(CARD_WEBP));
-        expect(rootManifest.files['zh-CN/smashup/base/what_were_we_thinking_bases'].variants.png.sha256)
-            .toBe(sha256(BASE_PNG));
-        expect(rootManifest.files['zh-CN/smashup/base/compressed/what_were_we_thinking_bases'].variants.webp.sha256)
-            .toBe(sha256(BASE_WEBP));
-
-        expect(gameManifest.files['cards/what_were_we_thinking'].variants.png.sha256)
-            .toBe(sha256(CARD_PNG));
-        expect(gameManifest.files['cards/compressed/what_were_we_thinking'].variants.webp.sha256)
-            .toBe(sha256(CARD_WEBP));
-        expect(gameManifest.files['base/what_were_we_thinking_bases'].variants.png.sha256)
-            .toBe(sha256(BASE_PNG));
-        expect(gameManifest.files['base/compressed/what_were_we_thinking_bases'].variants.webp.sha256)
-            .toBe(sha256(BASE_WEBP));
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/what_were_we_thinking',
+            gameKey: 'cards/what_were_we_thinking',
+            variant: 'png',
+            localPath: CARD_PNG,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/cards/compressed/what_were_we_thinking',
+            gameKey: 'cards/compressed/what_were_we_thinking',
+            variant: 'webp',
+            localPath: CARD_WEBP,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/base/what_were_we_thinking_bases',
+            gameKey: 'base/what_were_we_thinking_bases',
+            variant: 'png',
+            localPath: BASE_PNG,
+        });
+        expectManifestAssetHash({
+            rootManifest,
+            gameManifest,
+            rootKey: 'zh-CN/smashup/base/compressed/what_were_we_thinking_bases',
+            gameKey: 'base/compressed/what_were_we_thinking_bases',
+            variant: 'webp',
+            localPath: BASE_WEBP,
+        });
     });
 
     it('四个派系进入派系选择 metadata 且保持实施中状态', () => {
