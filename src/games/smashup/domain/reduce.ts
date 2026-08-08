@@ -997,7 +997,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.ACTION_PLAYED: {
-            const { playerId, cardUid, isExtraAction, fromBuried, fromDiscard, fromStored, ownerId, discardPlaySourceId, consumesNormalLimit } = event.payload as any;
+            const { playerId, cardUid, defId: eventDefId, isExtraAction, fromBuried, fromDiscard, fromStored, ownerId, discardPlaySourceId, consumesNormalLimit } = event.payload as any;
             const player = state.players[playerId];
             const card = fromStored
                 ? player.storedCards?.find(c => c.uid === cardUid)
@@ -1013,7 +1013,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 }
                 return undefined;
             })();
-            const defId = card?.defId ?? buriedLookup?.buried.defId;
+            const defId = card?.defId ?? buriedLookup?.buried.defId ?? eventDefId;
             const def = defId ? getCardDef(defId) : undefined;
             const isOngoing = def && def.type === 'action' && (def as ActionCardDef).subtype === 'ongoing';
             const isSpecial = def && def.type === 'action' && (def as ActionCardDef).subtype === 'special';
