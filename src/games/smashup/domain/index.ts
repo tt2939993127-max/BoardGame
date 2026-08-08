@@ -146,6 +146,62 @@ function createReactionQueueFallbackState(core: SmashUpCore): MatchState<SmashUp
     };
 }
 
+function collectScoringBaseDiscardTriggerEvents(args: {
+    core: SmashUpCore;
+    baseRef: SmashUpScoringBaseRef;
+    now: number;
+    random: RandomFn;
+    matchState?: MatchState<SmashUpCore>;
+}): {
+    core: SmashUpCore;
+    matchState?: MatchState<SmashUpCore>;
+    events: SmashUpEvent[];
+} {
+    let updatedCore = args.core;
+    let ms = args.matchState
+        ? { ...args.matchState, core: updatedCore }
+        : undefined;
+    const events: SmashUpEvent[] = [];
+    const baseState = ms ?? createReactionQueueFallbackState(updatedCore);
+    const baseIndex = resolveScoringBaseRefSlotIndex(baseState, args.baseRef);
+    if (baseIndex === undefined) {
+        return { core: updatedCore, matchState: ms, events };
+    }
+
+    const scoringBase = updatedCore.bases[baseIndex];
+    if (!scoringBase || scoringBase.defId !== args.baseRef.baseDefId) {
+        return { core: updatedCore, matchState: ms, events };
+    }
+
+    // Only minions still on the scoring base at cleanup time are discarded by BASE_CLEARED.
+    const minionsToDiscard = [...scoringBase.minions];
+    for (const minion of minionsToDiscard) {
+        const queued = collectTriggers(updatedCore, 'onMinionDiscardedFromBase', {
+            state: updatedCore,
+            matchState: ms,
+            playerId: minion.controller,
+            baseIndex,
+            triggerMinionUid: minion.uid,
+            triggerMinionDefId: minion.defId,
+            triggerMinionPower: getEffectivePower(updatedCore, minion, baseIndex),
+            triggerMinion: minion,
+            random: args.random,
+            now: args.now,
+        });
+        if (!queued) {
+            continue;
+        }
+
+        events.push(queued);
+        updatedCore = reduce(updatedCore, queued as unknown as SmashUpEvent);
+        if (ms) {
+            ms = { ...ms, core: updatedCore };
+        }
+    }
+
+    return { core: updatedCore, matchState: ms, events };
+}
+
 function buildActionReturnToHandPromptKey(event: ActionReturnToHandOptionArmedEvent): string {
     return [
         event.type,
@@ -480,6 +536,7 @@ function buildMultiBaseScoringInteraction(
 function finalizeCurrentScoringBase(
     state: MatchState<SmashUpCore>,
     now: number,
+    random: RandomFn,
 ): { updatedState: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
     const consumedDeferred = consumeScoringFrameDeferredPayload(state);
     const workingState = consumedDeferred.state;
@@ -489,6 +546,15 @@ function finalizeCurrentScoringBase(
         return { updatedState: workingState, events: [] };
     }
     const events: SmashUpEvent[] = [];
+
+    const discardTriggers = collectScoringBaseDiscardTriggerEvents({
+        core: workingState.core,
+        baseRef: currentBaseRef,
+        now,
+        random,
+        matchState: workingState,
+    });
+    events.push(...discardTriggers.events);
 
     const deferredEvents = consumedDeferred.deferredEvents;
     if (deferredEvents.length > 0) {
@@ -865,32 +931,6 @@ export function scoreOneBase(
     };
     events.push(scoreEvt);
 
-    for (const m of scoringBase.minions) {
-        const queued = collectTriggers(updatedCore, 'onMinionDiscardedFromBase', {
-            state: updatedCore,
-            matchState: ms,
-            playerId: m.controller,
-            baseIndex,
-            triggerMinionUid: m.uid,
-            triggerMinionDefId: m.defId,
-            triggerMinionPower: getEffectivePower(updatedCore, m, baseIndex),
-            triggerMinion: m,
-            random: rng,
-            now,
-        });
-        if (queued) {
-            events.push(queued);
-            updatedCore = reduce(updatedCore, queued as unknown as SmashUpEvent);
-            if (ms) ms = { ...ms, core: updatedCore };
-            const rq = maybeResolveReactionQueue(ms ? ms : createReactionQueueFallbackState(updatedCore), rng, now);
-            if (rq) {
-                events.push(...rq.events);
-                ms = rq.state;
-                updatedCore = rq.state.core;
-            }
-        }
-    }
-
     // 璁板綍 afterScoring 鍓嶇殑浜や簰鐘舵€侊紝鐢ㄤ簬鍒ゆ柇 afterScoring 鏄惁鏂板浜嗕氦浜?
     const afterScoringCore = updatedCore;
     const interactionBeforeAfterScoring = ms?.sys?.interaction?.current?.id ?? null;
@@ -1010,6 +1050,39 @@ export function scoreOneBase(
     const playersWithAfterScoringCards = ms
         ? getPlayersWithPlayableAfterScoringResponses({ ...ms, core: afterScoringCore }, now)
         : [];
+
+    const hasActiveScoringSession = !!(ms && currentBaseRef && getScoringSession(ms));
+    if (
+        currentBaseRef
+        && !hasActiveScoringSession
+        && !afterScoringCreatedInteraction
+        && playersWithAfterScoringCards.length === 0
+    ) {
+        const discardTriggers = collectScoringBaseDiscardTriggerEvents({
+            core: updatedCore,
+            baseRef: currentBaseRef,
+            now,
+            random: rng,
+            matchState: ms,
+        });
+        events.push(...discardTriggers.events);
+        updatedCore = discardTriggers.core;
+        if (discardTriggers.matchState) {
+            ms = discardTriggers.matchState;
+        }
+
+        const rq = maybeResolveReactionQueue(
+            ms ? { ...ms, core: updatedCore } : createReactionQueueFallbackState(updatedCore),
+            rng,
+            now,
+        );
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        }
+    }
+
     // afterScoring 可能已经通过 BASE_DECK_REORDERED / 其他补发事件改写了基地牌库；
     // 后续换基地与空牌库 reshuffle 必须以最新 core 为准，而不是沿用函数入参的旧 baseDeck 快照。
     newBaseDeck = [...(updatedCore.baseDeck ?? newBaseDeck)];
@@ -1794,7 +1867,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 if (isPostScoringBaseRevealDelayActive(currentState, now)) {
                     return { events: [], halt: true, updatedState: currentState } as PhaseExitResult;
                 }
-                const finalized = finalizeCurrentScoringBase(clearPostScoringBaseRevealDelay(currentState), now);
+                const finalized = finalizeCurrentScoringBase(clearPostScoringBaseRevealDelay(currentState), now, random);
                 return { events: finalized.events, halt: true, updatedState: finalized.updatedState } as PhaseExitResult;
             }
 
@@ -1804,7 +1877,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             )) {
                 const delayedState = beginPostScoringBaseRevealDelay(currentState, now);
                 if (!isPostScoringBaseRevealDelayActive(delayedState, now)) {
-                    const finalized = finalizeCurrentScoringBase(clearPostScoringBaseRevealDelay(delayedState), now);
+                    const finalized = finalizeCurrentScoringBase(clearPostScoringBaseRevealDelay(delayedState), now, random);
                     return { events: finalized.events, halt: true, updatedState: finalized.updatedState } as PhaseExitResult;
                 }
                 return { events: [], halt: true, updatedState: delayedState } as PhaseExitResult;
