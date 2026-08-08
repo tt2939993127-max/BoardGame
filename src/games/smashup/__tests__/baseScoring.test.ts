@@ -27,6 +27,14 @@ import {
 } from '../../../engine';
 import type { MatchState } from '../../../engine/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
+import {
+    getPromptOption,
+    getPromptOptions,
+    getPromptPlayerId,
+    getPromptSourceId,
+    getSimpleChoicePrompt,
+    respondToPrompt,
+} from './helpers';
 
 const PLAYER_IDS = ['0', '1'];
 
@@ -1625,33 +1633,28 @@ describe('基地记分与力量计算', () => {
             };
 
             const result = scoreOneBase(state, 0, [], '0', 1000, undefined, matchState);
-            const reactionPrompt = result.matchState?.sys.interaction.current as any;
+            const reactionPrompt = getSimpleChoicePrompt(result.matchState!, 'smashup_reaction_choose');
             const triggerById = new Map((result.matchState?.core.triggerQueue ?? []).map((trigger: any) => [trigger.id, trigger]));
-            const igorDiscardTriggerOption = (reactionPrompt?.data?.options ?? []).find((option: any) =>
-                triggerById.get(option?.value?.triggerId)?.triggerMinionUid === 'igor-score-a',
+            const igorDiscardTriggerOption = getPromptOption(
+                reactionPrompt,
+                (option: any) => triggerById.get(option?.value?.triggerId)?.triggerMinionUid === 'igor-score-a',
+                'Igor scoring discard trigger option',
             );
-            expect(reactionPrompt?.data?.sourceId).toBe('smashup_reaction_choose');
-            expect(igorDiscardTriggerOption).toBeTruthy();
+            expect(getPromptSourceId(reactionPrompt)).toBe('smashup_reaction_choose');
 
-            const resolvedTrigger = executePipeline(
-                { domain: SmashUpDomain, systems },
+            const resolvedTrigger = respondToPrompt(
                 result.matchState!,
-                {
-                    type: 'SYS_INTERACTION_RESPOND',
-                    playerId: '0',
-                    payload: { optionId: igorDiscardTriggerOption.id },
-                    timestamp: 1001,
-                } as any,
+                igorDiscardTriggerOption.id,
+                '0',
                 createSeededRandom('igor-scoring-discard-target-prompt'),
-                PLAYER_IDS,
             );
             expect(resolvedTrigger.success).toBe(true);
 
-            const current = resolvedTrigger.state.sys.interaction.current as any;
-            const optionUids = (current?.data?.options ?? []).map((option: any) => option?.value?.minionUid);
+            const current = getSimpleChoicePrompt(resolvedTrigger.finalState, 'frankenstein_igor');
+            const optionUids = getPromptOptions(current).map((option: any) => option?.value?.minionUid);
 
-            expect(current?.data?.sourceId).toBe('frankenstein_igor');
-            expect(current?.playerId).toBe('0');
+            expect(getPromptSourceId(current)).toBe('frankenstein_igor');
+            expect(getPromptPlayerId(current)).toBe('0');
             expect(optionUids).toContain('igor-other-base-ally');
             expect(optionUids).toContain('igor-other-base-ally-b');
             expect(optionUids).not.toContain('igor-score-a');
