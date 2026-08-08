@@ -76,6 +76,7 @@ import type {
 import type { PlayerId } from '../../../engine/types';
 import { SU_EVENTS, SU_EVENT_TYPES, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from './types';
 import { getBaseDef, getMinionDef, getCardDef, getFactionTitan } from '../data/cards';
+import { getMunchkinSpecialCardDescriptor } from '../data/factions/munchkin';
 import {
     bindEntityScopedValue,
     clearEntityScopedValue,
@@ -423,6 +424,106 @@ function placeAttachedActionLeavingPlay(
         ...players,
         [attached.ownerId]: { ...owner, discard: [...owner.discard, card] },
     };
+}
+
+function getMunchkinTreasureCardType(defId: string): CardType {
+    const def = getCardDef(defId);
+    return def?.type === 'minion' ? 'minion' : 'action';
+}
+
+function buildMunchkinTreasureCard(defId: string, uid: string, owner: PlayerId): CardInstance {
+    return {
+        uid,
+        defId,
+        type: getMunchkinTreasureCardType(defId),
+        owner,
+    };
+}
+
+function collectOccupiedCardUids(state: SmashUpCore): Set<string> {
+    const occupied = new Set<string>();
+    const addUid = (uid: string | undefined) => {
+        if (uid) occupied.add(uid);
+    };
+    const addCards = (cards: readonly Array<{ uid: string }> | undefined) => {
+        for (const card of cards ?? []) addUid(card.uid);
+    };
+
+    for (const player of Object.values(state.players)) {
+        addCards(player.hand);
+        addCards(player.deck);
+        addCards(player.discard);
+        addCards(player.removedFromGame);
+        addCards(player.storedCards);
+    }
+    for (const base of state.bases) {
+        for (const minion of base.minions) {
+            addUid(minion.uid);
+            addCards(minion.attachedActions.map(attached => ({ uid: attached.uid })));
+        }
+        addCards(base.ongoingActions.map(action => ({ uid: action.uid })));
+        addCards(base.buriedCards);
+        for (const monster of base.monsters ?? []) addUid(monster.uid);
+    }
+    for (const titan of state.titans ?? []) addUid(titan.uid);
+    addCards(state.pendingMunchkinTreasureReward?.treasureCards);
+
+    return occupied;
+}
+
+function allocateMunchkinTreasureUids(
+    state: SmashUpCore,
+    preferredUids: string[] | undefined,
+    count: number,
+): { treasureUids: string[]; nextUid: number } {
+    const occupied = collectOccupiedCardUids(state);
+    const treasureUids: string[] = [];
+    let nextUid = state.nextUid;
+
+    const reserveGeneratedUid = (): string => {
+        let candidate = `munchkin_treasure_${nextUid}`;
+        while (occupied.has(candidate)) {
+            nextUid += 1;
+            candidate = `munchkin_treasure_${nextUid}`;
+        }
+        occupied.add(candidate);
+        nextUid += 1;
+        return candidate;
+    };
+
+    for (let index = 0; index < count; index += 1) {
+        const preferredUid = preferredUids?.[index];
+        if (preferredUid && !occupied.has(preferredUid)) {
+            treasureUids.push(preferredUid);
+            occupied.add(preferredUid);
+            const generatedIndex = /^munchkin_treasure_(\d+)$/.exec(preferredUid)?.[1];
+            if (generatedIndex !== undefined) {
+                nextUid = Math.max(nextUid, Number(generatedIndex) + 1);
+            }
+            continue;
+        }
+        treasureUids.push(reserveGeneratedUid());
+    }
+
+    return { treasureUids, nextUid };
+}
+
+function hasSameStringMultiset(left: string[] | undefined, right: string[]): boolean {
+    if (!left || left.length !== right.length) return false;
+    const counts = new Map<string, number>();
+    for (const value of right) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    for (const value of left) {
+        const count = counts.get(value);
+        if (!count) return false;
+        if (count === 1) {
+            counts.delete(value);
+        } else {
+            counts.set(value, count - 1);
+        }
+    }
+    return counts.size === 0;
 }
 
 // ============================================================================
