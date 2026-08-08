@@ -146,6 +146,15 @@ function createReactionQueueFallbackState(core: SmashUpCore): MatchState<SmashUp
     };
 }
 
+function buildScoringBaseCleanupIdentity(baseRef: SmashUpScoringBaseRef, baseIndex: number, now: number) {
+    const baseKey = baseRef.baseInstanceId ?? `${baseIndex}:${baseRef.baseDefId}`;
+    const frameId = `base-clear-discard-frame:${baseKey}:${now}`;
+    return {
+        frameId,
+        sourceEventIdForMinion: (minionUid: string) => `base-clear-discard:${baseKey}:minion:${minionUid}:${now}`,
+    };
+}
+
 function collectScoringBaseDiscardTriggerEvents(args: {
     core: SmashUpCore;
     baseRef: SmashUpScoringBaseRef;
@@ -175,6 +184,7 @@ function collectScoringBaseDiscardTriggerEvents(args: {
 
     // Only minions still on the scoring base at cleanup time are discarded by BASE_CLEARED.
     const minionsToDiscard = [...scoringBase.minions];
+    const cleanupIdentity = buildScoringBaseCleanupIdentity(args.baseRef, baseIndex, args.now);
     for (const minion of minionsToDiscard) {
         const queued = collectTriggers(updatedCore, 'onMinionDiscardedFromBase', {
             state: updatedCore,
@@ -185,6 +195,8 @@ function collectScoringBaseDiscardTriggerEvents(args: {
             triggerMinionDefId: minion.defId,
             triggerMinionPower: getEffectivePower(updatedCore, minion, baseIndex),
             triggerMinion: minion,
+            frameId: cleanupIdentity.frameId,
+            sourceEventId: cleanupIdentity.sourceEventIdForMinion(minion.uid),
             random: args.random,
             now: args.now,
         });
@@ -554,15 +566,28 @@ function finalizeCurrentScoringBase(
         random,
         matchState: workingState,
     });
-    events.push(...discardTriggers.events);
 
     const deferredEvents = consumedDeferred.deferredEvents;
+    const hydratedDeferredEvents = deferredEvents.map((event) => ({
+        type: event.type,
+        payload: event.payload,
+        timestamp: event.timestamp,
+    })) as SmashUpEvent[];
     if (deferredEvents.length > 0) {
-        events.push(...deferredEvents.map((event) => ({
-            type: event.type,
-            payload: event.payload,
-            timestamp: event.timestamp,
-        })) as SmashUpEvent[]);
+        const clearEventIndex = hydratedDeferredEvents.findIndex((event) =>
+            event.type === SU_EVENTS.BASE_CLEARED
+            && (event as BaseClearedEvent).payload?.baseDefId === currentBaseRef.baseDefId);
+        if (clearEventIndex >= 0) {
+            events.push(
+                ...hydratedDeferredEvents.slice(0, clearEventIndex + 1),
+                ...discardTriggers.events,
+                ...hydratedDeferredEvents.slice(clearEventIndex + 1),
+            );
+        } else {
+            events.push(...discardTriggers.events, ...hydratedDeferredEvents);
+        }
+    } else {
+        events.push(...discardTriggers.events);
     }
     const postDeferredCore = events.reduce(
         (core, event) => reduce(core, event),
@@ -1052,36 +1077,23 @@ export function scoreOneBase(
         : [];
 
     const hasActiveScoringSession = !!(ms && currentBaseRef && getScoringSession(ms));
-    if (
+    const shouldResolveDirectCleanupDiscardTriggers = !!(
         currentBaseRef
         && !hasActiveScoringSession
         && !afterScoringCreatedInteraction
         && playersWithAfterScoringCards.length === 0
-    ) {
-        const discardTriggers = collectScoringBaseDiscardTriggerEvents({
+    );
+    const directCleanupBaseCore = updatedCore;
+    const directCleanupBaseMatchState = ms;
+    const directCleanupDiscardTriggers = shouldResolveDirectCleanupDiscardTriggers && currentBaseRef
+        ? collectScoringBaseDiscardTriggerEvents({
             core: updatedCore,
             baseRef: currentBaseRef,
             now,
             random: rng,
             matchState: ms,
-        });
-        events.push(...discardTriggers.events);
-        updatedCore = discardTriggers.core;
-        if (discardTriggers.matchState) {
-            ms = discardTriggers.matchState;
-        }
-
-        const rq = maybeResolveReactionQueue(
-            ms ? { ...ms, core: updatedCore } : createReactionQueueFallbackState(updatedCore),
-            rng,
-            now,
-        );
-        if (rq) {
-            events.push(...rq.events);
-            ms = rq.state;
-            updatedCore = rq.state.core;
-        }
-    }
+        })
+        : undefined;
 
     // afterScoring 可能已经通过 BASE_DECK_REORDERED / 其他补发事件改写了基地牌库；
     // 后续换基地与空牌库 reshuffle 必须以最新 core 为准，而不是沿用函数入参的旧 baseDeck 快照。
@@ -1141,6 +1153,42 @@ export function scoreOneBase(
         if (queuedReveal) {
             postScoringEvents.push(queuedReveal as unknown as SmashUpEvent);
         }
+    }
+
+    if (directCleanupDiscardTriggers && directCleanupDiscardTriggers.events.length > 0) {
+        const clearEventIndex = postScoringEvents.findIndex(event => event.type === SU_EVENTS.BASE_CLEARED);
+        const directPostScoringEvents = clearEventIndex >= 0
+            ? [
+                ...postScoringEvents.slice(0, clearEventIndex + 1),
+                ...directCleanupDiscardTriggers.events,
+                ...postScoringEvents.slice(clearEventIndex + 1),
+            ]
+            : [
+                ...directCleanupDiscardTriggers.events,
+                ...postScoringEvents,
+            ];
+        events.push(...directPostScoringEvents);
+
+        let directReactionState = directCleanupBaseMatchState
+            ? { ...directCleanupBaseMatchState, core: directCleanupBaseCore }
+            : createReactionQueueFallbackState(directCleanupBaseCore);
+        for (const event of directPostScoringEvents) {
+            directReactionState = {
+                ...directReactionState,
+                core: reduce(directReactionState.core, event),
+            };
+        }
+
+        const rq = maybeResolveReactionQueue(directReactionState, rng, now);
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        } else {
+            ms = directReactionState;
+            updatedCore = directReactionState.core;
+        }
+        return { events, newBaseDeck, matchState: ms };
     }
 
     const serializedDeferredEvents = serializePostScoringEvents(postScoringEvents);

@@ -10,6 +10,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { SmashUpDomain, scoreOneBase } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
+import { createSmashUpEventSystem } from '../domain/systems';
 import type {
     SmashUpCore, SmashUpEvent, MinionOnBase, BaseInPlay,
     OngoingActionOnBase, AttachedActionOnMinion,
@@ -1604,6 +1605,7 @@ describe('基地记分与力量计算', () => {
                         defId: 'base_great_library',
                         minions: [
                             { uid: 'igor-other-base-ally', defId: 'werewolf_alpha', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                            { uid: 'igor-other-base-ally-b', defId: 'werewolf_howler', controller: '0', owner: '0', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                         ],
                         ongoingActions: [],
                     },
@@ -1614,6 +1616,7 @@ describe('基地记分与力量计算', () => {
             };
             const systems = [
                 createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+                createSmashUpEventSystem(),
                 ...createBaseSystems<SmashUpCore>(),
             ];
             const matchState: MatchState<SmashUpCore> = {
@@ -1622,14 +1625,37 @@ describe('基地记分与力量计算', () => {
             };
 
             const result = scoreOneBase(state, 0, [], '0', 1000, undefined, matchState);
-            const current = result.matchState?.sys.interaction.current as any;
+            const reactionPrompt = result.matchState?.sys.interaction.current as any;
+            const triggerById = new Map((result.matchState?.core.triggerQueue ?? []).map((trigger: any) => [trigger.id, trigger]));
+            const igorDiscardTriggerOption = (reactionPrompt?.data?.options ?? []).find((option: any) =>
+                triggerById.get(option?.value?.triggerId)?.triggerMinionUid === 'igor-score-a',
+            );
+            expect(reactionPrompt?.data?.sourceId).toBe('smashup_reaction_choose');
+            expect(igorDiscardTriggerOption).toBeTruthy();
+
+            const resolvedTrigger = executePipeline(
+                { domain: SmashUpDomain, systems },
+                result.matchState!,
+                {
+                    type: 'SYS_INTERACTION_RESPOND',
+                    playerId: '0',
+                    payload: { optionId: igorDiscardTriggerOption.id },
+                    timestamp: 1001,
+                } as any,
+                createSeededRandom('igor-scoring-discard-target-prompt'),
+                PLAYER_IDS,
+            );
+            expect(resolvedTrigger.success).toBe(true);
+
+            const current = resolvedTrigger.state.sys.interaction.current as any;
             const optionUids = (current?.data?.options ?? []).map((option: any) => option?.value?.minionUid);
 
             expect(current?.data?.sourceId).toBe('frankenstein_igor');
             expect(current?.playerId).toBe('0');
-            expect(optionUids).toContain('igor-same-base-ally');
             expect(optionUids).toContain('igor-other-base-ally');
+            expect(optionUids).toContain('igor-other-base-ally-b');
             expect(optionUids).not.toContain('igor-score-a');
+            expect(optionUids).not.toContain('igor-same-base-ally');
         });
 
         it('scoreOneBase 会让 Death on Six Legs 在己方随从计分弃牌后获得 1 个力量指示物', () => {

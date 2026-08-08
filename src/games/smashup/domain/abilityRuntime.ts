@@ -2,6 +2,7 @@ import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import {
     createSimpleChoice,
     queueInteraction,
+    resolveInteraction,
     type InteractionDescriptor,
     type PromptOption,
     type SimpleChoiceConfig,
@@ -315,6 +316,50 @@ function updateInteractionForContinuation<TState>(
     };
 }
 
+function promoteRuntimeContinuationInteraction<TState>(
+    state: MatchState<TState>,
+    continuationId: string | undefined,
+): MatchState<TState> {
+    if (!continuationId) {
+        return state;
+    }
+
+    const interactionState = state.sys.interaction;
+    const current = interactionState.current;
+    const queue = interactionState.queue ?? [];
+
+    const currentMarker = getAbilityRuntimePromptMarker(current?.data as Record<string, unknown> | undefined);
+    if (currentMarker?.continuationId === continuationId) {
+        return state;
+    }
+
+    const continuationIndex = queue.findIndex((interaction) =>
+        getAbilityRuntimePromptMarker(interaction.data as Record<string, unknown> | undefined)?.continuationId === continuationId,
+    );
+    if (continuationIndex < 0) {
+        return state;
+    }
+
+    const continuationInteraction = queue[continuationIndex];
+    const remainingQueue = queue.filter((_, index) => index !== continuationIndex);
+    const reorderedState: MatchState<TState> = {
+        ...state,
+        sys: {
+            ...state.sys,
+            interaction: {
+                ...interactionState,
+                queue: [
+                    continuationInteraction,
+                    ...(current ? [current] : []),
+                    ...remainingQueue,
+                ],
+            },
+        },
+    };
+
+    return resolveInteraction(reorderedState);
+}
+
 export function createEffectProgram<TContext, TState, TEvent>(
     effect: AbilityRuntimeEffect<TContext, TState, TEvent>,
     options: { deriveFootprint?: AbilityRuntimeFootprintDeriver<TContext> } = {},
@@ -419,9 +464,19 @@ export function createPromptProgram<TContext, TState, TEvent>(params: {
             matchState: resumeResult.matchState ?? state,
         };
         if (nextProgram) {
+            const nextProgramResult = executeAbilityProgram(nextProgram, nextContext);
+            const prioritizedNextProgramResult = nextProgramResult.suspended && nextProgramResult.matchState
+                ? {
+                    ...nextProgramResult,
+                    matchState: promoteRuntimeContinuationInteraction(
+                        nextProgramResult.matchState,
+                        nextProgramResult.continuationId,
+                    ),
+                }
+                : nextProgramResult;
             result = mergeRuntimeResults(
                 result,
-                executeAbilityProgram(nextProgram, nextContext),
+                prioritizedNextProgramResult,
             );
         }
         return {
