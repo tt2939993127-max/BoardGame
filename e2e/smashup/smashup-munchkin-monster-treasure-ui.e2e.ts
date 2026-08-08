@@ -9217,6 +9217,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             interactionSourceId: null,
             responseWindowType: null,
         });
+        await expect(page.getByText('本回合随从额度已用完')).toHaveCount(0, { timeout: 8000 });
+        await page.mouse.move(24, 24);
         await game.screenshot('100-半身人额外随从打到同基地后收口', testInfo);
     });
 
@@ -10806,6 +10808,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await expect(page.locator('[data-ongoing-uid="guild-caltrops-1"]').first()).toBeVisible({ timeout: 15000 });
         await expect(page.locator('[data-card-uid="guild-draw-1"]').first()).toBeVisible({ timeout: 15000 });
         await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await page.mouse.move(24, 24);
         await game.screenshot('174-盗贼公会触发后普通牌进手牌', testInfo);
     });
 
@@ -12725,6 +12728,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await game.openTestGame('smashup', { skipInitialization: true }, 20000);
         await game.setupScene(buildMunchkinDuplicationPotionScene());
+        await hideSmashUpDebugPanelForEvidence(page);
 
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
         const host = page.locator('[data-minion-uid="duplication-host"]').first();
@@ -12745,7 +12749,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.waitForNoInteraction(10000);
 
         await expect.poll(async () => {
-            const core = await readCoreState(page) as RocketBootsCoreState;
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
             const hostState = core.bases[0].minions.find(minion => minion.uid === 'duplication-host');
             const potion = hostState?.attachedActions?.find(action => action.uid === 'duplication-potion-1');
             return {
@@ -12763,6 +12768,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             triggerQueueLength: 0,
         });
 
+        await waitForSmashUpFxToSettle(page);
+        await page.mouse.move(24, 24);
         await game.screenshot('08-复制药水复制天赋后状态', testInfo);
     });
 
@@ -12845,6 +12852,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await game.openTestGame('smashup', { skipInitialization: true }, 20000);
         await game.setupScene(buildMunchkinWishingRingScene());
+        await hideSmashUpDebugPanelForEvidence(page);
 
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
         await expect(page.locator('[data-card-uid="wishing-ring-1"]').first()).toBeVisible({ timeout: 15000 });
@@ -12881,6 +12889,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             interactionSourceId: null,
             responseWindowType: null,
         });
+        await waitForSmashUpFxToSettle(page);
         await expect(page.getByTestId('su-score-vp-0')).toHaveText('3');
         await expect(page.locator('[data-card-uid="wishing-ring-1"]')).toHaveCount(0);
         await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 2');
@@ -12893,6 +12902,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await game.openTestGame('smashup', { skipInitialization: true }, 20000);
         await game.setupScene(buildMunchkinTreasureFinderScene());
+        await hideSmashUpDebugPanelForEvidence(page);
 
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
         await expect(page.locator('[data-card-uid="treasure-finder-1"]').first()).toBeVisible({ timeout: 15000 });
@@ -12938,6 +12948,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             interactionSourceId: null,
             responseWindowType: null,
         });
+        await waitForSmashUpFxToSettle(page);
         await expect(page.locator('[data-card-uid="treasure-finder-1"]')).toHaveCount(0);
         await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 4');
         await game.screenshot('31-探宝棒结算后手牌与公共宝藏牌堆', testInfo);
@@ -13116,6 +13127,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await game.openTestGame('smashup', { skipInitialization: true }, 20000);
         await game.setupScene(buildMunchkinDungeonRulebookScene());
+        await hideSmashUpDebugPanelForEvidence(page);
 
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
         const rulebook = page.locator('[data-card-uid="dungeon-rulebook-1"]').first();
@@ -13133,7 +13145,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.waitForNoInteraction(10000);
 
         await expect.poll(async () => {
-            const core = await readCoreState(page) as RocketBootsCoreState;
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
             return {
                 remainingOngoingUids: core.bases[0].ongoingActions?.map(action => action.uid) ?? [],
                 player0HandUids: core.players?.['0']?.hand?.map(card => card.uid) ?? [],
@@ -13149,6 +13162,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             triggerQueueLength: 0,
         });
 
+        await waitForSmashUpFxToSettle(page);
         await game.screenshot('11-地牢规则书摧毁行动后状态', testInfo);
     });
 
@@ -13218,6 +13232,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await game.openTestGame('smashup', { skipInitialization: true }, 20000);
         await game.setupScene(buildMunchkinHalitosisPotionScene());
+        await hideSmashUpDebugPanelForEvidence(page);
 
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
         const potion = page.locator('[data-card-uid="halitosis-1"]').first();
@@ -13244,7 +13259,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.waitForNoInteraction(10000);
 
         await expect.poll(async () => {
-            const core = await readCoreState(page) as RocketBootsCoreState;
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
             return {
                 sourceMinionUids: core.bases[0].minions.map(minion => minion.uid),
                 targetMinionUids: core.bases[1].minions.map(minion => minion.uid),
@@ -13262,6 +13278,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             triggerQueueLength: 0,
         });
 
+        await waitForSmashUpFxToSettle(page);
         await game.screenshot('15-口臭药水移动后状态', testInfo);
     });
 
@@ -14781,6 +14798,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         expect(state.core.bases[0].monsters).toEqual([]);
         expect(state.core.bases[0].minions.find((entry: any) => entry.uid === 'warriors-war-cry-own')?.tempPowerModifier).toBeGreaterThan(0);
         expect(state.core.bases[0].minions.some((entry: any) => entry.uid === 'warriors-war-cry-other')).toBe(true);
+        await page.mouse.move(24, 24);
         await game.screenshot('勇士-战争怒吼-怪物摧毁并把力量加到所选随从', testInfo);
     });
 

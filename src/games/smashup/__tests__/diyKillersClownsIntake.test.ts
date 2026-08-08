@@ -5,8 +5,9 @@ import { resolve } from 'path';
 import { smashUpCriticalImageResolver } from '../criticalImageResolver';
 import { getBaseDef, getBaseDefIdsForFactions, getFactionCards } from '../data/cards';
 import { getSmashUpAtlasImageById } from '../domain/atlasCatalog';
-import { SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
-import { isFactionImplementationInProgress } from '../ui/factionMeta';
+import { isSmashUpDiyFaction, SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
+import { getSmashUpSelectableFactionIds } from '../domain/pregameDraft';
+import { getVisibleFactionMetadata, isFactionImplementationInProgress } from '../ui/factionMeta';
 
 function readSmashUpLocale(locale: 'en' | 'zh-CN') {
     return JSON.parse(
@@ -25,7 +26,7 @@ function makePlayingState(factions: Record<string, [string, string]>) {
     };
 }
 
-describe('SmashUp DIY 杀人狂 / 小丑 intake', () => {
+describe('SmashUp 杀人狂 / 小丑 intake', () => {
     const zhCN = readSmashUpLocale('zh-CN');
     const en = readSmashUpLocale('en');
 
@@ -67,7 +68,7 @@ describe('SmashUp DIY 杀人狂 / 小丑 intake', () => {
         expect(defs.find(def => def.id === 'diy_clowns_pie_in_the_face')?.count).toBe(2);
     });
 
-    it('两个 DIY 派系各自带 2 张基地并接到独立基地图集', () => {
+    it('两个单派系包各自带 2 张基地并接到独立基地图集', () => {
         expect(getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.DIY_KILLERS]).sort()).toEqual([
             'base_diy_killers_camp_crystal_lake',
             'base_diy_killers_nightmare_world',
@@ -110,6 +111,20 @@ describe('SmashUp DIY 杀人狂 / 小丑 intake', () => {
         expect(result.critical).toContain('smashup/base/diy_clowns_bases');
         expect(isFactionImplementationInProgress(SMASHUP_FACTION_IDS.DIY_KILLERS)).toBe(true);
         expect(isFactionImplementationInProgress(SMASHUP_FACTION_IDS.DIY_CLOWNS)).toBe(true);
+    });
+
+    it('杀人狂和小丑不归入 DIY，关闭 DIY 扩展后仍属于可见普通派系元数据', () => {
+        expect(isSmashUpDiyFaction(SMASHUP_FACTION_IDS.DIY_KILLERS)).toBe(false);
+        expect(isSmashUpDiyFaction(SMASHUP_FACTION_IDS.DIY_CLOWNS)).toBe(false);
+
+        const visibleWithoutDiy = getVisibleFactionMetadata('zh-CN', ['titans'])
+            .map(meta => meta.id);
+        const selectableWithoutDiy = getSmashUpSelectableFactionIds(['titans']);
+
+        expect(visibleWithoutDiy).toContain(SMASHUP_FACTION_IDS.DIY_KILLERS);
+        expect(visibleWithoutDiy).toContain(SMASHUP_FACTION_IDS.DIY_CLOWNS);
+        expect(selectableWithoutDiy).toContain(SMASHUP_FACTION_IDS.DIY_KILLERS);
+        expect(selectableWithoutDiy).toContain(SMASHUP_FACTION_IDS.DIY_CLOWNS);
     });
 
     it('中英文 locale 覆盖派系、卡牌与基地文本', () => {

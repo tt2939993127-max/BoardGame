@@ -258,6 +258,17 @@ describe('FactionSelection POD/旧版派系统一占用', () => {
         expect(screen.getByTestId('faction-option-ninjas')).toBeInTheDocument();
     });
 
+    it('DIY 角标只出现在真实 DIY 派系候选卡上', () => {
+        renderSelection();
+
+        expect(screen.getByTestId('faction-diy-badge-huluwawa')).toHaveTextContent('DIY');
+        expect(screen.queryByTestId('faction-diy-badge-paladins')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('faction-diy-badge-round_table_knights')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('faction-diy-badge-goblins')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('faction-diy-badge-diy_killers')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('faction-diy-badge-diy_clowns')).not.toBeInTheDocument();
+    });
+
     it('默认列表应保留上下文，并将实施中派系统一排到末尾', () => {
         renderSelection();
 
@@ -292,8 +303,11 @@ describe('FactionSelection POD/旧版派系统一占用', () => {
         renderSelection(vi.fn(), core);
 
         expect(screen.queryByTestId('faction-option-huluwawa')).not.toBeInTheDocument();
+        expect(screen.getByTestId('faction-option-paladins')).toBeInTheDocument();
         expect(getVisibleFactionVariantGroups('zh-CN', ['titans']).map(group => group.groupId))
             .not.toContain(SMASHUP_FACTION_IDS.HULUWAWA);
+        expect(getVisibleFactionVariantGroups('zh-CN', ['titans']).map(group => group.groupId))
+            .toContain(SMASHUP_FACTION_IDS.PALADINS);
     });
 
     it('带特有机制的派系详情应显示机制规则，普通派系不显示', () => {

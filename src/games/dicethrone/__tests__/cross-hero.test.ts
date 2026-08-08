@@ -2575,6 +2575,59 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack).toBeNull();
         });
 
+        it('back strike can be spent on incoming attack damage and settles with stand-tall defense damage', () => {
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 1, 1, 1, 1, 1, 4, 6, 5]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'monk', '1': 'samurai' }
+                    );
+                    state.core.players['1'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] = 1;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'samurai back strike settles with stand-tall defense damage',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                    cmd('USE_TOKEN', '1', { tokenId: TOKEN_IDS.SAMURAI_RETRIBUTION, amount: 1 }),
+                    cmd('SKIP_TOKEN_RESPONSE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 46 },
+                        '1': { hp: 45 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] ?? 0).toBe(0);
+            expect(result.finalState.core.pendingDamage ?? null).toBeNull();
+            expect(result.finalState.core.pendingAttack).toBeNull();
+        });
+
         it('stand-tall fully prevents the attack without opening back-strike mitigation window', () => {
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,

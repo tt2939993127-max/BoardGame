@@ -5,6 +5,13 @@ description: "Smash Up 新增派系端到端流程。用于新增派系、卡牌
 
 # Smash Up 新增派系端到端流程
 
+## 规范来源与职责边界
+
+- 本 skill 是 `adapter/workflow`：只承载大杀四方新增派系的项目专项流程。
+- 跨游戏新增派系/角色/英雄的通用执行流以 `.codex/skill/add-new-faction/SKILL.md` 为主。
+- 大杀四方录入和实现专项文档以 `docs/games/smashup/workflows/` 为主；本 skill 只做路由和端到端收口顺序。
+- 数据、资源、审计、E2E 标准仍回 `docs/ai-rules/` 对应主源，不在本 skill 复制成通用规范。
+
 ## 默认完成定义（强制）
 
 当用户要求 Smash Up 新增派系或“新派系增加流程”时，默认不是只做素材 intake，而是连续完成：

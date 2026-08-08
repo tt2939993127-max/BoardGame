@@ -1,7 +1,7 @@
 param(
     [string]$CodexHome = $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "D:\codex-home" }),
     [string]$OpenDesignRoot = "",
-    [string[]]$Agents = @("codex", "openclaw"),
+    [string[]]$Agents = @("codex"),
     [switch]$InstallSource,
     [switch]$SkipMcpInstall,
     [switch]$NoPnpmUpgrade
@@ -242,4 +242,4 @@ if (-not $SkipMcpInstall) {
     }
 }
 
-Write-Step "Done. Restart Codex/OpenClaw before expecting new MCP tools in an existing session."
+Write-Step "Done. Restart Codex before expecting new MCP tools in an existing session."

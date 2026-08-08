@@ -5,6 +5,13 @@ description: "BoardGame 新增派系/角色/英雄端到端流程。用于 Smash
 
 # 新增派系/角色完整交付工作流
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载已有游戏新增派系/角色/英雄的端到端执行顺序。
+- 新游戏从零创建走 `.codex/skill/create-new-game/SKILL.md`；单个大杀四方派系适配走 `.codex/skill/smashup-faction-addition/SKILL.md`。
+- 数据录入、资源链、审计和 E2E 标准正文分别以 `docs/ai-rules/data-entry.md`、`docs/ai-rules/asset-pipeline.md`、`docs/ai-rules/testing-audit.md`、`docs/ai-rules/e2e-verification.md` 为主源。
+- 本 skill 不复制这些标准为第二份规范；冲突时先改主源，再同步 workflow。
+
 ## 核心原则
 
 新增派系/角色不是单纯“能显示图”或“能进入游戏”。只有同时完成以下六条，才能说“新增完成”：
@@ -50,7 +57,7 @@ description: "BoardGame 新增派系/角色/英雄端到端流程。用于 Smash
 
 - Smash Up 新派系：读 `docs/games/smashup/workflows/smashup-faction-intake.md`，若包含玩法实现再读 `docs/games/smashup/workflows/smashup-faction-implementation.md`。
 - Dice Throne 新英雄/角色：读 `docs/games/dicethrone/workflows/dicethrone-hero-intake.md`。
-- 其他游戏暂无专用 workflow：以本 skill + `docs/ai-rules/data-entry.md` + 该游戏 `rule/` 为准，并补专用 workflow，不要把临时口径写进全局规则。
+- 其他游戏暂无专用 workflow：以本 skill + `docs/ai-rules/data-entry.md` + 该游戏 `rule/` 为准，并补专用 workflow，不要把临时口径写进项目全局规则。
 
 ## S0：范围与批次矩阵
 

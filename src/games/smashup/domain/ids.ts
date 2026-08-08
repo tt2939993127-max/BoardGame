@@ -321,9 +321,6 @@ export const SMASHUP_IN_PROGRESS_FACTION_IDS = new Set<string>([
 
 export const SMASHUP_DIY_FACTION_IDS = new Set<string>([
     SMASHUP_FACTION_IDS.HULUWAWA,
-    SMASHUP_FACTION_IDS.PALADINS,
-    SMASHUP_FACTION_IDS.DIY_KILLERS,
-    SMASHUP_FACTION_IDS.DIY_CLOWNS,
 ]);
 
 export function isSmashUpDiyFaction(factionId: string | null | undefined): boolean {

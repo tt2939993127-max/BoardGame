@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { SMASHUP_FACTION_PARTICIPATION_GROUPS } from '../factionParticipationPool';
 import {
     getFactionVariantGroupById,
     getPreferredFactionVariant,
@@ -47,8 +48,22 @@ describe('SmashUp faction variant groups', () => {
 
     it('hides DIY factions when the diy expansion is disabled', () => {
         const groups = getVisibleFactionVariantGroups('zh-CN', ['titans']);
+        const groupIds = groups.map((group) => group.groupId);
 
-        expect(groups.map((group) => group.groupId)).not.toContain(SMASHUP_FACTION_IDS.HULUWAWA);
+        expect(groupIds).not.toContain(SMASHUP_FACTION_IDS.HULUWAWA);
+        expect(groupIds).toContain(SMASHUP_FACTION_IDS.PALADINS);
         expect(getPreferredFactionVariant(SMASHUP_FACTION_IDS.HULUWAWA, 'zh-CN', ['titans'])).toBeUndefined();
+        expect(getPreferredFactionVariant(SMASHUP_FACTION_IDS.PALADINS, 'zh-CN', ['titans'])?.id)
+            .toBe(SMASHUP_FACTION_IDS.PALADINS);
+    });
+
+    it('keeps Paladins in single faction packs instead of the DIY/custom group', () => {
+        const singleFactionPacks = SMASHUP_FACTION_PARTICIPATION_GROUPS
+            .find((group) => group.id === 'single_faction_packs');
+        const customGroup = SMASHUP_FACTION_PARTICIPATION_GROUPS
+            .find((group) => group.id === 'custom');
+
+        expect(singleFactionPacks?.factionIds).toContain(SMASHUP_FACTION_IDS.PALADINS);
+        expect(customGroup?.factionIds).not.toContain(SMASHUP_FACTION_IDS.PALADINS);
     });
 });

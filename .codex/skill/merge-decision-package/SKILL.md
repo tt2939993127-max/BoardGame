@@ -9,6 +9,13 @@ description: "BoardGame 保留/合并/真相源决策包。用于多 worktree、
 
 把“有两边内容要不要保留/合并”的混乱问题，压成普通人能直接判断的决策包。默认先说明哪些能全保留、哪些只是正式入口不能双生效，再给一句用户可直接回复的推荐方案。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只负责生成给用户看的保留/合并裁决包。
+- 分支 / worktree 目标锁定和删改影响标准，以 `docs/ai-rules/worktree-branch-target-lock.md` 为 `canonical-source`。
+- 真正执行 PR/分支合并时回到 `.codex/skill/merge-pr-workflow/SKILL.md`；普通提交/推送回到 `.codex/skill/git-operations/SKILL.md`。
+- 本 skill 不执行合并、不删除分支、不移动文件；它只把证据转成用户能判断的决策说明。
+
 ## 先决条件
 
 开始前先锁定四件事：

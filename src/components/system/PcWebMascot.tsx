@@ -16,6 +16,8 @@ const shouldHideOnRoute = (pathname: string) => (
     || pathname.startsWith('/games/summonerwars/config/')
     || pathname === '/games/dicethrone/config'
     || pathname.startsWith('/games/dicethrone/config/')
+    || pathname === '/games/betrayal/config'
+    || pathname.startsWith('/games/betrayal/config/')
     || pathname.startsWith('/admin')
     || pathname.startsWith('/dev')
 );

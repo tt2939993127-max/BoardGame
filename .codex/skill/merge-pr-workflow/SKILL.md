@@ -8,6 +8,13 @@ description: "BoardGame PR 合并流程。用于合并 PR/分支、冲突处理�
 ## 概览
 按仓库规范执行 PR 合并：自动发现目标 PR 分支、预检查、合并/冲突处理、审计与验证，并输出可追溯汇报。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载 PR/分支合并执行顺序、冲突处理和合并后验证。
+- 日常提交、推送、pre-push 阻塞和普通 Git 操作以 `.codex/skill/git-operations/SKILL.md` 为入口。
+- 分支 / worktree 目标锁定标准以 `docs/ai-rules/worktree-branch-target-lock.md` 为 `canonical-source`。
+- 需要让用户判断“保留哪边 / 能不能都保留”时，使用 `.codex/skill/merge-decision-package/SKILL.md`；本 skill 不把用户决策包模板复制成合并流程正文。
+
 ## 必读/引用
 - **必须先读**：仓库根目录 `AGENTS.md`（遵守分支/验证/提交要求）
 - **合并规则参考**：本技能引用 `references/git-merge-checklist.md`（从 `docs/git-merge-checklist.md` 归档）

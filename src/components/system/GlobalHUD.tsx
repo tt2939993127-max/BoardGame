@@ -41,6 +41,8 @@ const shouldHideOnRoute = (pathname: string) => (
     || pathname.startsWith('/games/summonerwars/config/')
     || pathname === '/games/dicethrone/config'
     || pathname.startsWith('/games/dicethrone/config/')
+    || pathname === '/games/betrayal/config'
+    || pathname.startsWith('/games/betrayal/config/')
 );
 
 const openExternalUrlInNewTab = (url: string) => {

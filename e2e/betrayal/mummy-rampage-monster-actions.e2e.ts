@@ -10,6 +10,7 @@ import {
 } from '../helpers/common';
 import {
     createFirstScenarioHauntRuntimeCore,
+    expectVisiblePhysicalDiceBox,
     initBetrayalContext,
     injectCore,
     saveScreenshot,
@@ -57,6 +58,37 @@ const humanTestUrlForPlayer = (playerId: string) =>
     `/play/betrayal?players=3&playerID=${playerId}&seat0=human&seat1=human&seat2=human`;
 const HUMAN_TRAITOR_TEST_URL = humanTestUrlForPlayer('2');
 const MUMMY_MONSTER_ID = 'mummy';
+
+const expectRollContinueButtonUsable = async (page: Page) => {
+    const continueButton = page.getByTestId('betrayal-roll-continue');
+    await expect(continueButton).toBeVisible();
+    const metrics = await continueButton.evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const samplePoints = [
+            { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+            { x: rect.left + rect.width / 2, y: rect.bottom - 4 },
+            { x: rect.left + 4, y: rect.top + rect.height / 2 },
+            { x: rect.right - 4, y: rect.top + rect.height / 2 },
+        ];
+        return {
+            width: rect.width,
+            height: rect.height,
+            top: rect.top,
+            bottom: rect.bottom,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            hitTestPasses: samplePoints.map((point) => {
+                const target = document.elementFromPoint(point.x, point.y);
+                return target === button || button.contains(target);
+            }),
+        };
+    });
+    expect(metrics.width).toBeGreaterThanOrEqual(88);
+    expect(metrics.height).toBeGreaterThanOrEqual(42);
+    expect(metrics.top).toBeGreaterThanOrEqual(0);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+    expect(metrics.hitTestPasses.every(Boolean)).toBe(true);
+};
 
 type RoomFloor = BetrayalCore['rooms'][number]['floor'];
 
@@ -713,10 +745,12 @@ test.describe('山屋惊魂木乃伊横行怪物行动真实入口', () => {
         await expect(rollPanel).toBeVisible();
         await expect(rollPanel).toContainText('木乃伊移动');
         await expect(rollPanel).toContainText('可移动 0 间');
+        await expectVisiblePhysicalDiceBox(rollPanel);
         await waitForPhysicalDiceSettled(rollPanel);
         await expect(rollPanel.getByTestId('betrayal-house-dice-physics-source')).toHaveAttribute('data-dice-settled', 'true');
         await expect(rollPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-physics-ready', 'true');
         await expect(rollPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-preload-state', 'none');
+        await expectRollContinueButtonUsable(page);
         await saveScreenshot(page, MOVE_ROLL_SCREENSHOT);
 
         await page.getByTestId('betrayal-roll-continue').click();
@@ -791,10 +825,12 @@ test.describe('山屋惊魂木乃伊横行怪物行动真实入口', () => {
         await expect(rollPanel).toBeVisible();
         await expect(rollPanel).toContainText('木乃伊移动');
         await expect(rollPanel).toContainText('可移动 1 间');
+        await expectVisiblePhysicalDiceBox(rollPanel);
         await waitForPhysicalDiceSettled(rollPanel);
         await expect(rollPanel.getByTestId('betrayal-house-dice-physics-source')).toHaveAttribute('data-dice-settled', 'true');
         await expect(rollPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-physics-ready', 'true');
         await expect(rollPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-preload-state', 'none');
+        await expectRollContinueButtonUsable(page);
         await saveScreenshot(page, MOVE_ONE_ROLL_SCREENSHOT);
 
         await page.getByTestId('betrayal-roll-continue').click();

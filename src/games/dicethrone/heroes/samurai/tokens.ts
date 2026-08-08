@@ -44,6 +44,7 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         category: 'debuff',
         passiveTrigger: {
             timing: 'onDamageDealt',
+            ignoreModifierOnUltimateDamage: true,
             removable: true,
             consumeOnTrigger: true,
             actions: [{ type: 'modifyStat', target: 'self', value: -1 }],

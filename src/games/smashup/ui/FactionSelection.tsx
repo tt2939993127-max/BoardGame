@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
-import { buildFactionSelectionIdentitySet, FACTION_DISPLAY_NAMES, normalizeFactionSelectionId } from '../domain/ids';
+import {
+    buildFactionSelectionIdentitySet,
+    FACTION_DISPLAY_NAMES,
+    isSmashUpDiyFaction,
+    normalizeFactionSelectionId,
+} from '../domain/ids';
 import {
     FACTION_METADATA,
     getFactionMechanicTutorial,
@@ -454,6 +459,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID, pl
             : group.defaultVariant;
         const showImplementationBanner = isFactionImplementationInProgress(group.groupId)
             || (selectedVariantId ? isFactionImplementationInProgress(selectedVariantId) : false);
+        const showDiyBadge = isSmashUpDiyFaction(previewFactionId);
         const selectedOverlayText = isMyTurn
             ? t('ui.click_to_cancel_selection')
             : t('ui.selected');
@@ -535,6 +541,15 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID, pl
                                     {t(labelMeta.nameKey)}
                                 </h3>
                             </div>
+
+                            {showDiyBadge && (
+                                <div
+                                    className="absolute left-1.5 top-1.5 z-40 rounded border border-purple-300/65 bg-purple-950/78 px-1.5 py-0.5 text-[9px] font-black uppercase leading-none tracking-[0.12em] text-purple-100 shadow-[0_2px_8px_rgba(88,28,135,0.45)] lg:left-2 lg:top-2 lg:px-2 lg:py-1 lg:text-[10px]"
+                                    data-testid={`faction-diy-badge-${group.groupId}`}
+                                >
+                                    DIY
+                                </div>
+                            )}
 
                             {showImplementationBanner && (
                                 <ImplementationStatusRibbon

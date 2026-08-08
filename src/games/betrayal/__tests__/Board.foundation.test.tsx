@@ -4669,6 +4669,8 @@ describe('Betrayal Board foundation', () => {
         );
         expect(screen.getByTestId('betrayal-discovery-detail')).toHaveTextContent('器械库获得砍刀');
         expect(screen.getByTestId('betrayal-discovery-detail')).toHaveTextContent('展示后埋葬急救包');
+        expect(screen.queryByTestId('betrayal-discovery-card-front-missing')).not.toBeInTheDocument();
+        expect(screen.queryByText('无发现牌')).not.toBeInTheDocument();
         const armorySteps = expectDiscoveryResolutionLedgerTraceOnly(2);
         expect(armorySteps[0]).toHaveTextContent('器械库获得砍刀');
         expect(armorySteps[1]).toHaveTextContent('展示后埋葬急救包');

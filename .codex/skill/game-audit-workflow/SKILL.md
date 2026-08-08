@@ -8,6 +8,14 @@ description: "BoardGame 规则审计与证据链流程。用于规则、卡牌�
 ## 概览
 本技能用于**所有游戏**的审计工作：从权威规则/图片/说明出发，对实现做全链路对照，并按 **D 维度库**输出可复查审计证据（含测试/截图链路）。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载审计执行顺序、证据产出流程和项目内操作口径。
+- 审计入口、证据分层和流程门禁以 `docs/ai-rules/testing-audit.md` 为主源。
+- fail-close、全面审计完成定义和矩阵门禁以 `docs/ai-rules/testing-audit-core-principles.md` 为主源。
+- D 维度索引与输出格式以 `docs/ai-rules/testing-audit-dimensions.md` 及其分卷为主源。
+- 本 skill 不复制上述规范正文；如发现冲突，先改规范主源，再同步本 workflow 的步骤或引用。
+
 **必读权威维度索引**：`docs/ai-rules/testing-audit-dimensions.md`；按命中维度再打开对应主题分卷。
 - 审计入口与证据分层读：`docs/ai-rules/testing-audit.md`。
 - fail-close、全面审计完成定义、交互入口语义矩阵和技能完整流程矩阵读：`docs/ai-rules/testing-audit-core-principles.md`。

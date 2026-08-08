@@ -56,7 +56,7 @@
 ## 共享基线与游戏实现分线收口（强制）
 
 - **真实问题定义**：新游戏 workflow 中常见失误不是“没建 worktree”，而是把两类改动混在一起处理：
-  1. 本应进入 `main` 的共享基线改动（项目 skill、通用 workflow、全局规范补强）；
+  1. 本应进入 `main` 的共享基线改动（项目 skill、通用 workflow、项目全局规范补强）；
   2. 只应留在 `feat/game-<gameId>` worktree 的游戏实现（`src/games/<gameId>/**`、该游戏 i18n、OpenSpec change、测试、evidence、design-system 等）。
 - **正规做法**：
   1. 先把共享基线改动在职责正确的主线现场整理清楚；

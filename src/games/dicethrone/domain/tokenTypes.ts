@@ -260,6 +260,8 @@ export interface PassiveTriggerConfig {
      * - opponentAttackDamage: 仅对手发起的攻击伤害
      */
     damageTriggerScope?: 'anyDamage' | 'opponentAttackDamage';
+    /** 终极伤害仍触发消耗，但不应用本被动的数值修正（如武士耻辱）。 */
+    ignoreModifierOnUltimateDamage?: boolean;
     /** 效果行为（可自动执行） */
     actions?: EffectAction[];
     /** 触发后自动移除自身全部层数 */

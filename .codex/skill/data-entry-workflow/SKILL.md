@@ -5,11 +5,18 @@ description: "BoardGame 数据录入与核对流程。用于图片、规则书�
 
 # 数据录入工作流
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载 BoardGame 数据录入的执行顺序、路由和项目内交付要求。
+- 通用录入原则、来源优先级、核对契约和零猜测门禁以 `docs/ai-rules/data-entry.md` 为 `canonical-source`。
+- 图片/素材路径、manifest、正式资源链和服务器主源以 `docs/ai-rules/asset-pipeline.md` 为 `canonical-source`。
+- 本 skill 可以保留最小提醒，但不应复制 `data-entry.md` 的完整标准正文；如发现冲突，先改规范主源，再同步本 workflow。
+
 ## 何时使用
 
 - 用户要求“录入数据”“根据图片补卡牌/技能/Token”“核对图片和代码”“整理真相源”“补 atlas 索引”“根据规则书/PDF/Wiki 更新文案或静态数据”时使用。
 - 这不是实现 skill；它先收紧数据录入纪律，再把任务路由到对应游戏的 workflow。
-- 当任务明确是“配置表 / 配置审查 / 字段核对 / 配置重录 / 配置修正提案”时，先使用全局 `D:\codex-home\skills\config-review-workflow\SKILL.md`；本 skill 只补图片、规则源、裁图和录入合同，不复制配置表工作流正文。
+- 当任务明确是“配置表 / 配置审查 / 字段核对 / 配置重录 / 配置修正提案”时，先使用系统 `D:\codex-home\skills\config-review-workflow\SKILL.md`；本 skill 只补图片、规则源、裁图和录入合同，不复制配置表工作流正文。
 
 ## 先读
 
@@ -216,7 +223,7 @@ description: "BoardGame 数据录入与核对流程。用于图片、规则书�
 - 若还没有专用 workflow：
   以 `docs/ai-rules/data-entry.md` 为主流程，再补读该游戏自己的 `src/games/<gameId>/rule/` 文档。
   新游戏第一次录入时，必须先把图面字段版式合同写进本轮 evidence；若该版式会复用，后续再沉淀到对应游戏 workflow 或规则文档。
-- 不得把某个游戏的字段结构、抓取站点或索引习惯提升成全局默认。
+- 不得把某个游戏的字段结构、抓取站点或索引习惯提升成项目全局默认。
 
 ## 交付要求
 

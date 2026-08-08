@@ -69,7 +69,7 @@ import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
 import { getUsableTokenAmountForTiming } from './tokenResponse';
 import { getTokenUseOptions } from './tokenTypes';
 import { getGameMode } from './utils';
-import { isPurifiableDebuffId, isRemovableStatusId } from './statusRemoval';
+import { canRemoveStatusFromPlayer, isPurifiableDebuffId, isRemovableStatusId } from './statusRemoval';
 import { isDirectDiceInterferenceActor } from './responseWindowGuards';
 
 // ============================================================================
@@ -1155,6 +1155,9 @@ const validateRemoveStatus = (
     if (targetError) return targetError;
 
     if (cmd.payload.statusId) {
+        if (!canRemoveStatusFromPlayer(state, playerId, cmd.payload.targetPlayerId, cmd.payload.statusId)) {
+            return fail('invalid_status');
+        }
         if (!playerHasStatusOrToken(state, cmd.payload.targetPlayerId, cmd.payload.statusId)) {
             return fail('no_status');
         }
@@ -1180,6 +1183,10 @@ const validateTransferStatus = (
     const interaction = pendingInteraction!;
     const sourceTargetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.fromPlayerId);
     if (sourceTargetError) return sourceTargetError;
+
+    if (!canRemoveStatusFromPlayer(state, playerId, cmd.payload.fromPlayerId, cmd.payload.statusId)) {
+        return fail('invalid_status');
+    }
 
     const targetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.toPlayerId);
     if (targetError) return targetError;

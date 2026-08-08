@@ -7,6 +7,13 @@ description: "BoardGame 桌游 UI 概念图/imagegen prompt 前置流程。用�
 
 这个 skill 用来把“规则 + 素材”转成可靠的 UI 生图 brief。目标不是让图更花，而是少做少错：先证明理解了游戏和素材，再调用 `imagegen`。默认不是“一次出完所有图”，而是先过结构，再过布局收敛，再过分界面；风格默认只收成一版，且必须和素材统一，除非用户明确要求才额外做风格分叉。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载 BoardGame 生图/设计稿执行步骤、证据块、输入包和返工流程。
+- UI 设计原则以 `docs/ai-rules/ui-ux.md` 为 `canonical-source`；UI 改动验收和截图门禁以 `docs/ai-rules/ui-change-gates.md` 为 `canonical-source`。
+- 资源和素材链路以 `docs/ai-rules/asset-pipeline.md` 为 `canonical-source`。
+- 本 skill 不把这些标准复制成第二份规范；如发现冲突，先改标准文档，再同步本 workflow 的引用或步骤。
+
 ## 使用顺序
 
 1. 先读当前项目规范：`AGENTS.md`、`docs/ai-rules/ui-ux.md`、`docs/ai-rules/asset-pipeline.md`。

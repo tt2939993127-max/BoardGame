@@ -276,6 +276,25 @@ function markCurrentAttackReadyAfterInteraction(
     };
 }
 
+const isInteractionResolutionSideEffect = (event: DiceThroneEvent): boolean => {
+    const sourceCommandType = event.sourceCommandType;
+    if (event.type === 'CARD_DISCARDED') {
+        return sourceCommandType === 'RESOLVE_INTERACTION';
+    }
+    if (
+        event.type === 'STATUS_REMOVED'
+        || event.type === 'TOKEN_CONSUMED'
+        || event.type === 'STATUS_APPLIED'
+        || event.type === 'TOKEN_GRANTED'
+    ) {
+        return sourceCommandType === 'REMOVE_STATUS'
+            || sourceCommandType === 'TRANSFER_STATUS'
+            || sourceCommandType === 'GRANT_TOKENS'
+            || sourceCommandType === 'RESOLVE_INTERACTION';
+    }
+    return false;
+};
+
 function applyEmergencySkipFallback(core: DiceThroneCore, context: EmergencySkipContext): DiceThroneCore | null {
     if (!core.pendingAttack) return null;
 
@@ -759,9 +778,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // ---- 状态/手牌交互自动完成：只在各自权威完成事件出现时 resolve ----
                 // 注意：REMOVE_STATUS 移除所有状态时会生成多个 STATUS_REMOVED 事件，
                 // 使用 statusInteractionCompleted 标记防止重复 resolve
-                if (!statusInteractionCompleted && (dtEvent.type === 'STATUS_REMOVED' || dtEvent.type === 'TOKEN_CONSUMED'
-                    || dtEvent.type === 'STATUS_APPLIED' || dtEvent.type === 'TOKEN_GRANTED'
-                    || dtEvent.type === 'CARD_DISCARDED')) {
+                if (!statusInteractionCompleted && isInteractionResolutionSideEffect(dtEvent)) {
                     const current = newState.sys.interaction.current;
                     if (current?.kind === 'dt:card-interaction') {
                         const interactionData = current.data as DtInteractionDescriptor;

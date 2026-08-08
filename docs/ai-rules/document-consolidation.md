@@ -51,6 +51,24 @@
 
 1. `AGENTS.md` 的部署/Android OTA 细则：应下沉到 `.codex/skill/android-app-release/SKILL.md`、`docs/deploy.md` 和 `docs/mobile-release.md`，根文件只保留触发入口。
 2. `AGENTS.md` 的 UI/UX 规范：应下沉到 `docs/ai-rules/ui-ux.md` 与项目 UI/UX skill，根文件只保留“UI 改动先读哪里”。
+3. 根目录历史计划/日志：`task_plan.md`、`progress.md`、`findings.md`、`lint-output.txt`、`e2e-ai-test-*.txt`、`WIKI-*.md` 需要先判断当前/历史/临时状态，再迁入 `temp/`、`evidence/` 或补状态标记；不得直接删除。
+4. 单游戏文档双入口：`docs/features/*`、`docs/refactor/*`、`docs/plans/*`、`docs/improvements/*` 中已发现与 `docs/games/<gameId>/...` 精确重复的文档；倾向保留游戏目录为长期入口，旧顶层入口需先查引用后处理。
+5. OpenSpec 已完成但未归档变更：`openspec/changes/` 中多项 `tasks.md` 已全勾选但仍未进入 `archive/`；需单独按 OpenSpec 流程验证并归档。
+
+## 2026-08-08 全仓文档盘点
+
+- 只读扫描约 3,748 个 Markdown / 文本文档：`evidence/` 约 1,916 个，`openspec/` 约 1,000 个，`docs/` 约 478 个，`.codex/skill/` 约 54 个。
+- 已补 `docs/README.md` 作为总入口，并在根 `README.md` 的文档段落加入该入口；这是入口整理，不改变任何规则语义。
+- 用户纠偏：本轮真正目标是“AI 规范重构”，不是“产品规格实施”。已新增 `docs/ai-rules/README.md` 作为 AI 规范层主入口，并明确 `openspec/` 只管产品/架构能力规格，不作为 AI 规范重构主线。
+- 已新增 `docs/ai-rules/document-merge-ledger.md`，开始按 P0-P5 批次判断 AI 规范文档的主从关系、合并方向和待精读项；本轮扫描 `docs/ai-rules/` + `.codex/skill/` 未发现哈希完全相同的文件，问题主要是主题重叠和主从关系不清。
+- P1 UI 组第一步已完成主从标注：`.codex/skill/screenshot-delivery/SKILL.md` 和 `.codex/skill/boardgame-ui-imagegen/SKILL.md` 明确降为 workflow，只引用 `e2e-verification.md`、`ui-change-gates.md`、`ui-ux.md`、`asset-pipeline.md` 等规范主源。
+- P2 测试/审计组第一步已完成主从标注：`.codex/skill/game-audit-workflow/SKILL.md` 明确降为 workflow；行级检查未发现 `testing-audit.md` 与核心/维度分卷存在可直接删除的逐行重复，后续只做段落级迁移和压缩。
+- P3 资源/录入组第一步已完成主从标注：`.codex/skill/data-entry-workflow/SKILL.md` 和 `.codex/skill/atlas-crop/SKILL.md` 明确降为 workflow；`asset-pipeline.md`、`critical-image-preload.md`、`audio-assets.md`、`data-entry.md` 当前未发现可直接删除的逐行重复。
+- P4 新游戏/新增派系组第一步已完成职责分线：`create-new-game` 管从零新增游戏，`add-new-faction` 管已有游戏新增对象，`smashup-faction-addition` 只做大杀四方 adapter；OpenSpec 在这里只承担产品/架构能力规格，不作为 AI 规范重构入口。
+- P5 Git/合并组第一步已完成职责分层：`git-operations` 管日常提交/推送，`merge-pr-workflow` 管 PR/分支合并执行，`merge-decision-package` 管给用户的合并裁决包，`worktree-branch-target-lock.md` 管目标锁定标准。
+- 已按“保留侧存在 + 哈希完全一致 + 仓内无引用旧路径”的证据，删除 8 份顶层单游戏重复副本：`docs/features/smashup-base-restrictions-ui.md`、`docs/features/cardia-card-magnify.md`、`docs/refactor/dicethrone-hand-area-refactor.md`、`docs/refactor/dicethrone-auto-advance-upkeep-income.md`、`docs/improvements/smashup-actionlog-reason-display.md`、`docs/plans/2026-02-20-smashup-cursor-design.md`、`docs/dicethrone-new-heroes-progress.md`、`docs/dicethrone-audio-plan.md`。
+- 仍未处理的精确重复候选包括：小黑屋 legacy 规则在 `src/games/betrayal/rule/legacy-zh/` ↔ `docs/games/betrayal/sources/legacy-zh/` 双份存在，另有 `evidence/_shared/*` ↔ `evidence/*` 重复；这些需要先判定运行时/录入/审计默认入口和历史引用后再处理。
+- 后续若要继续去重，必须继续查引用并证明被删侧有效内容已迁移或明确失效。
 ## 本轮事故回代
 
 这次“余牌查询开启但正式对局点牌堆无响应”的流程问题，暴露的是两个层面：

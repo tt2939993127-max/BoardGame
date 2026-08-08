@@ -10658,6 +10658,9 @@ export default function BetrayalBoard({
     }
     return latestDiscovery?.detail?.trim() ?? "";
   }, [latestDiscovery, latestDiscoveryDetailSteps]);
+  const shouldShowLatestDiscoveryCardFace = Boolean(
+    latestDiscovery && latestDiscovery.kind !== "none",
+  );
   const latestDiscoveryPendingCardResolution =
     React.useMemo<BetrayalPendingCardResolutionState | null>(() => {
       const pendingResolution = activePendingCardResolution;
@@ -14788,6 +14791,15 @@ export default function BetrayalBoard({
                         {latestDiscoveryContinueLabel}
                       </button>
                     ) : null}
+                    <span
+                      className="sr-only"
+                      data-testid="betrayal-discovery-detail"
+                    >
+                      {latestDiscovery!.summary} {latestDiscovery!.detail}
+                    </span>
+                    {shouldShowLatestDiscoveryCardFace ||
+                    (shouldShowLatestDiscoveryRoll &&
+                      latestDiscoveryRecentRoll) ? (
                     <div
                       data-testid="betrayal-discovery-panel-main"
                       className={`flex min-h-0 items-center justify-center ${
@@ -14807,6 +14819,7 @@ export default function BetrayalBoard({
                             }`
                       }`}
                     >
+                      {shouldShowLatestDiscoveryCardFace ? (
                       <div
                           className={`shrink-0 ${
                           isPhoneLandscapeLayout &&
@@ -14819,12 +14832,6 @@ export default function BetrayalBoard({
                               : "w-[min(340px,calc(100vw-2rem))] md:w-[340px]"
                         }`}
                       >
-                        <span
-                          className="sr-only"
-                          data-testid="betrayal-discovery-detail"
-                        >
-                          {latestDiscovery!.summary} {latestDiscovery!.detail}
-                        </span>
                         {latestDiscoveryPanelVisual ? (
                           <DiscoveryAtlasFrame
                             visual={latestDiscoveryPanelVisual}
@@ -14846,6 +14853,7 @@ export default function BetrayalBoard({
                           </div>
                         )}
                       </div>
+                      ) : null}
                       {shouldShowLatestDiscoveryRoll &&
                       latestDiscoveryRecentRoll ? (
                         <RecentRollPanel
@@ -14876,6 +14884,7 @@ export default function BetrayalBoard({
                         />
                       ) : null}
                     </div>
+                    ) : null}
                     {latestDiscoveryFinalEffectText ? (
                       <div
                         data-testid="betrayal-discovery-final-effect"

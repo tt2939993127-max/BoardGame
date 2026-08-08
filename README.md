@@ -273,6 +273,7 @@ npm run test:e2e
 
 ## 📄 文档
 
+- [**文档总入口**](docs/README.md) — 按职责说明 docs、openspec、evidence、.codex/skill 和游戏规则文档该从哪里读
 - [**架构可视化**](docs/architecture-visual.svg) — 动画 SVG，一图看懂整体架构与管线流程
 - [架构设计文档](docs/architecture.md) — 完整技术架构说明
 - [部署指南](docs/deploy.md) — 同域 / Pages 分离 / 镜像部署完整说明

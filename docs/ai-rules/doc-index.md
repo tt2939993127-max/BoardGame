@@ -16,7 +16,7 @@
 | **国际化资源架构** (i18n 路径/符号链接/locale) | `docs/i18n-asset-architecture.md` | 方案 B2 架构、符号链接设置、未来迁移计划 |
 | **修改 DiceThrone** (文案/资源) | `docs/games/dicethrone/dicethrone-i18n.md` | 翻译 Key 结构、Scheme A 取图函数 |
 | **环境配置 / 部署** (端口/同域代理) | `docs/deploy.md` | 端口映射、环境变量、Nginx 参数 |
-| **协作者接入 Open Design** (需要设计 MCP、本地 AI 设计工具、设计稿 / 视觉方案工作流) | `docs/infra/open-design.md` | Open Design 是当前默认设计工具入口；优先接 `od mcp install codex/openclaw`；`CODEX_HOME` 默认 `D:\codex-home`；Open Design artifact、HTML 预览、运行页截图或 reference sheet 不等于设计稿合格，用户要设计稿时仍必须转到“新游戏位图设计稿 / 设计批准门禁”，先完成本轮规则重读、正式素材输入包、出图前硬回执和 AI 图面核验 |
+| **协作者接入 Open Design** (需要设计 MCP、本地 AI 设计工具、设计稿 / 视觉方案工作流) | `docs/infra/open-design.md` | Open Design 是当前默认设计工具入口；优先执行 `od mcp install codex`；`CODEX_HOME` 默认 `D:\codex-home`；Open Design artifact、HTML 预览、运行页截图或 reference sheet 不等于设计稿合格，用户要设计稿时仍必须转到“新游戏位图设计稿 / 设计批准门禁”，先完成本轮规则重读、正式素材输入包、出图前硬回执和 AI 图面核验 |
 | **Android App 打包 / 上传 / 原生更新 / OTA / 网站下载入口** | `.codex/skill/android-app-release/SKILL.md` + `docs/mobile-release.md` + `docs/android-app-build.md` | 先分 OTA 还是 native；release 必须正式壳；本地 build 不算完成；发布后必须回查 `latest.json` 并直接下载线上 APK 验 `appId/appName`；不要把“更新下载入口”误升格成“必须部署网站” |
 | **移动端素材包下载/清理/校验失败** (增量校验失败、本地临时文件校验失败、清理并重下仍失败) | `.codex/skill/android-app-release/SKILL.md` + `docs/mobile-release.md` + `docs/ai-rules/asset-pipeline.md` | 先回到真实移动素材包链路，锁 H5 清理、服务层安装模式、原生桥参数和原生日志；清理重下必须证明下一次安装已切完整 ZIP，发布 OTA 后必须下载线上 OTA zip 反查修复代码，缺少原始失败位点日志时不得宣称彻底修好 |
 | **本地联机测试** (单人同步调试) | `docs/test-mode.md` | 测试模式开关及其对视角的影响 |

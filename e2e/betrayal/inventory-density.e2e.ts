@@ -359,14 +359,43 @@ test.describe("山屋惊魂持有区高密度证据", () => {
     const previewOverlay = page.getByTestId("betrayal-room-preview-overlay");
     await expect(previewOverlay).toBeVisible();
     await expect(previewOverlay).toHaveCSS("position", "fixed");
-    const closeButton = previewOverlay.getByRole("button", { name: "收起" });
+    const closeButton = previewOverlay.getByTestId(
+      "betrayal-room-preview-overlay-close",
+    );
     await expect(closeButton).toBeVisible();
+    await expect(closeButton).toHaveText("收起");
     const closeButtonMetrics = await closeButton.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
+      const overlay = element.closest(
+        '[data-testid="betrayal-room-preview-overlay"]',
+      );
+      const previewContainer = element.parentElement?.querySelector(
+        ".group\\/modal",
+      );
+      const overlayRect = overlay?.getBoundingClientRect();
+      const previewRect = previewContainer?.getBoundingClientRect();
+      return {
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        right: rect.right,
+        overlayTop: overlayRect?.top ?? 0,
+        overlayRight: overlayRect?.right ?? 0,
+        previewTop: previewRect?.top ?? 0,
+        previewRight: previewRect?.right ?? 0,
+      };
     });
     expect(closeButtonMetrics.width).toBeGreaterThanOrEqual(44);
     expect(closeButtonMetrics.height).toBeGreaterThanOrEqual(44);
+    expect(closeButtonMetrics.top).toBeGreaterThanOrEqual(
+      closeButtonMetrics.previewTop,
+    );
+    expect(closeButtonMetrics.right).toBeLessThanOrEqual(
+      closeButtonMetrics.previewRight,
+    );
+    expect(closeButtonMetrics.right).toBeLessThan(
+      closeButtonMetrics.overlayRight - 80,
+    );
     await saveScreenshot(page, ROOM_PREVIEW_SCREENSHOT);
 
     await closeButton.click();

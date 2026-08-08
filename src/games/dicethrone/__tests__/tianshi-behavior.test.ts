@@ -15,6 +15,7 @@ import { TIANSHI_CARDS } from '../heroes/tianshi/cards';
 import {
     createHeroMatchup,
     createQueuedRandom,
+    getCardInteractionPrompt,
     injectPendingInteraction,
     testSystems,
 } from './test-utils';
@@ -454,6 +455,77 @@ describe('炽天使领域行为', () => {
         if (removeResult.success) {
             expect(removeResult.state.core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(0);
         }
+    });
+
+    it('神圣净化等待目标玩家先花费净化，再继续选择要移除的状态', () => {
+        const state = createTianshiState();
+        state.core.players['1'].tokens[TOKEN_IDS.PURIFY] = 1;
+        state.core.players['1'].statusEffects[STATUS_IDS.POISON] = 1;
+        state.core.players['1'].statusEffects[STATUS_IDS.BIND] = 1;
+
+        const ability = TIANSHI_ABILITIES.find(entry => entry.id === 'divine-purification');
+        const choiceEvents = resolveEffectsToEvents(ability?.effects ?? [], 'preDefense', {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'divine-purification',
+            state: state.core,
+            damageDealt: 0,
+            timestamp: 320,
+        }, { random: createQueuedRandom([1]) });
+        const choiceEvent = choiceEvents.find((event): event is Extract<DiceThroneEvent, { type: 'CHOICE_REQUESTED' }> => (
+            event.type === 'CHOICE_REQUESTED'
+        ));
+        const customId = choiceEvent?.payload.options[1]?.customId;
+        expect(customId).toBe('tianshi-divine-purification-target');
+        if (!customId) return;
+
+        const resolveChoice = getChoiceResolvedEventHandler(customId);
+        expect(resolveChoice).toBeDefined();
+        if (!resolveChoice) return;
+        const resolvedEvents = resolveChoice({
+            state: state.core,
+            playerId: '0',
+            customId,
+            sourceAbilityId: 'divine-purification',
+            value: 1,
+            timestamp: 321,
+        });
+        const interactionEvent = resolvedEvents.find((event): event is Extract<DiceThroneEvent, { type: 'INTERACTION_REQUESTED' }> => (
+            event.type === 'INTERACTION_REQUESTED'
+        ));
+        expect(interactionEvent?.payload.interaction.type).toBe('selectStatus');
+        if (!interactionEvent) return;
+        injectPendingInteraction(state, interactionEvent.payload.interaction);
+
+        const purifyResult = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('USE_PURIFY', '1', { statusId: STATUS_IDS.POISON }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(purifyResult.success).toBe(true);
+        if (!purifyResult.success) return;
+        expect(purifyResult.state.core.players['1'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
+        expect(purifyResult.state.core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(0);
+        expect(getCardInteractionPrompt(purifyResult.state, 'divine-purification').type).toBe('selectStatus');
+
+        const removeResult = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            purifyResult.state,
+            command('REMOVE_STATUS', '1', {
+                targetPlayerId: '1',
+                statusId: STATUS_IDS.BIND,
+            }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(removeResult.success).toBe(true);
+        if (!removeResult.success) return;
+        expect(removeResult.state.core.players['1'].statusEffects[STATUS_IDS.BIND] ?? 0).toBe(0);
+        expect(() => getCardInteractionPrompt(removeResult.state, 'divine-purification')).toThrow(
+            'Expected a card-interaction prompt, but none was active.',
+        );
     });
 
     it.each([

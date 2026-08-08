@@ -56,7 +56,7 @@ import { buildDrawEvents } from './deckEvents';
 import { RESOURCE_IDS } from './resources';
 import { getCustomActionHandler } from './effects';
 import { buildStatusAppliedOrChoiceEvents } from './statusEvents';
-import { isRemovableStatusId } from './statusRemoval';
+import { canRemoveStatusFromPlayer, isRemovableStatusId } from './statusRemoval';
 import {
     hasAfterRollConfirmedWindowBeenHandled,
     buildAfterRollConfirmedSignature,
@@ -818,6 +818,9 @@ export function execute(
             if (targetPlayer) {
                 if (statusId) {
                     // 移除单个状态/标记的一层；“移除全部”走 statusId 为空的分支。
+                    if (!canRemoveStatusFromPlayer(state, command.playerId, targetPlayerId, statusId)) {
+                        break;
+                    }
                     const currentStacks = targetPlayer.statusEffects[statusId] ?? 0;
                     if (currentStacks > 0) {
                         // 检查状态是否可被移除
@@ -847,7 +850,8 @@ export function execute(
                     // 移除所有状态（只移除可被移除的）
                     Object.entries(targetPlayer.statusEffects).forEach(([sid, stacks]) => {
                         if (stacks > 0) {
-                            if (isRemovableStatusId(state, sid)) {
+                            if (isRemovableStatusId(state, sid)
+                                && canRemoveStatusFromPlayer(state, command.playerId, targetPlayerId, sid)) {
                                 events.push({
                                     type: 'STATUS_REMOVED',
                                     payload: { targetId: targetPlayerId, statusId: sid, stacks },
@@ -859,7 +863,8 @@ export function execute(
                     });
                     Object.entries(targetPlayer.tokens).forEach(([tid, amount]) => {
                         if (amount > 0) {
-                            if (isRemovableStatusId(state, tid)) {
+                            if (isRemovableStatusId(state, tid)
+                                && canRemoveStatusFromPlayer(state, command.playerId, targetPlayerId, tid)) {
                                 events.push({
                                     type: 'TOKEN_CONSUMED',
                                     payload: { playerId: targetPlayerId, tokenId: tid, amount, newTotal: 0 },
@@ -890,6 +895,9 @@ export function execute(
                 // 检查是否可被转移（不可移除的 token 也不能被转移）
                 if (!isRemovableStatusId(state, statusId)) {
                     // 不可移除的 token 不能被转移，跳过
+                    break;
+                }
+                if (!canRemoveStatusFromPlayer(state, command.playerId, fromPlayerId, statusId)) {
                     break;
                 }
                 

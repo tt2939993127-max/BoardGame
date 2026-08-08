@@ -2056,4 +2056,35 @@ describe('武士耻辱 (Shame) Token', () => {
         expect(directDamage.finalDamage).toBe(6);
         expect(directDamage.sideEffectEvents).toHaveLength(0);
     });
+
+    it('终极攻击会移除耻辱但不降低终极伤害', () => {
+        const state = createHeroMatchup('samurai', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.SHAME] = 2;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'samurai-ultimate',
+            isUltimate: true,
+        } as any;
+
+        const ultimateDamage = createDamageCalculation({
+            baseDamage: 1,
+            source: { playerId: '0', abilityId: 'samurai-ultimate' },
+            target: { playerId: '1' },
+            state: state.core,
+            damageScope: 'attack',
+            timestamp: 102,
+        }).resolve();
+
+        expect(ultimateDamage.finalDamage).toBe(1);
+        expect(ultimateDamage.sideEffectEvents).toMatchObject([{
+            type: 'TOKEN_CONSUMED',
+            payload: {
+                playerId: '0',
+                tokenId: TOKEN_IDS.SHAME,
+                amount: 2,
+                newTotal: 0,
+            },
+        }]);
+    });
 });

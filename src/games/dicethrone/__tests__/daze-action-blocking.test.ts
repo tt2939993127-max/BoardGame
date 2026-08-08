@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { DiceThroneCommand, DiceThroneCore } from '../domain/types';
+import type { DiceThroneCommand, DiceThroneCore, InteractionDescriptor } from '../domain/types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { createInitializedState, fixedRandom } from './test-utils';
@@ -83,6 +83,38 @@ describe('Daze / Stun 语义', () => {
         expect(result.valid).toBe(false);
         if (!result.valid) {
             expect(result.error).toBe('player_is_stunned');
+        }
+    });
+
+    it('眩晕不能被对手的移除状态卡移除', () => {
+        const core = createCore();
+        core.players['1'].statusEffects[STATUS_IDS.DAZE] = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'remove-daze-from-opponent',
+            playerId: '0',
+            sourceCardId: 'card-bye-bye',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToRemove',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1'],
+        };
+
+        const result = validateCommand(
+            core,
+            {
+                type: 'REMOVE_STATUS',
+                playerId: '0',
+                payload: { targetPlayerId: '1', statusId: STATUS_IDS.DAZE },
+            } as DiceThroneCommand,
+            'main1',
+            interaction,
+        );
+
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+            expect(result.error).toBe('invalid_status');
         }
     });
 });

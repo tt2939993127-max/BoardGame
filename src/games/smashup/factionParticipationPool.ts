@@ -212,6 +212,7 @@ export const SMASHUP_FACTION_PARTICIPATION_GROUPS: SmashUpFactionParticipationGr
             SMASHUP_FACTION_IDS.GOBLINS,
             SMASHUP_FACTION_IDS.DIY_KILLERS,
             SMASHUP_FACTION_IDS.DIY_CLOWNS,
+            SMASHUP_FACTION_IDS.PALADINS,
         ],
     },
     {
@@ -231,7 +232,6 @@ export const SMASHUP_FACTION_PARTICIPATION_GROUPS: SmashUpFactionParticipationGr
         labelKey: 'setup.factionParticipation.groups.custom',
         factionIds: [
             SMASHUP_FACTION_IDS.HULUWAWA,
-            SMASHUP_FACTION_IDS.PALADINS,
         ],
     },
     {

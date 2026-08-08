@@ -8,6 +8,13 @@ description: 通用图集裁切与抽样验收流程；支持不规则网格配�
 用于从任意图集裁出单元图块，并做抽样检查（关键内容是否被裁掉、是否偏移）。  
 **目标**：裁切结果与运行时渲染一致，关键内容不被裁掉。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载图集裁切脚本、参数和抽样验收步骤。
+- 正式素材主源、压缩产物、manifest、运行时资源链和图集语义门禁，以 `docs/ai-rules/asset-pipeline.md` 为 `canonical-source`。
+- 数据录入核对合同以 `docs/ai-rules/data-entry.md` 为 `canonical-source`。
+- 本 skill 不把资源规范或录入规范复制成第二份正文；若冲突，先改规范主源。
+
 ## 适用场景
 - 新图集出现轻微左/右偏，需要微调裁切偏移
 - 需要批量导出 `slot-xx.webp/png` 做目检

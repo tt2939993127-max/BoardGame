@@ -356,6 +356,9 @@ export class DamageCalculation {
 
       for (const action of def.passiveTrigger.actions || []) {
         if (action.type !== 'modifyStat' || typeof action.value !== 'number') continue;
+        if (def.passiveTrigger.ignoreModifierOnUltimateDamage && coreState?.pendingAttack?.isUltimate === true) {
+          continue;
+        }
         const value = action.value * stacks;
         if (value === 0) continue;
         this.modifierStack = addModifier(this.modifierStack, {

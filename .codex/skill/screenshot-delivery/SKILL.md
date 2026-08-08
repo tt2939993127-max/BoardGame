@@ -9,6 +9,13 @@ description: "BoardGame 截图交付流程。用于打开图、给我看图、�
 `D:\codex-home\skills\artifact-preview-publisher\SKILL.md`、仓库脚本
 `npm run verify:open-image` 和项目截图验收口径。
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只规定截图如何核图、打开、发布和汇报。
+- 截图证据是否足够、必须拍哪些前后态、何时不能收口，以 `docs/ai-rules/e2e-verification.md` 为 `canonical-source`。
+- UI 改动是否通过玩家视角审计、是否需要继续返工，以 `docs/ai-rules/ui-change-gates.md` 为 `canonical-source`。
+- 本 skill 不再复制上述标准正文；若发现截图验收规则冲突，先改对应 `canonical-source`，再让本 skill 引用。
+
 ## 默认交付通道
 
 - 端到端截图、验收截图、PC/移动端对比图：先完成 AI 图面验收，再按

@@ -4,7 +4,7 @@
 
 本项目默认把 Open Design 作为设计工具入口，用来生成可落地设计产物、设计系统和前端稿。Open Design 只定义“用哪个工具接入设计链”，不定义“设计稿已经合格”。
 
-- **默认范围**：设计稿探索、`DESIGN.md` 设计系统、HTML / PDF / PPTX / 图片类产物、Codex / OpenClaw 通过 MCP 调用 Open Design。
+- **默认范围**：设计稿探索、`DESIGN.md` 设计系统、HTML / PDF / PPTX / 图片类产物，以及 Codex 通过 MCP 调用 Open Design。
 - **交付边界**：用户要“设计稿 / 视觉稿 / 效果图”时，默认交付物仍是 PNG / JPG / WebP 图片证据；imagegen 可用时走位图生图，imagegen 不可用且 Open Design 可用时自动转 Open Design artifact 候选稿，并以 artifact 渲染导出的 PNG / JPG / WebP 作为候选图。未审计的 Open Design artifact、HTML 预览、运行页截图或 reference sheet 只能是工具产物 / 内部校准物，不能直接冒充设计稿。
 - **规则与素材门禁**：涉及游戏主 UI、桌游版面、卡牌、token、骰子、角色板、棋盘、状态板等领域对象时，Open Design 运行前必须先按 `docs/ai-rules/doc-index.md` 的“新游戏位图设计稿 / 设计批准门禁”完成本轮规则重读、规则到画面映射、正式素材输入包和出图前硬回执。没有这些证据时，只能产出 blocked brief / 缺口清单，不得生成或打开完成态设计稿。
 - **素材不是 prompt 文案**：正式素材必须实际进入 Open Design 项目目录、reference sheet、图像输入、拼接基底、atlas crop 或运行时渲染链；只在 prompt 里写工作树路径、素材名或规则对象名，不算使用素材。
@@ -15,7 +15,7 @@
 - 用户要求接入本地设计工具或设计 MCP。
 - 当前任务需要先出设计稿、效果稿、页面原型、设计系统或前端可复刻视觉方案。
 - 当前任务已经完成规则 / 素材前置包，但 imagegen 入口不可用、CLI 缺 API key 或不能接入正式素材；此时自动转 Open Design，而不是停成最终阻塞。
-- Codex / OpenClaw 需要一个本地设计 MCP。
+- Codex 需要一个本地设计 MCP。
 
 ## 仓库内正式入口
 
@@ -25,7 +25,7 @@
 npm run setup:open-design
 ```
 
-如果本机没有 `od`，走源码安装到 `D:\codex-home\tools\open-design`，构建 daemon / MCP CLI，并安装 Codex / OpenClaw MCP：
+如果本机没有 `od`，走源码安装到 `D:\codex-home\tools\open-design`，构建 daemon / MCP CLI，并安装 Codex MCP：
 
 ```bash
 npm run setup:open-design:install
@@ -55,11 +55,11 @@ scripts\infra\setup-open-design.cmd -InstallSource
 - 优先寻找本机 `od` 命令。
 - 如果加 `-InstallSource` 且本机没有 `od`，则把 `nexu-io/open-design` 浅克隆到 `D:\codex-home\tools\open-design`。
 - 源码安装时要求 Node 24.x，并把 pnpm 补到官方要求的 `10.33.2`。
-- 源码安装只安装 daemon / MCP 依赖范围，避免因为桌面 Electron 依赖阻塞 Codex / OpenClaw 接入。
+- 源码安装只安装 daemon / MCP 依赖范围，避免因为桌面 Electron 依赖阻塞 Codex 接入。
 - 源码安装会在缺少 SQLite 原生绑定时单独重建 `better-sqlite3`；若 daemon 已经运行且绑定文件存在，会跳过重建以避免文件占用。
-- 执行 Open Design 的 MCP 安装：`od mcp install codex`，并尝试 `od mcp install openclaw`。
+- 执行 Open Design 的 MCP 安装：`od mcp install codex`。
 - Codex 当前没有可执行文件在 PATH 时，脚本直接写当前生效的 `D:\codex-home\config.toml`。
-- 安装后提示重启 Codex / OpenClaw，因为当前会话不会热加载新 MCP 工具。
+- 安装后提示重启 Codex，因为当前会话不会热加载新 MCP 工具。
 - `start-open-design.ps1` 会在后台启动 `http://127.0.0.1:7456`，日志写入 `logs/open-design-daemon.*.log`。
 
 ## 验证
@@ -82,7 +82,7 @@ node D:\codex-home\tools\open-design\apps\daemon\bin\od.mjs --help
 codex mcp list
 ```
 
-至少要看到 Open Design 相关 MCP 入口。之后重启 Codex / OpenClaw，再在新会话里使用 Open Design 工具。
+至少要看到 Open Design 相关 MCP 入口。之后重启 Codex，再在新会话里使用 Open Design 工具。
 
 daemon 验证：
 

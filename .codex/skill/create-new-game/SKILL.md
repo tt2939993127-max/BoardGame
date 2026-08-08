@@ -5,6 +5,13 @@ description: "BoardGame 新游戏创建或资源/data intake 流程。用于新�
 
 # 创建新游戏（分阶段工作流）
 
+## 规范来源与职责边界
+
+- 本 skill 是 `workflow`：只承载 BoardGame 新游戏从规则/素材 intake 到骨架、实现、UI、验证的阶段流程。
+- AI 规范重构不由本 skill 承担；AI 规范入口是 `docs/ai-rules/README.md`。
+- 新游戏涉及产品/架构能力变更时，OpenSpec 只承担产品能力规格，不承担 AI 行为规范。
+- 数据录入、资源链、UI gate、审计和 E2E 的标准正文分别回到 `docs/ai-rules/data-entry.md`、`docs/ai-rules/asset-pipeline.md`、`docs/ai-rules/ui-change-gates.md`、`docs/ai-rules/testing-audit.md`、`docs/ai-rules/e2e-verification.md`。
+
 > **核心原则**：每个阶段独立可验证、独立可提交。阶段之间不留 TODO 缺口。AI 必须在完成当前阶段验收后才能进入下一阶段。
 > **规则源就是规则真相**：项目 `rule/` 目录里的规则书、剧本书、帮助卡转写或用户指定真相源，一经可读并锁定，就是本轮规则依据；不得把它说成“还没有规则”或“要结构化后才算规则”。所谓结构化只指把同一份规则源登记成可复查的原文定位、对象全集、原子子句、可见性、状态/命令/UI/测试覆盖矩阵，服务实现审计，不产生第二套规则。
 > **新增游戏第一步不是写 Board**：在规则来源和素材目录已给出时，第一批实质动作必须是规则数据录入、规则对象抽取、素材候选定位、语义命名与正式落盘/替代裁定。低保真程序化界面只能算原型，不能绕过素材 intake。

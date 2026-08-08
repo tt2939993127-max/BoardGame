@@ -11,6 +11,7 @@ import {
   getBetrayalConfigReviewCellValue,
   getBetrayalConfigReviewFieldDefinition,
   isBetrayalConfigReviewFieldApplicable,
+  type BetrayalConfigReviewColumnKey,
   type BetrayalConfigReviewFieldKey,
   type BetrayalConfigReviewRow,
   type BetrayalConfigReviewType,
@@ -60,6 +61,68 @@ const FIELD_LABELS: Record<BetrayalConfigReviewFieldKey, string> = {
   sourcePath: '规则来源',
   reviewStatus: '审查状态',
 };
+
+const COLUMN_WIDTHS: Record<BetrayalConfigReviewColumnKey, number> = {
+  category: 112,
+  name: 200,
+  floor: 96,
+  coordinates: 88,
+  state: 132,
+  visualId: 170,
+  atlasFrame: 88,
+  discoverySymbol: 180,
+  doorways: 360,
+  orientationTurns: 120,
+  rotatedDoorways: 260,
+  connectionStatus: 240,
+  scenarioCardLabel: 190,
+  triggerOmenLabel: 190,
+  hauntNumber: 96,
+  implementationStatus: 160,
+  implementedScenarioId: 190,
+  runtimeSupport: 230,
+  runtimeObjective: 320,
+  hauntObjective: 320,
+  hauntId: 180,
+  reward: 240,
+  sourcePath: 360,
+  reviewStatus: 160,
+};
+
+const STICKY_COLUMN_LEFT: Partial<Record<BetrayalConfigReviewColumnKey, number>> = {
+  category: 0,
+  name: COLUMN_WIDTHS.category,
+};
+
+const CONFIG_TABLE_MIN_WIDTH = BETRAYAL_CONFIG_REVIEW_COLUMN_KEYS.reduce(
+  (total, columnKey) => total + COLUMN_WIDTHS[columnKey],
+  0,
+);
+
+function getColumnStyle(
+  columnKey: BetrayalConfigReviewColumnKey,
+  backgroundColor?: string,
+  zIndex?: number,
+): React.CSSProperties {
+  const stickyLeft = STICKY_COLUMN_LEFT[columnKey];
+  return {
+    width: COLUMN_WIDTHS[columnKey],
+    minWidth: COLUMN_WIDTHS[columnKey],
+    ...(stickyLeft !== undefined
+      ? {
+          backgroundColor,
+          left: stickyLeft,
+          position: 'sticky',
+          zIndex,
+          ...(columnKey === 'name' ? { boxShadow: '2px 0 6px rgba(91, 57, 31, 0.12)' } : {}),
+        }
+      : {}),
+  };
+}
+
+function getColumnClassName(columnKey: BetrayalConfigReviewColumnKey): string {
+  return `betrayal-config-col-${columnKey}`;
+}
 
 interface PendingConfigEdit {
   row: BetrayalConfigReviewRow;
@@ -290,6 +353,19 @@ export const BetrayalConfigReview = () => {
 
   return (
     <main className="min-h-screen bg-[#f4ead8] px-5 py-6 text-[#2f1e12]">
+      <style>{`
+        @media (max-width: 640px) {
+          .betrayal-config-col-category {
+            width: 78px !important;
+            min-width: 78px !important;
+          }
+          .betrayal-config-col-name {
+            width: 112px !important;
+            min-width: 112px !important;
+            left: 78px !important;
+          }
+        }
+      `}</style>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
         <header className="rounded-xl border border-[#8a5a35]/30 bg-[#fff8ec] p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -369,21 +445,40 @@ export const BetrayalConfigReview = () => {
 
         <section className="overflow-hidden rounded-xl border border-[#8a5a35]/30 bg-[#fffaf1] shadow-sm">
           <div className="max-h-[72vh] overflow-auto">
-            <table className="min-w-[1900px] border-collapse text-sm">
+            <table
+              className="border-separate border-spacing-0 text-sm"
+              data-testid="betrayal-config-table"
+              style={{ minWidth: CONFIG_TABLE_MIN_WIDTH, tableLayout: 'fixed' }}
+            >
+              <colgroup>
+                {BETRAYAL_CONFIG_REVIEW_COLUMN_KEYS.map((columnKey) => (
+                  <col key={columnKey} className={getColumnClassName(columnKey)} style={getColumnStyle(columnKey)} />
+                ))}
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-[#ead9bd] text-left text-[#3b2819]">
                 <tr>
                   {BETRAYAL_CONFIG_REVIEW_COLUMN_KEYS.map((columnKey) => (
-                    <th key={columnKey} className="border-b border-[#8a5a35]/30 px-3 py-2 font-semibold">
+                    <th
+                      key={columnKey}
+                      className={`${getColumnClassName(columnKey)} border-b border-[#8a5a35]/30 px-3 py-2 font-semibold`}
+                      style={getColumnStyle(columnKey, '#ead9bd', 30)}
+                    >
                       {FIELD_LABELS[columnKey]}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.rowId} className="odd:bg-[#fffaf1] even:bg-[#f8eddc]">
+                {filteredRows.map((row, rowIndex) => {
+                  const rowBackground = rowIndex % 2 === 0 ? '#fffaf1' : '#f8eddc';
+                  return (
+                    <tr key={row.rowId} className="odd:bg-[#fffaf1] even:bg-[#f8eddc]">
                     {BETRAYAL_CONFIG_REVIEW_COLUMN_KEYS.map((columnKey) => (
-                      <td key={columnKey} className="max-w-[260px] align-top border-b border-[#8a5a35]/15 px-3 py-2">
+                      <td
+                        key={columnKey}
+                        className={`${getColumnClassName(columnKey)} align-top break-words border-b border-[#8a5a35]/15 px-3 py-2`}
+                        style={getColumnStyle(columnKey, rowBackground, 2)}
+                      >
                         <ConfigEditableCell
                           row={row}
                           fieldKey={columnKey}
@@ -392,8 +487,9 @@ export const BetrayalConfigReview = () => {
                         />
                       </td>
                     ))}
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
