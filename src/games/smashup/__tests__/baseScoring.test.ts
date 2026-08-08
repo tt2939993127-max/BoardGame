@@ -536,6 +536,53 @@ describe('基地记分与力量计算', () => {
             expect(drawEvent).toBeDefined();
         });
 
+        it('scoreOneBase 会先清场再让 Samurai-Chan POD 从空牌库重洗弃牌堆抽牌', () => {
+            const state: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0', {
+                        factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                        deck: [],
+                        discard: [
+                            { uid: 'discard-draw-1', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' },
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'base_shoguns_palace_pod',
+                    minions: [
+                        { uid: 'chan-pod-1', defId: 'samurai_samurai_chan_pod', controller: '0', owner: '0', basePower: 23, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const result = scoreOneBase(state, 0, [], '0', 1000);
+            const clearIndex = result.events.findIndex((event) => event.type === SU_EVENTS.BASE_CLEARED);
+            const reshuffleIndex = result.events.findIndex((event) =>
+                event.type === SU_EVENTS.DECK_RESHUFFLED
+                && (event as any).payload?.playerId === '0'
+            );
+            const drawIndex = result.events.findIndex((event) =>
+                event.type === SU_EVENTS.CARDS_DRAWN
+                && (event as any).payload?.playerId === '0'
+                && ((event as any).payload?.cardUids ?? []).includes('discard-draw-1')
+            );
+
+            expect(clearIndex).toBeGreaterThanOrEqual(0);
+            expect(reshuffleIndex).toBeGreaterThan(clearIndex);
+            expect(drawIndex).toBeGreaterThan(reshuffleIndex);
+
+            const finalState = result.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), state);
+            expect(finalState.players['0'].hand.map((card: any) => card.uid)).toContain('discard-draw-1');
+            expect(finalState.players['0'].discard.map((card: any) => card.uid)).not.toContain('discard-draw-1');
+        });
+
         it('scoreOneBase 会让 Sleeping Beauty 在基地计分弃牌后洗回拥有者牌库', () => {
             const state: SmashUpCore = {
                 players: {
