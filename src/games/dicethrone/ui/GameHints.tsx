@@ -161,6 +161,34 @@ const ResponseWindowHint: React.FC<{
 }> = ({ onResponsePass }) => {
     const { t } = useTranslation('game-dicethrone');
     const pointerPassHandledRef = React.useRef(false);
+    const [isHandCardHovered, setIsHandCardHovered] = React.useState(false);
+
+    React.useEffect(() => {
+        let animationFrame: number | null = null;
+        const syncHandCardHover = () => {
+            if (animationFrame !== null) {
+                window.cancelAnimationFrame(animationFrame);
+            }
+            animationFrame = window.requestAnimationFrame(() => {
+                animationFrame = null;
+                setIsHandCardHovered(Boolean(
+                    document.querySelector('[data-testid="hand-area"] [data-card-id]:hover'),
+                ));
+            });
+        };
+
+        document.addEventListener('pointerover', syncHandCardHover, true);
+        document.addEventListener('pointerout', syncHandCardHover, true);
+        syncHandCardHover();
+        return () => {
+            document.removeEventListener('pointerover', syncHandCardHover, true);
+            document.removeEventListener('pointerout', syncHandCardHover, true);
+            if (animationFrame !== null) {
+                window.cancelAnimationFrame(animationFrame);
+            }
+        };
+    }, []);
+
     const handlePointerDown = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
         if (event.button !== 0) return;
         pointerPassHandledRef.current = true;
@@ -183,51 +211,71 @@ const ResponseWindowHint: React.FC<{
             style={{
                 zIndex: UI_Z_INDEX.hint,
                 position: 'fixed',
-                bottom: '26vw',
+                // 常态贴在手牌区上沿；手牌抬起时暂时让位，避免遮住可响应牌。
+                bottom: isHandCardHovered ? 'calc(26vw + 14px)' : 'calc(18vw + 8px)',
                 left: '50%',
                 transform: 'translateX(-50%)',
+                transition: 'bottom 160ms ease-out',
             }}
         >
             <div
-                data-testid="dicethrone-response-window-hint-panel"
-                className="relative flex items-center gap-[0.9vw] overflow-hidden rounded-full border-4 border-[#ffe16d] bg-[#2b1837] px-[1.15vw] py-[0.62vw] shadow-[0_0.3vw_0_rgba(0,0,0,0.95),0_0.68vw_0_#5b4212,0_0_1.05vw_rgba(255,225,109,0.72),0_0.95vw_1.45vw_rgba(0,0,0,0.52)]"
-                style={{
-                    border: '4px solid #ffe16d',
-                    borderRadius: '9999px',
-                    backgroundColor: '#2b1837',
-                    boxShadow: '0 0.3vw 0 rgba(0,0,0,0.95), 0 0.68vw 0 #5b4212, 0 0 0 2px rgba(255,255,255,0.18), 0 0 1.05vw rgba(255,225,109,0.72), 0 0.95vw 1.45vw rgba(0,0,0,0.52)',
-                }}
+                className="relative rounded-full"
             >
-                <style>{`@keyframes dicethrone-response-shimmer { 0% { transform: translateX(-145%); } 58% { transform: translateX(145%); } 100% { transform: translateX(145%); } }`}</style>
                 <div
                     aria-hidden="true"
-                    data-testid="dicethrone-response-shimmer"
-                    className="pointer-events-none absolute inset-0"
+                    data-testid="dicethrone-response-orbit"
+                    className="pointer-events-none absolute -inset-[4px] overflow-hidden rounded-full"
+                >
+                    <div
+                        data-testid="dicethrone-response-orbit-track"
+                        className="absolute left-1/2 top-1/2 h-[260%] w-[160%]"
+                        style={{
+                            background: 'conic-gradient(from 0deg, transparent 0deg 294deg, rgba(255,214,77,0.28) 304deg, #fffbe0 324deg, #ffd65f 342deg, rgba(255,214,77,0.22) 356deg, transparent 360deg)',
+                            transform: 'translate(-50%, -50%)',
+                            animation: 'dicethrone-response-border-orbit 1.45s linear infinite',
+                        }}
+                    />
+                </div>
+                <div
+                    data-testid="dicethrone-response-window-hint-panel"
+                    className="relative z-10 flex items-center gap-[0.9vw] rounded-full border border-[#ffe16d] bg-[#2b1837] px-[1.15vw] py-[0.62vw]"
                     style={{
-                        background: 'linear-gradient(108deg, transparent 28%, rgba(255,248,189,0.88) 50%, transparent 72%)',
-                        animation: 'dicethrone-response-shimmer 2.2s ease-in-out infinite',
-                    }}
-                />
-                <span className="relative z-10 text-[#fff3bd] text-[0.95vw] font-black tracking-wider">
-                    {t('response.yourTurn')}
-                </span>
-                <button
-                    type="button"
-                    data-testid="dicethrone-response-pass-button"
-                    onPointerDown={handlePointerDown}
-                    onClick={handleClick}
-                    className="relative z-10 min-h-[44px] rounded-lg border-2 border-[#fff0ae] bg-[#9b7118] px-[1vw] text-[0.78vw] font-black tracking-wider text-white shadow-[0_0.2vw_0_rgba(0,0,0,0.9),0_0.34vw_0_#4a3207] transition-[box-shadow,background-color] duration-150 hover:bg-[#b88720] hover:shadow-[0_0.24vw_0_rgba(0,0,0,0.9),0_0.42vw_0_#4a3207] active:bg-[#865f14]"
-                    style={{
-                        minHeight: 44,
-                        border: '2px solid #fff0ae',
-                        borderRadius: '0.5rem',
-                        backgroundColor: '#9b7118',
-                        boxShadow: '0 0.2vw 0 rgba(0,0,0,0.9), 0 0.34vw 0 #4a3207',
-                        pointerEvents: 'auto',
+                        border: '1.5px solid rgba(255,225,109,0.72)',
+                        borderRadius: '9999px',
+                        backgroundColor: '#2b1837',
+                        boxShadow: 'none',
                     }}
                 >
-                    {t('response.pass')}
-                </button>
+                    <style>{`
+                        @keyframes dicethrone-response-border-orbit {
+                            from { transform: translate(-50%, -50%) rotate(0deg); }
+                            to { transform: translate(-50%, -50%) rotate(360deg); }
+                        }
+                        @media (prefers-reduced-motion: reduce) {
+                            [data-testid="dicethrone-response-orbit-track"] { animation: none !important; }
+                        }
+                    `}</style>
+                    <span className="relative z-10 text-[#fff3bd] text-[0.95vw] font-black tracking-wider">
+                        {t('response.yourTurn')}
+                    </span>
+                    <button
+                        type="button"
+                        data-testid="dicethrone-response-pass-button"
+                        onPointerDown={handlePointerDown}
+                        onClick={handleClick}
+                        className="relative z-10 min-h-[44px] rounded-lg border-2 border-[#fff0ae] bg-[#9b7118] px-[1vw] text-[0.78vw] font-black tracking-wider text-white transition-[background-color] duration-150 hover:bg-[#b88720] active:bg-[#865f14]"
+                        style={{
+                            minHeight: 44,
+                            border: '2px solid #fff0ae',
+                            borderRadius: '0.5rem',
+                            backgroundColor: '#9b7118',
+                            boxShadow: 'none',
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        {t('response.pass')}
+                    </button>
+                </div>
             </div>
         </div>
     );

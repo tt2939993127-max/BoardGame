@@ -7,6 +7,7 @@ import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { registerChoiceResolvedEventHandler, type ChoiceResolvedEventContext } from '../choiceResolvedEvents';
 import {
     createBonusDiceWithReroll,
+    createDisplayOnlySettlement,
     createDTPassiveTriggerHandler,
     registerCustomActionHandler,
     type CustomActionContext,
@@ -448,15 +449,24 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
     if (!random) return [];
 
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
     let activated = false;
     for (let index = 0; index < 2; index += 1) {
         const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? String(value);
         activated ||= value === 6;
+        dice.push({
+            index,
+            value,
+            face,
+            effectKey: 'bonusDie.effect.tianshi.flight',
+            effectParams: { value },
+        });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
                 value,
-                face: getPlayerDieFace(state, attackerId, value) ?? String(value),
+                face,
                 playerId: attackerId,
                 targetPlayerId: state.pendingAttack.defenderId ?? state.pendingAttack.attackerId,
                 effectKey: 'bonusDie.effect.tianshi.flight',
@@ -465,6 +475,14 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
             ...eventSource(sourceAbilityId, timestamp + index, 'USE_TOKEN'),
         } as BonusDieRolledEvent);
     }
+
+    events.push(createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        state.pendingAttack.defenderId ?? state.pendingAttack.attackerId,
+        dice,
+        timestamp + 2,
+    ));
 
     if (activated) {
         events.push({
@@ -475,7 +493,7 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
                     ? { defensiveFlightActivated: true }
                     : { isDefendable: false },
             },
-            ...eventSource(sourceAbilityId, timestamp + 2, 'USE_TOKEN'),
+            ...eventSource(sourceAbilityId, timestamp + 3, 'USE_TOKEN'),
         } as DiceThroneEvent);
     }
     return events;

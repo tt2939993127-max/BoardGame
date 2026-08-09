@@ -105,9 +105,9 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
         await expect(responseHintPanel).toBeVisible({ timeout: 10000 });
         await expect(responsePassButton).toBeEnabled({ timeout: 10000 });
         const responseHandCard = page.locator('[data-testid="hand-area"] [data-card-id="card-surprise"]').first();
+        const responseHandArea = page.getByTestId('hand-area');
         await expect(responseHandCard).toBeVisible({ timeout: 10000 });
-        await responseHandCard.hover();
-        await page.waitForTimeout(300);
+        await expect(responseHandArea).toBeVisible({ timeout: 10000 });
         await expect(diceTray).toBeVisible({ timeout: 10000 });
         await expect(diceTray.getByTestId('dice-2d')).toHaveCount(5);
         await expect.poll(async () => diceTray.getByTestId('dice-2d').evaluateAll((dice) => (
@@ -115,40 +115,60 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
         ))).toBe(true);
         await expect(diceTray.locator('canvas')).toHaveCount(0);
 
+        const responseBaseLayout = await page.evaluate(() => {
+            const panel = document.querySelector<HTMLElement>('[data-testid="dicethrone-response-window-hint-panel"]');
+            const handCard = document.querySelector<HTMLElement>('[data-testid="hand-area"] [data-card-id="card-surprise"]');
+            if (!panel || !handCard) throw new Error('响应提示或可响应手牌缺失');
+            const panelRect = panel.getBoundingClientRect();
+            const handCardRect = handCard.getBoundingClientRect();
+            return {
+                panelBottom: panelRect.bottom,
+                panelTop: panelRect.top,
+                handCardTop: handCardRect.top,
+                viewportHeight: window.innerHeight,
+            };
+        });
+        expect(responseBaseLayout.handCardTop - responseBaseLayout.panelBottom).toBeGreaterThanOrEqual(8);
+        expect(responseBaseLayout.handCardTop - responseBaseLayout.panelBottom).toBeLessThanOrEqual(20);
+        expect(responseBaseLayout.panelTop).toBeGreaterThan(responseBaseLayout.viewportHeight * 0.5);
+        await game.screenshot('01-真人响应位于手牌区上沿', testInfo);
+
+        await responseHandCard.hover();
+        await page.waitForTimeout(300);
+
         const responseVisual = await responseHintPanel.evaluate((panel) => {
             const hintStyle = getComputedStyle(panel);
             const panelRect = panel.getBoundingClientRect();
-            const shimmer = panel.querySelector('[data-testid="dicethrone-response-shimmer"]');
-            if (!(shimmer instanceof HTMLElement)) {
-                throw new Error('响应提示流光层缺失');
+            const orbit = document.querySelector('[data-testid="dicethrone-response-orbit"]');
+            const orbitTrack = document.querySelector('[data-testid="dicethrone-response-orbit-track"]');
+            if (!(orbit instanceof HTMLElement) || !(orbitTrack instanceof HTMLElement)) {
+                throw new Error('响应提示边沿流光层缺失');
             }
-            const shimmerStyle = getComputedStyle(shimmer);
+            const orbitStyle = getComputedStyle(orbit);
+            const orbitTrackStyle = getComputedStyle(orbitTrack);
             const passButton = panel.querySelector('[data-testid="dicethrone-response-pass-button"]');
             if (!(passButton instanceof HTMLButtonElement)) {
                 throw new Error('响应提示中的跳过按钮缺失');
             }
             const buttonStyle = getComputedStyle(passButton);
+            const hoveredHandCard = document.querySelector<HTMLElement>('[data-testid="hand-area"] [data-card-id="card-surprise"]');
+            if (!hoveredHandCard) throw new Error('可响应手牌缺失');
+            const hoveredHandCardRect = hoveredHandCard.getBoundingClientRect();
             return {
                 panelBorderWidth: Number.parseFloat(hintStyle.borderTopWidth),
                 panelShadow: hintStyle.boxShadow,
                 panelBackgroundImage: hintStyle.backgroundImage,
-                shimmerAnimationName: shimmerStyle.animationName,
-                shimmerBackgroundImage: shimmerStyle.backgroundImage,
+                orbitOverflow: orbitStyle.overflow,
+                orbitFilter: orbitStyle.filter,
+                orbitAnimationName: orbitTrackStyle.animationName,
+                orbitBackgroundImage: orbitTrackStyle.backgroundImage,
                 panelBorderRadius: Number.parseFloat(hintStyle.borderTopLeftRadius),
                 panelHeight: panelRect.height,
                 panelRectLeft: panelRect.left,
                 panelRectRight: panelRect.right,
                 panelRectTop: panelRect.top,
                 panelRectBottom: panelRect.bottom,
-                panelCenterOffsetX: Math.abs(
-                    panelRect.left + panelRect.width / 2 - window.innerWidth / 2,
-                ),
-                panelBottomOffset: window.innerHeight - panelRect.bottom,
-                expectedPanelBottomOffset: window.innerWidth * 0.26,
-                handCards: Array.from(document.querySelectorAll<HTMLElement>('[data-testid="hand-area"] [data-card-id]'))
-                    .map((card) => card.getBoundingClientRect())
-                    .filter((rect) => rect.width > 0 && rect.height > 0)
-                    .map((rect) => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom })),
+                hoveredHandCardTop: hoveredHandCardRect.top,
                 buttonBorderWidth: Number.parseFloat(buttonStyle.borderTopWidth),
                 buttonShadow: buttonStyle.boxShadow,
                 buttonBorderRadius: Number.parseFloat(buttonStyle.borderTopLeftRadius),
@@ -157,29 +177,21 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
             };
         });
         expect(responseVisual).toMatchObject({
-            panelBorderWidth: 4,
             buttonBorderWidth: 2,
             panelBackgroundImage: 'none',
             buttonBackgroundImage: 'none',
         });
-        expect(responseVisual.panelShadow).not.toBe('none');
-        expect(responseVisual.shimmerAnimationName).toBe('dicethrone-response-shimmer');
-        expect(responseVisual.shimmerBackgroundImage).toContain('linear-gradient');
-        expect(responseVisual.buttonShadow).not.toBe('none');
+        expect(responseVisual.panelBorderWidth).toBeGreaterThanOrEqual(1);
+        expect(responseVisual.panelBorderWidth).toBeLessThanOrEqual(2);
+        expect(responseVisual.panelShadow).toBe('none');
+        expect(responseVisual.orbitOverflow).toBe('hidden');
+        expect(responseVisual.orbitFilter).toBe('none');
+        expect(responseVisual.orbitAnimationName).toBe('dicethrone-response-border-orbit');
+        expect(responseVisual.orbitBackgroundImage).toContain('conic-gradient');
+        expect(responseVisual.buttonShadow).toBe('none');
         expect(responseVisual.panelBorderRadius).toBeGreaterThanOrEqual(responseVisual.panelHeight / 2);
-        expect(responseVisual.panelCenterOffsetX).toBeLessThanOrEqual(1);
-        expect(Math.abs(responseVisual.panelBottomOffset - responseVisual.expectedPanelBottomOffset)).toBeLessThanOrEqual(1);
-        expect(responseVisual.handCards).not.toHaveLength(0);
-        for (const handCard of responseVisual.handCards) {
-            const overlapsHandCard = handCard.left < responseVisual.panelRectRight
-                && handCard.right > responseVisual.panelRectLeft
-                && handCard.top < responseVisual.panelRectBottom
-                && handCard.bottom > responseVisual.panelRectTop;
-            expect(overlapsHandCard).toBe(false);
-            if (handCard.left < responseVisual.panelRectRight && handCard.right > responseVisual.panelRectLeft) {
-                expect(handCard.top - responseVisual.panelRectBottom).toBeGreaterThanOrEqual(6);
-            }
-        }
+        expect(responseVisual.hoveredHandCardTop - responseVisual.panelRectBottom).toBeGreaterThanOrEqual(6);
+        expect(responseBaseLayout.panelBottom - responseVisual.panelRectBottom).toBeGreaterThanOrEqual(60);
         expect(responseVisual.buttonBorderRadius).toBeGreaterThanOrEqual(8);
         expect(responseVisual.buttonHeight).toBeGreaterThanOrEqual(44);
 
@@ -193,7 +205,7 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
         });
         expect(diceTrayVisual).toMatchObject({ borderWidth: 2, backgroundImage: 'none' });
         expect(diceTrayVisual.boxShadow).not.toBe('none');
-        await game.screenshot('01-真人响应提示显眼且2D骰盘已就绪', testInfo);
+        await game.screenshot('02-悬浮手牌时响应提示自动上移避让', testInfo);
 
         await responsePassButton.evaluate((button) => {
             const w = window as typeof window & { __DT_RESPONSE_PASS_POINTERDOWN_HIT__?: number };
@@ -217,7 +229,7 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
             return state.sys.responseWindow?.current ?? null;
         }, { timeout: 10000 }).toBeNull();
         await expect(responseHint).toBeHidden({ timeout: 10000 });
-        await game.screenshot('02-真人跳过响应后提示关闭', testInfo);
+        await game.screenshot('03-真人跳过响应后提示关闭', testInfo);
     });
 
     test('AI 选中制胜高地后，真人应能用惊不惊喜改骰取消终极招式', async ({ page, game }, testInfo) => {

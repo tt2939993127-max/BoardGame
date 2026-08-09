@@ -9,10 +9,12 @@ import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import { canRerollBonusDiceSettlement } from '../domain/bonusDiceSettlement';
+import { getUsableTokensForTiming } from '../domain/tokenResponse';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { initHeroState } from '../domain/characters';
 import { DIVINE_PURIFICATION_2, DIVINE_PUNISHMENT_2, TIANSHI_ABILITIES } from '../heroes/tianshi/abilities';
 import { TIANSHI_CARDS } from '../heroes/tianshi/cards';
+import { TIANSHI_TOKENS } from '../heroes/tianshi/tokens';
 import {
     createHeroMatchup,
     createQueuedRandom,
@@ -86,6 +88,18 @@ describe('炽天使领域行为', () => {
         expect(player.deck.some(card => card.id === 'card-tianshi-holy-strike')).toBe(true);
         expect(state.core.tokenDefinitions.find(token => token.id === TOKEN_IDS.FLIGHT)?.stackLimit).toBe(3);
         expect(state.core.tokenDefinitions.find(token => token.id === STATUS_IDS.DAZZLE)?.stackLimit).toBe(1);
+    });
+
+    it('飞行只在掷骰阶段可用，不应进入伤害响应弹窗', () => {
+        const state = createTianshiState();
+        state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] = 1;
+        const flight = TIANSHI_TOKENS.find((token) => token.id === TOKEN_IDS.FLIGHT);
+
+        expect(flight?.activeUse?.timing).toEqual(['duringRoll']);
+        expect(getUsableTokensForTiming(state.core, '0', 'beforeDamageDealt').map((token) => token.id))
+            .not.toContain(TOKEN_IDS.FLIGHT);
+        expect(getUsableTokensForTiming(state.core, '0', 'beforeDamageReceived').map((token) => token.id))
+            .not.toContain(TOKEN_IDS.FLIGHT);
     });
 
     it('智天使升级卡的费用应与卡面一致，为 3 CP', () => {

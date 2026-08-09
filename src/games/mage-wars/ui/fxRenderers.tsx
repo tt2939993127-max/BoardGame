@@ -75,8 +75,8 @@ function AttackDiceFeedback({
             data-testid="mage-wars-fx-attack-dice"
             style={{ left: `${left}%`, top: `${top}%`, transform: 'translate(-50%, -50%)' }}
             initial={{ opacity: 0, scale: 0.68, y: 10 }}
-            animate={{ opacity: [0, 1, 1, 0], scale: [0.68, 1, 1, 1.04], y: [10, 0, 0, -6] }}
-            transition={{ duration: 0.68, ease: 'easeOut' }}
+            animate={{ opacity: [0, 1, 1, 1, 0], scale: [0.68, 1, 1, 1, 1.04], y: [10, 0, 0, 0, -6] }}
+            transition={{ duration: 1.35, ease: 'easeOut' }}
         >
             {diceResults.slice(0, 6).map((result, index) => (
                 <AttackDieResult key={`${index}-${result}`} result={result} />
@@ -245,7 +245,7 @@ export const AttackImpactRenderer: React.FC<FxRendererProps> = ({
     onImpact,
 }) => {
     const cell = event.ctx.cell;
-    useTimedImpactAndComplete(cell, onImpact, onComplete, 0, 700);
+    useTimedImpactAndComplete(cell, onImpact, onComplete, 0, 1_450);
 
     if (!cell) return null;
     const damage = (event.params?.damageAmount as number | undefined) ?? 1;

@@ -17,7 +17,6 @@ import {
     getPendingBonusSettlementDice,
     getPlayerDieFace,
     getTokenStackLimit,
-    isInteractiveBonusDiceSettlement,
     isAttackSnapshotDieId,
 } from './rules';
 import { buildAfterRollConfirmedSignature } from './responseWindowGuards';
@@ -1271,10 +1270,7 @@ const handleBonusDiceRerollRequested: EventHandler<Extract<DiceThroneEvent, { ty
     event
 ) => {
     const nextState = { ...state, pendingBonusDiceSettlement: event.payload.settlement };
-    if (
-        isInteractiveBonusDiceSettlement(event.payload.settlement)
-        && getBonusSettlementContextDice(event.payload.settlement).length > 0
-    ) {
+    if (getBonusSettlementContextDice(event.payload.settlement).length > 0) {
         return replaceCurrentRollContext(
             nextState,
             createBonusRollContextFromSettlement(nextState, event.payload.settlement),

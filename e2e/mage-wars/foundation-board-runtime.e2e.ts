@@ -682,6 +682,27 @@ test.describe('Mage Wars foundation runtime board', () => {
         await expect(page.locator('[data-testid="mage-wars-zone-field-card"][data-object-id="mw-test-focus-blue-archer"][data-field-card-role="target"]')).toBeVisible();
         await expect(page.getByTestId('mage-wars-selected-unit-guard')).toBeVisible();
         await expect(page.getByTestId('mage-wars-desktop-settlement-overlay')).toHaveCount(0);
+        const combatFocusAudit = await page.evaluate(() => {
+            const zone = document.querySelector<HTMLElement>('[data-testid="mage-wars-arena-zone-a2"]')?.getBoundingClientRect();
+            const target = document.querySelector<HTMLElement>('[data-object-id="mw-test-focus-blue-archer"]')?.getBoundingClientRect();
+            if (!zone || !target) return null;
+            const targetCenter = {
+                x: target.left + target.width / 2,
+                y: target.top + target.height / 2,
+            };
+            const hit = document.elementFromPoint(targetCenter.x, targetCenter.y)
+                ?.closest<HTMLElement>('[data-testid="mage-wars-zone-field-card"]');
+            return {
+                targetInsideA2: target.left >= zone.left
+                    && target.right <= zone.right
+                    && target.top >= zone.top
+                    && target.bottom <= zone.bottom,
+                targetCenterHitsTarget: hit?.dataset.objectId === 'mw-test-focus-blue-archer',
+            };
+        });
+        expect(combatFocusAudit).not.toBeNull();
+        expect(combatFocusAudit!.targetInsideA2).toBe(true);
+        expect(combatFocusAudit!.targetCenterHitsTarget).toBe(true);
         await mkdir(dirname(SCREENSHOT_PATH), { recursive: true });
         await page.screenshot({ path: SCREENSHOT_PATH, fullPage: false });
 
@@ -695,7 +716,6 @@ test.describe('Mage Wars foundation runtime board', () => {
         }), { timeout: 5_000 }).toBe(true);
         await expect(page.getByTestId('mage-wars-fx-attack-dice')).toBeVisible({ timeout: 5_000 });
         await expect(page.getByTestId('mage-wars-fx-attack-die-face').first()).toBeVisible();
-        await page.screenshot({ path: ATTACK_SETTLEMENT_SCREENSHOT_PATH, fullPage: false });
         const settlementAudit = await page.evaluate(() => {
             const stage = document.querySelector<HTMLElement>('[data-testid="mage-wars-arena-stage"]')?.getBoundingClientRect();
             const dice = document.querySelector<HTMLElement>('[data-testid="mage-wars-fx-attack-dice"]')?.getBoundingClientRect();
@@ -707,6 +727,7 @@ test.describe('Mage Wars foundation runtime board', () => {
         });
         expect(settlementAudit).not.toBeNull();
         expect(settlementAudit!.diceInsideArena).toBe(true);
+        await page.screenshot({ path: ATTACK_SETTLEMENT_SCREENSHOT_PATH, fullPage: false });
 
         await assertNoFatalFrontendErrors([{ label: 'mage-wars', diagnostics }]);
     });

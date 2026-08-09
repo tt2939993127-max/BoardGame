@@ -208,59 +208,73 @@ export const getBonusFaceLabel = (
     return face ? (t(`dice.face.${face}`) as string) : (t('bonusDie.title') as string);
 };
 
-// @atlas-contract character-portraits.png uses the legacy shared portrait contract for existing heroes.
-const PORTRAIT_ATLAS = {
-    imageW: 3950,
-    imageH: 4096,
-    deckX: 0,
-    deckY: 0,
-    deckW: 3934,
-    deckH: 1054,
-    cols: 10,
-    rows: 2,
+type PortraitAtlasId = 'legacy' | 'new';
+
+type PortraitAtlas = {
+    imagePath: string;
+    imageW: number;
+    imageH: number;
+    deckX: number;
+    deckY: number;
+    deckW: number;
+    deckH: number;
+    cols: number;
+    rows: number;
 };
 
-// @atlas-contract characterhead2.png is a separate 6-column portrait source for newer Dice Throne heroes.
-const NEW_PORTRAIT_ATLAS = {
-    imageW: 3570,
-    imageH: 6042,
-    deckX: 0,
-    deckY: 0,
-    deckW: 3570,
-    deckH: 6041,
-    cols: 6,
-    rows: 7,
+type PortraitBinding = {
+    atlasId: PortraitAtlasId;
+    row: number;
+    col: number;
 };
 
-const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
-    huntress: 0,
-    gunslinger: 1,
-    treant: 2,
-    monk: 3,
-    moon_elf: 4,
-    paladin: 5,
-    pyromancer: 6,
-    vampire_lord: 11,
-    cursed_pirate: 8,
-    shadow_thief: 9,
-    ninja: 10,
-    samurai: 7,
-    barbarian: 13,
+// @atlas-contract Each runtime hero has one explicit atlas and cell. Do not infer a cell from a nearby hero.
+const PORTRAIT_ATLASES: Record<PortraitAtlasId, PortraitAtlas> = {
+    legacy: {
+        imagePath: ASSETS.AVATAR,
+        imageW: 3950,
+        imageH: 4096,
+        deckX: 0,
+        deckY: 0,
+        deckW: 3934,
+        deckH: 1054,
+        cols: 10,
+        rows: 2,
+    },
+    new: {
+        imagePath: ASSETS.NEW_AVATAR,
+        imageW: 3570,
+        imageH: 6042,
+        deckX: 0,
+        deckY: 0,
+        deckW: 3570,
+        deckH: 6041,
+        cols: 6,
+        rows: 7,
+    },
 };
 
-const NEW_CHARACTER_PORTRAIT_INDEX: Partial<Record<HeroState['characterId'], number>> = {
-    ninja: 2,
-    zhanshujia: 5,
-    cursed_pirate: 6,
-    artificer: 8,
-    tianshi: 7,
-    huntress: 10,
-    treant: 13,
+export const CHARACTER_PORTRAIT_BINDINGS: Partial<Record<HeroState['characterId'], PortraitBinding>> = {
+    huntress: { atlasId: 'new', row: 1, col: 4 },
+    gunslinger: { atlasId: 'legacy', row: 0, col: 1 },
+    treant: { atlasId: 'new', row: 2, col: 1 },
+    monk: { atlasId: 'legacy', row: 0, col: 3 },
+    moon_elf: { atlasId: 'legacy', row: 0, col: 4 },
+    paladin: { atlasId: 'legacy', row: 0, col: 5 },
+    pyromancer: { atlasId: 'legacy', row: 0, col: 6 },
+    vampire_lord: { atlasId: 'legacy', row: 1, col: 1 },
+    cursed_pirate: { atlasId: 'new', row: 1, col: 0 },
+    shadow_thief: { atlasId: 'legacy', row: 0, col: 9 },
+    ninja: { atlasId: 'new', row: 0, col: 2 },
+    samurai: { atlasId: 'legacy', row: 0, col: 7 },
+    barbarian: { atlasId: 'legacy', row: 1, col: 3 },
+    artificer: { atlasId: 'legacy', row: 1, col: 2 },
+    tianshi: { atlasId: 'new', row: 1, col: 1 },
+    zhanshujia: { atlasId: 'new', row: 0, col: 5 },
 };
 
 const buildPortraitAtlasStyle = (
-    atlas: typeof PORTRAIT_ATLAS,
-    imagePath: string,
+    atlas: PortraitAtlas,
     index: number,
     locale?: string,
 ) => {
@@ -275,7 +289,7 @@ const buildPortraitAtlasStyle = (
     const yPos = (y / (atlas.imageH - cellH)) * 100;
 
     return {
-        backgroundImage: buildLocalizedImageSet(imagePath, locale),
+        backgroundImage: buildLocalizedImageSet(atlas.imagePath, locale),
         backgroundSize: `${((atlas.imageW / cellW) * 100).toFixed(4)}% ${((atlas.imageH / cellH) * 100).toFixed(4)}%`,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: `${xPos.toFixed(4)}% ${yPos.toFixed(4)}%`,
@@ -283,11 +297,8 @@ const buildPortraitAtlasStyle = (
 };
 
 export const getPortraitStyle = (characterId: HeroState['characterId'], locale?: string) => {
-    const newPortraitIndex = NEW_CHARACTER_PORTRAIT_INDEX[characterId];
-    if (typeof newPortraitIndex === 'number') {
-        return buildPortraitAtlasStyle(NEW_PORTRAIT_ATLAS, ASSETS.NEW_AVATAR, newPortraitIndex, locale);
-    }
-
-    const index = CHARACTER_PORTRAIT_INDEX[characterId] ?? 0;
-    return buildPortraitAtlasStyle(PORTRAIT_ATLAS, ASSETS.AVATAR, index, locale);
+    const binding = CHARACTER_PORTRAIT_BINDINGS[characterId] ?? { atlasId: 'legacy', row: 0, col: 0 };
+    const atlas = PORTRAIT_ATLASES[binding.atlasId];
+    const index = binding.row * atlas.cols + binding.col;
+    return buildPortraitAtlasStyle(atlas, index, locale);
 };

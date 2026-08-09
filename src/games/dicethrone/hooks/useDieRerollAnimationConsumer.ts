@@ -7,6 +7,8 @@ interface UseDieRerollAnimationConsumerConfig {
     eventStreamEntries: EventStreamEntry[];
     setRerollingDiceIds: (ids: number[]) => void;
     setRerollAnimationSeq?: (seq: number | ((seq: number) => number)) => void;
+    /** 当前右侧骰盘承接的奖励骰；首次投出时整组一起翻滚。 */
+    bonusDiceIds?: number[];
     clearDelayMs?: number;
 }
 
@@ -15,7 +17,8 @@ export function useDieRerollAnimationConsumer(config: UseDieRerollAnimationConsu
         eventStreamEntries,
         setRerollingDiceIds,
         setRerollAnimationSeq,
-        clearDelayMs = 600,
+        bonusDiceIds = [],
+        clearDelayMs = 1000,
     } = config;
     const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
     const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -42,23 +45,30 @@ export function useDieRerollAnimationConsumer(config: UseDieRerollAnimationConsu
         if (newEntries.length === 0) return;
 
         const rerolledDiceIds: number[] = [];
+        let hasInitialBonusRoll = false;
         for (const entry of newEntries) {
             const event = entry.event as { type: string; payload?: { dieId?: number } };
             if (event.type === 'DIE_REROLLED' && typeof event.payload?.dieId === 'number') {
                 rerolledDiceIds.push(event.payload.dieId);
             }
+            if (event.type === 'BONUS_DIE_ROLLED') {
+                hasInitialBonusRoll = true;
+            }
         }
 
-        if (rerolledDiceIds.length === 0) return;
+        const rollingDiceIds = hasInitialBonusRoll
+            ? Array.from(new Set([...rerolledDiceIds, ...bonusDiceIds]))
+            : rerolledDiceIds;
+        if (rollingDiceIds.length === 0) return;
 
         if (clearTimerRef.current) {
             clearTimeout(clearTimerRef.current);
         }
-        setRerollingDiceIds(rerolledDiceIds);
+        setRerollingDiceIds(rollingDiceIds);
         setRerollAnimationSeq?.((seq) => seq + 1);
         clearTimerRef.current = setTimeout(() => {
             clearTimerRef.current = null;
             setRerollingDiceIds([]);
         }, clearDelayMs);
-    }, [clearDelayMs, clearRerollAnimation, consumeNew, eventStreamEntries, setRerollAnimationSeq, setRerollingDiceIds]);
+    }, [bonusDiceIds, clearDelayMs, clearRerollAnimation, consumeNew, eventStreamEntries, setRerollAnimationSeq, setRerollingDiceIds]);
 }

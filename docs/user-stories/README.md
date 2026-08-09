@@ -22,6 +22,7 @@
 - 纸牌帮：`docs/games/the-gang/user-stories/online-viewer-and-landscape-contract-2026-07-10.md`
 - 纸牌帮：`docs/games/the-gang/user-stories/two-hand-pre-start-swap-and-touch-ui-2026-07-28.md`
 - DiceThrone：`docs/games/dicethrone/user-stories/pyromancer-burn-image-standard-2026-05-12.md`
+- DiceThrone：`docs/games/dicethrone/user-stories/response-hint-hand-rail-and-orbit-light-2026-08-09.md`
 - 召唤师战争：`docs/games/summonerwars/user-stories/ice-shards-attack-start-auto-2026-07-17.md`
 - 七大恨：`docs/games/qidahen/user-stories/population-token-no-material-exception-2026-07-07.md`
 - 山屋惊魂：`docs/games/betrayal/user-stories/first-haunt-mummy-runtime-scope-2026-07-28.md`

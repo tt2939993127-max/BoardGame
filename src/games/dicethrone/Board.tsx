@@ -109,8 +109,10 @@ import { canRerollBonusDiceSettlement } from './domain/bonusDiceSettlement';
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 const boardBonusDieLogger = createScopedLogger('DT_BOARD_BONUS_DIE');
 
+// 所有奖励骰都由右侧骰盘承接；是否允许重投或改骰由结算自身的规则决定，
+// 而不是由中央展示层决定。
 const shouldUseRightTrayForPendingBonusDice = (settlement?: PendingBonusDiceSettlement): boolean => (
-    Boolean(settlement?.displayOnly && settlement.allowDiceModification)
+    Boolean(settlement)
 );
 
 const createPendingBonusDiceTrayDice = (
@@ -257,6 +259,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const currentPendingBonusDiceSettlement = isCurrentBonusRollSettlement(G)
         ? G.pendingBonusDiceSettlement
         : undefined;
+    // 奖励骰的唯一展示载体是右侧骰盘。自动结算后 pending 会被清掉，
+    // 但 currentRollContext 仍保留最终骰面供回看，因此不能再以 pending
+    // 是否存在来决定旧事件流特写是否应出现。
+    const isRightTrayBonusDiceContext = G.currentRollContext?.kind === 'bonus';
     const allowBonusDieBackgroundInteraction = G.currentRollContext?.kind === 'bonus'
         && currentPendingBonusDiceSettlement !== undefined;
     const isDirectDiceActor = React.useMemo(
@@ -446,8 +452,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 .map(([pid, characterId]) => `${pid}:${characterId}`)
                 .sort()
                 .join('|') || 'unselected'}`,
-        suppressStandaloneBonusDie: Boolean(currentPendingBonusDiceSettlement),
-        suppressBonusDiceInCardSpotlight: shouldUseRightTrayForPendingBonusDice(currentPendingBonusDiceSettlement),
+        suppressStandaloneBonusDie: isRightTrayBonusDiceContext,
+        suppressBonusDiceInCardSpotlight: isRightTrayBonusDiceContext,
     });
 
     const shouldHidePendingDisplayOnlyBonusOverlay = shouldSuppressPendingDisplayOnlyBonusOverlay({
@@ -504,6 +510,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
         setRerollingDiceIds,
         setRerollAnimationSeq,
+        bonusDiceIds: G.currentRollContext?.kind === 'bonus'
+            ? G.currentRollContext.dice.map((die) => die.id)
+            : [],
     });
 
     // 追踪已激活的攻击修正卡
@@ -1228,17 +1237,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             || rawG.sys.interaction.current.kind === 'dt:bonus-dice'
         )
     );
-    const canConfirmBonusDiceFromRightTray = Boolean(
-        canUseRightTrayBonusDiceActions
-    );
     const requiresManualBonusDiceSettlement = Boolean(
         rightTrayBonusDiceSettlement
+        && rightTrayBonusDiceSettlement.displayOnly !== true
         && !(
             rightTrayBonusDiceSettlement.allowDiceModification === true
             && rightTrayBonusDiceSettlement.maxRerollCount === 0
             && rightTrayBonusDiceSettlement.rerollCount === 0
             && rightTrayBonusDiceSettlement.ultimateLocked !== true
         )
+    );
+    const canConfirmBonusDiceFromRightTray = Boolean(
+        canUseRightTrayBonusDiceActions
+        && requiresManualBonusDiceSettlement
     );
     const handleConfirmBonusDiceFromRightTray = React.useCallback(() => {
         if (!canConfirmBonusDiceFromRightTray || !rightTrayBonusDiceSettlement) {

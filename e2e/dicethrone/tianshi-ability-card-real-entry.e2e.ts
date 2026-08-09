@@ -10,6 +10,7 @@ import { expect, test } from '../framework';
 import type { GameTestContext } from '../framework';
 import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { setDiceThroneBonusDiceValues } from '../helpers/dicethrone';
 import '../../src/games/dicethrone/domain';
 
 type JsonRecord = Record<string, any>;
@@ -648,6 +649,49 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             shieldGranted: 3,
         });
         await game.screenshot('tianshi-angelic-cloak-after-closeout', testInfo);
+    });
+
+    test('消耗飞行 Token 的两颗骰子应只在右侧骰盘保留，不走中央特写', async ({ page, game }, testInfo) => {
+        await setupTianshiScene(game, {
+            phase: 'offensiveRoll',
+            dice: [1, 1, 1, 4, 5],
+            tokens: { [TOKEN_IDS.FLIGHT]: 1 },
+            pendingAttack: pendingAttackForCard(),
+        });
+        await setDiceThroneBonusDiceValues(page, [1, 6]);
+
+        const flightToken = page.getByTestId(`dt-player-0-token-${TOKEN_IDS.FLIGHT}`);
+        await expect(flightToken).toBeVisible({ timeout: 10000 });
+        await flightToken.click();
+
+        await expect.poll(async () => {
+            const state = await readState(game);
+            return {
+                flight: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.FLIGHT] ?? null,
+                undefendable: state.core?.pendingAttack?.isDefendable === false,
+                dice: state.core?.currentRollContext?.dice?.map((die: JsonRecord) => die.value) ?? [],
+                replayOnly: state.core?.currentRollContext?.display?.replayOnly ?? false,
+            };
+        }, { timeout: 10000 }).toEqual({
+            flight: 0,
+            undefendable: true,
+            dice: [1, 6],
+            replayOnly: true,
+        });
+
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        await expect(diceTray).toBeVisible({ timeout: 10000 });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(2);
+        await expect(diceTray.getByTestId('dice-2d').nth(0)).toHaveAttribute('data-roll-animation', 'dice2d-cube-tumble');
+        await expect(diceTray.getByTestId('dice-2d').nth(1)).toHaveAttribute('data-roll-animation', 'dice2d-cube-tumble');
+        await expect(diceTray.getByTestId('dice-2d').nth(0)).toHaveAttribute('data-face-value', '1');
+        await expect(diceTray.getByTestId('dice-2d').nth(1)).toHaveAttribute('data-face-value', '6');
+        await game.screenshot('tianshi-flight-token-right-tray-rolling', testInfo);
+        await expect(page.getByTestId('bonus-dice-confirm-button')).toBeHidden();
+        await expect(page.getByTestId('bonus-die-overlay')).toBeHidden();
+        await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden();
+        await page.waitForTimeout(1100);
+        await game.screenshot('tianshi-flight-token-right-tray-after-closeout', testInfo);
     });
 
     test('复合升级牌福音临世应从真实手牌支付 CP、替换技能并通过玩家卡片选择目标', async ({ page, game }, testInfo) => {
