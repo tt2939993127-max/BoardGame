@@ -896,11 +896,10 @@
       "addedToInventory": "Added to inventory",
       "readyToUse": "Selected and ready to use",
       "rollModifierTag": "Modify Dice",
-      "finalEffectLabel": "Final effect",
       "confirmCard": "Confirm",
-      "confirmCardStep": "Confirm this step ({{current}}/{{total}})",
+      "nextSearchCard": "Next card",
       "confirmationProgress": "Players confirmed {{confirmed}}/{{total}}",
-      "waitingForAll": "Waiting for all players ({{confirmed}}/{{total}})"
+      "waitingForAll": "Waiting for other players ({{confirmed}}/{{total}})"
     },
     "roll": {
       "fallbackLabel": "Dice Roll",

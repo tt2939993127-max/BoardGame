@@ -1,7 +1,7 @@
 # 新增音频素材合同
 
 > 本文是“新增外部音频素材”这条链路的目录、命名、产物和验收合同。
-> 执行步骤、汇报模板、/dev/audio 收口动作已下沉到 `./.codex/skill/audio-integration/SKILL.md`。
+> 执行步骤、汇报模板、/dev/audio 收口动作已下沉到系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`。
 > 如果任务只是“查已有库里的 key 并接到代码”，不要直接套本文，先走该 skill 的 A 类流程。
 
 ## 0. 适用范围
@@ -13,7 +13,7 @@
 
 如果不是新增素材，而是复用现有音效库 key，请改走：
 
-- `./.codex/skill/audio-integration/SKILL.md`
+- `D:\codex-home\skills\audio-integration\SKILL.md`
 - `docs/audio/audio-usage.md`
 
 ## 1. 前置条件
@@ -68,45 +68,14 @@ public/assets/common/audio/
 5. `docs/audio/registry.ai.json`（当精简 registry 需要刷新时）
 6. `docs/audio/audio-catalog.md`（当语义目录需要刷新时）
 
-## 4. 必跑命令
+## 4. 必跑命令入口
 
-### 4.1 压缩音频
+命令定义和可选压缩参数统一见 `docs/audio/audio-usage.md` §3，本文件只规定新增素材的执行顺序：
 
-```bash
-npm run compress:audio -- public/assets/common/audio
-```
-
-可选：
-
-```bash
-AUDIO_CLEAN=1 npm run compress:audio -- public/assets/common/audio
-AUDIO_OGG_BITRATE=96k npm run compress:audio -- public/assets/common/audio
-FFMPEG_PATH=tools/ffmpeg/bin/ffmpeg.exe npm run compress:audio -- public/assets/common/audio
-```
-
-### 4.2 生成 registry
-
-```bash
-node scripts/audio/generate_common_audio_registry.js
-```
-
-### 4.3 生成资源清单
-
-```bash
-node scripts/audio/generate_audio_assets_md.js
-```
-
-### 4.4 生成精简 registry
-
-```bash
-node scripts/audio/generate_ai_audio_registry.js
-```
-
-### 4.5 生成语义目录
-
-```bash
-node scripts/audio/generate_audio_catalog.js
-```
+1. 压缩新增素材并确认产物存在。
+2. 生成运行时 registry 和资源清单。
+3. 按需要刷新 AI 精简 registry、语义目录和中文友好名。
+4. 按本文第 6 节完成 `/dev/audio` 浏览器验收，再进入代码接入。
 
 ## 5. 中文友好名合同
 

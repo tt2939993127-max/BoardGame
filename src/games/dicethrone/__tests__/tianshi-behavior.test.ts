@@ -8,6 +8,7 @@ import { reduce } from '../domain/reducer';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../domain/types';
+import { canRerollBonusDiceSettlement } from '../domain/bonusDiceSettlement';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { initHeroState } from '../domain/characters';
 import { DIVINE_PURIFICATION_2, DIVINE_PUNISHMENT_2, TIANSHI_ABILITIES } from '../heroes/tianshi/abilities';
@@ -15,8 +16,11 @@ import { TIANSHI_CARDS } from '../heroes/tianshi/cards';
 import {
     createHeroMatchup,
     createQueuedRandom,
+    getCardById,
     getCardInteractionPrompt,
+    getSimpleChoicePrompt,
     injectPendingInteraction,
+    respondToPrompt,
     testSystems,
 } from './test-utils';
 
@@ -48,6 +52,19 @@ const createTianshiThreePlayerState = (): MatchState<DiceThroneCore> => {
     return state;
 };
 
+const setPlayerBoardFace = (
+    state: MatchState<DiceThroneCore>,
+    playerId: PlayerId,
+    face: 'normal' | 'cursed',
+): void => {
+    state.core = applyEvents(state.core, [{
+        type: 'PLAYER_BOARD_FACE_CHANGED',
+        payload: { playerId, face, sourceAbilityId: 'test-setup' },
+        sourceCommandType: 'TEST',
+        timestamp: 90,
+    } as DiceThroneEvent]);
+};
+
 describe('炽天使领域行为', () => {
     it('选角初始化炽天使的骰面、九个技能和专属牌库', () => {
         const state = createTianshiState();
@@ -69,6 +86,12 @@ describe('炽天使领域行为', () => {
         expect(player.deck.some(card => card.id === 'card-tianshi-holy-strike')).toBe(true);
         expect(state.core.tokenDefinitions.find(token => token.id === TOKEN_IDS.FLIGHT)?.stackLimit).toBe(3);
         expect(state.core.tokenDefinitions.find(token => token.id === STATUS_IDS.DAZZLE)?.stackLimit).toBe(1);
+    });
+
+    it('智天使升级卡的费用应与卡面一致，为 3 CP', () => {
+        const card = TIANSHI_CARDS.find(entry => entry.id === 'upgrade-tianshi-holy-blade-3-cherub-2');
+
+        expect(card?.cpCost).toBe(3);
     });
 
     it.each([
@@ -528,6 +551,79 @@ describe('炽天使领域行为', () => {
         );
     });
 
+    it('神圣净化移除状态前，目标玩家可以用瞬时行动牌打断', () => {
+        const state = createTianshiState();
+        const target = state.core.players['1'];
+        target.statusEffects[STATUS_IDS.POISON] = 1;
+        target.statusEffects[STATUS_IDS.BIND] = 1;
+        target.resources[RESOURCE_IDS.CP] = 2;
+        target.hand = [getCardById('card-bye-bye')];
+        target.deck = target.deck.filter(card => card.id !== 'card-bye-bye');
+
+        const ability = TIANSHI_ABILITIES.find(entry => entry.id === 'divine-purification');
+        const choiceEvents = resolveEffectsToEvents(ability?.effects ?? [], 'preDefense', {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'divine-purification',
+            state: state.core,
+            damageDealt: 0,
+            timestamp: 340,
+        }, { random: createQueuedRandom([1]) });
+        const targetChoice = choiceEvents.find((event): event is Extract<DiceThroneEvent, { type: 'CHOICE_REQUESTED' }> => (
+            event.type === 'CHOICE_REQUESTED'
+        ));
+        expect(targetChoice).toBeDefined();
+        if (!targetChoice) return;
+
+        const customId = targetChoice.payload.options[1]?.customId;
+        expect(customId).toBe('tianshi-divine-purification-target');
+        if (!customId) return;
+        const resolveChoice = getChoiceResolvedEventHandler(customId);
+        expect(resolveChoice).toBeDefined();
+        if (!resolveChoice) return;
+        const resolvedEvents = resolveChoice({
+            state: state.core,
+            playerId: '0',
+            customId,
+            sourceAbilityId: 'divine-purification',
+            value: 1,
+            timestamp: 341,
+        });
+        const purificationInteraction = resolvedEvents.find((event): event is Extract<DiceThroneEvent, { type: 'INTERACTION_REQUESTED' }> => (
+            event.type === 'INTERACTION_REQUESTED'
+        ));
+        expect(purificationInteraction?.payload.interaction.type).toBe('selectStatus');
+        if (!purificationInteraction) return;
+        injectPendingInteraction(state, purificationInteraction.payload.interaction);
+
+        const playByeBye = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('PLAY_CARD', '1', { cardId: 'card-bye-bye' }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(playByeBye.success).toBe(true);
+        if (!playByeBye.success) return;
+        expect(playByeBye.state.core.players['1'].discard.map(card => card.id)).toContain('card-bye-bye');
+        expect(getCardInteractionPrompt(playByeBye.state, 'card-bye-bye').type).toBe('selectStatus');
+
+        const removeWithCard = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            playByeBye.state,
+            command('REMOVE_STATUS', '1', {
+                targetPlayerId: '1',
+                statusId: STATUS_IDS.POISON,
+            }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(removeWithCard.success).toBe(true);
+        if (!removeWithCard.success) return;
+        expect(removeWithCard.state.core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(0);
+        expect(getCardInteractionPrompt(removeWithCard.state, 'divine-purification').type).toBe('selectStatus');
+    });
+
     it.each([
         { label: '基础版', heal: 4 },
         { label: '升级版', heal: 5 },
@@ -582,6 +678,112 @@ describe('炽天使领域行为', () => {
         ));
         expect(interactionEvent?.payload.interaction.type).toBe('selectStatus');
         expect(interactionEvent?.payload.interaction.targetPlayerIds).toEqual(['0']);
+    });
+
+    it('神圣净化选择自己时先治疗清状态，之后仍触发咒缚海盗火药桶', () => {
+        let state = createHeroMatchup('tianshi', 'cursed_pirate')(['0', '1'], createQueuedRandom([1]));
+        setPlayerBoardFace(state, '1', 'cursed');
+        state.core.players['0'].statusEffects[STATUS_IDS.POISON] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 40;
+
+        const toOffensiveRoll = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('ADVANCE_PHASE', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(toOffensiveRoll.success).toBe(true);
+        if (!toOffensiveRoll.success) return;
+        state = toOffensiveRoll.state;
+
+        const roll = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('ROLL_DICE', '0'),
+            createQueuedRandom([5, 5, 6, 1, 1]),
+            playerIds,
+        );
+        expect(roll.success).toBe(true);
+        if (!roll.success) return;
+        state = roll.state;
+
+        const confirm = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('CONFIRM_ROLL', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(confirm.success).toBe(true);
+        if (!confirm.success) return;
+        state = confirm.state;
+
+        const selectAbility = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('SELECT_ABILITY', '0', { abilityId: 'divine-purification' }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(selectAbility.success).toBe(true);
+        if (!selectAbility.success) return;
+        state = selectAbility.state;
+
+        const preDefense = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('ADVANCE_PHASE', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(preDefense.success).toBe(true);
+        if (!preDefense.success) return;
+
+        const targetPrompt = getSimpleChoicePrompt(preDefense.state, 'divine-purification');
+        const selfOption = targetPrompt.options.find(option => option.value.value === 0);
+        expect(selfOption).toBeDefined();
+        if (!selfOption) return;
+
+        const selfChoice = respondToPrompt(preDefense.state, selfOption.id, '0', createQueuedRandom([1]), playerIds);
+        expect(selfChoice.success).toBe(true);
+        if (!selfChoice.success) return;
+        expect(selfChoice.events).toContainEqual(expect.objectContaining({
+            type: 'HEAL_APPLIED',
+            payload: expect.objectContaining({ targetId: '0', amount: 4 }),
+        }));
+        expect(getCardInteractionPrompt(selfChoice.state, 'divine-purification').type).toBe('selectStatus');
+
+        const removeStatus = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            selfChoice.state,
+            command('REMOVE_STATUS', '0', {
+                targetPlayerId: '0',
+                statusId: STATUS_IDS.POISON,
+            }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(removeStatus.success).toBe(true);
+        if (!removeStatus.success) return;
+
+        const allEvents = [...selfChoice.events, ...removeStatus.events];
+        const healIndex = allEvents.findIndex(event => event.type === 'HEAL_APPLIED');
+        const removeIndex = allEvents.findIndex(event => (
+            event.type === 'STATUS_REMOVED'
+            && event.payload.targetId === '0'
+            && event.payload.statusId === STATUS_IDS.POISON
+        ));
+        const powderIndex = allEvents.findIndex(event => (
+            event.type === 'STATUS_APPLIED'
+            && event.payload.targetId === '0'
+            && event.payload.statusId === STATUS_IDS.POWDER_KEG
+        ));
+        expect(healIndex).toBeGreaterThanOrEqual(0);
+        expect(removeIndex).toBeGreaterThan(healIndex);
+        expect(powderIndex).toBeGreaterThan(removeIndex);
+        expect(removeStatus.state.sys.phase).toBe('main2');
+        expect(removeStatus.state.core.players['0'].statusEffects[STATUS_IDS.POWDER_KEG] ?? 0).toBe(1);
     });
 
     it('神圣净化只面对正面飞行标记时不应把飞行列入负面状态移除交互', () => {
@@ -891,6 +1093,46 @@ describe('炽天使领域行为', () => {
         }
     });
 
+    it('防御阶段先选择天使斗篷后，飞行失败不会取消已激活的防御能力', () => {
+        let state = createTianshiState();
+        state.sys.phase = 'defensiveRoll';
+        state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] = 1;
+        state.core.pendingAttack = {
+            attackerId: '1',
+            defenderId: '0',
+            sourceAbilityId: 'holy-blade-3',
+            isDefendable: true,
+            damage: 5,
+        };
+
+        const selectDefense = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('SELECT_ABILITY', '0', { abilityId: 'angelic-cloak' }),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(selectDefense.success).toBe(true);
+        if (!selectDefense.success) return;
+        state = selectDefense.state;
+        expect(state.core.pendingAttack?.defenseAbilityId).toBe('angelic-cloak');
+
+        const flight = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('USE_TOKEN', '0', { tokenId: TOKEN_IDS.FLIGHT, amount: 1 }),
+            createQueuedRandom([1, 2]),
+            playerIds,
+        );
+        expect(flight.success).toBe(true);
+        if (!flight.success) return;
+        expect(flight.events.filter(event => event.type === 'BONUS_DIE_ROLLED').map(event => event.payload.value)).toEqual([1, 2]);
+        expect(flight.events.some(event => event.type === 'PENDING_ATTACK_UPDATED')).toBe(false);
+        expect(flight.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] ?? 0).toBe(0);
+        expect(flight.state.core.pendingAttack?.defenseAbilityId).toBe('angelic-cloak');
+        expect(flight.state.core.pendingAttack?.defensiveFlightActivated).not.toBe(true);
+    });
+
     it('神圣祝福在炽天使持有者遭受致死伤害时消耗标记并保留 1 点生命', () => {
         const state = createTianshiState();
         state.core.players['0'].resources[RESOURCE_IDS.HP] = 3;
@@ -939,6 +1181,7 @@ describe('炽天使领域行为', () => {
         expect(rerollRequest.payload.settlement.rerollCostTokenId).toBe('');
         expect(rerollRequest.payload.settlement.rerollCostAmount).toBe(0);
         expect(rerollRequest.payload.settlement.maxRerollCount).toBe(1);
+        expect(canRerollBonusDiceSettlement(rerollRequest.payload.settlement, state.core.players['0'].tokens)).toBe(true);
 
         const pendingState: MatchState<DiceThroneCore> = {
             ...state,

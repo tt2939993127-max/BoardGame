@@ -56,12 +56,44 @@ export interface MatchUiEvent {
     sentAt?: number;
 }
 
-export interface BatchDispatchMeta {
+export type OnlineAiClientStateEventKind = 'none' | 'sync' | 'update' | 'patch';
+export type OnlineAiClientPatchIssueKind = 'discontinuity' | 'apply-failed';
+
+export interface OnlineAiClientPatchIssue {
+    kind: OnlineAiClientPatchIssueKind;
+    expectedStateID?: number | null;
+    receivedStateID?: number | null;
+    error?: string | null;
+    at: number;
+}
+
+/**
+ * 仅用于把在线 AI 的命令尝试与客户端同步现场关联起来，不参与状态裁决。
+ */
+export interface OnlineAiClientTransportDiagnostics {
+    sentAt: number;
+    lastStateEventKind: OnlineAiClientStateEventKind;
+    lastStateEventStateID: number | null;
+    lastStateEventAt: number | null;
+    syncInFlight: boolean;
+    lastSyncRequestReason: string | null;
+    lastSyncRequestedAt: number | null;
+    lastPatchIssue: OnlineAiClientPatchIssue | null;
+}
+
+export interface OnlineAiDispatchMeta {
+    /** AI 决策尝试编号；只用于关联日志和反馈，不参与命令合法性。 */
+    onlineAiAttemptKey?: string;
+    /** 客户端发送命令时的同步现场；服务端只记录，不信任其参与裁决。 */
+    clientTransport?: OnlineAiClientTransportDiagnostics;
+}
+
+export interface BatchDispatchMeta extends OnlineAiDispatchMeta {
     /** 客户端发起这批命令时所基于的权威 stateID */
     expectedStateID?: number;
 }
 
-export interface CommandDispatchMeta {
+export interface CommandDispatchMeta extends OnlineAiDispatchMeta {
     /** 单条命令发起时客户端所基于的权威 stateID */
     expectedStateID?: number;
 }

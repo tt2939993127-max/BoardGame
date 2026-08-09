@@ -711,15 +711,7 @@
     "bonusDiceResponse": "Bonus Dice Response",
     "bonusDiceResponseEnabled": "Bonus Dice Response Enabled",
     "bonusDiceResponseDisabled": "Bonus Dice Response Disabled",
-    "bonusDiceResponseRequiresManual": "Enable Manual Response before responding to bonus dice",
-    "diceDisplay": {
-      "title": "Dice Display",
-      "hint": "Switch the in-match dice presentation without changing the actual roll result.",
-      "board3d": "Board 3D Dice",
-      "board3dHint": "When enabled, your own roll phase uses the board 3D dice stage; response dice interactions that require direct die clicks use the board stage automatically.",
-      "enabled": "Enabled",
-      "disabled": "Disabled"
-    }
+    "bonusDiceResponseRequiresManual": "Enable Manual Response before responding to bonus dice"
   },
   "hero": {
     "monk": "Monk",
@@ -861,6 +853,7 @@
     "rerollSelected": "Selected",
     "confirm": "Confirm",
     "confirmed": "Confirmed",
+    "restoreCoveredRoll": "Restore previous roll",
     "bonusRoll": "Bonus Roll",
     "bonusRolled": "Bonus roll: {{value}} ({{face}})",
     "face": {
@@ -1155,7 +1148,9 @@
       "tianshi.supremeHoliness": "Supreme Holiness: Holy Pendant gains 2 Flight and 2 Purify; otherwise draw 1 card"
     },
     "selectToReroll": "Click a die to spend {{cost}} {{token}} to reroll",
+    "selectToRerollFree": "Click a die to reroll for free",
     "noTokenToReroll": "No {{token}} tokens available to reroll",
+    "noRerollAvailable": "Reroll is not available",
     "rerollLimitReached": "Reroll limit reached",
     "diceResult": "Dice Results",
     "choiceResult": "Choice Results",
@@ -1203,6 +1198,7 @@
     "requireIsNotRoller": "This card can only be played by the non-roller (responding to opponent's dice)",
     "requireRollConfirmed": "Must confirm dice results before playing this card",
     "requireNotRollConfirmed": "Dice results already confirmed, cannot play this card",
+    "rollContextLocked": "The current dice cannot be modified by cards",
     "requireMinDamageDealt": "Not enough damage dealt this attack to play this card",
     "noStatusOnBoard": "No status effects on the board, cannot play this card",
     "requirePendingDamage": "This card requires pending damage to be played",

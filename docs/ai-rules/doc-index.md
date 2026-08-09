@@ -2,13 +2,24 @@
 
 > 按场景查找需要阅读的文档。
 
+## 路由优先级
+
+同一任务可能同时出现“反馈、规则、审计、UI、测试、截图”等关键词时，按现实目标选择入口：
+
+1. 先判断是否是玩法/规则 bug；卡牌、技能、Token、状态、阶段、伤害、资源和升级版差异先走 ./.codex/skill/rule-bug-fix-workflow/SKILL.md。
+2. 用户追问“为什么审计没审出来 / 重审 / 审计收口”时走 ./.codex/skill/game-audit-workflow/SKILL.md，再按该 skill 的 references/reading-map.md 渐进读取规范。
+3. 只处理 open/in_progress/resolved/closed 状态、分诊和回写时才走 ./.codex/skill/feedback-closeout/SKILL.md；它不是玩法 bug 修复入口。
+4. 工具文档只解决“命令/API 怎么用”；规则是否正确仍回规则合同、领域状态、真实入口和 evidence 主源。
+
+索引行是路由入口，不是规范正文；规范正文只在各自 canonical-source 维护。
+
 | 场景 / 行为 | 必须阅读的文档 | 关注重点 |
 | :--- | :--- | :--- |
 | **新增/修改 ActionLog 伤害来源标注** (breakdown/来源显示) | `docs/ai-rules/engine-action-log.md` § 伤害来源标注 | 实现 `DamageSourceResolver`，调用 `buildDamageBreakdownSegment` 或 `buildDamageSourceAnnotation`，禁止手写 breakdown 构建逻辑 |
 | **处理资源** (图片/音频/图集/清单) | `docs/tools.md` + `docs/ai-rules/asset-pipeline.md` + `docs/ai-rules/critical-image-preload.md` + `docs/ai-rules/audio-assets.md` | 压缩指令、正式对局素材禁止降采样、扫描参数、清单校验、图片链路/裁剪规范、正式素材优先、缺关键素材必须请求素材或锁定补源路径、禁止未授权用占位/自绘替代、关键图片预加载、音频运行时合同 |
 | **参考图生成 Three.js / img2threejs 程序化模型** (图生模型、参考图重建、书本/棋盘/道具 3D 资产原型) | `.codex/skill/img2threejs-reconstruction/SKILL.md` + `docs/ai-rules/asset-pipeline.md` | 先读官方/案例仓库，再建立“参考图区域 -> 模型部件/材质”追踪表；参考图是建模蓝图，不是整面贴图，也不能脱离参考图做泛主题模型；默认先落 `temp/` 原型，未授权不得改正式游戏代码 |
 | **需求交接式安全图片处理 / 视觉子代理 / OCR / 图集裁图核对** (图片文字读取、卡图/房间图规则录入、图片验收、读图卡死后继续任务) | `.codex/skill/safe-image-reading/SKILL.md` + `.codex/skill/data-entry-workflow/SKILL.md` | 主线程把用户当前需求、业务对象、图片需要补足的字段/判断点和结果用途交给短子代理或本地 OCR；录入需求返回官方原文、原子子句、结构化规则字段并写入 evidence/真相表；验收/对比需求只返回是否满足用户预期、失败点和最小证据；不得返回 base64/markdown 图片，也不得产出无关过程说明 |
-| **新增派系 / 新英雄 / 新角色** (从素材做到可玩、含录入/资源/机制/审计/E2E) | `.codex/skill/add-new-faction/SKILL.md` + `.codex/skill/data-entry-workflow/SKILL.md` | 这是新增批次的默认入口；先走项目 skill，再按 `gameId` 进入专项 workflow；默认包含对象级全面审计、evidence 留档与真实入口 E2E，不需要等用户额外提醒 |
+| **新增派系 / 新英雄 / 新角色** (从素材做到可玩、含录入/资源/机制/审计/E2E) | `.codex/skill/add-new-faction/SKILL.md` + `.codex/skill/data-entry-workflow/SKILL.md` | 这是新增批次的默认入口；先走项目 skill，再按 `gameId` 进入专项 workflow；默认包含当前锁定对象范围的对象级审计、evidence 留档与真实入口 E2E；不得因“新增批次”标签自动扩大到整批 |
 | **录入业务数据** (图片/规则书/Wiki/截图 → 名称/描述/数值/类型/索引/文案) | `.codex/skill/data-entry-workflow/SKILL.md` + `docs/ai-rules/data-entry.md` | 先通过 skill 进入通用门禁，再按 gameId 路由到专用 workflow；覆盖真相源锁定、核对契约、零猜测 OCR、图片索引录入、先文档后实现；剧本书、开局/结局朗读、分阵营秘密阅读等玩家可见长文必须过原文锁定门禁，并在合同里分列公开揭示、秘密阅读、开局、目标、结局节点；沉浸式剧本正文不得混入 setup / 准备清单 / 目标摘要；开局/结局剧情必须是独立剧情幕或等价叙事载体，电影字幕幕必须独占当前阅读时刻，动作按钮必须在幕内布局槽居中且不得压住字幕、来源状态或 `THE END / PROLOGUE` |
 | **配置表 / 配置审查 / 字段核对 / 配置重录与修正提案** (旧游戏 adapter、配置字段覆盖、表格行与正式源对账) | `D:\codex-home\skills\config-review-workflow\SKILL.md` + `docs/ai-rules/game-config-package.md` + `.codex/skill/data-entry-workflow/SKILL.md` | 先锁问题对象、真相源、实际配置入口和验收口径；新游戏使用严格 JSON，旧游戏先做同源 adapter；玩家模式提交字段级提案，维护者模式生成待应用 patch；正式重录只改唯一配置源，并回原入口验证；图片/规则字段另走安全图片读取和专项 workflow |
 | **新游戏静态配置包实施** (严格 JSON、schema、能力绑定、运行时物化) | `.codex/skill/create-new-game/SKILL.md` + `docs/ai-rules/game-config-package.md` | 新游戏静态事实默认使用 `GameConfigPackage`；官方仓库真相源统一严格 JSON，JSONC/YAML/XLSX 只作导入导出或编辑辅助并先转 JSON；特殊效果由 `abilityId + params` 绑定代码能力；配置表必须来自物化结果；玩家修正走结构化反馈提案 |
@@ -55,14 +66,14 @@
 | **修改 DiceThrone 卡牌时机 / 手牌可用性 / 改骰即时牌** (红色即时牌、黄色防御阶段牌、进攻/防御掷骰、响应窗口、修改自己或对方骰子) | `docs/games/dicethrone/card-timing-terms.md` + `docs/ai-rules/rule-contract-audit.md` | 先拆清卡牌颜色、使用窗口、效果目标、阶段归属和现实操作者；红色即时牌不等于防御阶段牌，“就这？”这类描述限定防御投掷阶段的牌按黄色防御阶段牌处理 |
 | **用户明确裁定 / 与规则书或既有实现偏离的需求** | `docs/user-stories/README.md` | 先把用户描述沉淀为独立真相参考；项目级需求放 `docs/user-stories/project/`，游戏级需求统一放 `docs/games/<gameId>/user-stories/` |
 | **新游戏设计阶段** (领域建模/决策点/引擎缺口) | `docs/ai-rules/engine-systems.md` § 领域建模前置审查 + `docs/ai-rules/engine-ability-framework.md` | 规则→领域模型→实现，禁止跳过建模；术语映射、决策点识别、引擎能力缺口分析；能力/约束系统读专项文档 |
-| **大杀四方 POD 系统** (POD 卡牌/自动映射/数据一致性) | `docs/refactor/pod-system-architecture.md` + `src/games/smashup/rule/POD-SYSTEM.md` | 数据层完整定义不继承，能力层自动映射+选择性覆盖，审计脚本检查一致性 |
+| **大杀四方 POD 系统** (POD 卡牌/自动映射/数据一致性) | `src/games/smashup/rule/POD-SYSTEM.md` + `docs/games/smashup/refactor/pod/pod-system-architecture.md` | 先读运行时合同，再读架构补充；数据层完整定义不继承，能力层自动映射+选择性覆盖，审计脚本检查一致性 |
 | **大杀四方消灭触发链 / pendingSave** (`processDestroyTriggers` / `PREVENT_DESTROY_SOURCE_IDS` / 防止消灭交互) | `docs/games/smashup/destroy-pending-save.md` + `src/games/smashup/rule/ENGINE_GUIDE.md` | onDestroy 与防止消灭交互顺序、pendingSave 白名单合同、matchState 链式传递；不要把 SmashUp 当前 runtime 例外提升成跨游戏通用规则 |
 | **判断是否有活跃交互 / 阻止手牌操作** (interactionBusy/disableInteraction) | `docs/ai-rules/engine-systems.md` § 框架复用优先 → `useIsInteractionBusy` | 所有"等待玩家输入"走 `sys.interaction`，Board 层用此 Hook 统一判断，禁止自建 UI 状态机 |
 | **游戏结束检测** (gameover/胜负判定) | `docs/ai-rules/engine-gameover.md` | `sys.gameover` 唯一来源，管线自动检测，Board 读 `G.sys.gameover`，禁止读 core/ctx |
 | **传输层/Board Props** (socket/dispatch/Provider) | `docs/ai-rules/engine-transport.md` | `GameBoardProps` 契约，无 `ctx` prop，`dispatch` 命令分发，`GameProvider`/`LocalGameProvider` |
 | **乐观更新/延迟优化** (optimistic/latency/预测) | `docs/ai-rules/engine-transport.md` + `docs/ai-rules/engine-visual-events.md` | Random Probe 自动检测、AnimationMode、骰子动画最短播放时间（UI 层保护）、EventStream 水位线、pending replay、`latencyConfig.ts` |
-| **挑选/查找/对接音效** (查 key、换音效、补预加载、试听收口) | `.codex/skill/audio-integration/SKILL.md` + `docs/ai-rules/audio-assets.md` + `docs/audio/audio-usage.md` | 先走项目音频 workflow；skill 负责查找链路、汇报和收口，文档负责运行时合同、架构合同与命令入口 |
-| **从外部导入新音效素材** (新增音频资源) | `.codex/skill/audio-integration/SKILL.md` + `docs/ai-rules/audio-assets.md` + `docs/audio/add-audio.md` | skill 负责执行步骤与收口；文档负责目录、命名、产物、压缩、registry、运行时合同、中文友好名和 `/dev/audio` 验收合同 |
+| **挑选/查找/对接音效** (查 key、换音效、补预加载、试听收口) | 系统 skill `D:\codex-home\skills\audio-integration\SKILL.md` + `docs/ai-rules/audio-assets.md` + `docs/audio/audio-usage.md` | 先走系统音频 workflow；skill 负责查找链路、汇报和收口，文档负责运行时合同、架构合同与命令入口 |
+| **从外部导入新音效素材** (新增音频资源) | 系统 skill `D:\codex-home\skills\audio-integration\SKILL.md` + `docs/ai-rules/audio-assets.md` + `docs/audio/add-audio.md` | skill 负责执行步骤与收口；文档负责目录、命名、产物、压缩、registry、运行时合同、中文友好名和 `/dev/audio` 验收合同 |
 | **音频不播放 / AudioContext** (浏览器兼容) | `docs/ai-rules/golden-rules.md` § AudioContext | `ctx.resume()` 异步竞态、HTML5 Audio vs WebAudio 区别 |
 | **状态同步/存储调优** (16MB 限制) | `docs/mongodb-16mb-fix.md` | 状态裁剪策略、Log 限制、Undo 快照优化 |
 | **复杂任务规划** (多文件/长流程) | `D:\codex-home\skills\planning-with-files\SKILL.md` | 必须维护 `task_plan.md`，定期转存 `findings.md` |

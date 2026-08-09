@@ -17,6 +17,7 @@ import type {
     StatusAppliedEvent,
 } from '../events';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
+import { createCompareRollContext } from '../rollContext';
 
 function createLoadedChoiceContext(
     state: CustomActionContext['state'],
@@ -156,12 +157,12 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
     ];
 }
 
-function handleShowdownBonus({ attackerId, sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
+function handleShowdownBonus({ attackerId, targetId, sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
     const attackerRoll = random.d(6);
     const defenderRoll = random.d(6);
-    const resolvedDefenderId = getSelectedCombatOpponentId(
+    const resolvedDefenderId = targetId ?? getSelectedCombatOpponentId(
         state,
         attackerId,
         state.turnPhase,
@@ -170,107 +171,130 @@ function handleShowdownBonus({ attackerId, sourceAbilityId, state, timestamp, ra
     const amount = typeof action.params?.bonusDamageOnWin === 'number'
         ? action.params.bonusDamageOnWin
         : 2;
-    const showdownWon = attackerRoll >= defenderRoll;
     const attackerFace = getPlayerDieFace(state, attackerId, attackerRoll);
     const defenderFace = getPlayerDieFace(state, resolvedDefenderId, defenderRoll);
 
     return [{
-        type: 'CHOICE_REQUESTED',
+        type: 'COMPARE_ROLL_REQUESTED',
         payload: {
-            playerId: attackerId,
-            sourceAbilityId,
-            titleKey: 'compareRoll.gunslingerShowdown.title',
-            options: [],
-            compareRoll: {
-                contestants: [
+            context: createCompareRollContext(state, {
+                id: `compare:gunslingerShowdown:${sourceAbilityId}:${timestamp}`,
+                ownerPlayerId: attackerId,
+                targetPlayerId: resolvedDefenderId,
+                sourceAbilityId,
+                dice: [
                     {
+                        id: 0,
+                        definitionId: `compare:${attackerId}`,
+                        value: attackerRoll,
+                        symbol: attackerFace,
+                        symbols: attackerFace ? [attackerFace] : [],
+                        isKept: false,
+                        ownerId: attackerId,
+                    },
+                    {
+                        id: 1,
+                        definitionId: `compare:${resolvedDefenderId}`,
+                        value: defenderRoll,
+                        symbol: defenderFace,
+                        symbols: defenderFace ? [defenderFace] : [],
+                        isKept: false,
+                        ownerId: resolvedDefenderId,
+                    },
+                ],
+                metadata: {
+                    compareKind: 'gunslingerShowdown',
+                    bonusDamageOnWin: amount,
+                    contestants: [
+                    {
+                        dieId: 0,
                         playerId: attackerId,
                         labelKey: 'compareRoll.gunslingerShowdown.attacker',
-                        roll: attackerRoll,
-                        face: attackerFace,
                         characterId: state.players[attackerId]?.characterId,
                     },
                     {
+                        dieId: 1,
                         playerId: resolvedDefenderId,
                         labelKey: 'compareRoll.gunslingerShowdown.defender',
-                        roll: defenderRoll,
-                        face: defenderFace,
                         characterId: state.players[resolvedDefenderId]?.characterId,
                     },
                 ],
-                resultTextKey: showdownWon
-                    ? 'compareRoll.gunslingerShowdown.win'
-                    : 'compareRoll.gunslingerShowdown.lose',
-                resultTextParams: showdownWon ? { amount } : undefined,
-                resultTone: showdownWon ? 'success' : 'neutral',
-                confirmValue: {
-                    value: showdownWon ? amount : 0,
-                    customId: 'gunslinger-showdown-apply-bonus',
                 },
-            },
+            }),
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as ChoiceRequestedEvent];
+    } as DiceThroneEvent];
 }
 
 function handleDuelResolve({ sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
-    const defenderRoll = state.dice[0]?.value ?? random.d(6);
-    const attackerRoll = state.pendingAttack?.duelAttackerDieValue ?? random.d(6);
+    const currentRollDice = state.currentRollContext?.dice ?? getActiveDice(state);
+    const defenderRoll = currentRollDice.find(die => die.ownerId === state.pendingAttack?.defenderId)?.value
+        ?? currentRollDice[0]?.value
+        ?? random.d(6);
+    const attackerRoll = currentRollDice.find(die => die.ownerId === state.pendingAttack?.attackerId && die.id !== 0)?.value
+        ?? random.d(6);
     const originalAttackerId = state.pendingAttack?.attackerId;
     const originalDefenderId = state.pendingAttack?.defenderId;
     if (!originalAttackerId || !originalDefenderId) return [];
 
     const winOnTie = action.params?.winOnTie === true;
-    const duelWon = winOnTie ? defenderRoll >= attackerRoll : defenderRoll > attackerRoll;
     const defenderFace = getPlayerDieFace(state, originalDefenderId, defenderRoll);
     const attackerFace = getPlayerDieFace(state, originalAttackerId, attackerRoll);
 
     return [{
-        type: 'CHOICE_REQUESTED',
+        type: 'COMPARE_ROLL_REQUESTED',
         payload: {
-            playerId: originalDefenderId,
-            sourceAbilityId,
-            titleKey: duelWon ? 'choices.gunslingerDuel.title' : 'compareRoll.gunslingerDuel.title',
-            options: duelWon
-                ? [
-                    { value: 3, customId: 'gunslinger-duel-deal-3', labelKey: 'choices.gunslingerDuel.deal3' },
-                    { value: 50, customId: 'gunslinger-duel-prevent-half', labelKey: 'choices.gunslingerDuel.preventHalf' },
-                ]
-                : [],
-            compareRoll: {
-                contestants: [
+            context: createCompareRollContext(state, {
+                id: `compare:gunslingerDuel:${sourceAbilityId}:${timestamp}`,
+                ownerPlayerId: originalDefenderId,
+                targetPlayerId: originalAttackerId,
+                sourceAbilityId,
+                dice: [
                     {
+                        id: 0,
+                        definitionId: `compare:${originalDefenderId}`,
+                        value: defenderRoll,
+                        symbol: defenderFace,
+                        symbols: defenderFace ? [defenderFace] : [],
+                        isKept: false,
+                        ownerId: originalDefenderId,
+                    },
+                    {
+                        id: 1,
+                        definitionId: `compare:${originalAttackerId}`,
+                        value: attackerRoll,
+                        symbol: attackerFace,
+                        symbols: attackerFace ? [attackerFace] : [],
+                        isKept: false,
+                        ownerId: originalAttackerId,
+                    },
+                ],
+                metadata: {
+                    compareKind: 'gunslingerDuel',
+                    winOnTie,
+                    contestants: [
+                    {
+                        dieId: 0,
                         playerId: originalDefenderId,
                         labelKey: 'compareRoll.gunslingerDuel.defender',
-                        roll: defenderRoll,
-                        face: defenderFace,
                         characterId: state.players[originalDefenderId]?.characterId,
                     },
                     {
+                        dieId: 1,
                         playerId: originalAttackerId,
                         labelKey: 'compareRoll.gunslingerDuel.attacker',
-                        roll: attackerRoll,
-                        face: attackerFace,
                         characterId: state.players[originalAttackerId]?.characterId,
                     },
                 ],
-                resultTextKey: duelWon
-                    ? 'compareRoll.gunslingerDuel.win'
-                    : (defenderRoll === attackerRoll && !winOnTie
-                        ? 'compareRoll.gunslingerDuel.tieLose'
-                        : 'compareRoll.gunslingerDuel.lose'),
-                resultTone: duelWon ? 'success' : 'danger',
-                ...(duelWon ? {} : {
-                    confirmValue: { value: 1, customId: 'gunslinger-duel-lose' },
-                }),
-            },
+                },
+            }),
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as ChoiceRequestedEvent];
+    } as DiceThroneEvent];
 }
 
 function handleWildWest({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {

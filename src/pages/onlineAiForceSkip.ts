@@ -197,13 +197,21 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
         };
 
         unsubscribeError = client.subscribeError?.((reason) => {
-            if (settled || reason !== 'online_ai_circuit_open') {
+            if (settled || (reason !== 'online_ai_circuit_open' && reason !== 'stale_state')) {
                 return;
             }
             settled = true;
             cleanup();
             if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
                 lastAiAttemptKeyRef.current = null;
+            }
+            if (reason === 'stale_state') {
+                if (onWillResync) {
+                    onWillResync(reason);
+                } else {
+                    client.resync();
+                }
+                scheduleRetry();
             }
             onRejected?.(reason);
         }) ?? null;
@@ -239,7 +247,9 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
             onRejected?.('command_timeout');
         }, SINGLE_COMMAND_CONFIRM_TIMEOUT_MS);
 
-        client.sendCommand(command.type, command.payload);
+        client.sendCommand(command.type, command.payload, {
+            onlineAiAttemptKey: resolution.attemptKey,
+        });
         return;
     }
 
@@ -268,6 +278,9 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
                 scheduleRetry();
             }
             onRejected?.(reason);
+        },
+        {
+            onlineAiAttemptKey: resolution.attemptKey,
         },
     );
 }

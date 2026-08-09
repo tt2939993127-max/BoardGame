@@ -21,6 +21,7 @@ import {
     getPendingBonusSettlementDice,
     getRollerId,
 } from '../rules';
+import { getCurrentRollDice, isCurrentBonusRollSettlement } from '../rollContext';
 import { findHeroCard } from '../../heroes';
 
 // ============================================================================
@@ -117,11 +118,15 @@ function resolveAllowedDieIdsForDiceInteraction(
     attackerId?: PlayerId,
 ): number[] | undefined {
     if (!state) return undefined;
-    if (state.pendingBonusDiceSettlement?.allowDiceModification) {
+    if (state.pendingBonusDiceSettlement?.allowDiceModification && isCurrentBonusRollSettlement(state)) {
         return getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).map(die => die.index);
     }
-    if (state.pendingAttack?.defenseAbilityId === 'duel') {
-        return [0, 1];
+    const currentRollDice = getCurrentRollDice(state, state.turnPhase);
+    const attackSnapshotDieIds = action && isDefenderSelectingAnyDiceDuringDefense(action, attackerId, state)
+        ? getAttackSnapshotDieIds(state)
+        : [];
+    if (currentRollDice.length > 0) {
+        return [...currentRollDice.map(die => die.id), ...attackSnapshotDieIds];
     }
     if (action && isDefenderSelectingAnyDiceDuringDefense(action, attackerId, state)) {
         return [

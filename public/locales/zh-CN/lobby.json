@@ -216,6 +216,8 @@
     "button_label": "点击看板娘",
     "image_alt": "易桌游看板娘",
     "community_welcome": "欢迎进群交流：",
+    "force_end_phase_tip": "遇到卡死时，悬浮球可以强制结束阶段。",
+    "switch_view_tip": "点击对手分数/头像可以切换视角，可以看弃牌堆。",
     "copy_success": "群号已复制",
     "copy_failed": "复制失败，请手动复制群号"
   },

@@ -10,6 +10,7 @@ import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
 import type { PassiveAbilityDef } from './passiveAbility';
+import type { RollDieConditionalEffect, RollDieDefaultEffect } from './tokenTypes';
 
 // ============================================================================
 // 基础类型
@@ -275,8 +276,6 @@ export interface PendingAttack {
     attackDiceFaceCounts?: Record<string, number>;
     /** 攻击方骰子点数快照（用于 2/3/4/5-of-a-kind 的“相同数字”判定） */
     attackDiceValues?: number[];
-    /** 枪手“对决”中攻击方那颗对掷骰，防御方确认前先展示在右侧骰盘。 */
-    duelAttackerDieValue?: number;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
     /** 攻击掷骰阶段结束时已经使用过的 Token，允许暴击和精准在同一次攻击中连续使用。 */
@@ -295,10 +294,21 @@ export interface PendingAttack {
     statusCheckOrder?: 'dazzleFirst' | 'blindedFirst';
     /** 防御掷骰阶段激活飞行后，本次攻击主伤害完全免除。 */
     defensiveFlightActivated?: boolean;
+    /**
+     * 本次进攻骰技能是否算作“本回合已进行一次攻击”。
+     * 默认未设置时沿用 ATTACK_INITIATED 的普通攻击口径；仅规则明确将已选分支裁定为非攻击时置为 false。
+     */
+    countsAsOffensiveAttackMade?: boolean;
     /** 攻击链内的后续选择结果（例如工匠扳手攻击的追加分支），用于交互后恢复同一条攻击。 */
     followUpChoiceBySourceAbilityId?: Record<string, string>;
     /** 树精神圣防止即将受到的负面状态的可选响应决定。 */
     treantDivinePreventDebuffChoice?: 'prevent' | 'skip';
+    /** 教会税 II 在技能激活后等待状态判定/响应窗口收口再发放的 CP。 */
+    deferredCpGrants?: Array<{
+        playerId: PlayerId;
+        amount: number;
+        sourceAbilityId?: string;
+    }>;
     /** 等本次伤害响应窗口消耗指定 token 后再授予的 token。 */
     deferredTokenGrants?: PendingDamage['deferredTokenGrants'];
     /**
@@ -489,6 +499,8 @@ export interface PendingDamage {
         sourcePlayerId?: PlayerId;
         damageScope?: 'attack' | 'direct';
         unblockable?: boolean;
+        /** 神罚反弹在响应窗口收口时按最终伤害计算。 */
+        reflectFromPendingDamage?: boolean;
         sourceCommandType?: string;
     }>;
     /** 需要等本响应窗口消耗指定 token 后再授予的 token。 */
@@ -591,11 +603,112 @@ export interface PendingBonusDiceSettlement {
     customResolutionId?: string;
     /** 允许普通改骰牌修改这组奖励骰，并在确认结算时读取改后的结果 */
     allowDiceModification?: boolean;
+    /** 终极技能成功发动后的结算骰：可展示/确认，但不可再被改骰或重掷。 */
+    ultimateLocked?: boolean;
     /**
      * 当前奖励骰结果是否应打开 afterRollConfirmed 响应窗口。
      * 仅用于“投出特定结果才触发效果”的奖励骰；像一掷千金这种任意结果都会结算数值的奖励骰不打开响应窗口。
      */
     opensAfterRollConfirmedResponseWindow?: boolean;
+    /** rollDie 延后结算所需的规则输入；投掷前不执行条件效果。 */
+    rollDieResolution?: {
+        conditionalEffects?: RollDieConditionalEffect[];
+        defaultEffect?: RollDieDefaultEffect;
+        /** rollDie action 的显式效果目标；伤害仍使用 settlement.targetId。 */
+        effectTargetId?: PlayerId;
+        /** bonusDamage 是否应交给同一效果链后续的主伤害消费。 */
+        bonusDamageMode?: 'inline' | 'standalone';
+        resolutionMode?: 'damage' | 'attackBonus';
+        attackBonusSourceCardId?: string;
+        isDefensiveContext?: boolean;
+        sfxKey?: string;
+    };
+}
+
+export type DiceThroneRollContextKind =
+    | 'offensive'
+    | 'defensive'
+    | 'targeting'
+    | 'effect'
+    | 'bonus'
+    | 'evasion'
+    | 'compare';
+
+export type DiceThroneRollContextActorScope =
+    | 'owner'
+    | 'opponents'
+    | 'allies'
+    | 'both'
+    | 'any'
+    | 'none';
+
+export interface DiceThroneRollContextPolicy {
+    modifiableBy: DiceThroneRollContextActorScope;
+    rerollableBy: DiceThroneRollContextActorScope;
+    allowPassiveReroll: boolean;
+    allowRollCards: boolean;
+    ultimateLocked: boolean;
+    blocksPhaseFlow: boolean;
+}
+
+export interface DiceThroneRollContextSettlement {
+    mode:
+        | 'selectAttack'
+        | 'targetPlayer'
+        | 'damage'
+        | 'attackBonus'
+        | 'threshold'
+        | 'tokenNegate'
+        | 'compare'
+        | 'none';
+    resumeFrameId?: string;
+    followupStep?: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface DiceThroneRollContextDisplay {
+    surface: 'diceTray' | 'bonusOverlay' | 'compactOverlay' | 'recapOnly';
+    replayOnly: boolean;
+    summaryKey?: string;
+}
+
+export interface DiceThroneCoveredRollRef {
+    id: string;
+    kind: DiceThroneRollContextKind;
+    ownerPlayerId: PlayerId;
+    phase?: TurnPhase;
+}
+
+export interface DiceThroneRollContext {
+    id: string;
+    kind: DiceThroneRollContextKind;
+    ownerPlayerId: PlayerId;
+    targetPlayerId?: PlayerId;
+    sourceAbilityId?: string;
+    sourceCardId?: string;
+    sourceTokenId?: string;
+    phase?: TurnPhase;
+    dice: Die[];
+    status: 'open' | 'settling' | 'settled' | 'locked';
+    policy: DiceThroneRollContextPolicy;
+    settlement: DiceThroneRollContextSettlement;
+    display: DiceThroneRollContextDisplay;
+    /**
+     * 仅用于审计/步骤级回退定位。它不是第二个当前骰区，
+     * 普通改骰命令不得读取这里的旧骰面。
+     */
+    coveredPreviousRollRef?: DiceThroneCoveredRollRef;
+}
+
+/**
+ * 覆盖当前骰区前的单步恢复点。
+ *
+ * 这是 DiceThrone 骰区自己的步骤恢复，不是通用 UndoSystem 历史；
+ * 只保留最近一次覆盖前的领域状态，恢复后继续使用唯一 currentRollContext。
+ */
+export interface DiceThroneRollContextRecovery {
+    coveredRollRef: DiceThroneCoveredRollRef;
+    restoreState: Omit<DiceThroneCore, 'rollContextRecovery'>;
 }
 
 export interface HeroState {
@@ -700,6 +813,10 @@ export interface DiceThroneCore {
     pendingDamage?: PendingDamage;
     /** 待结算的奖励骰（等待重掷交互） */
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
+    /** 当前唯一可操作骰区。新投掷会覆盖旧投掷，不存在并行当前骰子。 */
+    currentRollContext?: DiceThroneRollContext;
+    /** 最近一次当前骰区被覆盖前的单步恢复点。不是第二个当前骰区。 */
+    rollContextRecovery?: DiceThroneRollContextRecovery;
     /**
      * 骰面确认序号（自增）
      * 用于 afterRollConfirmed 响应窗口源头级去重，避免 CLOSED 后在同一确认源上立刻 reopen。
@@ -751,6 +868,8 @@ export interface DiceThroneCore {
         attackerId: PlayerId;
         /** 原回合的活跃玩家（额外攻击结束后恢复） */
         originalActivePlayerId: PlayerId;
+        /** 触发额外攻击的状态或能力；用于处理来源特有的阶段规则。 */
+        sourceStatusId?: string;
         /** 是否已经真正进入过额外攻击的 offensiveRoll 阶段 */
         phaseEntered?: boolean;
     };

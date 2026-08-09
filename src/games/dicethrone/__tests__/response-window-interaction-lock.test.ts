@@ -360,7 +360,7 @@ describe('响应窗口交互锁定：骰子修改类（modifyDie）', () => {
         expect(modifyAttackDie.success).toBe(true);
         expect(modifyAttackDie.finalState.core.dice[0]?.value).toBe(1);
         expect(modifyAttackDie.finalState.core.dice[1]?.value).not.toBe(6);
-        expect(modifyAttackDie.finalState.core.pendingAttack?.duelAttackerDieValue).toBe(6);
+        expect(modifyAttackDie.finalState.core.currentRollContext?.dice.find((die: any) => die.id === 1)?.value).toBe(6);
     });
 
     it('防御方在普通防御骰确认后的响应窗口可用惊不惊喜改攻击快照骰子', () => {

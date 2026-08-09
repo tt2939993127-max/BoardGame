@@ -19,6 +19,8 @@ import type {
     BatchDispatchMeta,
     CommandDispatchMeta,
     MatchUiEvent,
+    type OnlineAiClientPatchIssue,
+    type OnlineAiClientStateEventKind,
 } from './protocol';
 import { applyPatches } from './patch';
 
@@ -88,6 +90,12 @@ export class GameTransportClient {
     private _syncRetries = 0;
     private _healthCheckTimer: ReturnType<typeof setInterval> | null = null;
     private _terminalError: string | null = null;
+    private _lastStateEventKind: OnlineAiClientStateEventKind = 'none';
+    private _lastStateEventStateID: number | null = null;
+    private _lastStateEventAt: number | null = null;
+    private _lastSyncRequestReason: string | null = null;
+    private _lastSyncRequestedAt: number | null = null;
+    private _lastPatchIssue: OnlineAiClientPatchIssue | null = null;
     private static readonly SYNC_TIMEOUT_MS = 5000;
     private static readonly SYNC_MAX_RETRIES = 5;
     private static readonly HEALTH_CHECK_INTERVAL_MS = 30000; // 30秒检查一次
@@ -229,6 +237,7 @@ export class GameTransportClient {
             this._matchPlayers = matchPlayers;
             // sync 是全量权威态，收到后立即建立 patch 连续性校验基线
             this._lastReceivedStateID = syncMeta?.stateID ?? null;
+            this.recordStateEvent('sync', this._lastReceivedStateID);
             this.config.onDebugEvent?.({
                 stage: 'sync-received',
                 receivedStateID: syncMeta?.stateID ?? null,
@@ -246,6 +255,7 @@ export class GameTransportClient {
             if (meta?.stateID !== undefined) {
                 this._lastReceivedStateID = meta.stateID;
             }
+            this.recordStateEvent('update', this._lastReceivedStateID);
             this.config.onStateUpdate?.(state, matchPlayers, meta);
             this.notifyStateUpdateSubscribers(state);
         });
@@ -266,6 +276,12 @@ export class GameTransportClient {
                     expectedStateID: this._lastReceivedStateID + 1,
                     receivedStateID: meta.stateID,
                 });
+                this._lastPatchIssue = {
+                    kind: 'discontinuity',
+                    expectedStateID: this._lastReceivedStateID + 1,
+                    receivedStateID: meta.stateID,
+                    at: Date.now(),
+                };
                 this.sendSync('stateid-discontinuity');
                 return;
             }
@@ -284,6 +300,12 @@ export class GameTransportClient {
                     error: result.error,
                     receivedStateID: meta.stateID,
                 });
+                this._lastPatchIssue = {
+                    kind: 'apply-failed',
+                    receivedStateID: meta.stateID,
+                    error: result.error ?? null,
+                    at: Date.now(),
+                };
                 this.sendSync('patch-apply-failed');
                 return;
             }
@@ -292,6 +314,7 @@ export class GameTransportClient {
             this._latestState = result.state;
             this._lastReceivedStateID = meta.stateID;
             this._matchPlayers = matchPlayers;
+            this.recordStateEvent('patch', this._lastReceivedStateID);
 
             // 传递给上层，与 state:update 行为一致
             this.config.onStateUpdate?.(result.state!, matchPlayers, meta);
@@ -345,7 +368,11 @@ export class GameTransportClient {
     }
 
     /** 发送命令 */
-    sendCommand(commandType: string, payload: unknown): void {
+    sendCommand(
+        commandType: string,
+        payload: unknown,
+        dispatchContext?: Pick<CommandDispatchMeta, 'onlineAiAttemptKey'>,
+    ): void {
         if (!this.socket || this._destroyed) return;
         if (this._syncInFlight) {
             console.warn('[GameTransportClient] 全量同步进行中，命令被延后丢弃', {
@@ -364,15 +391,22 @@ export class GameTransportClient {
             this.config.onError?.('not_connected');
             return;
         }
+        const commandMeta: CommandDispatchMeta = {
+            expectedStateID: this._lastReceivedStateID ?? undefined,
+            ...(dispatchContext?.onlineAiAttemptKey
+                ? {
+                    onlineAiAttemptKey: dispatchContext.onlineAiAttemptKey,
+                    clientTransport: this.buildOnlineAiClientTransportDiagnostics(),
+                }
+                : {}),
+        };
         this.socket.emit(
             'command',
             this.config.matchID,
             commandType,
             payload,
             this.config.credentials,
-            {
-                expectedStateID: this._lastReceivedStateID ?? undefined,
-            } satisfies CommandDispatchMeta,
+            commandMeta,
         );
     }
 
@@ -401,6 +435,7 @@ export class GameTransportClient {
         commands: Array<{ type: string; payload: unknown }>,
         onConfirmed?: (state: unknown) => void,
         onRejected?: (reason: string) => void,
+        dispatchContext?: Pick<BatchDispatchMeta, 'onlineAiAttemptKey'>,
     ): void {
         if (!this.socket || this._destroyed) return;
         if (this._syncInFlight) {
@@ -452,15 +487,22 @@ export class GameTransportClient {
         this.socket.once('disconnect', disconnectHandler);
 
         // 发送批次
+        const batchMeta: BatchDispatchMeta = {
+            expectedStateID: this._lastReceivedStateID ?? undefined,
+            ...(dispatchContext?.onlineAiAttemptKey
+                ? {
+                    onlineAiAttemptKey: dispatchContext.onlineAiAttemptKey,
+                    clientTransport: this.buildOnlineAiClientTransportDiagnostics(),
+                }
+                : {}),
+        };
         this.socket.emit(
             'batch',
             this.config.matchID,
             batchId,
             commands,
             this.config.credentials,
-            ({
-                expectedStateID: this._lastReceivedStateID ?? undefined,
-            } satisfies BatchDispatchMeta),
+            batchMeta,
         );
     }
 
@@ -514,6 +556,8 @@ export class GameTransportClient {
     private sendSync(reason: string): void {
         if (this._destroyed || this._terminalError || !this.socket?.connected) return;
         this._syncInFlight = true;
+        this._lastSyncRequestReason = reason;
+        this._lastSyncRequestedAt = Date.now();
         this.clearSyncTimer();
         this.config.onDebugEvent?.({
             stage: 'sync-requested',
@@ -553,6 +597,28 @@ export class GameTransportClient {
             clearTimeout(this._syncTimer);
             this._syncTimer = null;
         }
+    }
+
+    private recordStateEvent(
+        kind: Exclude<OnlineAiClientStateEventKind, 'none'>,
+        stateID: number | null,
+    ): void {
+        this._lastStateEventKind = kind;
+        this._lastStateEventStateID = stateID;
+        this._lastStateEventAt = Date.now();
+    }
+
+    private buildOnlineAiClientTransportDiagnostics() {
+        return {
+            sentAt: Date.now(),
+            lastStateEventKind: this._lastStateEventKind,
+            lastStateEventStateID: this._lastStateEventStateID,
+            lastStateEventAt: this._lastStateEventAt,
+            syncInFlight: this._syncInFlight,
+            lastSyncRequestReason: this._lastSyncRequestReason,
+            lastSyncRequestedAt: this._lastSyncRequestedAt,
+            lastPatchIssue: this._lastPatchIssue,
+        };
     }
 
     /** 更新玩家 ID（调试面板切换视角时使用） */

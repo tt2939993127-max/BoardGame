@@ -12,7 +12,7 @@ const EVIDENCE_DIR = resolve(process.cwd(), 'evidence/betrayal-floor-switcher');
 const UPPER_FLOOR_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-楼层切换-二层默认.jpg`;
 const GROUND_FLOOR_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-楼层切换-一层切换后.jpg`;
 const MOVE_TARGET_FLOOR_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-楼层切换-移动目标楼层.jpg`;
-const STEP_1_SWITCH_FLOOR_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-跨层移动-1右下切层红圈.jpg`;
+const STEP_1_SWITCH_FLOOR_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-跨层移动-1侧边切层按钮红圈.jpg`;
 const STEP_2_MOVE_ACTION_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-跨层移动-2移动按钮红圈.jpg`;
 const STEP_3_TARGET_ROOM_SCREENSHOT = `${EVIDENCE_DIR}/山屋惊魂-跨层移动-3目标房间红圈.jpg`;
 
@@ -83,6 +83,50 @@ const addRedCallout = async (page: Page, testId: string, label: string) => {
     }, { targetTestId: testId, calloutLabel: label });
 };
 
+type FloorSwitcherGeometry = {
+    switcherCenterY: number;
+    switcherRight: number;
+    switcherBottom: number;
+    gridCenterY: number;
+    gridRight: number;
+    gridBottom: number;
+    gridHeight: number;
+};
+
+const expectFloorSwitcherAnchoredToMapSide = async (
+    page: Page,
+    previous?: FloorSwitcherGeometry,
+): Promise<FloorSwitcherGeometry> => {
+    const geometry = await page.getByTestId('betrayal-room-floor-switcher').evaluate((switcher) => {
+        const grid = document.querySelector('[data-testid="betrayal-room-grid"]');
+        if (!grid) {
+            throw new Error('missing betrayal-room-grid');
+        }
+        const switcherRect = switcher.getBoundingClientRect();
+        const gridRect = grid.getBoundingClientRect();
+        return {
+            switcherCenterY: switcherRect.top + switcherRect.height / 2,
+            switcherRight: switcherRect.right,
+            switcherBottom: switcherRect.bottom,
+            gridCenterY: gridRect.top + gridRect.height / 2,
+            gridRight: gridRect.right,
+            gridBottom: gridRect.bottom,
+            gridHeight: gridRect.height,
+        };
+    });
+
+    expect(Math.abs(geometry.switcherCenterY - geometry.gridCenterY)).toBeLessThanOrEqual(
+        Math.max(64, geometry.gridHeight * 0.08),
+    );
+    expect(geometry.gridBottom - geometry.switcherBottom).toBeGreaterThan(geometry.gridHeight * 0.25);
+    expect(geometry.gridRight - geometry.switcherRight).toBeGreaterThanOrEqual(200);
+    if (previous) {
+        expect(Math.abs(geometry.switcherCenterY - previous.switcherCenterY)).toBeLessThanOrEqual(2);
+        expect(Math.abs(geometry.switcherRight - previous.switcherRight)).toBeLessThanOrEqual(2);
+    }
+    return geometry;
+};
+
 test.describe('山屋惊魂楼层切换视觉验收', () => {
     test.beforeEach(async ({ context, page }) => {
         await initBetrayalContext(context);
@@ -113,6 +157,7 @@ test.describe('山屋惊魂楼层切换视觉验收', () => {
         await expectOnlyFloorVisible(page, 'upper', 'upper-landing', ['grand-staircase', 'basement-landing']);
         await expect(page.getByTestId('betrayal-room-floor-up')).toBeDisabled();
         await expect(page.getByTestId('betrayal-room-floor-down')).toBeEnabled();
+        const upperSwitcherGeometry = await expectFloorSwitcherAnchoredToMapSide(page);
         await saveScreenshot(page, UPPER_FLOOR_SCREENSHOT);
 
         await page.getByTestId('betrayal-room-floor-down').click();
@@ -120,12 +165,13 @@ test.describe('山屋惊魂楼层切换视觉验收', () => {
         await expect(page.getByTestId('betrayal-room-floor-up')).toBeEnabled();
         await expect(page.getByTestId('betrayal-room-floor-down')).toBeDisabled();
         await expect(page.getByTestId('betrayal-room-floor-basement')).toHaveCount(0);
+        await expectFloorSwitcherAnchoredToMapSide(page, upperSwitcherGeometry);
         await page.getByTestId('betrayal-room-floor-down').evaluate((node) => (node as HTMLButtonElement).click());
         await expectOnlyFloorVisible(page, 'ground', 'grand-staircase', ['upper-landing', 'basement-landing']);
         await saveScreenshot(page, GROUND_FLOOR_SCREENSHOT);
     });
 
-    test('站在楼梯格时右下角切层再移动到跨层目标房间', async ({ page }) => {
+    test('站在楼梯格时移动模式下用侧边切层选择跨层目标房间', async ({ page }) => {
         const core = createStartedFirstScenarioCore(['0', '1', '2']);
         const upperLanding = core.rooms.find((room) => room.id === 'upper-landing')!;
         const grandStaircase = core.rooms.find((room) => room.id === 'grand-staircase')!;
@@ -145,20 +191,23 @@ test.describe('山屋惊魂楼层切换视觉验收', () => {
         await expect(page.getByTestId('betrayal-board')).toBeVisible({ timeout: 30000 });
         await expectOnlyFloorVisible(page, 'upper', 'upper-landing', ['grand-staircase', 'basement-landing']);
         await expect(page.getByTestId('betrayal-room-floor-down')).toBeEnabled();
-        await addRedCallout(page, 'betrayal-room-floor-down', '1 点右下切层');
-        await saveScreenshot(page, STEP_1_SWITCH_FLOOR_SCREENSHOT);
+        const switcherGeometry = await expectFloorSwitcherAnchoredToMapSide(page);
+       await addRedCallout(page, 'betrayal-room-floor-down', '1 点切层按钮');
+       await saveScreenshot(page, STEP_1_SWITCH_FLOOR_SCREENSHOT);
 
-        await clearRedCallouts(page);
+       await clearRedCallouts(page);
+       await addRedCallout(page, 'betrayal-action-move', '2 点移动');
+       await saveScreenshot(page, STEP_2_MOVE_ACTION_SCREENSHOT);
+
+       await clearRedCallouts(page);
+       await page.getByTestId('betrayal-action-move').click();
+        await expectOnlyFloorVisible(page, 'upper', 'upper-landing', ['grand-staircase', 'basement-landing']);
+        await expectFloorSwitcherAnchoredToMapSide(page, switcherGeometry);
         await page.getByTestId('betrayal-room-floor-down').click();
         await expectOnlyFloorVisible(page, 'ground', 'grand-staircase', ['upper-landing', 'basement-landing']);
-        await expect(page.getByTestId('betrayal-room-grand-staircase')).toBeDisabled();
-        await addRedCallout(page, 'betrayal-action-move', '2 点移动');
-        await saveScreenshot(page, STEP_2_MOVE_ACTION_SCREENSHOT);
-
-        await clearRedCallouts(page);
-        await page.getByTestId('betrayal-action-move').click();
-        await expect(page.getByTestId('betrayal-room-grand-staircase')).toBeEnabled();
-        await addRedCallout(page, 'betrayal-room-grand-staircase', '3 点目标房间');
+        await expectFloorSwitcherAnchoredToMapSide(page, switcherGeometry);
+       await expect(page.getByTestId('betrayal-room-grand-staircase')).toBeEnabled();
+       await addRedCallout(page, 'betrayal-room-grand-staircase', '3 点目标房间');
         await saveScreenshot(page, MOVE_TARGET_FLOOR_SCREENSHOT);
         await saveScreenshot(page, STEP_3_TARGET_ROOM_SCREENSHOT);
 

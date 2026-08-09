@@ -72,8 +72,8 @@ abilityTags: ['talent'],  // ❌ 错误！应该是 'special'
 
 ## 相关文档
 
-- `docs/refactor/pod-auto-mapping.md` - POD 自动映射系统
-- `docs/refactor/pod-stub-cleanup.md` - POD stub 清理
+- `docs/games/smashup/refactor/pod/pod-auto-mapping.md` - POD 自动映射系统
+- `docs/games/smashup/refactor/pod/pod-stub-cleanup.md` - POD stub 清理
 - `src/games/smashup/abilities/ninjas.ts` - 忍者侍从能力实现
 
 ## 教训

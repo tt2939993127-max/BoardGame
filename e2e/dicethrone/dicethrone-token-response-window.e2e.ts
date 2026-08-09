@@ -179,7 +179,14 @@ async function injectMoonElfEvasiveResponseScene(page: Page): Promise<void> {
             ...(nextState.sys ?? {}),
             phase: 'defensiveRoll',
             interaction: {
-                current: undefined,
+                current: {
+                    id: 'dt-token-response-moon-elf-evasive-response',
+                    kind: 'dt:token-response',
+                    playerId: '0',
+                    data: {
+                        pendingDamageId: 'moon-elf-evasive-response',
+                    },
+                },
                 queue: [],
             },
         };

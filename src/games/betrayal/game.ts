@@ -846,6 +846,14 @@ export type BetrayalPendingCardResolutionStepKind = Extract<
     'room-effect' | 'room-discovery-card' | 'buried-room-discovery-card' | 'drawn-card' | 'haunt-roll' | 'event-effect'
 >;
 
+export interface BetrayalPendingCardResolutionProcessCard {
+    cardId?: string;
+    cardName: string;
+    deckKind: BetrayalDeckKind;
+    outcome: 'buried' | 'gained';
+    text: string;
+}
+
 export interface BetrayalPendingCardResolutionState {
     id: string;
     playerId: string;
@@ -859,6 +867,7 @@ export interface BetrayalPendingCardResolutionState {
     text: string;
     index: number;
     total: number;
+    processCards?: BetrayalPendingCardResolutionProcessCard[];
 }
 
 export interface BetrayalPendingTradeAgreementState {
@@ -2847,6 +2856,9 @@ function clonePendingCardResolution(
         acknowledgedPlayerIds: resolution.acknowledgedPlayerIds
             ? [...resolution.acknowledgedPlayerIds]
             : undefined,
+        processCards: resolution.processCards
+            ? resolution.processCards.map((card) => ({ ...card }))
+            : undefined,
     };
 }
 
@@ -2918,9 +2930,13 @@ function createPendingCardResolutionQueue(options: {
             cardId: options.drawnCard.id,
             }]
             : [];
-    const visibleAcknowledgementSteps = collapseSameScreenOmenResolutionSteps(steps);
+    const visibleAcknowledgementSteps = collapseRoomDiscoverySearchResolutionSteps(
+        collapseSameScreenOmenResolutionSteps(steps),
+        cardById,
+    );
 
     return visibleAcknowledgementSteps.map((step, index) => {
+        const processCards = 'processCards' in step ? step.processCards : undefined;
         const card = step.cardId ? cardById.get(step.cardId) : undefined;
         const deckKind = step.deckKind === 'event' || step.deckKind === 'item' || step.deckKind === 'omen'
             ? step.deckKind
@@ -2940,8 +2956,58 @@ function createPendingCardResolutionQueue(options: {
             text: step.text,
             index: index + 1,
             total: visibleAcknowledgementSteps.length,
+            processCards: processCards?.map((processCard) => ({ ...processCard })),
         };
     });
+}
+
+function isRoomDiscoverySearchResolutionStep(
+    step: BetrayalDiscoveryResolutionStep,
+): boolean {
+    return step.kind === 'room-discovery-card' || step.kind === 'buried-room-discovery-card';
+}
+
+function collapseRoomDiscoverySearchResolutionSteps(
+    steps: BetrayalDiscoveryResolutionStep[],
+    cardById: Map<string, BetrayalInventoryCard>,
+): Array<BetrayalDiscoveryResolutionStep & { processCards?: BetrayalPendingCardResolutionProcessCard[] }> {
+    const collapsed: Array<BetrayalDiscoveryResolutionStep & { processCards?: BetrayalPendingCardResolutionProcessCard[] }> = [];
+    for (let index = 0; index < steps.length; index += 1) {
+        const step = steps[index]!;
+        if (!isRoomDiscoverySearchResolutionStep(step)) {
+            collapsed.push(step);
+            continue;
+        }
+        const searchSteps: BetrayalDiscoveryResolutionStep[] = [];
+        while (index < steps.length && isRoomDiscoverySearchResolutionStep(steps[index]!)) {
+            searchSteps.push(steps[index]!);
+            index += 1;
+        }
+        index -= 1;
+
+        const gainedStep = [...searchSteps].reverse().find((candidate) => candidate.kind === 'room-discovery-card');
+        const finalStep = gainedStep ?? searchSteps[searchSteps.length - 1]!;
+        const processCards = searchSteps.map((searchStep) => {
+            const card = searchStep.cardId ? cardById.get(searchStep.cardId) : undefined;
+            return {
+                cardId: searchStep.cardId,
+                cardName: card?.name ?? searchStep.text,
+                deckKind: searchStep.deckKind ?? 'item',
+                outcome: searchStep.kind === 'buried-room-discovery-card' ? 'buried' as const : 'gained' as const,
+                text: searchStep.text,
+            };
+        });
+        collapsed.push({
+            ...finalStep,
+            id: `room-discovery-search-${searchSteps.map((searchStep) => searchStep.id).join('-')}`,
+            kind: 'room-discovery-card',
+            text: searchSteps.map((searchStep) => searchStep.text).join('；'),
+            deckKind: finalStep.deckKind ?? 'item',
+            cardId: finalStep.cardId,
+            processCards,
+        });
+    }
+    return collapsed;
 }
 
 function collapseSameScreenOmenResolutionSteps(
@@ -11129,19 +11195,19 @@ function createRoomDiscoveryCardResolutionSteps(
 ): BetrayalDiscoveryResolutionStep[] {
     const rewardNames = getRoomDiscoveryRewardNames(roomDiscoveryCards);
     return [
-        ...rewardNames.gained.map((name, index) => ({
-            id: `room-discovery-card-${roomDiscoveryCards.roomDiscoveryCards?.[index]?.id ?? index}`,
-            kind: 'room-discovery-card' as const,
-            text: `${roomName}获得${name}`,
-            deckKind: 'item' as const,
-            cardId: roomDiscoveryCards.roomDiscoveryCards?.[index]?.id,
-        })),
         ...rewardNames.buried.map((name, index) => ({
             id: `buried-room-discovery-card-${roomDiscoveryCards.buriedRoomDiscoveryCards?.[index]?.id ?? index}`,
             kind: 'buried-room-discovery-card' as const,
             text: `展示后埋葬${name}`,
             deckKind: 'item' as const,
             cardId: roomDiscoveryCards.buriedRoomDiscoveryCards?.[index]?.id,
+        })),
+        ...rewardNames.gained.map((name, index) => ({
+            id: `room-discovery-card-${roomDiscoveryCards.roomDiscoveryCards?.[index]?.id ?? index}`,
+            kind: 'room-discovery-card' as const,
+            text: `${roomName}获得${name}`,
+            deckKind: 'item' as const,
+            cardId: roomDiscoveryCards.roomDiscoveryCards?.[index]?.id,
         })),
     ];
 }
@@ -11155,11 +11221,11 @@ function formatRoomDiscoveryRewardDetailParts(
 ): string[] {
     const rewardNames = getRoomDiscoveryRewardNames(roomDiscoveryCards);
     return [
-        rewardNames.gained.length > 0
-            ? `${roomName}获得${rewardNames.gained.join('、')}`
-            : null,
         rewardNames.buried.length > 0
             ? `展示后埋葬${rewardNames.buried.join('、')}`
+            : null,
+        rewardNames.gained.length > 0
+            ? `${roomName}获得${rewardNames.gained.join('、')}`
             : null,
     ].filter((part): part is string => Boolean(part));
 }
@@ -19206,7 +19272,7 @@ function reduceEvent(state: BetrayalCore, event: BetrayalEvent): BetrayalCore {
             core.pendingEventChoice = null;
             core.pendingCardResolutionQueue = createPendingCardResolutionQueue({
                 playerId: event.payload.playerId,
-                requiredPlayerIds: [event.payload.playerId],
+                requiredPlayerIds: core.playerIds,
                 roomId: event.payload.roomId,
                 timestamp: event.timestamp,
                 deckKind: event.payload.deckKind,
@@ -19571,7 +19637,7 @@ function reduceEvent(state: BetrayalCore, event: BetrayalEvent): BetrayalCore {
                 ? []
                 : createPendingCardResolutionQueue({
                     playerId: event.payload.playerId,
-                    requiredPlayerIds: [event.payload.playerId],
+                    requiredPlayerIds: core.playerIds,
                     roomId: core.currentExplorer.roomId,
                     timestamp: event.timestamp,
                     deckKind: 'event',

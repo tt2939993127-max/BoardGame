@@ -121,6 +121,8 @@ describe('僧侣 vs 暗影刺客：太极连环掌 + 暗影防御护盾', () => 
                 cmd('ROLL_DICE', '1'),                                  // 4 × d(6) → [6,6,1,3]
                 cmd('CONFIRM_ROLL', '1'),
                 cmd('ADVANCE_PHASE', '1'),                              // defensiveRoll exit → resolveAttack
+                // withDamage 的奖励骰先进入唯一当前骰区
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),                     // 确认奖励骰最终面 → 主伤害
                 // 僧侣有太极 → TOKEN_RESPONSE_REQUESTED（beforeDamageDealt）→ halt
                 cmd('SKIP_TOKEN_RESPONSE', '0'),                        // 跳过太极加伤 → 伤害结算 → main2
             ],

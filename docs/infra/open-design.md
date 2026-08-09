@@ -5,10 +5,22 @@
 本项目默认把 Open Design 作为设计工具入口，用来生成可落地设计产物、设计系统和前端稿。Open Design 只定义“用哪个工具接入设计链”，不定义“设计稿已经合格”。
 
 - **默认范围**：设计稿探索、`DESIGN.md` 设计系统、HTML / PDF / PPTX / 图片类产物，以及 Codex 通过 MCP 调用 Open Design。
-- **交付边界**：用户要“设计稿 / 视觉稿 / 效果图”时，默认交付物仍是 PNG / JPG / WebP 图片证据；imagegen 可用时走位图生图，imagegen 不可用且 Open Design 可用时自动转 Open Design artifact 候选稿，并以 artifact 渲染导出的 PNG / JPG / WebP 作为候选图。未审计的 Open Design artifact、HTML 预览、运行页截图或 reference sheet 只能是工具产物 / 内部校准物，不能直接冒充设计稿。
+- **交付边界**：用户要“设计稿 / 视觉稿 / 效果图”时，默认交付物仍是 PNG / JPG / WebP 图片证据；imagegen 可用时走位图生图，imagegen 不可用且 Open Design 可用时自动转 Open Design artifact 候选稿。本项目固定采用“Open Design artifact + 固定视口浏览器渲染截图 + AI 图面核验 + 用户看图”的交付模式；未审计的 Open Design artifact、HTML 预览、产品运行页截图或 reference sheet 只能是工具产物 / 内部校准物，不能直接冒充设计稿。
 - **规则与素材门禁**：涉及游戏主 UI、桌游版面、卡牌、token、骰子、角色板、棋盘、状态板等领域对象时，Open Design 运行前必须先按 `docs/ai-rules/doc-index.md` 的“新游戏位图设计稿 / 设计批准门禁”完成本轮规则重读、规则到画面映射、正式素材输入包和出图前硬回执。没有这些证据时，只能产出 blocked brief / 缺口清单，不得生成或打开完成态设计稿。
 - **素材不是 prompt 文案**：正式素材必须实际进入 Open Design 项目目录、reference sheet、图像输入、拼接基底、atlas crop 或运行时渲染链；只在 prompt 里写工作树路径、素材名或规则对象名，不算使用素材。
 - **人工验收顺序**：候选图必须先经过 AI 图面核验，确认规则、素材、少边框和可复刻门禁均为 PASS 后，才允许打开给用户人工验收。
+
+## 固定交付模式
+
+本项目默认不把 `od export --format image` 当作设计稿收口门槛。固定模式如下：
+
+1. Open Design artifact 是可编辑设计源。
+2. 用户验收图使用当前 artifact 在固定视口（PC 默认 `1920×1080`）下的浏览器渲染 PNG。
+3. 所有用户可见设计改动必须先走 AI 图面核验；核验通过后再按看图流程展示给用户。
+4. 测试格线、区域高亮、编号说明等只能通过显式调试参数或标注副本出现，不进入正式 UI 截图。
+5. `od export --format image` 只作为可选的桌面版官方导出链路；只有用户明确要求“官方 Open Design 导出 PNG / desktop export / 打包运行时导出”时才追它。若它因缺少桌面运行时失败，不得阻塞已经通过 AI 图面核验的浏览器渲染验收图。
+
+桌面 / 打包运行时的意义只限于使用 Open Design 桌面版 Electron bundled Chromium 生成官方导出文件，适合归档、外部分发或需要复现 Download 菜单产物的场景。它不改变设计语义，也不比同一 artifact 的固定视口浏览器截图更能证明布局、素材、规则对象或格子归属正确。
 
 ## 何时使用
 
@@ -19,13 +31,15 @@
 
 ## 仓库内正式入口
 
-如果本机已经安装了 Open Design 桌面版或已有 `od` 命令：
+默认项目内安装 / 接入入口：
 
 ```bash
 npm run setup:open-design
 ```
 
-如果本机没有 `od`，走源码安装到 `D:\codex-home\tools\open-design`，构建 daemon / MCP CLI，并安装 Codex MCP：
+它会把 Open Design 源码安装到当前仓库的 `.tools/open-design`，构建 daemon / MCP CLI，并安装 Codex MCP。这个目录是本地工具副本，不进 Git。
+
+显式安装入口等价保留：
 
 ```bash
 npm run setup:open-design:install
@@ -51,9 +65,10 @@ scripts\infra\setup-open-design.cmd -InstallSource
 
 ## 脚本会做什么
 
-- 默认使用 `D:\codex-home` 作为 `CODEX_HOME`。
-- 优先寻找本机 `od` 命令。
-- 如果加 `-InstallSource` 且本机没有 `od`，则把 `nexu-io/open-design` 浅克隆到 `D:\codex-home\tools\open-design`。
+- 默认使用 `D:\codex-home` 作为 `CODEX_HOME`，只用于写当前 Codex MCP 配置。
+- 默认工具落点是当前项目 `.tools/open-design`，避免协作者找不到工具来源。
+- `npm run setup:open-design` / `npm run setup:design:mcp` 默认会加 `-InstallSource`，把 `nexu-io/open-design` 浅克隆到 `.tools/open-design`。
+- 查找顺序是：项目内 `.tools/open-design` → 本机 `od` 命令 → 旧系统侧 `D:\codex-home\tools\open-design` 兼容 fallback。新接入不要依赖旧系统侧路径。
 - 源码安装时要求 Node 24.x，并把 pnpm 补到官方要求的 `10.33.2`。
 - 源码安装只安装 daemon / MCP 依赖范围，避免因为桌面 Electron 依赖阻塞 Codex 接入。
 - 源码安装会在缺少 SQLite 原生绑定时单独重建 `better-sqlite3`；若 daemon 已经运行且绑定文件存在，会跳过重建以避免文件占用。
@@ -70,10 +85,10 @@ scripts\infra\setup-open-design.cmd -InstallSource
 where.exe od
 ```
 
-如果是本项目源码安装，直接验证源码入口：
+如果是本项目源码安装，直接验证项目内源码入口：
 
 ```powershell
-node D:\codex-home\tools\open-design\apps\daemon\bin\od.mjs --help
+node .\.tools\open-design\apps\daemon\bin\od.mjs --help
 ```
 
 再看 Codex MCP 列表：

@@ -6,7 +6,7 @@ import { PhaseIndicator } from './PhaseIndicator';
 import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
-import { STATUS_IDS } from '../domain/ids';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import type { HitStopConfig } from '../../../components/common/animations';
 import { UI_Z_INDEX } from '../../../core';
 import { AutoResponseToggle } from './AutoResponseToggle';
@@ -26,6 +26,8 @@ export const LeftSidebar = ({
     drawDeckRef,
     onPurifyClick,
     canUsePurify,
+    onFlightClick,
+    canUseFlight,
     tokenDefinitions,
     onKnockdownClick,
     canRemoveKnockdown,
@@ -51,6 +53,10 @@ export const LeftSidebar = ({
     onPurifyClick?: () => void;
     /** 是否可以使用净化（有净化 Token 且有负面状态） */
     canUsePurify?: boolean;
+    /** 点击飞行 Token 的回调 */
+    onFlightClick?: () => void;
+    /** 是否可以使用飞行（进攻/防御掷骰阶段且有待处理攻击） */
+    canUseFlight?: boolean;
     /** Token 定义列表（用于判断哪些 Token 可点击） */
     tokenDefinitions?: TokenDef[];
     /** 点击击倒状态的回调 */
@@ -99,16 +105,22 @@ export const LeftSidebar = ({
                         tokenStackLimits={viewPlayer.tokenStackLimits}
                         testIdPrefix={playerId ? `dt-player-${playerId}-token` : undefined}
                         onTokenClick={(tokenId) => {
+                            if (tokenId === TOKEN_IDS.FLIGHT && onFlightClick) {
+                                onFlightClick();
+                                return;
+                            }
                             // 从定义中查找该 Token 是否有 removeDebuff 效果（即净化类 Token）
                             const tokenDef = tokenDefinitions?.find(def => def.id === tokenId);
                             if (tokenDef?.activeUse?.effect.type === 'removeDebuff' && onPurifyClick) {
                                 onPurifyClick();
                             }
                         }}
-                        clickableTokens={canUsePurify
-                            ? (tokenDefinitions ?? []).filter(def => def.activeUse?.effect.type === 'removeDebuff').map(def => def.id)
-                            : []
-                        }
+                        clickableTokens={[
+                            ...(canUsePurify
+                                ? (tokenDefinitions ?? []).filter(def => def.activeUse?.effect.type === 'removeDebuff').map(def => def.id)
+                                : []),
+                            ...(canUseFlight ? [TOKEN_IDS.FLIGHT] : []),
+                        ]}
                     />
                     <StatusEffectsContainer
                         effects={viewPlayer.statusEffects ?? {}}

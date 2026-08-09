@@ -2,10 +2,12 @@ import type { PlayerId, ResponseWindowState } from '../../../engine/types';
 import type { DiceThroneCore } from './types';
 import {
     areTeammates,
+    getActiveDice,
     getPendingBonusSettlementDice,
     isTeamMode,
     shouldOpenAfterRollConfirmedForBonusSettlement,
 } from './rules';
+import { isCurrentBonusRollSettlement } from './rollContext';
 
 export const isDirectDiceInterferenceActor = (
     core: DiceThroneCore,
@@ -29,10 +31,11 @@ export const isDirectDiceInterferenceActor = (
 
 export const buildAfterRollConfirmedSignature = (core: DiceThroneCore): string => {
     const pendingBonusSettlement = core.pendingBonusDiceSettlement;
-    const pendingBonusDice = shouldOpenAfterRollConfirmedForBonusSettlement(pendingBonusSettlement)
+    const pendingBonusDice = isCurrentBonusRollSettlement(core)
+        && shouldOpenAfterRollConfirmedForBonusSettlement(pendingBonusSettlement)
         ? getPendingBonusSettlementDice(pendingBonusSettlement)
         : [];
-    const dice = core.dice ?? [];
+    const dice = getActiveDice(core);
     const turnNumber = typeof core.turnNumber === 'number' ? core.turnNumber : '';
     const activePlayerId = typeof core.activePlayerId === 'string' ? core.activePlayerId : '';
 

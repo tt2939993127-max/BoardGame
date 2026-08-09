@@ -29,9 +29,10 @@ import {
     maybeCreateDamageResponseEvent,
 } from './tokenResponse';
 import { getTokenUseOptions } from './tokenTypes';
-import { getCustomActionHandler } from './effects';
+import { getCustomActionHandler, resolveRollDieSettlement } from './effects';
 import { getBonusDiceSettlementHandler } from './bonusDiceSettlement';
 import { applyEvents } from './utils';
+import { isCurrentBonusRollSettlement } from './rollContext';
 
 /**
  * 旧 token 定义未显式声明 customActionId 时的兼容兜底。
@@ -185,8 +186,6 @@ export function executeTokenCommand(
                 pendingDamage.responseType,
                 timestamp
             );
-            const reflectDamage = result.extra?.reflectDamage as number | undefined;
-
             // 精准 (accuracy)：使攻击不可防御
             if (result.extra?.makeUndefendable && state.pendingAttack) {
                 events.push({
@@ -199,16 +198,14 @@ export function executeTokenCommand(
 
             // 神罚 (retribution)：反弹伤害给攻击者。
             // 这类反伤必须等响应窗口收口后再播，否则会在 Token/奖励骰特写尚未结束时提前播完。
-            if (reflectDamage && reflectDamage > 0) {
-                const attackerPlayer = state.players[pendingDamage.sourcePlayerId];
-                const attackerHp = attackerPlayer?.resources[RESOURCE_IDS.HP] ?? 0;
-                const actualReflect = Math.min(reflectDamage, attackerHp);
+            if (result.success && tokenDef.id === TOKEN_IDS.RETRIBUTION) {
                 deferredDamageEvents.push({
                     targetId: pendingDamage.sourcePlayerId,
-                    amount: reflectDamage,
-                    actualDamage: actualReflect,
+                    amount: 0,
+                    actualDamage: 0,
                     sourceAbilityId: 'retribution-reflect',
                     sourcePlayerId: pendingDamage.targetPlayerId,
+                    reflectFromPendingDamage: true,
                     sourceCommandType: command.type,
                 });
             }
@@ -308,8 +305,9 @@ export function executeTokenCommand(
                 }
             }
             
-            // 如果完全闪避，关闭响应窗口
-            if (result.fullyEvaded) {
+            // 闪避结果进入 currentRollContext，允许改骰/重掷后再由 SKIP_TOKEN_RESPONSE 收口。
+            // 其它立即完成的 Token 仍保持原有自动关闭行为。
+            if (result.fullyEvaded && !result.rollResult) {
                 const stateAfterToken = applyEvents(state, events, reduce);
                 const updatedPendingDamage: PendingDamage = {
                     ...(stateAfterToken.pendingDamage ?? pendingDamage),
@@ -467,7 +465,7 @@ export function executeTokenCommand(
             const playerId = command.playerId;
             const settlement = state.pendingBonusDiceSettlement;
             
-            if (!playerId || !settlement) {
+            if (!playerId || !settlement || !isCurrentBonusRollSettlement(state, settlement) || settlement.ultimateLocked === true) {
                 console.warn('[DiceThrone] REROLL_BONUS_DIE: invalid state');
                 break;
             }
@@ -513,7 +511,7 @@ export function executeTokenCommand(
             const playerId = command.playerId;
             const settlement = state.pendingBonusDiceSettlement;
             
-            if (!playerId || !settlement) {
+            if (!playerId || !settlement || !isCurrentBonusRollSettlement(state, settlement)) {
                 console.warn('[DiceThrone] SKIP_BONUS_DICE_REROLL: invalid state');
                 break;
             }
@@ -525,10 +523,16 @@ export function executeTokenCommand(
                 ? getBonusDiceSettlementHandler(settlement.customResolutionId)
                 : undefined;
             const settlementResult = settlementHandler?.({ state, settlement, timestamp });
+            const rollDieFollowupEvents = settlement.rollDieResolution
+                ? resolveRollDieSettlement({ state, settlement, random, timestamp })
+                : [];
             const totalDamage = settlementResult?.totalDamage ?? defaultTotalDamage;
             const thresholdTriggered = settlementResult?.thresholdTriggered
                 ?? (settlement.threshold ? totalDamage >= settlement.threshold : false);
-            const followupEvents = settlementResult?.followupEvents ?? [];
+            const followupEvents = [
+                ...(settlementResult?.followupEvents ?? []),
+                ...rollDieFollowupEvents,
+            ];
             
             // 发出 BONUS_DICE_SETTLED 事件
             // displayOnly 标记传递给 systems.ts，避免误 resolve 其他活跃交互
@@ -542,6 +546,7 @@ export function executeTokenCommand(
                     targetId: settlement.targetId,
                     sourceAbilityId: settlement.sourceAbilityId,
                     ...(settlement.displayOnly ? { displayOnly: true } : {}),
+                    ...(settlement.allowDiceModification ? { allowDiceModification: true } : {}),
                 },
                 sourceCommandType: command.type,
                 timestamp,

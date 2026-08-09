@@ -12,6 +12,7 @@ import { getCustomActionMeta, isCustomActionCategory } from './effects';
 import { logger } from '../../../lib/logger';
 import type {
     DiceThroneCore,
+    DiceThroneRollContext,
     Die,
     DieFace,
     TeamId,
@@ -25,6 +26,7 @@ import { DICE_FACE_IDS, BARBARIAN_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS, TREANT_D
 import { getDieFaceByValue } from './diceRegistry';
 import { CHARACTER_DATA_MAP } from './characters';
 import { playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
+import { getCurrentRollDice, getCurrentRollOwnerId, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
 
 import { getGameMode } from './utils';
 
@@ -105,9 +107,7 @@ export const getFaceCounts = (dice: Die[]): Record<DieFace, number> => {
  * 获取活跃骰子（根据 rollDiceCount）
  */
 export const getActiveDice = (state: DiceThroneCore): Die[] => {
-    const dice = Array.isArray(state.dice) ? state.dice : [];
-    const rollDiceCount = typeof state.rollDiceCount === 'number' ? state.rollDiceCount : dice.length;
-    return dice.slice(0, rollDiceCount);
+    return getCurrentRollDice(state);
 };
 
 export const ATTACK_SNAPSHOT_DIE_ID_OFFSET = 100;
@@ -137,6 +137,17 @@ export const getPendingBonusSettlementDice = (
     const rawDice = settlement?.dice;
     return Array.isArray(rawDice) ? rawDice : [];
 };
+
+/**
+ * 奖励骰是否仍是规则上的交互阻塞。
+ * displayOnly 只代表展示壳层；只要明确允许改骰，它仍然必须等待交互收口。
+ */
+export const isInteractiveBonusDiceSettlement = (
+    settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
+): boolean => Boolean(
+    settlement
+    && (settlement.displayOnly !== true || settlement.allowDiceModification === true),
+);
 
 export const shouldOpenAfterRollConfirmedForBonusSettlement = (
     settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
@@ -276,6 +287,34 @@ export const areTeammates = (state: DiceThroneCore, playerA: PlayerId, playerB: 
     return !!teamA && teamA === teamB;
 };
 
+/**
+ * 当前骰区策略的唯一操作者判定。
+ * `allies` 包含骰区拥有者所在队伍；`both` 仅包含上下文显式记录的拥有者与目标。
+ */
+export const isPlayerAllowedByRollContextPolicy = (
+    state: DiceThroneCore,
+    context: DiceThroneRollContext,
+    playerId: PlayerId,
+    action: 'modify' | 'reroll',
+): boolean => {
+    if (!state.players[playerId] || context.policy.ultimateLocked) return false;
+
+    const scope = action === 'modify'
+        ? context.policy.modifiableBy
+        : context.policy.rerollableBy;
+    if (scope === 'none') return false;
+    if (scope === 'any') return true;
+
+    const isOwner = context.ownerPlayerId === playerId;
+    if (scope === 'owner') return isOwner;
+
+    const isAlly = areTeammates(state, context.ownerPlayerId, playerId);
+    if (scope === 'allies') return isAlly;
+    if (scope === 'opponents') return !isAlly;
+
+    return isOwner || context.targetPlayerId === playerId;
+};
+
 export const getTeammateId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
     if (!isTeamMode(state)) return undefined;
     const teamId = getTeamId(state, playerId);
@@ -347,7 +386,7 @@ export const getSelectedCombatOpponentId = (
 
         const effectivePhase = phase ?? state.turnPhase;
         if (effectivePhase === 'targetingRoll') {
-            const targetingValue = state.dice[0]?.value;
+            const targetingValue = getActiveDice(state)[0]?.value;
             if (typeof targetingValue === 'number') {
                 return getTargetingRollAutoDefenderId(state, playerId, targetingValue);
             }
@@ -502,8 +541,27 @@ export const getNextPlayerId = (state: DiceThroneCore): PlayerId => {
  * 获取当前掷骰玩家 ID
  */
 export const getRollerId = (state: DiceThroneCore, phase?: TurnPhase): PlayerId => {
+    const currentContext = state.currentRollContext;
+    const isSettledReplay = currentContext?.status === 'settled'
+        && currentContext.display.replayOnly === true;
+    if (
+        currentContext
+        && !isSettledReplay
+        && (
+            currentContext.phase === undefined
+            || phase === undefined
+            || currentContext.phase === phase
+            || currentContext.kind === 'bonus'
+            || currentContext.kind === 'effect'
+            || currentContext.kind === 'evasion'
+            || currentContext.kind === 'compare'
+        )
+    ) {
+        return getCurrentRollOwnerId(state, phase);
+    }
     if (
         state.pendingBonusDiceSettlement?.allowDiceModification === true
+        && isCurrentBonusRollSettlement(state)
         && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).length > 0
     ) {
         return state.pendingBonusDiceSettlement.attackerId;
@@ -773,6 +831,7 @@ export type CardPlayFailReason =
     | 'requireNotRollConfirmed'    // 骰面已确认，不能再打出该卡
     | 'requireMinDamageDealt'      // 本回合未造成足够伤害
     | 'noStatusOnBoard'            // 场上没有任何状态效果或 token
+    | 'rollContextLocked'          // 当前骰区不允许改骰牌
     | 'requirePendingDamage';      // 需要处于待结算伤害响应窗口
 
 const getAttackModifierPlayFailureReason = (
@@ -808,6 +867,7 @@ const canPlayRollCardOutsideRollPhaseWithDiceResult = (
 
     if (
         responseWindowType === 'afterRollConfirmed'
+        && isCurrentBonusRollSettlement(state)
         && shouldOpenAfterRollConfirmedForBonusSettlement(state.pendingBonusDiceSettlement)
     ) {
         return true;
@@ -818,7 +878,7 @@ const canPlayRollCardOutsideRollPhaseWithDiceResult = (
         && card.playCondition.requireRollConfirmed === true
         && state.rollConfirmed === true
         && state.rollCount > 0
-        && state.dice.length > 0;
+        && getDiceResultCountForCardPlay(state) > 0;
 };
 
 const isDiceRollPhase = (phase: TurnPhase): boolean => (
@@ -828,10 +888,7 @@ const isDiceRollPhase = (phase: TurnPhase): boolean => (
 );
 
 const getDiceResultCountForCardPlay = (state: DiceThroneCore): number => {
-    if (state.pendingBonusDiceSettlement?.allowDiceModification === true) {
-        return getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).length;
-    }
-    return state.dice.length;
+    return getActiveDice(state).length;
 };
 
 const matchesPendingDamagePlayCondition = (
@@ -984,6 +1041,15 @@ const checkStandardCardPlay = (
         && !canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)
     ) {
         return { ok: false, reason: 'wrongPhaseForRoll' };
+    }
+
+    const currentRollContext = resolveCurrentRollContext(state, phase);
+    if (
+        hasExistingDiceToolEffect(card)
+        && currentRollContext
+        && currentRollContext.policy.allowRollCards !== true
+    ) {
+        return { ok: false, reason: 'rollContextLocked' };
     }
 
     if (card.cpCost > 0 && playerCp < card.cpCost) {
@@ -1139,6 +1205,11 @@ const checkResponseWindowCardPlay = (
 
     switch (windowType) {
         case 'afterRollConfirmed': {
+            // FAQ：精准要到进攻投掷阶段结束才花费；在此之前，对手可以用“拜拜了您嘞”移除它。
+            // 这张牌是状态移除型瞬时行动，不属于改骰牌，但必须能进入该响应窗口。
+            if (card.id === 'card-bye-bye' && card.timing === 'instant') {
+                return { ok: true };
+            }
             if (card.timing !== 'instant' && card.timing !== 'roll') {
                 return failResponseWindow();
             }

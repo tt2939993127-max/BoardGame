@@ -55,13 +55,13 @@ describe('正义战法奖励骰时机', () => {
                 cmd('ROLL_DICE', '0'),               // 投掷进攻骰
                 cmd('CONFIRM_ROLL', '0'),             // 确认骰面
                 cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-combat' }),
-                cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie → defensiveRoll
+                cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie，当前骰区暂停
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认奖励骰最终面 → defensiveRoll
                 cmd('ROLL_DICE', '1'),               // 防御方投掷防御骰
                 cmd('CONFIRM_ROLL', '1'),             // 确认防御骰面
                 cmd('ADVANCE_PHASE', '1'),           // defensiveRoll exit → resolveAttack
                 // damage(5) → 防御方有守护 Token → TOKEN_RESPONSE_REQUESTED → halt
                 cmd('SKIP_TOKEN_RESPONSE', '1'),     // 防御方跳过守护 Token
-                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 攻击方跳过重掷
                 // autoContinue → pendingAttack=null → main2
             ],
             expect: {
@@ -123,11 +123,11 @@ describe('正义战法奖励骰时机', () => {
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-combat' }),
-                cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie → defensiveRoll
+                cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie，当前骰区暂停
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认奖励骰最终面 → defensiveRoll
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
                 cmd('ADVANCE_PHASE', '1'),           // defensiveRoll exit → resolveAttack
-                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 跳过重掷 → main2
             ],
             expect: {
                 turnPhase: 'main2',

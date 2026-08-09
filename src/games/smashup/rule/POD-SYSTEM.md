@@ -111,9 +111,9 @@ node scripts/audit-pod-data-consistency.mjs
 
 ## 相关文档
 
-- `docs/refactor/pod-system-architecture.md` - POD 系统架构详细说明
-- `docs/refactor/pod-auto-mapping.md` - 能力自动映射系统设计
-- `docs/refactor/pod-system-summary.md` - POD 系统完整修复总结
+- 当前主源：本文负责 POD 运行时合同、新增卡牌最低要求和基地策略。
+- 架构补充：`docs/games/smashup/refactor/pod/pod-system-architecture.md` 负责架构理由、注册层约束、数据审计和选择性覆盖示例。
+- 历史记录：`docs/games/smashup/refactor/pod/pod-auto-mapping.md`、`pod-stub-cleanup.md`、`pod-system-summary.md` 只记录历史实现、修复和测试，不作为当前规则正文。
 ## POD 基地策略（骨架阶段）
 
 - 当选择 `*_pod` 阵营时，选基只使用 `base_*_pod` 变体，不混入基础版 `base_*`。

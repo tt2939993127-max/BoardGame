@@ -250,6 +250,7 @@ function optionalStatusRemovalInteraction(
     playerId: PlayerId,
     sourceAbilityId: string,
     timestamp: number,
+    resumeAttackOnComplete = false,
 ): InteractionRequestedEvent | null {
     const player = state.players[playerId];
     if (!player) return null;
@@ -268,6 +269,9 @@ function optionalStatusRemovalInteraction(
         minSelectCount: 0,
         selected: [],
         targetPlayerIds: [playerId],
+        ...(resumeAttackOnComplete
+            ? { resumeAttackSettlementOnComplete: { stage: 'readyToResolve' as const } }
+            : {}),
     };
     return {
         type: 'INTERACTION_REQUESTED',
@@ -512,25 +516,36 @@ function resolveDivinePurificationChoice({ state, playerId, sourceAbilityId, cus
     const isUpgraded = customId === CHOICE_DIVINE_PURIFICATION_TARGET_2;
     const damageAmount = isUpgraded ? 6 : 5;
     const healAmount = isUpgraded ? 5 : 4;
+    const resolvedSourceAbilityId = sourceAbilityId ?? 'tianshi-divine-purification';
     const events: DiceThroneEvent[] = [];
     if (targetId === playerId) {
         events.push({
             type: 'HEAL_APPLIED',
-            payload: { targetId: playerId, amount: healAmount, sourceAbilityId },
-            ...eventSource(sourceAbilityId ?? 'tianshi-divine-purification', timestamp, 'CHOICE_RESOLVED'),
+            payload: { targetId: playerId, amount: healAmount, sourceAbilityId: resolvedSourceAbilityId },
+            ...eventSource(resolvedSourceAbilityId, timestamp, 'CHOICE_RESOLVED'),
         } as HealAppliedEvent);
+        if (state.pendingAttack?.attackerId === playerId) {
+            events.push({
+                type: 'PENDING_ATTACK_UPDATED',
+                payload: {
+                    attackerId: playerId,
+                    patch: { countsAsOffensiveAttackMade: false },
+                },
+                ...eventSource(resolvedSourceAbilityId, timestamp + 0.001, 'CHOICE_RESOLVED'),
+            } as DiceThroneEvent);
+        }
     } else {
         events.push(...directDamageEvents(
             state,
             targetId,
             damageAmount,
-            sourceAbilityId ?? 'tianshi-divine-purification',
+            resolvedSourceAbilityId,
             timestamp,
             playerId,
             true,
         ));
     }
-    const removeInteraction = optionalStatusRemovalInteraction(state, targetId, sourceAbilityId ?? 'tianshi-divine-purification', timestamp + 1);
+    const removeInteraction = optionalStatusRemovalInteraction(state, targetId, resolvedSourceAbilityId, timestamp + 1, true);
     if (removeInteraction) events.push(removeInteraction);
     return events;
 }

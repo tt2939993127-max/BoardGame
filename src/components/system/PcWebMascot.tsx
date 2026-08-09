@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 
 const MASCOT_SRC = 'common/images/mascot/easyboardgame-kanban-girl.png';
 const COMMUNITY_QQ_GROUP = '1081373485';
+const MASCOT_TIP_INTERVAL_MS = 5000;
 
 const shouldHideOnRoute = (pathname: string) => (
     pathname === '/play'
@@ -28,15 +29,29 @@ export const PcWebMascot = () => {
     const location = useLocation();
     const [pulseKey, setPulseKey] = React.useState(0);
     const [bubbleVisible, setBubbleVisible] = React.useState(false);
-
-    if (isAndroidShellBuildMode() || isNativeAndroidRuntime() || shouldHideOnRoute(location.pathname)) {
-        return null;
-    }
+    const [tipIndex, setTipIndex] = React.useState(0);
+    const shouldHide = isAndroidShellBuildMode() || isNativeAndroidRuntime() || shouldHideOnRoute(location.pathname);
 
     const handleMascotClick = () => {
         setPulseKey((value) => value + 1);
-        setBubbleVisible((value) => !value);
+        const nextBubbleVisible = !bubbleVisible;
+        setBubbleVisible(nextBubbleVisible);
+        if (nextBubbleVisible) {
+            setTipIndex(0);
+        }
     };
+
+    React.useEffect(() => {
+        if (!bubbleVisible || shouldHide) {
+            return undefined;
+        }
+
+        const intervalId = window.setInterval(() => {
+            setTipIndex((value) => (value + 1) % 3);
+        }, MASCOT_TIP_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, [bubbleVisible, shouldHide]);
 
     const handleGroupCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -49,21 +64,34 @@ export const PcWebMascot = () => {
         }
     };
 
+    const mascotTips = [
+        { id: 'community', text: t('mascot.community_welcome') },
+        { id: 'force-end-phase', text: t('mascot.force_end_phase_tip') },
+        { id: 'switch-view', text: t('mascot.switch_view_tip') },
+    ];
+    const activeTip = mascotTips[tipIndex] ?? mascotTips[0];
+
+    if (shouldHide) {
+        return null;
+    }
+
     return (
         <aside className="pc-web-mascot" data-testid="pc-web-mascot" aria-label={t('mascot.container_label')}>
             {bubbleVisible ? (
-                <div className="pc-web-mascot__bubble" data-testid="pc-web-mascot-bubble" role="status">
-                    <span className="pc-web-mascot__bubble-text">
-                        {t('mascot.community_welcome')}
+                <div className="pc-web-mascot__bubble" data-testid="pc-web-mascot-bubble" role="status" aria-live="polite">
+                    <span className="pc-web-mascot__bubble-text" data-testid="pc-web-mascot-tip">
+                        {activeTip.text}
                     </span>
-                    <button
-                        type="button"
-                        className="pc-web-mascot__group-button"
-                        onClick={handleGroupCopy}
-                        data-testid="pc-web-mascot-group-copy"
-                    >
-                        {COMMUNITY_QQ_GROUP}
-                    </button>
+                    {activeTip.id === 'community' ? (
+                        <button
+                            type="button"
+                            className="pc-web-mascot__group-button"
+                            onClick={handleGroupCopy}
+                            data-testid="pc-web-mascot-group-copy"
+                        >
+                            {COMMUNITY_QQ_GROUP}
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
             <button

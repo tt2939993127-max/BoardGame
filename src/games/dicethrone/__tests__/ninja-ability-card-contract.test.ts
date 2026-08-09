@@ -1515,6 +1515,13 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
             { random: createQueuedRandom([6]) },
         );
         let next = applyEvents(state.core, events);
+        const maskSettlementEvents = execute(
+            { core: next, sys: { phase: 'main1' } },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+        );
+        events = [...events, ...maskSettlementEvents];
+        next = applyEvents(next, maskSettlementEvents);
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(events.some(event => event.type === 'CARD_DRAWN')).toBe(false);
@@ -1534,6 +1541,13 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
             { random: createQueuedRandom([1]) },
         );
         next = applyEvents(state.core, events);
+        const otherSettlementEvents = execute(
+            { core: next, sys: { phase: 'main1' } },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+        );
+        events = [...events, ...otherSettlementEvents];
+        next = applyEvents(next, otherSettlementEvents);
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(events.filter(event => event.type === 'CARD_DRAWN')).toHaveLength(1);

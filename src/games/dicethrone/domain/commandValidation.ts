@@ -71,6 +71,7 @@ import { getTokenUseOptions } from './tokenTypes';
 import { getGameMode } from './utils';
 import { canRemoveStatusFromPlayer, isPurifiableDebuffId, isRemovableStatusId } from './statusRemoval';
 import { isDirectDiceInterferenceActor } from './responseWindowGuards';
+import { findCurrentRollDie, getCurrentRollDice, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
 
 // ============================================================================
 // 验证函数
@@ -223,6 +224,7 @@ const validateDieInteraction = (
     dieId: number,
     phase: TurnPhase,
     limitError: string,
+    mode: 'modify' | 'reroll',
 ): { interaction: ValidationInteractionDescriptor } | ValidationResult => {
     const ownershipError = validateInteractionOwnership(pendingInteraction, playerId);
     if (ownershipError) return ownershipError;
@@ -231,11 +233,8 @@ const validateDieInteraction = (
     const allowedDieIds = interaction.allowedDieIds?.length
         ? interaction.allowedDieIds
         : getActiveDice(state).map(activeDie => activeDie.id);
-    const isDuelAttackerDie = state.pendingAttack?.defenseAbilityId === 'duel'
-        && phase === 'defensiveRoll'
-        && dieId === 1
-        && allowedDieIds.includes(1);
     const isPendingBonusDie = state.pendingBonusDiceSettlement?.allowDiceModification === true
+        && isCurrentBonusRollSettlement(state)
         && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId);
     const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
     const isAttackSnapshotDie = phase === 'defensiveRoll'
@@ -245,16 +244,18 @@ const validateDieInteraction = (
         && Array.isArray(state.pendingAttack.attackDiceValues)
         && attackSnapshotDieIndex >= 0
         && attackSnapshotDieIndex < state.pendingAttack.attackDiceValues.length;
-    if (
-        isDuelAttackerDie
-        && interaction.diceOwnerId !== undefined
-        && interaction.diceOwnerId !== state.pendingAttack?.attackerId
-    ) {
-        return fail('invalid_die_selection');
-    }
-    const die = state.dice.find(entry => entry.id === dieId);
-    if (!die && !isDuelAttackerDie && !isPendingBonusDie && !isAttackSnapshotDie) {
+    const currentRollContext = resolveCurrentRollContext(state, phase);
+    const die = findCurrentRollDie(state, dieId, phase)?.die;
+    if (!die && !isPendingBonusDie && !isAttackSnapshotDie) {
         return fail('die_not_found');
+    }
+    if (die && currentRollContext) {
+        const actorScope = mode === 'modify'
+            ? currentRollContext.policy.modifiableBy
+            : currentRollContext.policy.rerollableBy;
+        if (currentRollContext.policy.ultimateLocked === true || actorScope === 'none') {
+            return fail('dice_locked');
+        }
     }
     if (!allowedDieIds.includes(dieId)) {
         return fail('invalid_die_selection');
@@ -263,7 +264,6 @@ const validateDieInteraction = (
         interaction.diceOwnerId
         && interaction.targetOpponentDice !== true
         && interaction.diceOwnerId !== playerId
-        && !isDuelAttackerDie
         && !isPendingBonusDie
         && !isAttackSnapshotDie
     ) {
@@ -596,7 +596,7 @@ const validateToggleDieLock = (
         return fail('roll_already_confirmed');
     }
     
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
+    const die = findCurrentRollDie(state, cmd.payload.dieId, phase)?.die;
     if (!die) {
         return fail('die_not_found');
     }
@@ -630,6 +630,31 @@ const validateConfirmRoll = (
         return fail('no_roll_yet');
     }
     
+    return ok();
+};
+
+const validateConfirmCompareRoll = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+): ValidationResult => {
+    const context = state.currentRollContext;
+    if (context?.kind !== 'compare') return fail('no_compare_roll');
+    if (context.ownerPlayerId !== playerId) return fail('not_your_roll');
+    return ok();
+};
+
+const validateRestoreCoveredRoll = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+): ValidationResult => {
+    const context = state.currentRollContext;
+    const recovery = state.rollContextRecovery;
+    if (!context || !recovery || context.coveredPreviousRollRef?.id !== recovery.coveredRollRef.id) {
+        return fail('no_covered_roll_to_restore');
+    }
+    if (context.ownerPlayerId !== playerId && recovery.coveredRollRef.ownerPlayerId !== playerId) {
+        return fail('not_your_roll');
+    }
     return ok();
 };
 
@@ -1110,7 +1135,7 @@ const validateModifyDie = (
     phase: TurnPhase,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, phase, 'modify_die_limit_reached');
+    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, phase, 'modify_die_limit_reached', 'modify');
     if ('valid' in validation) return validation;
     // 检查新值是否在范围内
     if (cmd.payload.newValue < 1 || cmd.payload.newValue > 6) {
@@ -1129,7 +1154,7 @@ const validateRerollDie = (
     phase: TurnPhase,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, phase, 'reroll_die_limit_reached');
+    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, phase, 'reroll_die_limit_reached', 'reroll');
     if ('valid' in validation) return validation;
     const remainingSlots = getRemainingDieInteractionSlots(pendingInteraction);
     if (remainingSlots !== undefined && remainingSlots <= 0) {
@@ -1484,8 +1509,11 @@ const validateRerollBonusDie = (
     cmd: RerollBonusDieCommand,
     playerId: PlayerId
 ): ValidationResult => {
-    if (!state.pendingBonusDiceSettlement) {
+    if (!state.pendingBonusDiceSettlement || !isCurrentBonusRollSettlement(state)) {
         return fail('no_pending_bonus_dice');
+    }
+    if (state.pendingBonusDiceSettlement.ultimateLocked === true) {
+        return fail('dice_locked');
     }
     if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
         return fail('player_mismatch');
@@ -1519,7 +1547,7 @@ const validateSkipBonusDiceReroll = (
     _cmd: SkipBonusDiceRerollCommand,
     playerId: PlayerId
 ): ValidationResult => {
-    if (!state.pendingBonusDiceSettlement) {
+    if (!state.pendingBonusDiceSettlement || !isCurrentBonusRollSettlement(state)) {
         return fail('no_pending_bonus_dice');
     }
     if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
@@ -1596,27 +1624,20 @@ const validateUsePassiveAbility = (
         return fail('target_die_required');
     }
 
-    // rerollDie 需要在投掷阶段且有骰子
+    // rerollDie 需要命中当前骰区中的骰子
     if (action.type === 'rerollDie' && Number.isInteger(cmd.payload.targetDieId)) {
-        const dieIndex = state.dice.findIndex(d => d.id === cmd.payload.targetDieId);
-        const die = dieIndex >= 0 ? state.dice[dieIndex] : undefined;
-        if (!die) {
+        const currentDie = findCurrentRollDie(state, cmd.payload.targetDieId, phase);
+        if (!currentDie) {
+            const currentDice = getCurrentRollDice(state, phase);
             console.warn('[validateUsePassiveAbility] 骰子不存在:', {
                 playerId,
                 targetDieId: cmd.payload.targetDieId,
-                diceIds: state.dice.map(d => d.id),
+                diceIds: currentDice.map(d => d.id),
             });
             return fail('die_not_found');
         }
-        if (dieIndex >= state.rollDiceCount) {
-            return fail('die_not_active');
-        }
-        // 必须已投掷过至少一次才能重掷
-        if (state.rollCount === 0) {
-            return fail('no_roll_yet');
-        }
         // 不能重掷被锁定的骰子
-        if (die.isKept) {
+        if (currentDie.die.isKept) {
             return fail('die_is_locked');
         }
     }
@@ -1670,6 +1691,8 @@ export const validateCommand = (
     if (isCommandType(command, 'ROLL_DICE')) return validateRollDice(state, command, playerId, phase);
     if (isCommandType(command, 'TOGGLE_DIE_LOCK')) return validateToggleDieLock(state, command, playerId, phase);
     if (isCommandType(command, 'CONFIRM_ROLL')) return validateConfirmRoll(state, command, playerId, phase);
+    if (isCommandType(command, 'CONFIRM_COMPARE_ROLL')) return validateConfirmCompareRoll(state, playerId);
+    if (isCommandType(command, 'RESTORE_COVERED_ROLL')) return validateRestoreCoveredRoll(state, playerId);
     if (isCommandType(command, 'SELECT_ABILITY')) return validateSelectAbility(state, command, playerId, phase);
     if (isCommandType(command, 'DRAW_CARD')) return validateDrawCard(state, command, playerId);
     if (isCommandType(command, 'DISCARD_CARD')) return validateDiscardCard(state, command, playerId);

@@ -26,7 +26,7 @@
 | --- | --- | --- | --- | --- |
 | 2026-06-03 | `AGENTS.md` § E2E 测试强制要求 | `docs/ai-rules/e2e-verification.md` | 有小幅澄清 | 保留原有截图验收、证据路径、看图要求；新增“默认状态注入，真实开房仅用于跨入口合同”的边界。 |
 | 2026-06-03 | `AGENTS.md` § 验证测试、`docs/automated-testing.md` § 测试框架 API | `docs/ai-rules/e2e-verification.md` | 对齐口径 | 将“所有 E2E 必须状态注入 / 只有用户明确要求才真实链路”收敛为同一规则：默认状态注入；跨入口合同需要证明时可用真实链路，并必须写清额外证明点。 |
-| 2026-06-04 | `docs/audio/audio-usage.md`、`docs/audio/add-audio.md` 中的执行型 SOP | `.codex/skill/audio-integration/SKILL.md` | 有结构性重构，无核心语义放宽 | 将“查找 key、接配置、生成产物、/dev/audio 收口、最终汇报”下沉到项目 skill；音频文档保留架构合同、命令入口、目录/产物/运行时约束。 |
+| 2026-06-04 | `docs/audio/audio-usage.md`、`docs/audio/add-audio.md` 中的执行型 SOP | 系统 skill `D:\codex-home\skills\audio-integration\SKILL.md` | 有结构性重构，无核心语义放宽 | 将“查找 key、接配置、生成产物、/dev/audio 收口、最终汇报”下沉到 audio workflow；音频文档保留架构合同、命令入口、目录/产物/运行时约束。 |
 | 2026-06-09 | `AGENTS.md` § 测试编写规范 / 验证测试 | `docs/ai-rules/e2e-verification.md` + `docs/ai-rules/doc-index.md` | 有结构性收口 | 根文件改成“测试分层 + 文档路由 + 红线”，把三板斧定义、主页/进局分层、长链预算、组合式验证下沉到二级文档。 |
 | 2026-06-09 | 当前对话关于“测试太慢 / 三板斧失守 / 根 AGENTS 渐进式披露”的复盘 | `docs/ai-rules/e2e-verification.md` + `docs/ai-rules/doc-index.md` | 有约束增强 | 新增“15 分钟定位预算”“长链不得作为默认调试循环”“同一目标最多二次自然链后必须拆合同”，并把“为什么慢 / 是否还在推进实现”的入口也路由到二级文档。 |
 | 2026-06-14 | `docs/ai-rules/ui-ux.md` 中误放的“实施中状态呈现”规则 | `docs/framework/frontend.md` § 实施中状态横幅 + `docs/ai-rules/doc-index.md` | 无语义放宽 | 将 `statusTag='under_construction'` 必须复用 `ImplementationStatusRibbon` 的规则从通用 UI/UX 审美规范迁到前端框架组件合同；`doc-index` 只保留路由入口。 |
@@ -46,11 +46,17 @@
 | 2026-07-19 | 小黑屋日志/撤回误判复盘 | `docs/ai-rules/testing-audit.md` + `docs/components/UndoFab.md` | 有约束增强 | 明确通用能力必须拆成系统层、Board/页面入口层和玩家真实可见入口分别证明；撤回/FAB 文档补齐 `UndoProvider + GameHUD + Board 层测试` 判定口径，避免把系统层通过误写成用户入口已接入。 |
 | 2026-07-19 | 当前对话接续摘要把小黑屋目标污染成 DiceThrone 特写 | `D:\codex-home\AGENTS.md` + `AGENTS.md` + `docs/ai-rules/conversation-handoff-target-lock.md` + `docs/ai-rules/doc-index.md` + `temp/current-thread-goal-coverage.md` | 有约束增强 | 新增“交接摘要不得接管目标”跨项目红线与项目接续门禁；临时覆盖矩阵顶部必须声明 active/historical/superseded，摘要与用户当前主线冲突时立即停线，避免把旧摘要当作当前实现目标。 |
 | 2026-07-19 | DiceThrone 特写 UI 被放进 token / 状态显示区域的截图复盘 | `docs/ai-rules/ui-change-gates.md` + `D:\codex-home\skills\ui-audit-loop\SKILL.md` | 有约束增强 | 将“改 UI 不能只看新增 UI 自己”升级为同屏保护槽位门禁：token、状态、资源、玩家面板、阶段、骰盘、牌堆、手牌、prompt 等必须逐项过账；新 UI 抢占这些槽位直接判 REVISE。 |
+| 2026-08-08 | `docs/ai-rules/ui-change-gates.md` 旧版 `0.1-0.4` blockquote 外壳与现行 UI 门禁章节 | `docs/ai-rules/ui-change-gates.md` `## 0.0C` + `docs/ai-rules/e2e-verification.md` + `docs/ai-rules/ui-responsive-layout.md` | 无语义放宽，重复外壳删除，独有规则保留 | 样式升级、新 UI 门禁和设计系统读取等重复正文回现行章节；旧版独有的视觉、空间、真实入口和主交互槽位规则归并到 `0.0C`；E2E 证据链与双端布局细则继续由各自主源承载。 |
+| 2026-08-08 | `docs/ai-rules/asset-pipeline.md` 的图片/音频总标题与已拆出的专项主源 | `docs/ai-rules/asset-pipeline.md` + `critical-image-preload.md` + `audio-assets.md` | 无语义变化，职责标识澄清 | 将总文档标题改为“图片资源与发布总规范”，导言明确关键图片预加载和音频运行时合同分别回专项文档；不搬移、不删除正文。 |
+| 2026-08-08 | 根 `AGENTS.md` 的“大杀四方 Wiki 爬虫规范”与项目背景段 | `docs/games/smashup/workflows/smashup-faction-intake.md` + 根 `AGENTS.md` 入口摘要 | 无语义放宽，专项流程下沉 | Wiki 脚本、执行顺序、来源优先级、Firecrawl 例外和勘误处理迁入 Smash Up intake workflow；根文件只保留触发条件和入口，项目背景压缩为范围说明。 |
+| 2026-08-08 | `docs/workflows/dicethrone-hero-intake.md` 旧顶层 workflow 与 `docs/games/dicethrone/workflows/dicethrone-hero-intake.md` | `docs/games/dicethrone/workflows/dicethrone-hero-intake.md` | 无语义放宽，旧入口删除 | 顶层旧 workflow 的有效内容已逐项迁入更完整的游戏目录主 workflow；保留历史裁图脚本路径说明，确认仓内无旧入口引用后删除顶层副本。 |
+| 2026-08-08 | `docs/workflows/smashup-faction-intake.md` 旧顶层 workflow 与 `docs/games/smashup/workflows/smashup-faction-intake.md` | `docs/games/smashup/workflows/smashup-faction-intake.md` | 无语义放宽，旧入口删除 | 顶层旧 workflow 的有效内容已逐项迁入更完整的游戏目录主 workflow；确认仓内无旧业务入口引用后删除顶层副本。 |
+| 2026-08-08 | `docs/refactor/pod-*.md` 五份大杀四方 POD 文档 | `docs/games/smashup/refactor/pod/` + `src/games/smashup/rule/POD-SYSTEM.md` | 无语义变化，职责归位 | POD 文档只服务大杀四方，整体迁到游戏目录；规则 / 运行时合同仍以 `src/games/smashup/rule/POD-SYSTEM.md` 为主源，架构说明留在游戏目录 refactor/pod。 |
 
 ## 后续候选批次
 
 1. `AGENTS.md` 的部署/Android OTA 细则：应下沉到 `.codex/skill/android-app-release/SKILL.md`、`docs/deploy.md` 和 `docs/mobile-release.md`，根文件只保留触发入口。
-2. `AGENTS.md` 的 UI/UX 规范：应下沉到 `docs/ai-rules/ui-ux.md` 与项目 UI/UX skill，根文件只保留“UI 改动先读哪里”。
+2. `AGENTS.md` 的 UI/UX 规范：已完成首轮压缩；后续只在发现根文件继续复制专项 SOP 时处理。
 3. 根目录历史计划/日志：`task_plan.md`、`progress.md`、`findings.md`、`lint-output.txt`、`e2e-ai-test-*.txt`、`WIKI-*.md` 需要先判断当前/历史/临时状态，再迁入 `temp/`、`evidence/` 或补状态标记；不得直接删除。
 4. 单游戏文档双入口：`docs/features/*`、`docs/refactor/*`、`docs/plans/*`、`docs/improvements/*` 中已发现与 `docs/games/<gameId>/...` 精确重复的文档；倾向保留游戏目录为长期入口，旧顶层入口需先查引用后处理。
 5. OpenSpec 已完成但未归档变更：`openspec/changes/` 中多项 `tasks.md` 已全勾选但仍未进入 `archive/`；需单独按 OpenSpec 流程验证并归档。
@@ -63,11 +69,49 @@
 - 已新增 `docs/ai-rules/document-merge-ledger.md`，开始按 P0-P5 批次判断 AI 规范文档的主从关系、合并方向和待精读项；本轮扫描 `docs/ai-rules/` + `.codex/skill/` 未发现哈希完全相同的文件，问题主要是主题重叠和主从关系不清。
 - P1 UI 组第一步已完成主从标注：`.codex/skill/screenshot-delivery/SKILL.md` 和 `.codex/skill/boardgame-ui-imagegen/SKILL.md` 明确降为 workflow，只引用 `e2e-verification.md`、`ui-change-gates.md`、`ui-ux.md`、`asset-pipeline.md` 等规范主源。
 - P2 测试/审计组第一步已完成主从标注：`.codex/skill/game-audit-workflow/SKILL.md` 明确降为 workflow；行级检查未发现 `testing-audit.md` 与核心/维度分卷存在可直接删除的逐行重复，后续只做段落级迁移和压缩。
+- P2.1 已将 `.codex/skill/game-audit-workflow/SKILL.md` 的「默认执行口径」长红线原样拆到 `.codex/skill/game-audit-workflow/references/audit-redlines.md`；主 skill 只保留审计入口、必读主源、Step 0-6 骨架和 evidence 产出要求。
+- P2.2 已将 `docs/ai-rules/testing-audit.md` 的审计 evidence 模板和自检脚本长正文压缩为入口；`docs/ai-rules/audit-evidence-template.md` 承接模板字段、自检扫描范围、`--include-untracked` / `audit:evidence:all`、轻量 evidence 检查和脚本局限。
+- P2.3 已将 `docs/ai-rules/testing-audit.md` 的「深度审计流程」Step 0-5 与深审禁区无损迁入 `docs/ai-rules/testing-audit-core-principles.md`；testing-audit 只保留深审入口和主源读取要求。
+- P2.4 已复核 `testing-audit.md` 的「禁止假阳性收口」：该段属于证据分层和对外结论口径短清单，当前保留在 testing-audit，不迁移到 core-principles。
+- P2.5 已将 `testing-audit.md` 的回归问题处理长流程压缩为入口；`docs/ai-rules/regression-closeout.md` 承接用户症状保真、最后正常证据、引入提交 / hunk 归因、回归还原、首跑红测、原始位点 E2E、UI 最小还原例外、代理按钮合同和输出模板。
+- P2.6 已将 `testing-audit.md` 的同类扩审执行细则压缩为入口；`regression-closeout.md` 承接搜索维度、共享层覆盖、命中处理和交付口径，testing-audit 保留“测试覆盖声明必须对账”作为证据口径。
+- P2.7 已复核 `testing-audit.md` 的「指定最近合并 PRxx 为权威基线时的红测归因」：该段属于测试失败归因与断言基线裁决口径，merge workflow / regression-closeout 均不是完整主源，当前保留在 testing-audit。
+- P2.8 已将 `testing-audit.md` 的「根因分级与处置」正文迁入 `docs/ai-rules/testing-audit-core-principles.md`；testing-audit 只保留根因分级入口和主源读取要求。
+- P2.9 已复核 `testing-audit.md` 的测试工具选型、效果数据契约测试、交互链完整性审计和 CI 质量门禁：该段属于审计工具路由短表，当前保留在 testing-audit，不迁移到 automated-testing 或 testing-best-practices。
+- P2.10 已将 `testing-audit.md` 的 E2E 选择器一致性检查清单和反模式迁入 `docs/automated-testing.md`；testing-audit 只保留审计入口，E2E 测试写法主源承接选择器来源、交互路径、i18n 按钮文本和状态断言。
+- P2.11 已将 `automated-testing.md` 中截图核对、外部资源缺失、流程截图、状态切换、奖励骰/特写和视觉项等重复验收清单压缩为入口；`docs/ai-rules/e2e-verification.md` 承接截图验收主源，并补齐无有效业务截图、线上/特定环境现状图、移动端 preferredOrientation 主方向和牌面美术未渲染口径。
+- P2.12 已继续压缩 `testing-audit.md`：结论等级和缺口分类回 `audit-evidence-template.md`，L1-L4、跨层通用能力、deferred/finalize 和时序 UI 证据门禁归入 `testing-audit-core-principles.md`；末尾重复的“教训附录 / D 维度库”入口合并。测试工具选型短表仍保留为审计路由，不迁成测试教程。
+- P2.13 已将 `.codex/skill/game-audit-workflow/references/dimensions.md` 从 D1-D52 的第二份维度清单压缩为高风险速查；完整 D1-D58 维度名称和定义统一回 `docs/ai-rules/testing-audit-dimensions.md`，并修正 `testing-audit.md` 中空的 D1-D24 章节和过时的 D1-D57 文案。
 - P3 资源/录入组第一步已完成主从标注：`.codex/skill/data-entry-workflow/SKILL.md` 和 `.codex/skill/atlas-crop/SKILL.md` 明确降为 workflow；`asset-pipeline.md`、`critical-image-preload.md`、`audio-assets.md`、`data-entry.md` 当前未发现可直接删除的逐行重复。
+- P3.1 已压缩 `.codex/skill/data-entry-workflow/SKILL.md`：通用录入门禁回 `docs/ai-rules/data-entry.md`，资源链回 `docs/ai-rules/asset-pipeline.md`，读图 / OCR 回 `.codex/skill/safe-image-reading/SKILL.md`，机制承接回 `docs/ai-rules/engine-systems.md`；workflow 只保留触发、S0-S4、批量门禁、游戏路由和交付要求。
+- P3.2 已复核 `.codex/skill/atlas-crop/SKILL.md`：当前约 82 行，已是脚本 / 参数 / 抽样验收 workflow；主源回 `asset-pipeline.md` 与 `data-entry.md`，本轮裁定不再拆分。
+- P3.4 已收口音频双入口：`docs/ai-rules/audio-assets.md` 只承载跨游戏运行时架构、共享包路径和音效触发主合同；`docs/audio/audio-usage.md` 只承载命令、查找、试听、BGM 与项目接入细节。删除 `audio-usage.md` 中重复的三层架构和本地包路径正文，并修正不存在的项目 skill 路径。
+- P3.5 已收口新增音频命令重复：`docs/audio/audio-usage.md` §3 作为压缩、registry、资源清单、AI registry 和语义目录命令主源；`docs/audio/add-audio.md` 只保留新增素材执行顺序和验收入口，并迁移可选压缩参数到命令主源。
+- P3.6 已复核剩余图片资源组：`asset-pipeline.md` 负责图片资源链与发布合同，`critical-image-preload.md` 负责 critical/warm 预加载、教程裁剪和图集初始化，`atlas-crop` 只负责裁切脚本与抽样验收；三者职责已分离，本批不迁移、不删除。
 - P4 新游戏/新增派系组第一步已完成职责分线：`create-new-game` 管从零新增游戏，`add-new-faction` 管已有游戏新增对象，`smashup-faction-addition` 只做大杀四方 adapter；OpenSpec 在这里只承担产品/架构能力规格，不作为 AI 规范重构入口。
+- P4.1 已将 `.codex/skill/create-new-game/SKILL.md` 顶部 19 条新游戏红线无损搬入 `.codex/skill/create-new-game/references/intake-redlines.md`，主 skill 改为索引入口，减少长红线堆叠。
+- P4.2 已将 `.codex/skill/create-new-game/SKILL.md` 阶段 0 的详细清单和一票否决迁入 `references/intake-redlines.md`，主 skill 阶段 0 只保留入口骨架。
+- P4.3 已压缩 `.codex/skill/create-new-game/SKILL.md` 阶段 5，把 UI/设计/截图链细则统一回 `references/ui-implementation-gates.md`，主 skill 只保留 4 条入口骨架。
 - P5 Git/合并组第一步已完成职责分层：`git-operations` 管日常提交/推送，`merge-pr-workflow` 管 PR/分支合并执行，`merge-decision-package` 管给用户的合并裁决包，`worktree-branch-target-lock.md` 管目标锁定标准。
+- P5.1 已压缩 `AGENTS.md` §1.4 Git/分支/worktree 长段落，把执行细节下沉到 `git-operations`、`merge-pr-workflow`、`merge-decision-package` 和 `worktree-branch-target-lock.md`，根文件只保留入口和硬红线。
+- P1/P3 根段落级合并已完成：`AGENTS.md` 资源段和 UI/UX 段已从长正文压缩为入口 + 硬红线；图片 locale 口径补到 `asset-pipeline.md`，`defineEvents()` 音频策略补到 `audio-assets.md`，项目内不存在的 audio workflow 路径修正为系统 skill，UI 细则回 `ui-ux.md` / `ui-change-gates.md` / `ui-responsive-layout.md` / `docs/mobile-adaptation.md`。
+- P2/P5 标准工作流段落级合并已完成：`AGENTS.md` 代码质量检查段压缩为最小验证入口 + 生产依赖验证；审查/提交/push 的静态分析、hook 和快速路径口径回前文与 `.codex/skill/git-operations/SKILL.md`；验证测试段保留为测试文档入口清单。
+- 小黑屋 legacy 中文规则双份已处理：`src/games/betrayal/rule/legacy-zh/` 判定为唯一就近入口，`docs/games/betrayal/sources/legacy-zh/` 归档镜像删除；删除前确认两侧各 29 个文件，除 README 外 28 个文件哈希一致，README 侧以 `src` 版本为信息更完整的保留侧。
+- docs 内 14 份 0 字节 Markdown 已删除：删除前确认全部长度为 0，且全仓无完整路径引用、无文件名引用；这些文件不承载正文信息。
+- 小黑屋 PDF 空抽取结果已合并：原 `docs/games/betrayal/sources/pdf-text/pdf-01.md` 到 `pdf-08.md` 仅含 CRLF，无正文；已改为 `docs/games/betrayal/sources/pdf-text/README.md` 记录 8 个扫描型 PDF 的空抽取结论，原空文件删除。
+- DiceThrone 音频 AI registry 双份已处理：保留 `docs/audio/registry.ai.dicethrone.json` 和通用生成脚本 `scripts/audio/generate_ai_audio_registry_dicethrone.js`；删除 `docs/games/dicethrone/audio/registry.ai.dicethrone.json` 和仅输出路径不同的旧脚本 `scripts/games/dicethrone/audio/generate_ai_audio_registry_dicethrone.js`；`docs/audio/audio-usage.md` 已改到通用脚本入口。
+- evidence 内 8 份无引用 0 字节文件已删除；`evidence/_shared/p0-audit-batch2.md` 被历史审计清单引用，已补占位说明防止误当成完整审计正文；`evidence/_shared/rolldie-logs.txt` 是脚本输出路径，暂保留为空。
+- evidence 内 5 组 Markdown 精确重复已收口：跨项目审计报告保留 `evidence/_shared/`，DiceThrone 专项报告保留 `evidence/dicethrone/`，删除根级同名副本。
+- 已新增 `evidence/README.md` 作为证据目录入口，明确 `_shared`、游戏目录、专项截图链的职责，并写明截图 / 图片重复不得按哈希直接删除。
 - 已按“保留侧存在 + 哈希完全一致 + 仓内无引用旧路径”的证据，删除 8 份顶层单游戏重复副本：`docs/features/smashup-base-restrictions-ui.md`、`docs/features/cardia-card-magnify.md`、`docs/refactor/dicethrone-hand-area-refactor.md`、`docs/refactor/dicethrone-auto-advance-upkeep-income.md`、`docs/improvements/smashup-actionlog-reason-display.md`、`docs/plans/2026-02-20-smashup-cursor-design.md`、`docs/dicethrone-new-heroes-progress.md`、`docs/dicethrone-audio-plan.md`。
-- 仍未处理的精确重复候选包括：小黑屋 legacy 规则在 `src/games/betrayal/rule/legacy-zh/` ↔ `docs/games/betrayal/sources/legacy-zh/` 双份存在，另有 `evidence/_shared/*` ↔ `evidence/*` 重复；这些需要先判定运行时/录入/审计默认入口和历史引用后再处理。
+- Smash Up POD 文档重复入口已收口：选择性覆盖示例合并到 `docs/games/smashup/refactor/pod/pod-system-architecture.md` 后删除独立文件；架构文档只保留补充职责，当前运行时合同仍在 `src/games/smashup/rule/POD-SYSTEM.md`，自动映射 / stub / 总结文档保留为历史记录并明确降权。
+- 公共 `docs/refactor/` 两份剩余文档已完成内容级归并：音效架构方案归入 `docs/ai-rules/audio-assets.md`，PixiJS 压测与重新评估条件归入 `docs/ai-rules/animation-effects.md`；删除旧方案入口，保留决策证据与有效边界。
+- 根 `AGENTS.md` 部署 / Android OTA 长段已压缩为入口和两条发布硬红线；详细分流、命令、包体、版本、服务器部署和回查分别回 `.codex/skill/android-app-release/SKILL.md`、`docs/deploy.md`、`docs/mobile-release.md`、`docs/android-app-build.md` 和 `docs/ios-testflight-build.md`。
+- docs 内 Markdown / 文本 / JSON 精确重复已清零；evidence 图片重复曾被单独排除在 AI 规范正文重构之外，后续已按独立历史证据仓规则处理明确副本，不把图片清理结果冒充规范正文去重。
+- 已开始 evidence 图片逐组去重：石像小天使自然回合子目录 3 张截图与父目录逐张 SHA256 一致，子目录索引只是父目录完整证据组的子集，且无路径引用，已收口到父目录；作祟后探索两批仅部分截图一致且分支 / 标注语义不同，保留两批。
+- 已继续收口两个同目录别名副本：删除无引用的教程调试图 `debug-second-chapter-after-use-click-latest.png` 和带协议噪声的 Fantasy Realms 图片 `fantasyrealms-board-tabletop-implementation-http.png`，各自保留同哈希的稳定命名文件。
+- 当前图片重复的主要机制不是“所有规范正文重复”，而是证据组缺少唯一入口、批次索引可独立导出、历史验收图与用户交付图没有明确角色标识；规范层已经补上“图片不得仅凭哈希删除”的门禁。
+- 图片精确重复已逐组归类：明确的同目录稳定别名和子集副本已删除；设计 / 最终、修复阶段、不同分支、用户批次和不同步骤的同像素图片已记录为保留，不再批量清理。
 - 后续若要继续去重，必须继续查引用并证明被删侧有效内容已迁移或明确失效。
 ## 本轮事故回代
 

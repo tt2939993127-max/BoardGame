@@ -42,6 +42,31 @@ test('PC Web 首页右下角显示看板娘且游戏页不显示', async ({ page
     await page.getByTestId('pc-web-mascot-button').click();
     await page.waitForTimeout(120);
     await expect(page.locator('.pc-web-mascot__scale')).toHaveCSS('animation-name', 'pc-web-mascot-scale');
+    await expect(page.getByTestId('pc-web-mascot-tip')).toHaveText('欢迎进群交流：');
+    await expect(page.getByTestId('pc-web-mascot-group-copy')).toHaveText('1081373485');
+
+    await expect.poll(() => page.getByTestId('pc-web-mascot-tip').innerText(), {
+        timeout: 6500,
+        message: '看板娘第二条提示未轮播出来',
+    }).toBe('遇到卡死时，悬浮球可以强制结束阶段。');
+    const tipTwoPath = getEvidenceScreenshotPath(testInfo, 'desktop-tip-2');
+    await ensureDirForScreenshot(tipTwoPath);
+    await page.screenshot({ path: tipTwoPath, fullPage: false });
+
+    await expect.poll(() => page.getByTestId('pc-web-mascot-tip').innerText(), {
+        timeout: 6500,
+        message: '看板娘第三条提示未轮播出来',
+    }).toBe('点击对手分数/头像可以切换视角，可以看弃牌堆。');
+    await expect(page.getByTestId('pc-web-mascot-group-copy')).toHaveCount(0);
+    const tipThreePath = getEvidenceScreenshotPath(testInfo, 'desktop-tip-3');
+    await ensureDirForScreenshot(tipThreePath);
+    await page.screenshot({ path: tipThreePath, fullPage: false });
+
+    await expect.poll(() => page.getByTestId('pc-web-mascot-tip').innerText(), {
+        timeout: 6500,
+        message: '看板娘提示未循环回到第一条',
+    }).toBe('欢迎进群交流：');
+    await expect(page.getByTestId('pc-web-mascot-group-copy')).toHaveText('1081373485');
 
     const clickedPath = getEvidenceScreenshotPath(testInfo, 'desktop-click-scale');
     await ensureDirForScreenshot(clickedPath);

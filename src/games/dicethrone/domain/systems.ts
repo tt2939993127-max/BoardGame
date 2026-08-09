@@ -15,7 +15,6 @@ import type {
     InteractionRequestedEvent,
     TokenResponseRequestedEvent,
     BonusDiceRerollRequestedEvent,
-    CpChangedEvent,
     InteractionDescriptor as DtInteractionDescriptor,
     ResponseWindowOpenedEvent,
     TurnPhase,
@@ -24,12 +23,11 @@ import { getPlayerPassiveAbilities } from './passiveAbility';
 import { findPlayerAbility } from './abilityLookup';
 import { getChoiceResolvedEventHandler } from './choiceResolvedEvents';
 import { hasCurrentChoiceAnchor } from './choiceEffects';
-import { RESOURCE_IDS } from './resources';
-import { CP_MAX } from './core-types';
 import {
     getActiveDice,
     getCombatOpponentId,
     getResponderQueue,
+    isInteractiveBonusDiceSettlement,
     shouldOpenAfterRollConfirmedForBonusSettlement,
 } from './rules';
 import { isRemovableStatusId } from './statusRemoval';
@@ -158,15 +156,57 @@ function isStaleOffensiveRollEndChoiceResolved(core: DiceThroneCore, event: Choi
 function queueDiceThroneInteraction(
     state: MatchState<DiceThroneCore>,
     interaction: EngineInteractionDescriptor,
+    options?: {
+        preemptCurrentStatusInteraction?: boolean;
+        requestedInteractionId?: string;
+    },
 ): MatchState<DiceThroneCore> {
+    const bindResponseWindowInteractionId = (
+        nextState: MatchState<DiceThroneCore>,
+    ): MatchState<DiceThroneCore> => {
+        const currentWindow = nextState.sys.responseWindow?.current;
+        if (
+            !options?.requestedInteractionId
+            || currentWindow?.pendingInteractionId !== options.requestedInteractionId
+        ) {
+            return nextState;
+        }
+        return {
+            ...nextState,
+            sys: {
+                ...nextState.sys,
+                responseWindow: {
+                    current: {
+                        ...currentWindow,
+                        pendingInteractionId: interaction.id,
+                    },
+                },
+            },
+        };
+    };
     const current = state.sys.interaction.current;
     if (
-        current?.kind === 'dt:token-response'
-        && interaction.kind !== 'dt:token-response'
+        (
+            (
+                options?.preemptCurrentStatusInteraction
+                && interaction.kind === 'dt:card-interaction'
+            )
+            || (
+                interaction.kind === 'multistep-choice'
+                && current?.kind === 'dt:bonus-dice'
+            )
+        )
+        && (
+            current?.kind === 'dt:bonus-dice'
+            || (
+                current?.kind === 'dt:card-interaction'
+                && current.playerId === interaction.playerId
+            )
+        )
     ) {
-        // 伤害响应期间仍可打出会继续请求输入的牌。新交互可能属于另一位玩家，
-        // 必须先接管界面，完成后再回到原令牌响应，否则新交互只会排队而双方都无法操作。
-        return queueInteraction({
+        // 瞬时行动牌可以打断目标玩家的状态选择或当前奖励骰交互；
+        // 完成新交互后恢复原交互，旧骰结果仍由当前唯一骰区承载。
+        return queueInteraction(bindResponseWindowInteractionId({
             ...state,
             sys: {
                 ...state.sys,
@@ -176,10 +216,29 @@ function queueDiceThroneInteraction(
                     queue: [current, ...state.sys.interaction.queue],
                 },
             },
-        }, interaction);
+        }), interaction);
     }
 
-    return queueInteraction(state, interaction);
+    if (
+        current?.kind === 'dt:token-response'
+        && interaction.kind !== 'dt:token-response'
+    ) {
+        // 伤害响应期间仍可打出会继续请求输入的牌。新交互可能属于另一位玩家，
+        // 必须先接管界面，完成后再回到原令牌响应，否则新交互只会排队而双方都无法操作。
+        return queueInteraction(bindResponseWindowInteractionId({
+            ...state,
+            sys: {
+                ...state.sys,
+                interaction: {
+                    ...state.sys.interaction,
+                    current: undefined,
+                    queue: [current, ...state.sys.interaction.queue],
+                },
+            },
+        }), interaction);
+    }
+
+    return queueInteraction(bindResponseWindowInteractionId(state), interaction);
 }
 
 function getCurrentInteractionChoiceSourceId(
@@ -513,6 +572,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
             const nextEvents: GameEvent[] = [];
             // 防止同一批事件中多个 STATUS_REMOVED 重复 resolve
             let statusInteractionCompleted = false;
+            const cardPlayPlayers = new Set(
+                events
+                    .filter((event): event is Extract<DiceThroneEvent, { type: 'CARD_PLAYED' }> => event.type === 'CARD_PLAYED')
+                    .map(event => event.payload.playerId),
+            );
 
             for (const event of events) {
                 const dtEvent = event as DiceThroneEvent;
@@ -636,6 +700,26 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     continue;
                 }
 
+                if (dtEvent.type === 'ROLL_CONTEXT_RESTORED') {
+                    // 恢复事件已经把领域状态切回覆盖前步骤；新骰区对应的交互和响应锁
+                    // 也必须一起清掉，否则系统会继续等待已经不存在的奖励骰/对掷输入。
+                    newState = {
+                        ...newState,
+                        sys: {
+                            ...newState.sys,
+                            interaction: {
+                                ...newState.sys.interaction,
+                                current: undefined,
+                                queue: [],
+                            },
+                            responseWindow: {
+                                current: undefined,
+                            },
+                        },
+                    };
+                    continue;
+                }
+
                 // ---- INTERACTION_REQUESTED → 根据类型创建不同交互 ----
                 if (dtEvent.type === 'INTERACTION_REQUESTED') {
                     const payload = (dtEvent as InteractionRequestedEvent).payload;
@@ -686,7 +770,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             pendingInteraction.playerId,
                             multistepData,
                         );
-                        newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(newState, interaction));
+                        newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(
+                            newState,
+                            interaction,
+                            { requestedInteractionId: pendingInteraction.id },
+                        ));
                         continue;
                     }
 
@@ -728,7 +816,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             pendingInteraction.playerId,
                             multistepData,
                         );
-                        newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(newState, interaction));
+                        newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(
+                            newState,
+                            interaction,
+                            { requestedInteractionId: pendingInteraction.id },
+                        ));
                         continue;
                     }
 
@@ -772,7 +864,14 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         playerId: pendingInteraction.playerId,
                         data: { ...pendingInteraction, sourceId: pendingInteraction.sourceCardId },
                     };
-                    newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(newState, interaction));
+                    newState = syncCurrentChoiceAnchorWithInteraction(queueDiceThroneInteraction(
+                        newState,
+                        interaction,
+                        {
+                            preemptCurrentStatusInteraction: cardPlayPlayers.has(pendingInteraction.playerId),
+                            requestedInteractionId: pendingInteraction.id,
+                        },
+                    ));
                 }
 
                 // ---- 状态/手牌交互自动完成：只在各自权威完成事件出现时 resolve ----
@@ -870,8 +969,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // 用户点击 Continue → SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED → resolveInteraction
                 if (dtEvent.type === 'BONUS_DICE_REROLL_REQUESTED') {
                     const payload = (dtEvent as BonusDiceRerollRequestedEvent).payload;
-                    // displayOnly settlement 不创建交互，不阻塞流程
-                    if (!payload.settlement.displayOnly) {
+                    // displayOnly 且不可改骰的 settlement 不创建交互；displayOnly 但可改骰仍是当前骰区交互。
+                    if (isInteractiveBonusDiceSettlement(payload.settlement)) {
                         const interaction: EngineInteractionDescriptor = {
                             id: `dt-bonus-dice-${payload.settlement.id}`,
                             kind: 'dt:bonus-dice',
@@ -893,11 +992,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 }
 
                 // ---- BONUS_DICE_SETTLED → resolve ----
-                // displayOnly 的 BONUS_DICE_SETTLED 不应 resolve 交互
-                // （displayOnly 用于展示，不影响游戏流程，不应清除攻击的 bonus dice 交互）
+                // 纯展示 displayOnly 的 BONUS_DICE_SETTLED 不应 resolve 交互；
+                // 但 displayOnly+allowDiceModification 是刚收口的当前骰交互，必须释放。
                 if (dtEvent.type === 'BONUS_DICE_SETTLED') {
                     const payload = (dtEvent as any).payload;
-                    if (!payload?.displayOnly) {
+                    if (!payload?.displayOnly || payload?.allowDiceModification === true) {
                         newState = syncCurrentChoiceAnchorWithInteraction(resolveInteraction(newState));
                     }
                 }
@@ -1038,20 +1137,25 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                                 hasFace = activeDice.some(d => d.symbol === passive.trigger!.requiredFace);
                             }
                             if (hasFace) {
-                                const player = newState.core.players[playerId];
-                                const currentCp = player?.resources[RESOURCE_IDS.CP] ?? 0;
-                                const newCp = Math.min(currentCp + passive.trigger.grantCp, CP_MAX);
-                                nextEvents.push({
-                                    type: 'CP_CHANGED',
-                                    payload: {
+                                const pendingAttack = newState.core.pendingAttack;
+                                if (!pendingAttack || pendingAttack.attackerId !== playerId) continue;
+                                const deferredCpGrants = [
+                                    ...(pendingAttack.deferredCpGrants ?? []),
+                                    {
                                         playerId,
-                                        delta: passive.trigger.grantCp,
-                                        newValue: newCp,
+                                        amount: passive.trigger.grantCp,
                                         sourceAbilityId: passive.id,
+                                    },
+                                ];
+                                nextEvents.push({
+                                    type: 'PENDING_ATTACK_UPDATED',
+                                    payload: {
+                                        attackerId: playerId,
+                                        patch: { deferredCpGrants },
                                     },
                                     sourceCommandType: 'PASSIVE_TRIGGER',
                                     timestamp: typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp + 1 : 1,
-                                } as CpChangedEvent);
+                                } as DiceThroneEvent);
                             }
                         }
                     }

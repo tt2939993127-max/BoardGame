@@ -226,6 +226,7 @@
     color: #5b4226;
     font-size: 0.875rem;
     line-height: 1.35;
+    min-height: 3.1rem;
     pointer-events: auto;
 }
 
@@ -936,6 +937,13 @@ html[data-game-id="betrayal"][data-betrayal-cinematic-stage="true"] [data-testid
 }
 
 @media (max-width: 1023px) and (max-height: 500px) and (orientation: landscape) {
+    .smashup-docked-prompt {
+        left: 0.75rem;
+        right: auto;
+        top: 6.25rem;
+        justify-content: flex-start;
+    }
+
     [data-game-ui="the-gang"][data-the-gang-two-hand="true"][data-the-gang-phase="chip-selection"] [data-bgg-zone="middle-zone"] {
         align-items: flex-start;
         padding-top: clamp(2.25rem, 13vh, 3.5rem);

@@ -10,7 +10,7 @@ import {
     type BetrayalRoomFloor,
     type BetrayalRoomSeed,
 } from '../scenarioConfig';
-import { BETRAYAL_ROOM_TILE_VISUALS } from '../roomAtlas';
+import { resolveBetrayalRoomTileVisual } from '../roomAtlas';
 
 export const BETRAYAL_CONFIG_REVIEW_VERSION = 'legacy-ts-config-v1';
 export const BETRAYAL_CONFIG_REVIEW_TABLE_ID = 'betrayal:legacy-config-review';
@@ -163,7 +163,7 @@ function formatOrientationOptions(doorways: readonly BetrayalRoomEdge[]): string
 }
 
 function resolveAtlasFrame(visualId: string): number | undefined {
-    const visual = BETRAYAL_ROOM_TILE_VISUALS[visualId as keyof typeof BETRAYAL_ROOM_TILE_VISUALS];
+    const visual = resolveBetrayalRoomTileVisual(visualId);
     return visual?.frameIndex;
 }
 

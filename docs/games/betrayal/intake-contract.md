@@ -33,22 +33,22 @@
 | 英文规则书文本 | 上一条镜像的可读 Markdown | `docs/games/betrayal/sources/official/betrayal-3e-rulebook-en.md` | 英文对照源 | 已抽取成 13 页文本 |
 | 英文求生者剧本书 | 求生者侧剧本文档 | `docs/games/betrayal/sources/official/betrayal-3e-secrets-of-survival-en.md` | 英文对照源 | 已抽取成 60 页文本 |
 | 英文叛徒剧本书 | 叛徒侧剧本文档 | `docs/games/betrayal/sources/official/betrayal-3e-traitors-tome-en.md` | 英文对照源 | 已抽取成 60 页文本 |
-| 中文规则 PDF | 用户补充的 `小黑屋规则翻译v1.1.pdf` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-2e-rulebook-zh-v1.1/betrayal-2e-rulebook-zh-v1.1.md`；归档镜像在 `docs/games/betrayal/sources/legacy-zh/` | 旧版中文对照源 | 有中文文本层与 24 页页面图，出现“第二版工作人员”，不作为 3e 权威源 |
-| 中文求生者 Word | 用户补充的 `求生秘诀_原版v1.2.docx` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-legacy-secrets-of-survival-zh-v1.2.md`；归档镜像在 `docs/games/betrayal/sources/legacy-zh/` | 旧版 / 基础版作祟对照源 | 第 1 剧本是“木乃伊横行”，不对应 3e 作祟 1 |
-| 中文叛徒 Word | 用户补充的 `奸徒手册_基础版精编校对v1.0.docx` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-legacy-traitors-tome-zh-v1.0.md`；归档镜像在 `docs/games/betrayal/sources/legacy-zh/` | 旧版 / 基础版作祟对照源 | 第 1 剧本是“木乃伊横行”，不对应 3e 作祟 1 |
+| 中文规则 PDF | 用户补充的 `小黑屋规则翻译v1.1.pdf` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-2e-rulebook-zh-v1.1/betrayal-2e-rulebook-zh-v1.1.md` | 旧版中文对照源 | 有中文文本层与 24 页页面图，出现“第二版工作人员”，不作为 3e 权威源 |
+| 中文求生者 Word | 用户补充的 `求生秘诀_原版v1.2.docx` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-legacy-secrets-of-survival-zh-v1.2.md` | 旧版 / 基础版作祟对照源 | 第 1 剧本是“木乃伊横行”，不对应 3e 作祟 1 |
+| 中文叛徒 Word | 用户补充的 `奸徒手册_基础版精编校对v1.0.docx` 转换结果 | `src/games/betrayal/rule/legacy-zh/betrayal-legacy-traitors-tome-zh-v1.0.md` | 旧版 / 基础版作祟对照源 | 第 1 剧本是“木乃伊横行”，不对应 3e 作祟 1 |
 
 ## 3. PDF 处理结论
 
 | 序号 | 原始文件 | 大小 | 抽取结果 | 结论 |
 | --- | --- | ---: | --- | --- |
-| 01 | `httpssteamusercontent...AC91.PDF` | 22.50 MB | `pdf-01.md` 为空 | 扫描型，待 OCR |
-| 02 | `httpssteamusercontent...5477.PDF` | 48.07 MB | `pdf-02.md` 为空 | 扫描型，待 OCR |
-| 03 | `httpssteamusercontent...68AC8.PDF` | 48.52 MB | `pdf-03.md` 为空 | 扫描型，待 OCR |
-| 04 | `httpssteamusercontent...770E.PDF` | 20.71 MB | `pdf-04.md` 为空 | 扫描型，待 OCR |
-| 05 | `httpssteamusercontent...9460.PDF` | 5.11 MB | `pdf-05.md` 为空 | 扫描型，待 OCR |
-| 06 | `httpssteamusercontent...317E.PDF` | 9.24 MB | `pdf-06.md` 为空 | 扫描型，待 OCR |
-| 07 | `httpssteamusercontent...1EDD.PDF` | 9.34 MB | `pdf-07.md` 为空 | 扫描型，待 OCR |
-| 08 | `httpssteamusercontent...DC2F.PDF` | 6.22 MB | `pdf-08.md` 为空 | 扫描型，待 OCR |
+| 01 | `httpssteamusercontent...AC91.PDF` | 22.50 MB | `pdf-text/README.md` 记录原 `pdf-01.md` 为空 | 扫描型，待 OCR |
+| 02 | `httpssteamusercontent...5477.PDF` | 48.07 MB | `pdf-text/README.md` 记录原 `pdf-02.md` 为空 | 扫描型，待 OCR |
+| 03 | `httpssteamusercontent...68AC8.PDF` | 48.52 MB | `pdf-text/README.md` 记录原 `pdf-03.md` 为空 | 扫描型，待 OCR |
+| 04 | `httpssteamusercontent...770E.PDF` | 20.71 MB | `pdf-text/README.md` 记录原 `pdf-04.md` 为空 | 扫描型，待 OCR |
+| 05 | `httpssteamusercontent...9460.PDF` | 5.11 MB | `pdf-text/README.md` 记录原 `pdf-05.md` 为空 | 扫描型，待 OCR |
+| 06 | `httpssteamusercontent...317E.PDF` | 9.24 MB | `pdf-text/README.md` 记录原 `pdf-06.md` 为空 | 扫描型，待 OCR |
+| 07 | `httpssteamusercontent...1EDD.PDF` | 9.34 MB | `pdf-text/README.md` 记录原 `pdf-07.md` 为空 | 扫描型，待 OCR |
+| 08 | `httpssteamusercontent...DC2F.PDF` | 6.22 MB | `pdf-text/README.md` 记录原 `pdf-08.md` 为空 | 扫描型，待 OCR |
 
 当前结论：早期本地 PDF 不能直接转成可读规则文本，后续应走 OCR 或人工录入，不允许把空 Markdown 当规则真相源。用户后续补充的中文 PDF 已可读，但版本口径是旧版中文对照，不覆盖当前 3e 官方规则源。
 

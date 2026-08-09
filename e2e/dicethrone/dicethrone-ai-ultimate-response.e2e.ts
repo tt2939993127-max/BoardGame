@@ -29,6 +29,146 @@ async function changeFirstDieFromSixToFive(page: Page): Promise<void> {
 }
 
 test.describe('DiceThrone AI 终极招式发动前响应', () => {
+    test('真人响应提示更显眼且可跳过并关闭响应窗口', async ({ page, game }, testInfo) => {
+        test.setTimeout(TEST_TIMEOUT_MS);
+
+        await game.openTestGame('dicethrone', { playerID: '1' }, OPEN_TIMEOUT_MS);
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 10, HP: 50 },
+            },
+            player1: {
+                hand: ['card-surprise'],
+                resources: { CP: 10, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'zhanshujia', '1': 'cursed_pirate' },
+                seatControllers: {
+                    '0': { type: 'local-ai', difficulty: 'expert' },
+                    '1': { type: 'human' },
+                },
+                hostStarted: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollDiceCount: 5,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 6, isKept: false },
+                    { id: 1, value: 6, isKept: false },
+                    { id: 2, value: 6, isKept: false },
+                    { id: 3, value: 6, isKept: false },
+                    { id: 4, value: 6, isKept: false },
+                ],
+            },
+            sys: {
+                phase: 'offensiveRoll',
+                currentPlayerIndex: 0,
+                interaction: { current: undefined, queue: [] },
+                responseWindow: { current: undefined },
+            },
+        });
+
+        await waitForDiceThronePhase(page, 'offensiveRoll');
+        await dispatchDiceThroneCommand(page, {
+            type: 'SELECT_ABILITY',
+            playerId: '0',
+            payload: { abilityId: 'high-ground' },
+        });
+
+        await expect.poll(async () => {
+            const state = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
+            const responseWindow = state.sys.responseWindow?.current;
+            return {
+                windowType: responseWindow?.windowType ?? null,
+                responderQueue: responseWindow?.responderQueue ?? [],
+                sourceAbilityId: state.core.pendingAttack?.sourceAbilityId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            windowType: 'afterRollConfirmed',
+            responderQueue: ['1'],
+            sourceAbilityId: 'high-ground',
+        });
+
+        const responseHint = page.getByTestId('dicethrone-response-window-hint');
+        const responseHintPanel = page.getByTestId('dicethrone-response-window-hint-panel');
+        const responsePassButton = page.getByTestId('dicethrone-response-pass-button');
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        const attackShowcase = page.getByTestId('attack-showcase-overlay');
+        const continueButton = attackShowcase.getByRole('button', { name: /^(继续|Continue)$/i });
+        await expect(continueButton).toBeVisible({ timeout: 10000 });
+        await continueButton.click();
+        await expect(attackShowcase).toBeHidden({ timeout: 10000 });
+        await expect(responseHint).toBeVisible({ timeout: 10000 });
+        await expect(responseHintPanel).toBeVisible({ timeout: 10000 });
+        await expect(responsePassButton).toBeEnabled({ timeout: 10000 });
+        await expect(diceTray).toBeVisible({ timeout: 10000 });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(5);
+        await expect.poll(async () => diceTray.getByTestId('dice-2d').evaluateAll((dice) => (
+            dice.every((die) => die.getAttribute('data-sprite-ready') === 'true')
+        ))).toBe(true);
+        await expect(diceTray.locator('canvas')).toHaveCount(0);
+
+        const responseVisual = await responseHintPanel.evaluate((panel) => {
+            const hintStyle = getComputedStyle(panel);
+            const panelRect = panel.getBoundingClientRect();
+            const passButton = panel.querySelector('[data-testid="dicethrone-response-pass-button"]');
+            if (!(passButton instanceof HTMLButtonElement)) {
+                throw new Error('响应提示中的跳过按钮缺失');
+            }
+            const buttonStyle = getComputedStyle(passButton);
+            return {
+                panelBorderWidth: Number.parseFloat(hintStyle.borderTopWidth),
+                panelShadow: hintStyle.boxShadow,
+                panelBackgroundImage: hintStyle.backgroundImage,
+                panelBorderRadius: Number.parseFloat(hintStyle.borderTopLeftRadius),
+                panelHeight: panelRect.height,
+                panelCenterOffsetX: Math.abs(
+                    panelRect.left + panelRect.width / 2 - window.innerWidth / 2,
+                ),
+                buttonBorderWidth: Number.parseFloat(buttonStyle.borderTopWidth),
+                buttonShadow: buttonStyle.boxShadow,
+                buttonBorderRadius: Number.parseFloat(buttonStyle.borderTopLeftRadius),
+                buttonHeight: passButton.getBoundingClientRect().height,
+                buttonBackgroundImage: buttonStyle.backgroundImage,
+            };
+        });
+        expect(responseVisual).toMatchObject({
+            panelBorderWidth: 2,
+            buttonBorderWidth: 2,
+            panelBackgroundImage: 'none',
+            buttonBackgroundImage: 'none',
+        });
+        expect(responseVisual.panelShadow).not.toBe('none');
+        expect(responseVisual.buttonShadow).not.toBe('none');
+        expect(responseVisual.panelBorderRadius).toBeGreaterThanOrEqual(responseVisual.panelHeight / 2);
+        expect(responseVisual.panelCenterOffsetX).toBeLessThanOrEqual(1);
+        expect(responseVisual.buttonBorderRadius).toBeGreaterThanOrEqual(8);
+        expect(responseVisual.buttonHeight).toBeGreaterThanOrEqual(44);
+
+        const diceTrayVisual = await diceTray.evaluate((tray) => {
+            const trayStyle = getComputedStyle(tray);
+            return {
+                borderWidth: Number.parseFloat(trayStyle.borderTopWidth),
+                boxShadow: trayStyle.boxShadow,
+                backgroundImage: trayStyle.backgroundImage,
+            };
+        });
+        expect(diceTrayVisual).toMatchObject({ borderWidth: 2, backgroundImage: 'none' });
+        expect(diceTrayVisual.boxShadow).not.toBe('none');
+        await game.screenshot('01-真人响应提示显眼且2D骰盘已就绪', testInfo);
+
+        await responsePassButton.click();
+        await expect.poll(async () => {
+            const state = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
+            return state.sys.responseWindow?.current ?? null;
+        }, { timeout: 10000 }).toBeNull();
+        await expect(responseHint).toBeHidden({ timeout: 10000 });
+        await game.screenshot('02-真人跳过响应后提示关闭', testInfo);
+    });
+
     test('AI 选中制胜高地后，真人应能用惊不惊喜改骰取消终极招式', async ({ page, game }, testInfo) => {
         test.setTimeout(TEST_TIMEOUT_MS);
 

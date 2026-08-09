@@ -7,8 +7,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($OpenDesignRoot)) {
-    $OpenDesignRoot = Join-Path $CodexHome "tools\open-design"
+    $OpenDesignRoot = Join-Path $projectRoot ".tools\open-design"
 }
 
 $odBin = Join-Path $OpenDesignRoot "apps\daemon\bin\od.mjs"
@@ -31,7 +32,6 @@ if (Test-OpenDesignDaemon) {
     exit 0
 }
 
-$projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $logDir = Join-Path $projectRoot "logs"
 if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir | Out-Null

@@ -13,7 +13,6 @@ import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import type { InteractionDescriptor, TurnPhase } from '../domain/types';
 import { UI_Z_INDEX, HudPortal } from '../../../core';
-import { GameButton } from './components/GameButton';
 
 export interface GameHintsProps {
     /** 是否处于弃牌模式 */
@@ -56,7 +55,11 @@ const DiscardHint: React.FC<{ mustDiscardCount: number }> = ({ mustDiscardCount 
     return (
         <div
             className="absolute bottom-[14vw] left-1/2 -translate-x-1/2 pointer-events-none animate-pulse"
-            style={{ zIndex: UI_Z_INDEX.hint }}
+            style={{
+                zIndex: UI_Z_INDEX.hint,
+                left: '50%',
+                transform: 'translateX(-50%)',
+            }}
         >
             <div className="px-[2vw] py-[0.8vw] rounded-xl bg-gradient-to-r from-red-900/90 to-orange-900/90 border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.4)] backdrop-blur-sm">
                 <div className="flex items-center gap-[1vw]">
@@ -163,21 +166,38 @@ const ResponseWindowHint: React.FC<{
 
     return (
         <div
+            data-testid="dicethrone-response-window-hint"
             className={`absolute ${offsetClass} left-1/2 -translate-x-1/2`}
             style={{ zIndex: UI_Z_INDEX.hint }}
         >
-            <div className="flex items-center gap-[1vw] px-[1.4vw] py-[0.6vw] rounded-full bg-black/80 border border-purple-500/60 shadow-lg backdrop-blur-sm">
-                <span className="text-purple-300 text-[0.8vw] font-bold tracking-wider">
+            <div
+                data-testid="dicethrone-response-window-hint-panel"
+                className="flex items-center gap-[0.8vw] rounded-full border-2 border-[#f6d477] bg-[#21182a] px-[1vw] py-[0.55vw] shadow-[0_0.25vw_0_rgba(0,0,0,0.95),0_0.58vw_0_#5b4212,0_0.8vw_1.2vw_rgba(0,0,0,0.48)]"
+                style={{
+                    border: '2px solid #f6d477',
+                    borderRadius: '9999px',
+                    backgroundColor: '#21182a',
+                    boxShadow: '0 0.25vw 0 rgba(0,0,0,0.95), 0 0.58vw 0 #5b4212, 0 0.8vw 1.2vw rgba(0,0,0,0.48)',
+                }}
+            >
+                <span className="text-[#ffe8a6] text-[0.86vw] font-black tracking-wider">
                     {t('response.yourTurn')}
                 </span>
-                <GameButton
+                <button
+                    type="button"
+                    data-testid="dicethrone-response-pass-button"
                     onClick={onResponsePass}
-                    variant="glass"
-                    size="sm"
-                    className="border-purple-500/50 hover:bg-purple-500/20 text-purple-100 text-[0.7vw] py-[0.3vw] px-[1vw] min-h-0"
+                    className="min-h-[44px] rounded-lg border-2 border-[#fff0ae] bg-[#9b7118] px-[1vw] text-[0.78vw] font-black tracking-wider text-white shadow-[0_0.2vw_0_rgba(0,0,0,0.9),0_0.34vw_0_#4a3207] transition-[transform,box-shadow,background-color] duration-150 hover:-translate-y-px hover:bg-[#b88720] hover:shadow-[0_0.24vw_0_rgba(0,0,0,0.9),0_0.42vw_0_#4a3207] active:translate-y-[0.18vw] active:shadow-[0_0.12vw_0_rgba(0,0,0,0.9),0_0.16vw_0_#4a3207]"
+                    style={{
+                        minHeight: 44,
+                        border: '2px solid #fff0ae',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#9b7118',
+                        boxShadow: '0 0.2vw 0 rgba(0,0,0,0.9), 0 0.34vw 0 #4a3207',
+                    }}
                 >
                     {t('response.pass')}
-                </GameButton>
+                </button>
             </div>
         </div>
     );

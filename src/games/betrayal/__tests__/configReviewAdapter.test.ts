@@ -34,14 +34,14 @@ describe('Betrayal configReviewAdapter', () => {
             visualId: 'kitchen',
             atlasFrame: 5,
             discoverySymbol: 'event',
-            doorways: ['东', '南', '西'],
+            doorways: ['北', '南'],
             connectionStatus: '放置时必须至少一扇旋转后门位连通入口门',
         });
         expect(kitchen?.values.rotatedDoorways).toEqual(expect.arrayContaining([
-            '0转：东、南、西',
-            '1转：南、西、北',
-            '2转：西、北、东',
-            '3转：北、东、南',
+            '0转：北、南',
+            '1转：东、西',
+            '2转：南、北',
+            '3转：西、东',
         ]));
 
         expect(hallway?.values.connectionStatus).toBe('连接清单与门位一致');
@@ -99,7 +99,7 @@ describe('Betrayal configReviewAdapter', () => {
         expect(scenario).toBeDefined();
         if (!kitchen || !scenario) return;
 
-        expect(getBetrayalConfigReviewCellValue(kitchen, 'doorways')).toEqual(['东', '南', '西']);
+        expect(getBetrayalConfigReviewCellValue(kitchen, 'doorways')).toEqual(['北', '南']);
         expect(isBetrayalConfigReviewFieldApplicable(kitchen, 'doorways')).toBe(true);
         expect(isBetrayalConfigReviewFieldApplicable(kitchen, 'hauntNumber')).toBe(false);
         expect(isBetrayalConfigReviewFieldApplicable(scenario, 'hauntNumber')).toBe(true);

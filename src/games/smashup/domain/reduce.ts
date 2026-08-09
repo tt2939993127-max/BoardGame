@@ -50,6 +50,7 @@ import type {
     TempPowerAddedEvent,
     PermanentPowerAddedEvent,
     CardSuppressedEvent,
+    CardsSuppressedUntilTurnEndEvent,
     BreakpointModifiedEvent,
     TempBasePowerModifiedEvent,
     BaseDeckShuffledEvent,
@@ -59,6 +60,7 @@ import type {
     TriggerQueuedEvent,
     TriggerConsumedEvent,
     MinionOnBase,
+    MonsterOnBase,
     CardType,
     CardInstance,
     BaseInPlay,
@@ -77,6 +79,11 @@ import type { PlayerId } from '../../../engine/types';
 import { SU_EVENTS, SU_EVENT_TYPES, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from './types';
 import { getBaseDef, getMinionDef, getCardDef, getFactionTitan } from '../data/cards';
 import {
+    getMunchkinSpecialCardDescriptor,
+    MUNCHKIN_MONSTER_DECK_DEF_IDS,
+    MUNCHKIN_TREASURE_DECK_DEF_IDS,
+} from '../data/factions/munchkin';
+import {
     bindEntityScopedValue,
     clearEntityScopedValue,
     createEntityId,
@@ -87,8 +94,9 @@ import {
     enrichCardInstanceWithObjectRef,
     getCardTransferObjectRef,
 } from './objectProvenance';
-import { canControllerPlayTitan, hasCthulhuExpansionFaction } from './abilityHelpers';
+import { canControllerPlayTitan, hasCthulhuExpansionFaction, hasMunchkinExpansionFaction } from './abilityHelpers';
 import { normalizeScoringEligibleBaseIndices } from './ongoingModifiers';
+import { isCardSuppressed } from './ongoingEffects';
 import {
     buildSmashUpCompletedDraftPlayers,
     getSmashUpBanTurnOrder,
@@ -225,6 +233,9 @@ function collectOccupiedUids(state: SmashUpCore): Set<string> {
         for (const ongoing of base.ongoingActions) {
             occupied.add(ongoing.uid);
         }
+        for (const monster of base.monsters ?? []) {
+            occupied.add(monster.uid);
+        }
         for (const buried of base.buriedCards ?? []) {
             occupied.add(buried.uid);
         }
@@ -232,6 +243,10 @@ function collectOccupiedUids(state: SmashUpCore): Set<string> {
 
     for (const titan of state.titans ?? []) {
         occupied.add(titan.uid);
+    }
+
+    for (const treasure of state.pendingMunchkinTreasureReward?.treasureCards ?? []) {
+        occupied.add(treasure.uid);
     }
 
     return occupied;
@@ -271,6 +286,130 @@ function allocateMadnessCardUids(
         cardUids: resolvedUids,
         nextUid: Math.max(state.nextUid + actualCount, fallbackNextUid),
     };
+}
+
+function allocateMunchkinTreasureUids(
+    state: SmashUpCore,
+    requestedUids: string[] | undefined,
+    actualCount: number,
+): { treasureUids: string[]; nextUid: number } {
+    const occupied = collectOccupiedUids(state);
+    const resolvedUids: string[] = [];
+    let fallbackNextUid = state.nextUid;
+
+    for (let index = 0; index < actualCount; index += 1) {
+        const requestedUid = requestedUids?.[index];
+        if (
+            requestedUid
+            && !occupied.has(requestedUid)
+            && !resolvedUids.includes(requestedUid)
+        ) {
+            resolvedUids.push(requestedUid);
+            occupied.add(requestedUid);
+            continue;
+        }
+
+        while (occupied.has(`munchkin_treasure_${fallbackNextUid}`)) {
+            fallbackNextUid += 1;
+        }
+        const generatedUid = `munchkin_treasure_${fallbackNextUid}`;
+        resolvedUids.push(generatedUid);
+        occupied.add(generatedUid);
+        fallbackNextUid += 1;
+    }
+
+    return {
+        treasureUids: resolvedUids,
+        nextUid: Math.max(state.nextUid + actualCount, fallbackNextUid),
+    };
+}
+
+function getMunchkinTreasureCardType(defId: string): CardType {
+    const def = getCardDef(defId);
+    if (!def || (def.type !== 'minion' && def.type !== 'action')) {
+        throw new Error(`unknown Munchkin treasure card: ${defId}`);
+    }
+    return def.type;
+}
+
+function buildMunchkinTreasureCard(defId: string, uid: string, owner: PlayerId): CardInstance {
+    return {
+        uid,
+        defId,
+        type: getMunchkinTreasureCardType(defId),
+        owner,
+    };
+}
+
+function dealMunchkinMonstersToBases(
+    state: SmashUpCore,
+    bases: BaseInPlay[],
+    monsterDeck: string[] | undefined,
+    nextUidSeed: number = state.nextUid,
+): { bases: BaseInPlay[]; monsterDeck: string[] | undefined; nextUid: number } {
+    if (!monsterDeck) {
+        return { bases, monsterDeck, nextUid: nextUidSeed };
+    }
+
+    const occupied = collectOccupiedUids(state);
+    let nextUid = Math.max(state.nextUid, nextUidSeed);
+    let deckCursor = 0;
+    let changed = false;
+
+    const nextBases = bases.map((base) => {
+        const existingMonsters = base.monsters ?? [];
+        for (const monster of existingMonsters) {
+            occupied.add(monster.uid);
+        }
+
+        const requiredCount = getBaseDef(base.defId)?.monsterCount ?? 0;
+        const missingCount = Math.max(0, requiredCount - existingMonsters.length);
+        if (missingCount === 0) return base;
+
+        const dealtMonsters: MonsterOnBase[] = [];
+        for (let index = 0; index < missingCount && deckCursor < monsterDeck.length; index += 1) {
+            const monsterDefId = monsterDeck[deckCursor];
+            deckCursor += 1;
+            while (occupied.has(`munchkin_monster_${nextUid}`)) {
+                nextUid += 1;
+            }
+            const uid = `munchkin_monster_${nextUid}`;
+            occupied.add(uid);
+            dealtMonsters.push({ uid, defId: monsterDefId });
+            nextUid += 1;
+        }
+
+        if (dealtMonsters.length === 0) return base;
+        changed = true;
+        return {
+            ...base,
+            monsters: [...existingMonsters, ...dealtMonsters],
+        };
+    });
+
+    return {
+        bases: changed ? nextBases : bases,
+        monsterDeck: monsterDeck.slice(deckCursor),
+        nextUid,
+    };
+}
+
+function hasSameStringMultiset(candidate: string[] | undefined, expected: string[]): candidate is string[] {
+    if (!candidate || candidate.length !== expected.length) return false;
+    const counts = new Map<string, number>();
+    for (const value of expected) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    for (const value of candidate) {
+        const count = counts.get(value) ?? 0;
+        if (count <= 0) return false;
+        if (count === 1) {
+            counts.delete(value);
+        } else {
+            counts.set(value, count - 1);
+        }
+    }
+    return counts.size === 0;
 }
 
 function removeMinionUidFromBases(
@@ -382,6 +521,13 @@ function detachCardUidFromBases(
 }
 
 type AttachedActionLeaveDestination = 'discard' | 'hand' | 'deckBottom';
+type AttachedActionLeaveContext = {
+    state?: SmashUpCore;
+    host?: MinionOnBase;
+};
+
+const MUNCHKIN_TREASURE_FACTION_ID = 'munchkin_treasures';
+const DWARF_KING_DEF_ID = 'munchkin_dwarves_dwarf_king';
 
 function isHalfTheBattleGalWomanTemporaryAction(attached: MinionOnBase['attachedActions'][number]): boolean {
     return attached.metadata?.halfTheBattleGalWomanTemporary === true;
@@ -396,10 +542,33 @@ function attachedActionToCard(attached: MinionOnBase['attachedActions'][number])
     };
 }
 
+function isMunchkinTreasureDefId(defId: string): boolean {
+    return getCardDef(defId)?.faction === MUNCHKIN_TREASURE_FACTION_ID;
+}
+
+function findDwarfKingTreasureReceiver(
+    context: AttachedActionLeaveContext | undefined,
+    attached: MinionOnBase['attachedActions'][number],
+): PlayerId | undefined {
+    const state = context?.state;
+    const host = context?.host;
+    if (!state || !host || !isMunchkinTreasureDefId(attached.defId)) {
+        return undefined;
+    }
+    return state.bases
+        .flatMap(base => base.minions)
+        .find(minion =>
+            minion.defId === DWARF_KING_DEF_ID
+            && minion.controller === host.controller
+            && !isCardSuppressed(state, minion.uid),
+        )?.controller;
+}
+
 function placeAttachedActionLeavingPlay(
     players: SmashUpCore['players'],
     attached: MinionOnBase['attachedActions'][number],
     defaultDestination: AttachedActionLeaveDestination,
+    context?: AttachedActionLeaveContext,
 ): SmashUpCore['players'] {
     const owner = players[attached.ownerId];
     if (!owner) return players;
@@ -407,6 +576,18 @@ function placeAttachedActionLeavingPlay(
     const destination = isHalfTheBattleGalWomanTemporaryAction(attached)
         ? 'deckBottom'
         : defaultDestination;
+    const dwarfKingReceiverId = destination === 'discard'
+        ? findDwarfKingTreasureReceiver(context, attached)
+        : undefined;
+    if (dwarfKingReceiverId) {
+        const receiver = players[dwarfKingReceiverId];
+        if (receiver) {
+            return {
+                ...players,
+                [dwarfKingReceiverId]: { ...receiver, hand: [...receiver.hand, card] },
+            };
+        }
+    }
     if (destination === 'hand') {
         return {
             ...players,
@@ -647,17 +828,31 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const madnessDeck = hasCthulhuExpansionFaction(newPlayers)
                 ? Array.from({ length: MADNESS_DECK_SIZE }, () => MADNESS_CARD_DEF_ID)
                 : undefined;
+            const hasMunchkinFaction = hasMunchkinExpansionFaction(newPlayers);
+            const initialTreasureDeck = hasMunchkinFaction ? [...MUNCHKIN_TREASURE_DECK_DEF_IDS] : undefined;
+            const initialMonsterDeck = hasMunchkinFaction ? [...MUNCHKIN_MONSTER_DECK_DEF_IDS] : undefined;
+            const setupBases = bases ?? state.bases;
+            const monsterSetup = dealMunchkinMonstersToBases(
+                { ...state, players: newPlayers, nextUid },
+                setupBases,
+                initialMonsterDeck,
+                nextUid,
+            );
 
             return {
                 ...state,
                 players: newPlayers,
                 turnOrder: state.factionSelection?.playTurnOrder ?? state.turnOrder,
-                nextUid,
+                nextUid: monsterSetup.nextUid,
                 currentPlayerIndex: 0,
                 factionSelection: undefined,
                 madnessDeck,
                 titans,
-                bases: bases ?? state.bases,
+                monsterDeck: monsterSetup.monsterDeck,
+                treasureDeck: initialTreasureDeck,
+                monsterDiscard: hasMunchkinFaction ? [] : undefined,
+                treasureDiscard: hasMunchkinFaction ? [] : undefined,
+                bases: monsterSetup.bases,
                 baseDeck: baseDeck ?? state.baseDeck,
                 nextBaseInstanceId: nextBaseInstanceId ?? state.nextBaseInstanceId,
             };
@@ -1442,6 +1637,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             let newPlayers = { ...state.players };
             const titans = state.titans ?? [];
             const newBaseDiscard = [...(state.baseDiscard ?? []), scoredBase.defId];
+            const clearedMonsterDefIds = (scoredBase.monsters ?? []).map(monster => monster.defId);
 
             // 埋葬卡：基地离场时翻开弃置到真正所有者弃牌堆（不触发能力）
             if (scoredBase.buriedCards && scoredBase.buriedCards.length > 0) {
@@ -1482,7 +1678,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             for (const m of scoredBase.minions) {
                 // Property 12: 随从附着的行动卡回各自所有者弃牌堆
                 for (const attached of m.attachedActions) {
-                    newPlayers = placeAttachedActionLeavingPlay(newPlayers, attached, 'discard');
+                    newPlayers = placeAttachedActionLeavingPlay(newPlayers, attached, 'discard', { state, host: m });
                 }
                 const returnedCard: CardInstance = {
                     uid: m.uid,
@@ -1547,6 +1743,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 bases: newBases,
                 titans: newTitans,
                 baseDiscard: newBaseDiscard,
+                monsterDiscard: clearedMonsterDefIds.length > 0
+                    ? [...(state.monsterDiscard ?? []), ...clearedMonsterDefIds]
+                    : state.monsterDiscard,
                 scoringEligibleBaseIndices: newEligible?.length ? newEligible : undefined,
                 tempBreakpointModifiers: newTempBreakpointModifiers,
                 tempBreakpointModifiersByBaseId: newTempBreakpointModifiersByBaseId,
@@ -2014,6 +2213,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         .filter(s => s.suppressorPlayerId !== playerId);
                     return remaining.length ? remaining : undefined;
                 })(),
+                suppressedCardUidsUntilTurnEnd: undefined,
                 // 清空 special 能力限制组使用记录
                 specialLimitUsed: undefined,
                 // 清空巨石阵双才能追踪
@@ -2269,10 +2469,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 const cleanedTitanSuppressed = removedTitanUids.size > 0
                     ? (state.titanOngoingSuppressedUntilTurnEnd ?? []).filter(uid => !removedTitanUids.has(uid))
                     : state.titanOngoingSuppressedUntilTurnEnd;
+                const monsterSetup = dealMunchkinMonstersToBases(state, updatedBases, state.monsterDeck, state.nextUid);
                 return {
                     ...state,
-                    bases: updatedBases,
+                    bases: monsterSetup.bases,
                     baseDeck: [...newBaseDeck, oldBaseDefId],
+                    monsterDeck: monsterSetup.monsterDeck,
+                    nextUid: monsterSetup.nextUid,
                     ...(nextBaseInstanceId ? { nextBaseInstanceId } : {}),
                     ...(updatedTitans ? { titans: updatedTitans } : {}),
                     ...(removedTitanUids.size > 0
@@ -2299,6 +2502,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
             const newBases = [...state.bases];
             newBases.splice(baseIndex, 0, newBase);
+            const monsterSetup = dealMunchkinMonstersToBases(state, newBases, state.monsterDeck, state.nextUid);
             const adjustedTitans = (state.titans ?? []).map(titan => {
                 if (titan.location.zone !== 'base') return titan;
                 if (titan.location.baseIndex >= baseIndex) {
@@ -2327,9 +2531,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             );
             return {
                 ...state,
-                bases: newBases,
+                bases: monsterSetup.bases,
                 titans: adjustedTitans,
                 baseDeck: newBaseDeck,
+                monsterDeck: monsterSetup.monsterDeck,
+                nextUid: monsterSetup.nextUid,
                 ...(nextBaseIdentity.nextBaseInstanceId ? { nextBaseInstanceId: nextBaseIdentity.nextBaseInstanceId } : {}),
                 beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
                 whenScoringTriggeredBases: cleanedWhenScoring.length > 0 ? cleanedWhenScoring : undefined,
@@ -2643,19 +2849,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // Property 12: 附着的行动卡回各自所有者弃牌堆
             if (minion) {
                 for (const attached of minion.attachedActions) {
-                    const attachedOwner = newPlayers[attached.ownerId];
-                    if (attachedOwner) {
-                        const attachedCard: CardInstance = {
-                            uid: attached.uid,
-                            defId: attached.defId,
-                            type: 'action',
-                            owner: attached.ownerId,
-                        };
-                        newPlayers = {
-                            ...newPlayers,
-                            [attached.ownerId]: { ...newPlayers[attached.ownerId], discard: [...newPlayers[attached.ownerId].discard, attachedCard] },
-                        };
-                    }
+                    newPlayers = placeAttachedActionLeavingPlay(newPlayers, attached, 'discard', { state, host: minion });
                 }
             }
             // 追踪本回合被消灭的随从（用于 furthering_the_cause 等触发器，并阻止过期移动把弃牌堆里的牌复活）
@@ -3296,12 +3490,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             }
             // 从基地的 ongoingActions 或随从的 attachedActions 中移除
             let detachedAttachedAction: MinionOnBase['attachedActions'][number] | undefined;
+            let detachedAttachedHost: MinionOnBase | undefined;
             const newBases = state.bases.map(base => {
                 const filteredOngoing = base.ongoingActions.filter(o => o.uid !== cardUid);
                 const filteredMinions = base.minions.map(m => {
                     const matchedAttachment = m.attachedActions.find(a => a.uid === cardUid);
                     if (!detachedAttachedAction && matchedAttachment) {
                         detachedAttachedAction = matchedAttachment;
+                        detachedAttachedHost = { ...m, attachedActions: [...m.attachedActions] };
                     }
                     const hadAttachment = matchedAttachment !== undefined;
                     const filtered = m.attachedActions.filter(a => a.uid !== cardUid);
@@ -3327,7 +3523,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 return {
                     ...state,
                     bases: newBases,
-                    players: placeAttachedActionLeavingPlay(state.players, detachedAttachedAction, 'discard'),
+                    players: placeAttachedActionLeavingPlay(state.players, detachedAttachedAction, 'discard', { state, host: detachedAttachedHost }),
                 };
             }
             if (clydeReturnControllerId) {
@@ -3347,6 +3543,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 }
             }
             const destinationZone = destination ?? 'discard';
+            if (detachedAttachedAction && destinationZone === 'discard') {
+                return {
+                    ...state,
+                    bases: newBases,
+                    players: placeAttachedActionLeavingPlay(state.players, detachedAttachedAction, 'discard', { state, host: detachedAttachedHost }),
+                };
+            }
             return {
                 ...state,
                 bases: newBases,
@@ -4547,6 +4750,18 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 suppressedCardsUntilTurnStart: [...prev, { cardUid, baseIndex, suppressorPlayerId, cardType }],
+            };
+        }
+
+        case SU_EVENTS.CARDS_SUPPRESSED_UNTIL_TURN_END: {
+            const { cardUids } = (event as CardsSuppressedUntilTurnEndEvent).payload;
+            const merged = Array.from(new Set([
+                ...(state.suppressedCardUidsUntilTurnEnd ?? []),
+                ...cardUids.filter(Boolean),
+            ]));
+            return {
+                ...state,
+                suppressedCardUidsUntilTurnEnd: merged.length > 0 ? merged : undefined,
             };
         }
 

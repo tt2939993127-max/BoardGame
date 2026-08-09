@@ -17,6 +17,7 @@ import {
     getPendingBonusSettlementDice,
     getPlayerDieFace,
     getTokenStackLimit,
+    isInteractiveBonusDiceSettlement,
     isAttackSnapshotDieId,
 } from './rules';
 import { buildAfterRollConfirmedSignature } from './responseWindowGuards';
@@ -40,6 +41,18 @@ import {
     handleCardPlayed, handleCpChanged, handleCardReordered,
     handleDeckShuffled, handleAbilityReplaced,
 } from './reduceCards';
+import {
+    clearCurrentRollContext,
+    createBonusRollContextFromSettlement,
+    createMainRollContext,
+    getBonusSettlementContextDice,
+    getEvasionDamageBeforeRoll,
+    getEvasionRollSuccess,
+    markCurrentRollContextStatus,
+    replaceCurrentRollContext,
+    setCurrentRollContextDice,
+    isCurrentBonusRollSettlement,
+} from './rollContext';
 
 // ============================================================================
 // 事件处理器
@@ -49,6 +62,68 @@ type EventHandler<E extends DiceThroneEvent> = (
     state: DiceThroneCore,
     event: E
 ) => DiceThroneCore;
+
+const isLegacyMainRollContext = (state: DiceThroneCore): boolean => (
+    state.currentRollContext?.kind === 'offensive'
+    || state.currentRollContext?.kind === 'defensive'
+    || state.currentRollContext?.kind === 'targeting'
+);
+
+const syncLegacyMainDiceToCurrentRollContext = (state: DiceThroneCore): DiceThroneCore => {
+    if (!isLegacyMainRollContext(state)) return state;
+    const rollDiceCount = typeof state.rollDiceCount === 'number' ? state.rollDiceCount : state.dice.length;
+    return setCurrentRollContextDice(state, state.dice.slice(0, rollDiceCount));
+};
+
+const updateEvasionRollResult = (
+    state: DiceThroneCore,
+    value: number,
+): DiceThroneCore => {
+    const context = state.currentRollContext;
+    if (context?.kind !== 'evasion') return state;
+    const success = getEvasionRollSuccess(context, value);
+    const pendingDamage = state.pendingDamage
+        ? {
+            ...state.pendingDamage,
+            currentDamage: success ? 0 : getEvasionDamageBeforeRoll(context),
+            isFullyEvaded: success,
+            lastEvasionRoll: { value, success },
+        }
+        : state.pendingDamage;
+    return {
+        ...state,
+        pendingDamage,
+        currentRollContext: {
+            ...context,
+            dice: context.dice.map((die) => die.id === 0 ? { ...die, value } : die),
+        },
+    };
+};
+
+const updateCompareRollContextDie = (
+    state: DiceThroneCore,
+    dieId: number,
+    newValue: number,
+): DiceThroneCore => {
+    const context = state.currentRollContext;
+    if (context?.kind !== 'compare') return state;
+    if (!context.dice.some(die => die.id === dieId)) return state;
+    return setCurrentRollContextDice(
+        state,
+        context.dice.map((die) => {
+            if (die.id !== dieId) return die;
+            const face = die.ownerId
+                ? getPlayerDieFace(state, die.ownerId, newValue)
+                : getDieFaceByDefinition(die.definitionId, newValue);
+            return {
+                ...die,
+                value: newValue,
+                symbol: face,
+                symbols: face ? [face] : [],
+            };
+        }),
+    );
+};
 
 /**
  * 处理骰子结果事件
@@ -67,14 +142,40 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
         }
         return die;
     });
-    const pendingAttack = state.pendingAttack?.defenseAbilityId === 'duel'
-        && state.pendingAttack.attackerId
+    const duelAttackerId = state.pendingAttack?.defenseAbilityId === 'duel'
+        ? state.pendingAttack.attackerId
+        : undefined;
+    const duelAttackerValue = duelAttackerId
+        ? results[resultIndex] ?? results[results.length - 1]
+        : undefined;
+    const duelAttackerCharacterId = duelAttackerId
+        ? state.players[duelAttackerId]?.characterId
+        : undefined;
+    const duelAttackerDie = duelAttackerId
+        && duelAttackerValue !== undefined
+        && duelAttackerCharacterId
+        && duelAttackerCharacterId !== 'unselected'
         ? {
-            ...state.pendingAttack,
-            duelAttackerDieValue: state.pendingAttack.duelAttackerDieValue ?? results[resultIndex] ?? results[results.length - 1] ?? undefined,
-        }
-        : state.pendingAttack;
-    return { ...state, dice: newDice, pendingAttack, rollCount: state.rollCount + 1, rollConfirmed: false };
+            id: 1,
+            definitionId: `${duelAttackerCharacterId}-dice`,
+            value: duelAttackerValue,
+            symbol: getPlayerDieFace(state, duelAttackerId, duelAttackerValue),
+            symbols: getPlayerDieFace(state, duelAttackerId, duelAttackerValue)
+                ? [getPlayerDieFace(state, duelAttackerId, duelAttackerValue)!]
+                : [],
+            isKept: false,
+            ownerId: duelAttackerId,
+        } as DiceThroneCore['dice'][number]
+        : undefined;
+    const nextState = { ...state, dice: newDice, rollCount: state.rollCount + 1, rollConfirmed: false };
+    return replaceCurrentRollContext(
+        nextState,
+        createMainRollContext(nextState, {
+            phase: event.payload.phase,
+            ownerPlayerId: event.payload.rollerId,
+            dice: duelAttackerDie ? [...newDice.slice(0, state.rollDiceCount), duelAttackerDie] : undefined,
+        }),
+    );
 };
 
 /**
@@ -146,10 +247,11 @@ const handleDieLockToggled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_L
     event
 ) => {
     const { dieId, isKept } = event.payload;
-    return {
+    const nextState = {
         ...state,
         dice: state.dice.map(d => d.id === dieId ? { ...d, isKept } : d),
     };
+    return syncLegacyMainDiceToCurrentRollContext(nextState);
 };
 
 /**
@@ -157,11 +259,11 @@ const handleDieLockToggled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_L
  */
 const handleRollConfirmed: EventHandler<Extract<DiceThroneEvent, { type: 'ROLL_CONFIRMED' }>> = (
     state
-) => ({
+) => markCurrentRollContextStatus({
     ...state,
     rollConfirmed: true,
     rollConfirmedSequence: (state.rollConfirmedSequence ?? 0) + 1,
-});
+}, 'settling');
 
 /**
  * 处理房主开始事件
@@ -247,11 +349,20 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     const isDisplayOnly = !!(event.payload as { displayOnly?: boolean })?.displayOnly;
     const isAttackBonusSettlement = state.pendingBonusDiceSettlement?.resolutionMode === 'attackBonus';
     const isNoDamageSettlement = state.pendingBonusDiceSettlement?.resolutionMode === 'none';
+    const isInlineRollDieSettlement = state.pendingBonusDiceSettlement?.rollDieResolution?.bonusDamageMode === 'inline';
     // 仅“独立伤害型”奖励骰才标记 bonusDiceResolved。
-    const pendingAttack = !isDisplayOnly && !isAttackBonusSettlement && !isNoDamageSettlement && state.pendingAttack
-        ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'readyToResolve')
-        : state.pendingAttack;
-    return { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
+    const pendingAttack = isInlineRollDieSettlement && state.pendingAttack
+        ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'withDamageChoicePending')
+        : !isDisplayOnly && !isAttackBonusSettlement && !isNoDamageSettlement && state.pendingAttack
+            ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'readyToResolve')
+            : state.pendingAttack;
+    const currentBonusContextId = state.pendingBonusDiceSettlement
+        ? `bonus:${state.pendingBonusDiceSettlement.id}`
+        : undefined;
+    const nextState = { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
+    return currentBonusContextId
+        ? clearCurrentRollContext(nextState, currentBonusContextId)
+        : nextState;
 };
 
 /**
@@ -864,13 +975,20 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
     event
 ) => {
     const { dieId, newValue, ownerId, target } = event.payload;
-    const targetsPendingBonusDie = target === 'pendingBonusDie'
+    if (target === 'evasionDie') {
+        return updateEvasionRollResult(state, newValue);
+    }
+    if ((target === undefined || target === 'activeDie') && state.currentRollContext?.kind === 'compare') {
+        return updateCompareRollContextDie(state, dieId, newValue);
+    }
+    const targetsPendingBonusDie = isCurrentBonusRollSettlement(state)
+        && (target === 'pendingBonusDie'
         || (
             target === undefined
             && state.pendingBonusDiceSettlement?.allowDiceModification === true
             && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId)
             && !state.dice.some(die => die.id === dieId)
-        );
+        ));
     const pendingBonusDiceSettlement = targetsPendingBonusDie && state.pendingBonusDiceSettlement?.allowDiceModification
         ? {
             ...state.pendingBonusDiceSettlement,
@@ -899,19 +1017,6 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
             }),
         }
         : state.pendingBonusDiceSettlement;
-    if (target !== 'pendingBonusDie'
-        && state.pendingAttack?.defenseAbilityId === 'duel'
-        && ownerId === state.pendingAttack.attackerId
-        && dieId === 1) {
-        return {
-            ...state,
-            pendingBonusDiceSettlement,
-            pendingAttack: {
-                ...state.pendingAttack,
-                duelAttackerDieValue: newValue,
-            },
-        };
-    }
     const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
     const pendingAttack = state.pendingAttack
         && target !== 'pendingBonusDie'
@@ -940,8 +1045,16 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
         })()
         : state.pendingAttack;
     const targetsCoreDie = target === undefined || target === 'activeDie';
-    const didDieValueChange = targetsCoreDie && state.dice.some(d => d.id === dieId && d.value !== newValue);
-    const newDice = targetsCoreDie
+    const isCurrentContextOnlyDie = Boolean(
+        state.currentRollContext
+        && targetsCoreDie
+        && state.currentRollContext.dice.some(die => die.id === dieId)
+        && !state.dice.slice(0, state.rollDiceCount).some(die => die.id === dieId),
+    );
+    const didDieValueChange = (targetsCoreDie && state.dice.some(d => d.id === dieId && d.value !== newValue))
+        || (isCurrentContextOnlyDie
+            && state.currentRollContext!.dice.some(die => die.id === dieId && die.value !== newValue));
+    const newDice = targetsCoreDie && !isCurrentContextOnlyDie
         ? state.dice.map(d => {
             if (d.id !== dieId) return d;
             const face = getDieFaceByDefinition(d.definitionId, newValue);
@@ -951,7 +1064,28 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
 
     const rollConfirmed = (state.rollConfirmed && didDieValueChange) ? false : state.rollConfirmed;
 
-    return { ...state, dice: newDice, rollConfirmed, pendingBonusDiceSettlement, pendingAttack };
+    const contextDice = state.currentRollContext && (target === undefined || target === 'activeDie')
+        ? state.currentRollContext.dice.map(die => {
+            if (die.id !== dieId) return die;
+            const face = die.ownerId
+                ? getPlayerDieFace(state, die.ownerId, newValue)
+                : getDieFaceByDefinition(die.definitionId, newValue);
+            return { ...die, value: newValue, symbol: face, symbols: face ? [face] : [] };
+        })
+        : undefined;
+    const nextState = {
+        ...state,
+        dice: newDice,
+        rollConfirmed,
+        pendingBonusDiceSettlement,
+        pendingAttack,
+        ...(contextDice ? { currentRollContext: { ...state.currentRollContext!, dice: contextDice } } : {}),
+    };
+    if (targetsPendingBonusDie && pendingBonusDiceSettlement) {
+        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(pendingBonusDiceSettlement));
+    }
+    if (contextDice) return nextState;
+    return syncLegacyMainDiceToCurrentRollContext(nextState);
 };
 
 /**
@@ -965,20 +1099,65 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
     state,
     event
 ) => {
-    const { dieId, newValue, ownerId } = event.payload;
-    if (state.pendingAttack?.defenseAbilityId === 'duel'
-        && ownerId === state.pendingAttack.attackerId
-        && dieId === 1) {
-        return {
-            ...state,
-            pendingAttack: {
-                ...state.pendingAttack,
-                duelAttackerDieValue: newValue,
-            },
-        };
+    const { dieId, newValue, ownerId, target } = event.payload;
+    if (target === 'evasionDie') {
+        return updateEvasionRollResult(state, newValue);
     }
-    const didDieValueChange = state.dice.some(d => d.id === dieId && d.value !== newValue);
-    const newDice = state.dice.map(d => {
+    if ((target === undefined || target === 'activeDie') && state.currentRollContext?.kind === 'compare') {
+        return updateCompareRollContextDie(state, dieId, newValue);
+    }
+    const targetsPendingBonusDie = isCurrentBonusRollSettlement(state)
+        && (target === 'pendingBonusDie'
+        || (
+            target === undefined
+            && state.pendingBonusDiceSettlement?.allowDiceModification === true
+            && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId)
+            && !state.dice.some(die => die.id === dieId)
+        ));
+    if (targetsPendingBonusDie && state.pendingBonusDiceSettlement?.allowDiceModification) {
+        const pendingBonusDiceSettlement = {
+            ...state.pendingBonusDiceSettlement,
+            dice: getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).map(die => {
+                if (die.index !== dieId) return die;
+                const isPowderKegDie = die.effectKey?.startsWith('bonusDie.effect.powderKeg.') === true;
+                const isBlindedDie = die.effectKey?.startsWith('bonusDie.effect.blinded.') === true;
+                const face = isPowderKegDie
+                    ? String(newValue)
+                    : (getPlayerDieFace(state, state.pendingBonusDiceSettlement!.attackerId, newValue) ?? String(newValue));
+                return {
+                    ...die,
+                    value: newValue,
+                    face,
+                    effectKey: isPowderKegDie
+                        ? `bonusDie.effect.powderKeg.${newValue}`
+                        : isBlindedDie
+                            ? (newValue <= 2 ? 'bonusDie.effect.blinded.miss' : 'bonusDie.effect.blinded.hit')
+                            : die.effectKey,
+                    effectParams: {
+                        ...die.effectParams,
+                        value: newValue,
+                        ...(die.effectKey === 'bonusDie.effect.gainCp' ? { cp: Math.ceil(newValue / 2) } : {}),
+                    },
+                };
+            }),
+        };
+        return setCurrentRollContextDice(
+            { ...state, pendingBonusDiceSettlement },
+            getBonusSettlementContextDice(pendingBonusDiceSettlement),
+        );
+    }
+    const isCurrentContextOnlyDie = Boolean(
+        state.currentRollContext
+        && (target === undefined || target === 'activeDie')
+        && state.currentRollContext.dice.some(die => die.id === dieId)
+        && !state.dice.slice(0, state.rollDiceCount).some(die => die.id === dieId),
+    );
+    const didDieValueChange = state.dice.some(d => d.id === dieId && d.value !== newValue)
+        || (isCurrentContextOnlyDie
+            && state.currentRollContext!.dice.some(die => die.id === dieId && die.value !== newValue));
+    const newDice = isCurrentContextOnlyDie
+        ? state.dice
+        : state.dice.map(d => {
         if (d.id !== dieId) return d;
         const face = getDieFaceByDefinition(d.definitionId, newValue);
         return { ...d, value: newValue, symbol: face, symbols: face ? [face] : [] };
@@ -986,7 +1165,18 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
 
     const rollConfirmed = (state.rollConfirmed && didDieValueChange) ? false : state.rollConfirmed;
 
-    return { ...state, dice: newDice, rollConfirmed };
+    const contextDice = state.currentRollContext && (target === undefined || target === 'activeDie')
+        ? state.currentRollContext.dice.map(die => {
+            if (die.id !== dieId) return die;
+            const face = die.ownerId
+                ? getPlayerDieFace(state, die.ownerId, newValue)
+                : getDieFaceByDefinition(die.definitionId, newValue);
+            return { ...die, value: newValue, symbol: face, symbols: face ? [face] : [] };
+        })
+        : undefined;
+    return contextDice
+        ? { ...state, dice: newDice, rollConfirmed, currentRollContext: { ...state.currentRollContext!, dice: contextDice } }
+        : syncLegacyMainDiceToCurrentRollContext({ ...state, dice: newDice, rollConfirmed });
 };
 
 /**
@@ -1068,7 +1258,41 @@ const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 
 const handleBonusDiceRerollRequested: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_REROLL_REQUESTED' }>> = (
     state,
     event
-) => ({ ...state, pendingBonusDiceSettlement: event.payload.settlement });
+) => {
+    const nextState = { ...state, pendingBonusDiceSettlement: event.payload.settlement };
+    if (
+        isInteractiveBonusDiceSettlement(event.payload.settlement)
+        && getBonusSettlementContextDice(event.payload.settlement).length > 0
+    ) {
+        return replaceCurrentRollContext(
+            nextState,
+            createBonusRollContextFromSettlement(nextState, event.payload.settlement),
+        );
+    }
+    return clearCurrentRollContext(nextState);
+};
+
+const handleCompareRollRequested: EventHandler<Extract<DiceThroneEvent, { type: 'COMPARE_ROLL_REQUESTED' }>> = (
+    state,
+    event
+) => replaceCurrentRollContext(state, event.payload.context);
+
+const handleCompareRollSettled: EventHandler<Extract<DiceThroneEvent, { type: 'COMPARE_ROLL_SETTLED' }>> = (
+    state,
+    event
+) => clearCurrentRollContext(state, event.payload.contextId);
+
+const handleRollContextRestored: EventHandler<Extract<DiceThroneEvent, { type: 'ROLL_CONTEXT_RESTORED' }>> = (
+    _state,
+    event,
+) => {
+    if (event.payload.restoreState.currentRollContext?.id !== event.payload.coveredRollId) {
+        throw new Error(
+            `[DiceThrone] ROLL_CONTEXT_RESTORED 破坏骰区恢复契约: expected=${event.payload.coveredRollId}`,
+        );
+    }
+    return event.payload.restoreState;
+};
 
 /**
  * 处理奖励骰重掷事件
@@ -1105,11 +1329,18 @@ const handleBonusDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     }
 
     // UI 展示由 EventStream 消费（事件 payload 已包含展示字段）
-    return {
+    const nextState = {
         ...state,
         players,
         pendingBonusDiceSettlement,
     };
+    if (pendingBonusDiceSettlement && isCurrentBonusRollSettlement(
+        { ...nextState, currentRollContext: state.currentRollContext },
+        pendingBonusDiceSettlement,
+    )) {
+        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(pendingBonusDiceSettlement));
+    }
+    return nextState;
 };
 
 /**
@@ -1301,6 +1532,12 @@ export const reduce = (
             return handleAbilityReselectionRequired(state, event);
         case 'BONUS_DICE_REROLL_REQUESTED':
             return handleBonusDiceRerollRequested(state, event);
+        case 'COMPARE_ROLL_REQUESTED':
+            return handleCompareRollRequested(state, event);
+        case 'COMPARE_ROLL_SETTLED':
+            return handleCompareRollSettled(state, event);
+        case 'ROLL_CONTEXT_RESTORED':
+            return handleRollContextRestored(state, event);
         case 'BONUS_DIE_REROLLED':
             return handleBonusDieRerolled(state, event);
         case 'BONUS_DICE_SETTLED':
@@ -1338,7 +1575,7 @@ export const reduce = (
 
                 if (to === 'offensiveRoll') {
                     const playerDice = createPlayerDice(state, activePlayerId);
-                    return {
+                    return clearCurrentRollContext({
                         ...state,
                         activePlayerId,
                         rollCount: 0,
@@ -1350,13 +1587,13 @@ export const reduce = (
                             ? { ...state.extraAttackInProgress, phaseEntered: true }
                             : state.extraAttackInProgress,
                         dice: resetDiceArray(playerDice ?? state.dice, 5),
-                    };
+                    });
                 }
 
                 if (to === 'defensiveRoll') {
                     const defenderId = state.pendingAttack?.defenderId ?? activePlayerId;
                     const playerDice = createPlayerDice(state, defenderId);
-                    return {
+                    return clearCurrentRollContext({
                         ...state,
                         activePlayerId,
                         rollCount: 0,
@@ -1364,12 +1601,12 @@ export const reduce = (
                         rollConfirmed: false,
                         rollDiceCount: 0,
                         dice: resetDiceArray(playerDice ?? state.dice, 0),
-                    };
+                    });
                 }
 
                 if (to === 'targetingRoll') {
                     const playerDice = createPlayerDice(state, activePlayerId);
-                    return {
+                    return clearCurrentRollContext({
                         ...state,
                         activePlayerId,
                         rollCount: 0,
@@ -1377,7 +1614,7 @@ export const reduce = (
                         rollDiceCount: 1,
                         rollConfirmed: false,
                         dice: resetDiceArray(playerDice ?? state.dice, 1),
-                    };
+                    });
                 }
 
                 if (to === 'main2') {
@@ -1394,15 +1631,15 @@ export const reduce = (
                         };
                     }
                     
-                    return {
+                    return clearCurrentRollContext({
                         ...state,
                         activePlayerId,
                         players,
                         extraAttackInProgress: state.extraAttackInProgress ? undefined : state.extraAttackInProgress,
-                    };
+                    });
                 }
 
-                return { ...state, activePlayerId };
+                return clearCurrentRollContext({ ...state, activePlayerId });
             }
 
             // 其他未知事件类型（包括系统层事件）直接返回原状态

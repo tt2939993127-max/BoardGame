@@ -419,9 +419,10 @@ export function createPromptProgram<TContext, TState, TEvent>(params: {
             matchState: resumeResult.matchState ?? state,
         };
         if (nextProgram) {
+            const continuationState = prioritizeContinuationPromptState(result.matchState ?? state);
             result = mergeRuntimeResults(
                 result,
-                executeAbilityProgram(nextProgram, nextContext),
+                executeAbilityProgram(nextProgram, withRuntimeMatchState(nextContext, continuationState)),
             );
         }
         return {
@@ -577,6 +578,37 @@ function mergeRuntimeResults<TState, TEvent>(
             : left.suspended
                 ? { suspended: true, continuationId: left.continuationId }
                 : {}),
+    };
+}
+
+function withRuntimeMatchState<TContext, TState>(
+    context: TContext,
+    matchState: MatchState<TState>,
+): TContext {
+    if (!context || typeof context !== 'object' || Array.isArray(context)) {
+        return context;
+    }
+    return {
+        ...(context as Record<string, unknown>),
+        matchState,
+    } as TContext;
+}
+
+function prioritizeContinuationPromptState<TState>(
+    state: MatchState<TState>,
+): MatchState<TState> {
+    const current = state.sys.interaction?.current;
+    if (!current) return state;
+    return {
+        ...state,
+        sys: {
+            ...state.sys,
+            interaction: {
+                ...state.sys.interaction,
+                current: undefined,
+                queue: [current, ...(state.sys.interaction?.queue ?? [])],
+            },
+        },
     };
 }
 

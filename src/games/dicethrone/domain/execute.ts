@@ -61,6 +61,7 @@ import {
     hasAfterRollConfirmedWindowBeenHandled,
     buildAfterRollConfirmedSignature,
 } from './responseWindowGuards';
+import { buildCompareRollChoiceEvent, findCurrentRollDie, getCurrentRollOwnerId, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
 
 // ============================================================================
 // 辅助函数
@@ -293,7 +294,7 @@ export function execute(
             
             const event: DiceRolledEvent = {
                 type: 'DICE_ROLLED',
-                payload: { results, rollerId },
+                payload: { results, rollerId, phase },
                 sourceCommandType: command.type,
                 timestamp,
             };
@@ -617,6 +618,43 @@ export function execute(
             break;
         }
 
+        case 'CONFIRM_COMPARE_ROLL': {
+            const currentRollContext = resolveCurrentRollContext(state, phase);
+            if (currentRollContext?.kind === 'compare') {
+                const choiceEvent = buildCompareRollChoiceEvent(currentRollContext, timestamp, command.type);
+                if (choiceEvent) {
+                    events.push(choiceEvent);
+                    events.push({
+                        type: 'COMPARE_ROLL_SETTLED',
+                        payload: { contextId: currentRollContext.id },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + 1,
+                    } as DiceThroneEvent);
+                }
+            }
+            break;
+        }
+
+        case 'RESTORE_COVERED_ROLL': {
+            const recovery = state.rollContextRecovery;
+            const currentContext = state.currentRollContext;
+            if (
+                recovery
+                && currentContext?.coveredPreviousRollRef?.id === recovery.coveredRollRef.id
+            ) {
+                events.push({
+                    type: 'ROLL_CONTEXT_RESTORED',
+                    payload: {
+                        coveredRollId: recovery.coveredRollRef.id,
+                        restoreState: recovery.restoreState,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
+            break;
+        }
+
         case 'DRAW_CARD':
         case 'DISCARD_CARD':
         case 'SELL_CARD':
@@ -689,12 +727,12 @@ export function execute(
 
         case 'MODIFY_DIE': {
             const { dieId, newValue } = command.payload as { dieId: number; newValue: number };
-            const die = state.dice.find(d => d.id === dieId);
-            const duelAttackerDieActive = state.pendingAttack?.defenseAbilityId === 'duel'
-                && phase === 'defensiveRoll'
-                && dieId === 1
-                && state.pendingAttack.attackerId;
+            const currentRollContext = resolveCurrentRollContext(state, phase);
+            const currentRollDie = findCurrentRollDie(state, dieId, phase);
+            const evasionDieActive = currentRollContext?.kind === 'evasion' && currentRollDie !== undefined;
+            const die = currentRollDie?.die;
             const pendingBonusDie = state.pendingBonusDiceSettlement?.allowDiceModification === true
+                && isCurrentBonusRollSettlement(state)
                 ? getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).find(d => d.index === dieId)
                 : undefined;
             const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
@@ -704,11 +742,11 @@ export function execute(
                 && attackSnapshotDieIndex < (state.pendingAttack.attackDiceValues?.length ?? 0)
                 ? state.pendingAttack.attackDiceValues?.[attackSnapshotDieIndex]
                 : undefined;
-            if (die || pendingBonusDie || attackSnapshotDieValue !== undefined || duelAttackerDieActive) {
-                const dieTarget = pendingBonusDie
-                    ? 'pendingBonusDie'
-                    : duelAttackerDieActive
-                        ? 'duelAttackerDie'
+            if (die || pendingBonusDie || attackSnapshotDieValue !== undefined) {
+                const dieTarget = evasionDieActive
+                    ? 'evasionDie'
+                    : pendingBonusDie
+                        ? 'pendingBonusDie'
                         : attackSnapshotDieValue !== undefined
                             ? 'attackSnapshot'
                             : 'activeDie';
@@ -716,13 +754,13 @@ export function execute(
                     type: 'DIE_MODIFIED',
                     payload: {
                         dieId,
-                        oldValue: duelAttackerDieActive
-                            ? state.pendingAttack?.duelAttackerDieValue ?? newValue
+                        oldValue: evasionDieActive
+                            ? die?.value ?? newValue
                             : pendingBonusDie?.value ?? die?.value ?? attackSnapshotDieValue ?? newValue,
                         newValue,
                         playerId: command.playerId,
-                        ownerId: duelAttackerDieActive
-                            ? state.pendingAttack?.attackerId
+                        ownerId: evasionDieActive
+                            ? currentRollContext?.ownerPlayerId
                             : pendingBonusDie
                                 ? state.pendingBonusDiceSettlement?.attackerId
                                 : die?.ownerId ?? (attackSnapshotDieValue !== undefined ? state.pendingAttack?.attackerId : undefined),
@@ -760,23 +798,26 @@ export function execute(
 
         case 'REROLL_DIE': {
             const { dieId } = command.payload as { dieId: number };
-            const die = state.dice.find(d => d.id === dieId);
+            const currentRollContext = resolveCurrentRollContext(state, phase);
+            const currentDie = findCurrentRollDie(state, dieId, phase);
+            const die = currentDie?.die;
             const newValue = random.d(6);
             const rollerId = getRollerId(state, phase);
-            const duelAttackerDieActive = state.pendingAttack?.defenseAbilityId === 'duel'
-                && phase === 'defensiveRoll'
-                && dieId === 1
-                && state.pendingAttack.attackerId;
             const event: DieRerolledEvent = {
                 type: 'DIE_REROLLED',
                 payload: {
                     dieId,
-                    oldValue: duelAttackerDieActive
-                        ? state.pendingAttack?.duelAttackerDieValue ?? newValue
-                        : die?.value ?? newValue,
+                    oldValue: die?.value ?? newValue,
                     newValue,
                     playerId: command.playerId,
-                    ownerId: duelAttackerDieActive ? state.pendingAttack?.attackerId : die?.ownerId ?? rollerId,
+                    ownerId: die?.ownerId ?? rollerId,
+                    target: currentRollContext?.kind === 'evasion'
+                        ? 'evasionDie'
+                        : currentRollContext?.kind === 'bonus'
+                            ? 'pendingBonusDie'
+                            : currentRollContext?.kind === 'compare'
+                                ? 'activeDie'
+                                : undefined,
                 },
                 sourceCommandType: command.type,
                 timestamp,
@@ -1194,9 +1235,8 @@ export function execute(
             if (!isPassiveActionUsable(state, command.playerId, passiveId, actionIndex, phase)) break;
             if (action.type === 'rerollDie') {
                 if (!Number.isInteger(targetDieId)) break;
-                const dieIndex = state.dice.findIndex(d => d.id === targetDieId);
-                const die = dieIndex >= 0 ? state.dice[dieIndex] : undefined;
-                if (!die || dieIndex >= state.rollDiceCount || state.rollCount === 0 || die.isKept) break;
+                const currentDie = findCurrentRollDie(state, targetDieId, phase);
+                if (!currentDie || currentDie.die.isKept) break;
             }
 
             const player = state.players[command.playerId];
@@ -1237,8 +1277,10 @@ export function execute(
 
             // 执行动作
             if (action.type === 'rerollDie') {
-                const die = state.dice.find(d => d.id === targetDieId);
-                if (!die) break;
+                const currentDie = findCurrentRollDie(state, targetDieId, phase);
+                if (!currentDie) break;
+                const currentRollContext = resolveCurrentRollContext(state, phase);
+                const die = currentDie.die;
                 const newValue = random.d(6);
                 events.push({
                     type: 'DIE_REROLLED',
@@ -1247,6 +1289,12 @@ export function execute(
                         oldValue: die?.value ?? newValue,
                         newValue,
                         playerId: command.playerId,
+                        ownerId: die.ownerId ?? getCurrentRollOwnerId(state, phase),
+                        target: currentRollContext?.kind === 'evasion'
+                            ? 'evasionDie'
+                            : currentRollContext?.kind === 'bonus'
+                                ? 'pendingBonusDie'
+                                : undefined,
                     },
                     sourceCommandType: command.type,
                     timestamp: timestamp + 1,

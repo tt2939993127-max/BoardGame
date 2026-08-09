@@ -9,12 +9,15 @@ import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
 import { applyEvents, getPendingAttackExpectedDamage } from './utils';
 import { reduce } from './reducer';
+import { isInteractiveBonusDiceSettlement } from './rules';
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
+    event.type === 'CHOICE_REQUESTED'
+    || event.type === 'COMPARE_ROLL_REQUESTED'
+    || event.type === 'INTERACTION_REQUESTED';
 
 const isInteractiveBonusDiceRerollEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'BONUS_DICE_REROLL_REQUESTED' && event.payload.settlement?.displayOnly !== true;
+    event.type === 'BONUS_DICE_REROLL_REQUESTED' && isInteractiveBonusDiceSettlement(event.payload.settlement);
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
@@ -184,7 +187,7 @@ export const resolveAttack = (
     const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(stateAfterPreDefense, random, timestamp);
     const bonusDamage = stateAfterDefense.pendingAttack?.bonusDamage ?? pending.bonusDamage ?? 0;
     events.push(...defenseEvents);
-    const hasDefenseChoice = defenseEvents.some(e => e.type === 'CHOICE_REQUESTED');
+    const hasDefenseChoice = defenseEvents.some(isBlockingInteractionEvent);
     const hasDefenseTokenResponse = defenseEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
     const hasDefenseInteractiveBonusDiceReroll = defenseEvents.some(isInteractiveBonusDiceRerollEvent);
     if (hasDefenseChoice || hasDefenseTokenResponse || hasDefenseInteractiveBonusDiceReroll) {

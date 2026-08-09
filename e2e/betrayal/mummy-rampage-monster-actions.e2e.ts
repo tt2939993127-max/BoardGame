@@ -530,6 +530,49 @@ const switchRoomMapToFloor = async (page: Page, floor: RoomFloor): Promise<void>
     await expect(page.getByTestId(`betrayal-room-floor-${floor}`)).toBeVisible();
 };
 
+const switchRoomMapAwayFromFloor = async (
+    page: Page,
+    currentFloor: RoomFloor,
+): Promise<RoomFloor | null> => {
+    for (const candidateFloor of (['upper', 'ground', 'basement'] as RoomFloor[])) {
+        if (candidateFloor === currentFloor) {
+            continue;
+        }
+        try {
+            await switchRoomMapToFloor(page, candidateFloor);
+            if (await page.getByTestId(`betrayal-room-floor-${candidateFloor}`).isVisible({ timeout: 500 }).catch(() => false)) {
+                return candidateFloor;
+            }
+        } catch {
+            // 该夹具没有把这个楼层纳入当前地图切换集合，继续尝试其它楼层。
+        }
+    }
+    return null;
+};
+
+const expectMonsterMoveActionFocusesMummy = async (
+    page: Page,
+    fixture: ReturnType<typeof createMummyTeleportReadyCore>,
+) => {
+    const offFloor = await switchRoomMapAwayFromFloor(page, fixture.mummyRoomFloor);
+    expect(offFloor).not.toBeNull();
+    await expect(page.getByTestId(`betrayal-room-floor-${fixture.mummyRoomFloor}`)).toHaveCount(0);
+    await expect(page.getByTestId(`betrayal-room-monster-${fixture.mummyRoomId}-${MUMMY_MONSTER_ID}`)).toHaveCount(0);
+
+    const monsterMoveAction = page.getByTestId('betrayal-action-monsterMove');
+    await expect(monsterMoveAction).toBeVisible();
+    await expect(monsterMoveAction).toContainText('移动木乃伊');
+    await expect(page.getByTestId('betrayal-action-move')).toHaveCount(0);
+    await expect(page.getByTestId('betrayal-action-explore')).toHaveCount(0);
+    await monsterMoveAction.click();
+
+    await expect(page.getByTestId(`betrayal-room-floor-${fixture.mummyRoomFloor}`)).toBeVisible();
+    const mummyToken = page.getByTestId(`betrayal-room-monster-${fixture.mummyRoomId}-${MUMMY_MONSTER_ID}`);
+    await expect(mummyToken).toBeVisible();
+    await expect(mummyToken).toHaveAttribute('data-direct-target', 'true');
+    return mummyToken;
+};
+
 type MummyActionState = {
     currentPlayer?: string;
     phase?: string;
@@ -760,9 +803,7 @@ test.describe('山屋惊魂木乃伊横行怪物行动真实入口', () => {
         await expect(monsterMoveAction).toContainText('移动木乃伊');
         await expect(page.getByTestId('betrayal-action-move')).toHaveCount(0);
         await expect(page.getByTestId('betrayal-action-explore')).toHaveCount(0);
-        await monsterMoveAction.click();
-        const mummyToken = page.getByTestId(`betrayal-room-monster-${fixture.mummyRoomId}-${MUMMY_MONSTER_ID}`);
-        await expect(mummyToken).toHaveAttribute('data-direct-target', 'true');
+        const mummyToken = await expectMonsterMoveActionFocusesMummy(page, fixture);
         await mummyToken.click();
         await expect(page.getByTestId('betrayal-action-cue')).toContainText('只限已发现房间');
         await expect(page.getByTestId('betrayal-turn-hint')).toContainText('不能探索新房间');
@@ -841,9 +882,7 @@ test.describe('山屋惊魂木乃伊横行怪物行动真实入口', () => {
         await expect(monsterMoveAction).toContainText('移动木乃伊');
         await expect(page.getByTestId('betrayal-action-move')).toHaveCount(0);
         await expect(page.getByTestId('betrayal-action-explore')).toHaveCount(0);
-        await monsterMoveAction.click();
-        const mummyToken = page.getByTestId(`betrayal-room-monster-${fixture.mummyRoomId}-${MUMMY_MONSTER_ID}`);
-        await expect(mummyToken).toHaveAttribute('data-direct-target', 'true');
+        const mummyToken = await expectMonsterMoveActionFocusesMummy(page, fixture);
         await mummyToken.click();
         await expect(page.getByTestId('betrayal-action-cue')).toContainText('只限已发现房间');
         await expect(page.getByTestId('betrayal-turn-hint')).toContainText('不能探索新房间');

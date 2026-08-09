@@ -8,6 +8,7 @@ import type { CardPreviewRef } from '../../../core';
 import type { DtResponseWindowType } from './core-types';
 import type {
     DieFace,
+    DiceThroneRollContext,
     SelectableCharacterId,
     InteractionDescriptor,
     PendingDefenderChoice,
@@ -16,6 +17,7 @@ import type {
     PendingBonusDiceSettlement,
     BonusDieInfo,
     PendingSeatSwapRequest,
+    TurnPhase,
 } from './core-types';
 import type { AbilityDef } from './combat';
 
@@ -115,6 +117,8 @@ export const DT_EVENTS = defineEvents({
   DAMAGE_PREVENTED: { audio: 'immediate', sound: DAMAGE_PREVENT_KEY },
   
   BONUS_DICE_REROLL_REQUESTED: { audio: 'immediate', sound: RESPONSE_WINDOW_OPEN_KEY },
+  COMPARE_ROLL_REQUESTED: 'silent',
+  COMPARE_ROLL_SETTLED: 'silent',
   BONUS_DICE_SETTLED: { audio: 'immediate', sound: BONUS_DICE_SETTLE_KEY },
   EXTRA_ATTACK_TRIGGERED: { audio: 'immediate', sound: EXTRA_ATTACK_KEY },
   ABILITY_RESELECTION_REQUIRED: { audio: 'immediate', sound: ABILITY_RESELECT_KEY },
@@ -152,6 +156,8 @@ export interface DiceRolledEvent extends GameEvent<'DICE_ROLLED'> {
     payload: {
         results: number[];
         rollerId: PlayerId;
+        /** 当前投掷所属阶段；用于把 DICE_ROLLED 同步进单槽当前骰区。 */
+        phase?: TurnPhase;
     };
 }
 
@@ -680,6 +686,28 @@ export interface ChoiceResolvedEvent extends GameEvent<'CHOICE_RESOLVED'> {
     };
 }
 
+/** 对掷/比骰当前骰区创建事件 */
+export interface CompareRollRequestedEvent extends GameEvent<'COMPARE_ROLL_REQUESTED'> {
+    payload: {
+        context: DiceThroneRollContext;
+    };
+}
+
+/** 对掷/比骰当前骰区确认收口事件 */
+export interface CompareRollSettledEvent extends GameEvent<'COMPARE_ROLL_SETTLED'> {
+    payload: {
+        contextId: string;
+    };
+}
+
+/** 恢复覆盖前骰区步骤事件；payload 中的状态来自当前领域状态，不接受客户端输入。 */
+export interface RollContextRestoredEvent extends GameEvent<'ROLL_CONTEXT_RESTORED'> {
+    payload: {
+        coveredRollId: string;
+        restoreState: Omit<DiceThroneCore, 'rollContextRecovery'>;
+    };
+}
+
 export interface DefenderSelectionRequestedEvent extends GameEvent<'DEFENDER_SELECTION_REQUESTED'> {
     payload: PendingDefenderChoice;
 }
@@ -742,7 +770,7 @@ export interface DieModifiedEvent extends GameEvent<'DIE_MODIFIED'> {
         playerId: PlayerId;
         sourceCardId?: string;
         ownerId?: PlayerId;
-        target?: 'activeDie' | 'pendingBonusDie' | 'attackSnapshot' | 'duelAttackerDie';
+        target?: 'activeDie' | 'pendingBonusDie' | 'evasionDie' | 'attackSnapshot';
     };
 }
 
@@ -755,6 +783,7 @@ export interface DieRerolledEvent extends GameEvent<'DIE_REROLLED'> {
         playerId: PlayerId;
         sourceCardId?: string;
         ownerId?: PlayerId;
+        target?: 'activeDie' | 'pendingBonusDie' | 'evasionDie' | 'attackSnapshot';
     };
 }
 
@@ -911,6 +940,10 @@ export interface BonusDiceSettledEvent extends GameEvent<'BONUS_DICE_SETTLED'> {
         targetId: PlayerId;
         /** 来源技能 ID */
         sourceAbilityId: string;
+        /** 纯展示回放；若 allowDiceModification 为 true，则仍表示刚收口的可交互当前骰。 */
+        displayOnly?: boolean;
+        /** 该奖励骰是否曾允许规则改骰/重掷，用于系统层释放交互。 */
+        allowDiceModification?: boolean;
     };
 }
 
@@ -989,6 +1022,9 @@ export type DiceThroneEvent =
     | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
+    | CompareRollRequestedEvent
+    | CompareRollSettledEvent
+    | RollContextRestoredEvent
     | DefenderSelectionRequestedEvent
     | DefenderSelectionResolvedEvent
     | TurnChangedEvent

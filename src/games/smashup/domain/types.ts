@@ -331,6 +331,8 @@ export interface BaseCardDef {
     replaceOnSetup?: boolean;
     /** 显式允许多个泰坦共存（如未来 Kaiju Island） */
     allowMultipleTitans?: boolean;
+    /** Munchkin 基地翻开时需要从公共怪物牌堆补到基地下方的怪物数量。 */
+    monsterCount?: number;
 }
 
 // ============================================================================
@@ -433,6 +435,15 @@ export interface BuriedCardOnBase {
     buriedFrom: 'hand' | 'discard' | 'play' | 'deck';
 }
 
+/** Munchkin 公共怪物在基地下方的运行时实例。 */
+export interface MonsterOnBase {
+    uid: string;
+    defId: string;
+    /** 被玩家临时/永久控制后，力量会算入该玩家；未受控时增加基地临界点。 */
+    controllerId?: PlayerId;
+    metadata?: Record<string, unknown>;
+}
+
 /** 场上的基地 */
 export interface BaseInPlay {
     /** 运行时基地实例身份；槽位编号只表示当前位置，不表示长期身份。 */
@@ -441,6 +452,8 @@ export interface BaseInPlay {
     minions: MinionOnBase[];
     /** 持续行动卡列表 */
     ongoingActions: OngoingActionOnBase[];
+    /** Munchkin 公共怪物，UI 显示在基地下方，不属于普通随从/行动卡区域。 */
+    monsters?: MonsterOnBase[];
     /** 埋葬卡列表（面朝下） */
     buriedCards?: BuriedCardOnBase[];
     /** 额外元数据（用于临时基地级状态，如“我们上，你们下”） */
@@ -813,6 +826,16 @@ export interface ActiveDuel {
     destroyReason?: string;
 }
 
+export interface PendingMunchkinTreasureReward {
+    baseIndex: number;
+    baseDefId: string;
+    baseInstanceId?: string;
+    treasureCards: Array<{ uid: string; defId: string; type: 'minion' | 'action' }>;
+    eligiblePlayerIds: PlayerId[];
+    nextRecipientIndex: number;
+    reason: string;
+}
+
 export interface SmashUpCore {
     players: Record<PlayerId, PlayerState>;
     /** 固定座位顺序（不随先手/轮转变化），用于 2v2 队伍推导。 */
@@ -863,6 +886,16 @@ export interface SmashUpCore {
     factionSelection?: FactionSelectionState;
     /** 疯狂牌库（克苏鲁扩展，defId 列表） */
     madnessDeck?: string[];
+    /** Munchkin 公共怪物牌库（defId 列表，索引 0 为牌库顶）。 */
+    monsterDeck?: string[];
+    /** Munchkin 公共怪物弃牌堆（defId 列表）。 */
+    monsterDiscard?: string[];
+    /** Munchkin 公共宝藏牌库（defId 列表，索引 0 为牌库顶）。 */
+    treasureDeck?: string[];
+    /** Munchkin 公共宝藏弃牌堆（defId 列表）。 */
+    treasureDiscard?: string[];
+    /** 计分后已翻开、等待玩家按奖励顺序分配的 Munchkin 宝藏。 */
+    pendingMunchkinTreasureReward?: PendingMunchkinTreasureReward;
     cardsPlayedThisTurn?: number;
     /** 本回合每位玩家从手牌弃牌的数量。TURN_STARTED 时清空。 */
     cardsDiscardedFromHandThisTurn?: Record<PlayerId, number>;
@@ -1010,6 +1043,8 @@ export interface SmashUpCore {
         suppressorPlayerId: PlayerId;
         cardType: 'minion' | 'ongoing' | 'attached' | 'titan';
     }>;
+    /** 本回合失去能力的卡牌/随从 UID 列表；任意 TURN_STARTED 时清空。 */
+    suppressedCardUidsUntilTurnEnd?: string[];
 
     /**
      * 本回合已触发过“每回合一次”的持续行动卡 UID 列表。
@@ -1151,6 +1186,8 @@ export const SU_COMMANDS = {
     ACTIVATE_SPECIAL: 'su:activate_special',
     /** 激活在场泰坦的主动 ongoing 能力 */
     ACTIVATE_TITAN_ONGOING: 'su:activate_titan_ongoing',
+    /** 手动点击并击败 Munchkin 公共怪物。 */
+    DEFEAT_MUNCHKIN_MONSTER: 'su:defeat_munchkin_monster',
 } as const;
 
 /** 打出随从 */
@@ -1273,6 +1310,14 @@ export interface ActivateTitanOngoingCommand extends Command<typeof SU_COMMANDS.
     };
 }
 
+/** 击败 Munchkin 公共怪物 */
+export interface DefeatMunchkinMonsterCommand extends Command<typeof SU_COMMANDS.DEFEAT_MUNCHKIN_MONSTER> {
+    payload: {
+        baseIndex: number;
+        monsterUid: string;
+    };
+}
+
 export type SmashUpCommand =
     | PlayMinionCommand
     | PlayActionCommand
@@ -1285,7 +1330,8 @@ export type SmashUpCommand =
     | UseBaseAbilityCommand
     | UseTalentCommand
     | ActivateSpecialCommand
-    | ActivateTitanOngoingCommand;
+    | ActivateTitanOngoingCommand
+    | DefeatMunchkinMonsterCommand;
 
 // ============================================================================
 // 事件类型
@@ -1798,6 +1844,7 @@ export type SmashUpEvent =
     | AbilityTriggeredEvent
     | BaseAbilitySuppressedEvent
     | CardSuppressedEvent
+    | CardsSuppressedUntilTurnEndEvent
     | BaseClearedEvent;
 
 // ============================================================================
@@ -2564,6 +2611,20 @@ export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUP
         baseIndex: number;
         suppressorPlayerId: PlayerId;
         cardType: 'minion' | 'ongoing' | 'attached' | 'titan';
+        reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
+    };
+}
+
+/** 卡牌能力压制事件（直到当前回合结束，用于 Munchkin 麻痹药水等群体压制效果） */
+export interface CardsSuppressedUntilTurnEndEvent extends GameEvent<typeof SU_EVENTS.CARDS_SUPPRESSED_UNTIL_TURN_END> {
+    payload: {
+        cardUids: string[];
+        baseIndex: number;
         reason: string;
         sourcePlayerId?: PlayerId;
         sourceCardUid?: string;

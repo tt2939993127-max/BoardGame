@@ -313,6 +313,7 @@ function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThron
         diceCount: 3,
         rerollCostTokenId: TOKEN_IDS.TAIJI,
         rerollCostAmount: 1,
+        maxRerollCount: 1,
         dieEffectKey: 'bonusDie.effect.thunderStrike2Die',
         rerollEffectKey: 'bonusDie.effect.thunderStrike2Reroll',
         threshold: 12,

@@ -120,6 +120,20 @@ export const BETRAYAL_ROOM_TILE_VISUALS = {
     backBasement: buildRoomTileVisual('betrayal/rooms/room-back-atlas', ROOM_BACK_ATLAS, 13),
 };
 
+const BETRAYAL_ROOM_VISUAL_ALIASES: Partial<Record<string, keyof typeof BETRAYAL_ROOM_TILE_VISUALS>> = {
+    startTriple: 'startTripleRoom',
+    upperLanding: 'startUpperLanding',
+    basementLanding: 'startBasementLanding',
+    entranceHall: 'startEntranceHall',
+    foyer: 'startGroundFloorStaircase',
+};
+
+export function resolveBetrayalRoomTileVisual(visualId: string): BetrayalRoomTileVisual | undefined {
+    const alias = BETRAYAL_ROOM_VISUAL_ALIASES[visualId];
+    if (alias) return BETRAYAL_ROOM_TILE_VISUALS[alias];
+    return BETRAYAL_ROOM_TILE_VISUALS[visualId as keyof typeof BETRAYAL_ROOM_TILE_VISUALS];
+}
+
 export function buildRoomAtlasImageStyle(visual: BetrayalRoomTileVisual): CSSProperties {
     const spriteStyle = computeSpriteImgStyle(visual.frameIndex, visual.config);
     return {

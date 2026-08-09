@@ -45,6 +45,14 @@
 - 只要卡牌/基地主裁图能清晰读出名称或正文，图片就是该字段的主真相源，`zh-CN` 与 `en` locale 都必须先回看图片核对。
 - Wiki、脚本抓取结果、既有 `i18n`、既有实现只能作为对照源，不能覆盖图片正文。
 
+### Wiki 对照工具（仅 intake 阶段）
+
+- 触发场景：数据录入、数据核对、审计检查或效果描述查询，且图片 / 本地正式来源不足以独立完成英文 canonical 名称、count / power 等对照时。
+- 抓取脚本：`scripts/scrape-wiki-with-descriptions.mjs`；代码对照脚本：`scripts/final-wiki-code-comparison.mjs`。
+- 默认执行顺序：先运行 `node scripts/scrape-wiki-with-descriptions.mjs`，再运行 `node scripts/final-wiki-code-comparison.mjs`，最后根据差异报告回写 intake 合同或实现。
+- 默认入口优先使用项目现有脚本与当前会话浏览能力；必要时再用 `agent-reach` 打开单页补证，不把 Firecrawl 当作常规入口。只有批量分页、动态站点交互、登录态或需要沉淀长期采集流水线时，才单独评估 Firecrawl。
+- Wiki 文本与代码对照时要考虑弯引号 / 直引号和编码差异；Wiki 的勘误重复项要按当前官方 / 项目裁决保留唯一版本，不能把重复条目直接算成新增卡牌。
+
 ## intake 输出口径
 
 intake 的目标不是“尽快改代码”，而是交付一份能安全进入 implementation 的 handoff 包。

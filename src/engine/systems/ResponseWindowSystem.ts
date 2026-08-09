@@ -665,6 +665,15 @@ export function createResponseWindowSystem<TCore>(
             // 如果有，说明本轮可能有更高优先级的系统（如 SmashUpEventSystem priority=50）
             // 会创建新的 interaction，此时不应立即解锁响应窗口，等下一轮再检查
             const hasInteractionResolved = events.some(e => e.type === INTERACTION_EVENTS.RESOLVED);
+            const completedInteractionIds = new Set(
+                events
+                    .filter(e => e.type === INTERACTION_EVENTS.CONFIRMED)
+                    .map(e => {
+                        const interactionId = (e.payload as { interactionId?: unknown } | undefined)?.interactionId;
+                        return typeof interactionId === 'string' ? interactionId : undefined;
+                    })
+                    .filter((interactionId): interactionId is string => interactionId !== undefined),
+            );
 
             // 前瞻检查：同一批事件中是否包含交互锁定请求事件（如 INTERACTION_REQUESTED）
             // 用于 responseAdvanceEvents 推进时判断——如果同批事件中有交互请求，
@@ -788,7 +797,13 @@ export function createResponseWindowSystem<TCore>(
                 // 等到下一轮时，若 sys.interaction.current 仍为 null，才真正解锁推进。
                 {
                     const currentWindow = newState.sys.responseWindow?.current;
-                    if (currentWindow && currentWindow.pendingInteractionId && !newState.sys.interaction.current) {
+                    const lockedInteractionWasConfirmed = currentWindow?.pendingInteractionId !== undefined
+                        && completedInteractionIds.has(currentWindow.pendingInteractionId);
+                    if (
+                        currentWindow
+                        && currentWindow.pendingInteractionId
+                        && (lockedInteractionWasConfirmed || !newState.sys.interaction.current)
+                    ) {
                         // 【修复】检查本轮事件中是否有 ABILITY_FEEDBACK（交互失败）
                         // 交互失败时，解锁但不推进，当前响应者继续响应
                         const hasAbilityFeedback = events.some(e => 

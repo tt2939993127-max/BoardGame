@@ -15,6 +15,7 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
+import { getGameConfigReviewPath, hasGameConfigReview } from '../../config/gameConfigReviewRoutes';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
@@ -737,10 +738,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         navigate(`/play/${gameId}/tutorial`);
     };
     const hasTutorialEntry = useMemo(() => hasGameTutorialLoader(gameId), [gameId]);
-    const hasConfigReview = normalizedGameId === 'summonerwars' || normalizedGameId === 'dicethrone';
+    const hasConfigReview = hasGameConfigReview(normalizedGameId);
     const handleConfigReview = () => {
         onNavigate?.();
-        navigate(`/games/${normalizedGameId}/config`);
+        navigate(getGameConfigReviewPath(normalizedGameId));
     };
     const loadCreateRoomPreferences = async (): Promise<LocalMatchPreferences | null> => {
         if (!gameManifest) {

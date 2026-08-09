@@ -1,3 +1,5 @@
+import type { OnlineAiClientTransportDiagnostics } from './protocol';
+
 export type OnlineAiCircuitSource = 'client' | 'watchdog' | 'safe-unblock';
 
 export type OnlineAiCircuitBlockReason =
@@ -12,6 +14,8 @@ export type OnlineAiCircuitFailure = {
     stateID: number;
     progressMarker?: string | null;
     commandSummary?: string | null;
+    attemptKey?: string | null;
+    clientTransport?: OnlineAiClientTransportDiagnostics | null;
     source: OnlineAiCircuitSource;
     at: number;
 };

@@ -1,6 +1,6 @@
 # 中文旧版对照源
 
-本目录收录用户补充的中文资料，供规则翻译、术语和旧版作祟对照使用。`src/games/betrayal/rule/legacy-zh/` 是后续读小黑屋规则时的就近入口；`docs/games/betrayal/sources/legacy-zh/` 只是资料归档镜像。
+本目录收录用户补充的中文资料，供规则翻译、术语和旧版作祟对照使用。`src/games/betrayal/rule/legacy-zh/` 是后续读小黑屋旧版中文规则时的唯一就近入口。原 `docs/games/betrayal/sources/legacy-zh/` 归档镜像已在文档去重批次中删除，删除前已确认除 README 外文件哈希一致，且本 README 保留了更完整的入口说明。
 
 ## 来源清单
 

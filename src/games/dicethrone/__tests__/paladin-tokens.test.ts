@@ -15,6 +15,11 @@ import { getPaladinStartingDeck } from '../heroes/paladin/cards';
 import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
 import { CHARACTER_DATA_MAP } from '../domain/characters';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS } from '../domain/ids';
+import { diceThroneFlowHooks } from '../domain/flowHooks';
+import { createDiceThroneEventSystem } from '../domain/systems';
+import { PALADIN_ABILITIES, PALADIN_TITHES_UPGRADED } from '../heroes/paladin/abilities';
+import { createHeroMatchup, fixedRandom, getCardById } from './test-utils';
+import { checkPlayCard } from '../domain/rules';
 
 // ============================================================================
 // 1. Token 定义完整性
@@ -33,6 +38,134 @@ describe('圣骑士 Token 定义', () => {
         expect(crit!.activeUse!.effect.value).toBe(4);
     });
 
+    it('暴击门槛只看攻击初始伤害，不把攻击修正加伤计入 5 点判断', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.CRIT] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'test-attack',
+            damage: 3,
+            isDefendable: true,
+            bonusDamage: 2,
+            attackModifierBonusDamage: 2,
+        } as any;
+
+        const result = diceThroneFlowHooks.onPhaseExit?.({
+            state: { core: state.core, sys: { phase: 'offensiveRoll' } },
+            from: 'offensiveRoll',
+            to: 'defensiveRoll',
+            command: { type: 'ADVANCE_PHASE', playerId: '0', payload: {}, timestamp: 100 } as any,
+            random: fixedRandom,
+        } as any);
+        const events = Array.isArray(result) ? result : result?.events ?? [];
+        expect(events.some(event => event.type === 'CHOICE_REQUESTED')).toBe(false);
+    });
+
+    it('教会税 II 在致盲判定失败后不发放延迟 CP', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].resources.cp = 14;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'blessing-of-might',
+            isDefendable: false,
+            blindedCheckResolved: true,
+            blindedCheckMissed: true,
+            deferredCpGrants: [{ playerId: '0', amount: 1, sourceAbilityId: 'tithes' }],
+        } as any;
+
+        const result = diceThroneFlowHooks.onPhaseExit?.({
+            state: { core: state.core, sys: { phase: 'offensiveRoll' } },
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: { type: 'ADVANCE_PHASE', playerId: '0', payload: {}, timestamp: 101 } as any,
+            random: fixedRandom,
+        } as any);
+        const events = Array.isArray(result) ? result : result?.events ?? [];
+        expect(events.some(event => event.type === 'CP_CHANGED')).toBe(false);
+        expect(events.some(event => (
+            event.type === 'PENDING_ATTACK_UPDATED'
+            && (event.payload.patch as any).deferredCpGrants?.length === 0
+        ))).toBe(true);
+    });
+
+    it('教会税 II 在技能激活时只登记延迟奖励，不立即发放 CP', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].passiveAbilities = [PALADIN_TITHES_UPGRADED];
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'blessing-of-might',
+            isDefendable: false,
+        } as any;
+
+        const system = createDiceThroneEventSystem();
+        const result = system.afterEvents?.({
+            state,
+            events: [{
+                type: 'ABILITY_ACTIVATED',
+                payload: { abilityId: 'blessing-of-might', playerId: '0', isDefense: false },
+                sourceCommandType: 'SELECT_ABILITY',
+                timestamp: 100,
+            }],
+            random: fixedRandom,
+        } as any);
+        const events = result && !Array.isArray(result) ? result.events ?? [] : [];
+
+        expect(events.some(event => event.type === 'CP_CHANGED')).toBe(false);
+        expect(events).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'PENDING_ATTACK_UPDATED',
+                payload: expect.objectContaining({
+                    patch: expect.objectContaining({
+                        deferredCpGrants: [expect.objectContaining({
+                            playerId: '0',
+                            amount: 1,
+                            sourceAbilityId: 'tithes',
+                        })],
+                    }),
+                }),
+            }),
+        ]));
+    });
+
+    it('正义战法和圣光术的奖励骰判定不触发教会税 II', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].passiveAbilities = [PALADIN_TITHES_UPGRADED];
+
+        const system = createDiceThroneEventSystem();
+        for (const abilityId of ['righteous-combat', 'holy-light']) {
+            const ability = PALADIN_ABILITIES.find(entry => entry.id === abilityId);
+            expect(ability).toBeDefined();
+            state.core.players['0'].abilities = ability ? [ability] : [];
+            state.core.pendingAttack = {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: abilityId,
+                isDefendable: true,
+            } as any;
+
+            const result = system.afterEvents?.({
+                state,
+                events: [{
+                    type: 'ABILITY_ACTIVATED',
+                    payload: { abilityId, playerId: '0', isDefense: false },
+                    sourceCommandType: 'SELECT_ABILITY',
+                    timestamp: 200,
+                }],
+                random: fixedRandom,
+            } as any);
+            const events = result && !Array.isArray(result) ? result.events ?? [] : [];
+            expect(events.some(event => event.type === 'PENDING_ATTACK_UPDATED')).toBe(false);
+            expect(events.some(event => event.type === 'CP_CHANGED')).toBe(false);
+        }
+    });
+
     it('应包含 Accuracy（精准）— consumable, onOffensiveRollEnd, 不叠加', () => {
         const acc = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.ACCURACY);
         expect(acc).toBeDefined();
@@ -40,6 +173,52 @@ describe('圣骑士 Token 定义', () => {
         expect(acc!.stackLimit).toBe(1);
         expect(acc!.activeUse).toBeDefined();
         expect(acc!.activeUse!.timing).toContain('onOffensiveRollEnd');
+    });
+
+    it('精准尚未花费前，对手可以在确认骰面响应窗口使用拜拜了您嘞移除它', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        const paladin = state.core.players['0'];
+        const opponent = state.core.players['1'];
+        paladin.tokens[TOKEN_IDS.ACCURACY] = 1;
+        opponent.hand = [getCardById('card-bye-bye')];
+        opponent.resources.cp = 5;
+        state.core.rollConfirmed = true;
+        state.core.turnPhase = 'offensiveRoll';
+
+        const result = checkPlayCard(
+            state.core,
+            '1',
+            opponent.hand[0],
+            'offensiveRoll',
+            'afterRollConfirmed',
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it('精准被拜拜了您嘞移除后，进攻投掷阶段收口不会再请求精准', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].tokens[TOKEN_IDS.ACCURACY] = 0;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'holy-strike-large',
+            damage: 8,
+            isDefendable: true,
+            offensiveRollEndTokenResolved: false,
+        } as any;
+
+        const result = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'defensiveRoll',
+            command: { type: 'ADVANCE_PHASE', playerId: '0', payload: {}, timestamp: 300 } as any,
+            random: fixedRandom,
+        } as any);
+        const events = Array.isArray(result) ? result : result?.events ?? [];
+        expect(events.some(event => event.type === 'CHOICE_REQUESTED')).toBe(false);
+        expect(events.some(event => event.type === 'ATTACK_INITIATED')).toBe(false);
     });
 
     it('应包含 Protect（守护）— consumable, beforeDamageReceived, 伤害减半', () => {

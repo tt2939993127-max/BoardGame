@@ -1,7 +1,7 @@
-# 图片/音频资源完整规范
+# 图片资源与发布总规范
 
-> 本文档是 `AGENTS.md` 的补充，包含图片/音频的完整路径规则、压缩流程与示例。
-> **触发条件**：新增/修改图片或音频资源引用时阅读。
+> 本文档是 `AGENTS.md` 的补充，承载图片资源链、压缩、manifest、服务器发布和移动素材包合同。
+> **触发条件**：新增/修改图片、图集、manifest、服务器资源或移动素材包引用时阅读；关键图片预加载见 `critical-image-preload.md`，音频运行时合同见 `audio-assets.md`。
 
 ---
 
@@ -18,6 +18,8 @@
 代码引用路径存在性是资源链验收的一部分。只要实现里已经写入 `tokenAsset`、`portraitAsset`、卡面路径、图集路径、帮助页路径、骰面路径或等价运行时资源逻辑路径，验收时必须逐项证明该逻辑路径能解析到正式资源树中的源图、压缩产物和 manifest / 索引 key；文件不存在或 manifest 未登记时，不能因为截图里有边框、占位、颜色块、fallback 空壳或页面可交互就判定资源已接入。
 
 图包拉取或图集 intake 不能只看文件是否下载成功。凡规则书、组件清单或用户指定规则源写明了卡牌、房间、token、剧本页、参考卡等对象数量，素材拉取阶段必须同步产出“规则数量 vs 素材实测数量”对账表：原始文件路径、尺寸、hash、声明 rows/cols、实测正面数、背面数、空格数、非对象数、复用 alias 和对账结论。对账不匹配且无法解释为背面、空格、复用 alias 或扩展/非基础对象时，素材状态只能是 `blocked/disputed`，不得继续压缩、接 manifest、写运行时引用、跑截图或汇报基础版完成。
+
+图集 intake 的验收必须一次性落在资源合同上：源文件、裁片/frame、运行时对象、previewRef、manifest、压缩产物和对象数量必须能互相对账。E2E 截图或 UI 人工看图只能证明“运行时某处消费到了某张图”和“布局没有被破坏”，不能反向证明整套图集录入正确。只要资源合同已通过，后续审计不得默认重启逐张肉眼看图；若截图中发现错图、空图或悬停空白，必须先回到资源合同或截图夹具定位，不得把它扩展成全量重复审图。
 
 找不到素材时，必须把该对象标为 `blocked`，写清已查找位置、失败步骤和最小解阻动作；不得用“后续美术优化”“程序化也能玩”“先跑通 E2E”绕过。
 
@@ -50,7 +52,7 @@ E2E、截图、单测、typecheck 或页面可交互只证明资源消费链路�
 
 ## 🖼️ 图片资源规范
 
-### ⚠️ 强制规则：禁止直接使用未压缩图片
+### 图片压缩规范（强制）：禁止直接使用未压缩图片
 
 **所有图片必须经过压缩后使用，禁止在代码中直接引用原始 `.png/.jpg` 文件。**
 
@@ -116,14 +118,13 @@ public/assets/
 **当前状态（过渡期）**：
 - 物理文件仍在 `public/assets/<gameId>/`
 - `public/assets/i18n/zh-CN/<gameId>` 为符号链接（Windows junction），指向 `../../<gameId>`
-- 代码默认使用 `locale="zh-CN"`，自动访问 `i18n/zh-CN/` 路径
+- 组件默认使用当前 `i18n.language`，未初始化时兜底 `zh-CN`，自动访问 `i18n/<locale>/` 路径
 - 符号链接使浏览器能正确加载 `i18n/zh-CN/` 下的资源，无需物理迁移文件
 
-**未来计划（英文版上线时）**：
-- 物理迁移中文图片到 `i18n/zh-CN/`
-- 删除原始路径 `public/assets/<gameId>/`
-- 新增英文图片到 `i18n/en/`
-- 删除符号链接
+**未来扩展（英文版上线时）**：
+- 新增英文图片到 `i18n/en/<gameId>/`
+- 代码继续使用同一套相对资源路径，由 locale 解析层切换语言目录
+- 若届时移除历史符号链接，必须先确认所有运行时路径都已进入 `i18n/<locale>/` 合同
 
 > **禁止**使用无语义的 `images/` 中间目录。直接按业务含义组织：`hero/`、`cards/`、`base/`、`common/` 等。
 
@@ -144,7 +145,7 @@ public/assets/
 
 | 场景 | 组件/函数 | 示例 |
 |------|-----------|------|
-| `<img>` 标签 | `OptimizedImage` | `<OptimizedImage src="dicethrone/images/foo.png" />` （自动使用 locale="zh-CN"） |
+| `<img>` 标签 | `OptimizedImage` | `<OptimizedImage src="dicethrone/images/foo.png" />` （默认使用当前 `i18n.language`） |
 | CSS 背景 | `buildOptimizedImageSet` | `background: ${buildOptimizedImageSet('dicethrone/images/foo.png')}` |
 | 精灵图裁切 | `getOptimizedImageUrls` | `const { webp } = getOptimizedImageUrls('dicethrone/images/foo.png')` |
 | 精灵图 CSS 背景 | `buildLocalizedImageSet` | `backgroundImage: buildLocalizedImageSet('dicethrone/images/atlas', locale)` |
@@ -169,10 +170,13 @@ public/assets/
 - **E2E / 截图验收同样禁止假素材**：如果截图时远程资源因为冷启动或拉取较慢而尚未出现，这是可记录的真实状态；可以等待更久，也可以保留真实空态截图，但不能为了“让截图好看”在游戏里加假的 fallback 素材。
 - **上传成功不等于手机可见（强制）**：服务器上传脚本返回成功只能证明对象写入了发布目标；若用户问题是“手机看不到 / 线上缺图 / 安装包缺图”，必须继续回查公开资源 URL、服务器活动集合 `current`、运行时 manifest / file-index、Android 已安装素材包或目标端请求链。只要公开 URL 仍是 404、manifest 未收录、或手机包未更新，就只能写“发布链路未闭合 / 手机仍未证明可见”，不得把“本地文件存在”“manifest 本地有条目”或“upload completed”说成移动端已修好。
 
+### 国际化资源架构（强制）
+
 **locale 处理规则**：
-- `OptimizedImage` 默认 `locale="zh-CN"`，自动转换路径为 `i18n/zh-CN/dicethrone/images/foo.png`
-- 符号链接使浏览器能正确加载该路径（实际指向 `../../dicethrone/images/foo.png`）
-- 未来英文版上线时，传入 `locale="en"` 即可切换到英文资源
+- 当前图片资源统一落在 `public/assets/i18n/zh-CN/<gameId>/`；未来英文版上线时，英文图片放入 `public/assets/i18n/en/<gameId>/`，运行时引用路径无需改结构。
+- `OptimizedImage` / `CardPreview` 未显式传入 `locale` 时，会自动使用 `i18n.language`，再兜底 `zh-CN`，并转换为 `i18n/<locale>/<gameId>/...` 路径。
+- 正常业务组件不要手动传 `locale` prop；只有测试、语言覆盖验证或确实需要强制预览另一语言时，才允许显式传入。
+- 符号链接使浏览器能正确加载 `i18n/zh-CN/` 路径（实际指向对应游戏资源目录）。
 - 生产构建会为 `public/assets` 中的资源 URL 自动追加 `?v=<content-hash>`，因此不要手动拼接版本参数；内容变更后缓存会自动失效
 
 ### 统一加载链路（强制）
@@ -370,7 +374,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 ### 服务器主源（强制）
 
 1. **公开资源域名和协作者入口保持不变**：正式资源仍通过现有命令发布，运行时仍使用 `https://assets.easyboardgame.top/official/...`。不得要求协作者改成服务器 IP、隐藏源域名或另一套上传命令。
-2. **服务器是发布与在线下载主源**：发布脚本通过受限 SSH 将本批对象写入新 release，完成路径、大小和哈希校验后原子切换 `/home/admin/storage/assets/current`。所有 `official/**` 公网读取首先使用该活动版本。
+2. **服务器是发布与在线下载主源**：发布脚本优先通过专用素材上传入口（`ASSET_SERVER_UPLOAD_URL` + `ASSET_SERVER_UPLOAD_TOKEN`）把本批对象交给服务器 runner；runner 写入新 release，完成路径、大小和哈希校验后原子切换 `/home/admin/storage/assets/current`。受限 SSH 只保留为管理员应急 fallback，不再作为协作者默认发布前提。所有 `official/**` 公网读取首先使用该活动版本。
 3. **禁止对象存储回退和灾备队列**：服务器切换成功后不再生成对象存储灾备队列；对象存储不可用、凭据缺失或容量问题不得参与正式发布判断，也不得把服务器回滚到旧远端对象状态。
 4. **发布完成必须验证本次服务器对象**：大型 bundle / APK / 游戏包必须返回 `X-Asset-Source: server`，且 `Content-Length` 与本次产物一致；file-index / latest manifest 等小型 JSON 必须从服务器读取正文并校验本次 SHA-256。旧同路径对象、旧缓存或 `server-error` 都不能作为本次发布成功证据。
 5. **服务器活动集合只闭合“已发布到服务器的活动根”**：已经存在于服务器 `current` 的 `official/**/assets-manifest.json`、OTA/latest manifest、移动包 manifest 和 file-index 都必须按自身合同展开到真实运行时对象；但不能反向推断“本地每个 `assets-manifest.json` 都必须上传到服务器”。如果清单只随 Web / OTA / App 包交付，就按包内清单验收；服务器侧只验对应 `compressed/*.webp` / `compressed/*.ogg` / 远端运行时对象。
@@ -426,7 +430,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 2. **先核对运行时真实请求路径**：图片运行时会自动补 `i18n/<locale>/` 与 `compressed/`，排查 404 时必须以最终请求 URL 为准，而不是只看源码里的相对路径。
 3. **裁切图也必须满足 `compressed/` 约定**：凡是运行时通过 `OptimizedImage` / `CardPreview` / `getOptimizedImageUrls()` 加载的裁切图，实际可访问文件必须位于对应目录的 `compressed/` 子目录；仅有 `crops/foo.webp` 而没有 `crops/compressed/foo.webp`，视为资源不完整。
 4. **上传前先重建 / 校验本地清单以找运行时对象**：资源目录有新增/移动后，先执行默认增量 `npm run assets:manifest` 或等价校验，确认新增运行时对象和 `basePrefix`；随后发布服务器需要的运行时对象。只有完整资源维护任务才使用 full 模式。
-5. **上传脚本入口**：当前正式入口是 `npm run assets:upload` / `npm run assets:check`，底层调用 `scripts/assets/upload-to-server.js`。排查“为什么本机能传/不能传”时，必须先确认服务器发布脚本、受限 SSH 配置和目标服务器活动目录。
+5. **上传脚本入口**：当前正式入口是 `npm run assets:upload` / `npm run assets:check`，底层调用 `scripts/assets/upload-to-server.js`。排查“为什么本机能传/不能传”时，必须先确认本机或 CI 是否配置 `ASSET_SERVER_UPLOAD_URL` / `ASSET_SERVER_UPLOAD_TOKEN`、服务器 runner 的 `/asset-publish` 是否可达、服务器发布脚本是否存在，以及目标服务器活动目录是否正常；受限 SSH 只作为管理员 fallback 排查项。
 6. **出现“多叠一层整图/四角异常”先查叠层来源（通用规则）**：优先用 DevTools 选中异常区域，检查上层元素是否存在整图覆盖；查看 **计算后** `opacity/visibility/filter/transform` 是否被脚本改写；必要时用 `elementsFromPoint()` 或逐层禁用 DOM 来定位真正的上层来源。该步骤必须在调整裁剪/圆角/纹理之前完成。
 
 ---
@@ -442,7 +446,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 ## 音频资源入口
 
-> 完整规范已拆到 `docs/ai-rules/audio-assets.md`；音频 workflow 优先走 `./.codex/skill/audio-integration/SKILL.md`。
+> 完整规范已拆到 `docs/ai-rules/audio-assets.md`；音频 workflow 优先走系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`。
 
 - 音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用完整 key。
 - 共享音频包路径合同、移动端已安装包读取、音效触发路径和工具链见 `audio-assets.md`。

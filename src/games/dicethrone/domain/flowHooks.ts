@@ -43,6 +43,7 @@ import {
     getTargetingRollChoiceOwnerId,
     isTeamMode,
     getPendingBonusSettlementDice,
+    isInteractiveBonusDiceSettlement,
 } from './rules';
 import { resolveAttack, resolveAttackWithSneakImmunityAfterDefense, resolveOffensivePreDefenseEffects, resolvePostDamageEffects, resolveWithDamageAfterChoice } from './attack';
 import { resourceSystem } from './resourceSystem';
@@ -67,6 +68,7 @@ import { findHeroCard } from '../heroes';
 import { hasCurrentChoiceAnchor, registerChoiceEffectHandler } from './choiceEffects';
 import { hasSpentTreantTreeSpiritThisTurn, hasUsablePassiveAction } from './passiveAbility';
 import { registerBonusDiceSettlementHandler } from './bonusDiceSettlement';
+import { isCurrentBonusRollSettlement } from './rollContext';
 import {
     POWDER_KEG_TRANSFER_CHOICE_ID,
     POWDER_KEG_UPKEEP_SOURCE_ABILITY_ID,
@@ -131,16 +133,17 @@ const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     || event.type === 'COMPARE_ROLL_REQUESTED'
     || event.type === 'INTERACTION_REQUESTED';
 
+const isInteractiveBonusDiceRerollEvent = (event: DiceThroneEvent): boolean =>
+    event.type === 'BONUS_DICE_REROLL_REQUESTED'
+    && isInteractiveBonusDiceSettlement(event.payload.settlement);
+
 const hasPendingBonusDiceSettlement = (core: DiceThroneCore): boolean =>
     core.pendingBonusDiceSettlement !== null
     && core.pendingBonusDiceSettlement !== undefined;
 
 const hasInteractivePendingBonusDiceSettlement = (core: DiceThroneCore): boolean =>
-    hasPendingBonusDiceSettlement(core)
-    && (
-        core.pendingBonusDiceSettlement?.displayOnly !== true
-        || core.pendingBonusDiceSettlement?.allowDiceModification === true
-    );
+    isInteractiveBonusDiceSettlement(core.pendingBonusDiceSettlement)
+    && isCurrentBonusRollSettlement(core);
 
 registerBonusDiceSettlementHandler(POWDER_KEG_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
     const playerId = settlement.attackerId;
@@ -316,8 +319,12 @@ function createOffensiveRollEndTokenChoiceEvent(
         return null;
     }
 
-    const expectedDamage = getPendingAttackExpectedDamage(core, core.pendingAttack);
-    const offensiveRollEndTokens = getUsableTokensForOffensiveRollEnd(core, attackerId, expectedDamage);
+    // 暴击的 FAQ 门槛只看攻击初始伤害，不把攻击修正（bonusDamage）计入 5 点判断。
+    const expectedInitialDamage = core.pendingAttack.damage
+        ?? (core.pendingAttack.sourceAbilityId
+            ? getPlayerAbilityBaseDamage(core, core.pendingAttack.attackerId, core.pendingAttack.sourceAbilityId)
+            : 0);
+    const offensiveRollEndTokens = getUsableTokensForOffensiveRollEnd(core, attackerId, expectedInitialDamage);
     if (offensiveRollEndTokens.length === 0) {
         return null;
     }
@@ -757,8 +764,10 @@ function resolvePostAttackFollowUp(
     timestamp: number,
     phase: TurnPhase
 ): PhaseExitResult {
+    const isWarMongerExtraOffensiveRoll =
+        core.extraAttackInProgress?.sourceStatusId === 'war-monger';
     const parleyStacks = core.players[core.activePlayerId]?.statusEffects[STATUS_IDS.PARLEY] ?? 0;
-    if (parleyStacks > 0) {
+    if (parleyStacks > 0 && !isWarMongerExtraOffensiveRoll) {
         events.push({
             type: 'STATUS_REMOVED',
             payload: {
@@ -769,6 +778,11 @@ function resolvePostAttackFollowUp(
             sourceCommandType: commandType,
             timestamp,
         } as StatusRemovedEvent);
+    }
+
+    if (core.pendingAttack?.countsAsOffensiveAttackMade === false) {
+        events.push(...resolveCursedPirateNoAttackPowderKegEvents(core, commandType, timestamp));
+        return { events, overrideNextPhase: 'main2' };
     }
 
     const { dazeEvents, triggered } = checkDazeExtraAttack(core, events, commandType, timestamp);
@@ -859,10 +873,15 @@ function resolveCursedPirateNoAttackPowderKegEvents(
     core: DiceThroneCore,
     commandType: string,
     timestamp: number,
+    forceNoAttack = false,
 ): DiceThroneEvent[] {
     const activePlayerId = core.activePlayerId;
     if (!core.players[activePlayerId]) return [];
-    if (core.offensiveRollAttackMadeThisTurn?.[activePlayerId]) return [];
+    const currentPendingAttackDoesNotCount = core.pendingAttack?.attackerId === activePlayerId
+        && core.pendingAttack.countsAsOffensiveAttackMade === false;
+    const isExtraAttackRoll = core.extraAttackInProgress?.attackerId === activePlayerId;
+    if (!forceNoAttack && !currentPendingAttackDoesNotCount && !isExtraAttackRoll
+        && core.offensiveRollAttackMadeThisTurn?.[activePlayerId]) return [];
 
     const hasOpposingCursedPirate = getOpponents(core, activePlayerId)
         .some((playerId) => {
@@ -945,7 +964,18 @@ function resolveBlindedCheckExitResult(
 ): PhaseExitResult | null {
     if (pendingAttack.blindedCheckResolved === true) {
         return pendingAttack.blindedCheckMissed === true
-            ? { events: [], overrideNextPhase: 'main2' }
+            ? {
+                events: [
+                    ...resolveCursedPirateNoAttackPowderKegEvents(
+                        core,
+                        sourceCommandType,
+                        timestamp,
+                        true,
+                    ),
+                    ...resolveDeferredCpGrantEvents(core, pendingAttack, sourceCommandType, timestamp),
+                ],
+                overrideNextPhase: 'main2',
+            }
             : null;
     }
 
@@ -1025,7 +1055,18 @@ function resolveDazzleCheckExitResult(
 ): PhaseExitResult | null {
     if (pendingAttack.dazzleCheckResolved === true) {
         return pendingAttack.dazzleCheckMissed === true
-            ? { events: [], overrideNextPhase: 'main2' }
+            ? {
+                events: [
+                    ...resolveCursedPirateNoAttackPowderKegEvents(
+                        core,
+                        sourceCommandType,
+                        timestamp,
+                        true,
+                    ),
+                    ...resolveDeferredCpGrantEvents(core, pendingAttack, sourceCommandType, timestamp),
+                ],
+                overrideNextPhase: 'main2',
+            }
             : null;
     }
 
@@ -1090,6 +1131,47 @@ function resolveDazzleCheckExitResult(
         } as DiceThroneEvent],
         halt: true,
     };
+}
+
+function resolveDeferredCpGrantEvents(
+    core: DiceThroneCore,
+    pendingAttack: NonNullable<DiceThroneCore['pendingAttack']>,
+    sourceCommandType: string,
+    timestamp: number,
+): DiceThroneEvent[] {
+    const grants = pendingAttack.deferredCpGrants ?? [];
+    if (grants.length === 0) return [];
+
+    const events: DiceThroneEvent[] = [];
+    if (!pendingAttack.blindedCheckMissed && !pendingAttack.dazzleCheckMissed) {
+        for (const grant of grants) {
+            const player = core.players[grant.playerId];
+            if (!player || grant.amount <= 0) continue;
+            const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+            events.push({
+                type: 'CP_CHANGED',
+                payload: {
+                    playerId: grant.playerId,
+                    delta: grant.amount,
+                    newValue: Math.min(currentCp + grant.amount, CP_MAX),
+                    sourceAbilityId: grant.sourceAbilityId,
+                },
+                sourceCommandType: 'PASSIVE_TRIGGER',
+                timestamp,
+            } as CpChangedEvent);
+        }
+    }
+
+    events.push({
+        type: 'PENDING_ATTACK_UPDATED',
+        payload: {
+            attackerId: pendingAttack.attackerId,
+            patch: { deferredCpGrants: [] },
+        },
+        sourceCommandType,
+        timestamp: timestamp + 0.001,
+    } as DiceThroneEvent);
+    return events;
 }
 
 function resolveBlindedAndDazzleChecks(
@@ -1345,6 +1427,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
         // ========== offensiveRoll 阶段退出：攻击前处理 ==========
         if (from === 'offensiveRoll') {
+            // 战争贩子的额外进攻投掷阶段不是完整的投掷阶段：
+            // 紧缚、刺藤和休战会保留，留给正常投掷阶段再结算。
+            const isWarMongerExtraOffensiveRoll =
+                core.extraAttackInProgress?.sourceStatusId === 'war-monger';
             if (core.offensiveRollAttemptsThisTurn !== core.rollCount) {
                 events.push({
                     type: 'OFFENSIVE_ROLL_ATTEMPTS_RECORDED',
@@ -1358,63 +1444,65 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
 
             const activePlayer = core.players[core.activePlayerId];
-            const thornStacks = activePlayer?.tokens?.[TOKEN_IDS.THORN] ?? 0;
-            if (thornStacks > 0) {
-                const extraRollAttempts = Math.min(Math.max(0, core.rollCount - 1), 2);
-                events.push({
-                    type: 'TOKEN_CONSUMED',
-                    payload: {
-                        playerId: core.activePlayerId,
-                        tokenId: TOKEN_IDS.THORN,
-                        amount: thornStacks,
-                        newTotal: 0,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as TokenConsumedEvent);
-
-                if (extraRollAttempts > 0) {
-                    const hp = activePlayer?.resources[RESOURCE_IDS.HP] ?? 0;
+            if (!isWarMongerExtraOffensiveRoll) {
+                const thornStacks = activePlayer?.tokens?.[TOKEN_IDS.THORN] ?? 0;
+                if (thornStacks > 0) {
+                    const extraRollAttempts = Math.min(Math.max(0, core.rollCount - 1), 2);
                     events.push({
-                        type: 'DAMAGE_DEALT',
+                        type: 'TOKEN_CONSUMED',
                         payload: {
-                            targetId: core.activePlayerId,
-                            amount: extraRollAttempts,
-                            actualDamage: Math.min(extraRollAttempts, hp),
-                            sourceAbilityId: TOKEN_IDS.THORN,
+                            playerId: core.activePlayerId,
+                            tokenId: TOKEN_IDS.THORN,
+                            amount: thornStacks,
+                            newTotal: 0,
                         },
                         sourceCommandType: command.type,
-                        timestamp: timestamp + 0.001,
-                    } as DamageDealtEvent);
+                        timestamp,
+                    } as TokenConsumedEvent);
+
+                    if (extraRollAttempts > 0) {
+                        const hp = activePlayer?.resources[RESOURCE_IDS.HP] ?? 0;
+                        events.push({
+                            type: 'DAMAGE_DEALT',
+                            payload: {
+                                targetId: core.activePlayerId,
+                                amount: extraRollAttempts,
+                                actualDamage: Math.min(extraRollAttempts, hp),
+                                sourceAbilityId: TOKEN_IDS.THORN,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp: timestamp + 0.001,
+                        } as DamageDealtEvent);
+                    }
                 }
-            }
 
-            const bindStacks = activePlayer?.statusEffects[STATUS_IDS.BIND] ?? 0;
-            if (bindStacks > 0) {
-                events.push({
-                    type: 'STATUS_REMOVED',
-                    payload: {
-                        targetId: core.activePlayerId,
-                        statusId: STATUS_IDS.BIND,
-                        stacks: bindStacks,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as StatusRemovedEvent);
-            }
+                const bindStacks = activePlayer?.statusEffects[STATUS_IDS.BIND] ?? 0;
+                if (bindStacks > 0) {
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: {
+                            targetId: core.activePlayerId,
+                            statusId: STATUS_IDS.BIND,
+                            stacks: bindStacks,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as StatusRemovedEvent);
+                }
 
-            const parleyStacks = activePlayer?.statusEffects[STATUS_IDS.PARLEY] ?? 0;
-            if (parleyStacks > 0 && !core.pendingAttack) {
-                events.push({
-                    type: 'STATUS_REMOVED',
-                    payload: {
-                        targetId: core.activePlayerId,
-                        statusId: STATUS_IDS.PARLEY,
-                        stacks: parleyStacks,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as StatusRemovedEvent);
+                const parleyStacks = activePlayer?.statusEffects[STATUS_IDS.PARLEY] ?? 0;
+                if (parleyStacks > 0 && !core.pendingAttack) {
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: {
+                            targetId: core.activePlayerId,
+                            statusId: STATUS_IDS.PARLEY,
+                            stacks: parleyStacks,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as StatusRemovedEvent);
+                }
             }
 
             if (core.pendingAttack) {
@@ -1440,12 +1528,8 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         : postDamageEvents;
                     events.push(...filteredPostDamageEvents);
 
-                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
-                    // displayOnly settlement 不需要 halt（伤害已在同批事件中处理）
-                    const hasBonusDiceRerollOffDR = postDamageEvents.some(e => 
-                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                        !(e as any).payload?.settlement?.displayOnly
-                    );
+                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED；只要该 settlement 仍可改骰，就必须暂停。
+                    const hasBonusDiceRerollOffDR = postDamageEvents.some(isInteractiveBonusDiceRerollEvent);
                     if (hasBonusDiceRerollOffDR) {
                         return { events, halt: true };
                     }
@@ -1483,6 +1567,16 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     };
                 }
 
+                const deferredCpEvents = resolveDeferredCpGrantEvents(
+                    core,
+                    core.pendingAttack,
+                    command.type,
+                    timestamp,
+                );
+                if (deferredCpEvents.length > 0) {
+                    events.push(...deferredCpEvents);
+                }
+
                 // ========== 潜行判定：防御方有潜行时跳过防御掷骰、免除伤害 ==========
                 // Ultimate Damage 不可被防御方以状态效果回避；普通不可防御伤害不走这个封锁口径。
                 // 规则：潜行触发时只免伤（跳过防御掷骰），不消耗标记
@@ -1500,10 +1594,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
-                    const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some((event) => 
-                        event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                        !(event as any).payload?.settlement?.displayOnly
-                    );
+                    const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some(isInteractiveBonusDiceRerollEvent);
                     if (hasSneakChoice || hasBonusDiceRerollPreDefenseSneak) {
                         return { events, halt: true };
                     }
@@ -1527,10 +1618,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...postDamageEventsSneak.filter(e => e.type !== 'DAMAGE_DEALT'));
 
                     // === 与非潜行路径对齐的 halt 检查 ===
-                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e => 
-                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                        !(e as any).payload?.settlement?.displayOnly
-                    );
+                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(isInteractiveBonusDiceRerollEvent);
                     const hasPostDamageChoiceSneak = postDamageEventsSneak.some(isBlockingInteractionEvent);
                     const hasTokenResponseSneak = postDamageEventsSneak.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
                     if (hasBonusDiceRerollSneak || hasPostDamageChoiceSneak || hasTokenResponseSneak) {
@@ -1549,11 +1637,8 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
-                // 只有非 displayOnly 的 bonus dice reroll 才需要 halt（displayOnly 不需要用户交互）
-                const hasBonusDiceRerollPreDefense = preDefenseEvents.some((event) => 
-                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                    !(event as any).payload?.settlement?.displayOnly
-                );
+                // displayOnly 只是展示壳层；若 settlement 允许改骰，仍然需要 halt。
+                const hasBonusDiceRerollPreDefense = preDefenseEvents.some(isInteractiveBonusDiceRerollEvent);
                 if (hasChoice || hasBonusDiceRerollPreDefense) {
                     // 需要用户做选择或处理奖励骰重掷，阻止阶段切换
                     return { events, halt: true };
@@ -1598,10 +1683,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);
                 const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                const hasBonusDiceRerollOff = attackEvents.some((event) => 
-                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                    !(event as any).payload?.settlement?.displayOnly
-                );
+                const hasBonusDiceRerollOff = attackEvents.some(isInteractiveBonusDiceRerollEvent);
                 if (hasAttackChoice || hasTokenResponse || hasBonusDiceRerollOff) {
                     return { events, halt: true };
                 }
@@ -1621,7 +1703,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
             let targetingCore = core;
             const attackerId = core.pendingAttack.attackerId;
-            const targetingValue = core.dice[0]?.value ?? 1;
+            const targetingValue = getActiveDice(core)[0]?.value ?? 1;
             const autoDefenderId = getTargetingRollAutoDefenderId(core, attackerId, targetingValue);
             const selectedDefenderId = command.type === 'SELECT_DEFENDER_TARGET'
                 ? ((command.payload as { defenderId?: unknown } | undefined)?.defenderId)
@@ -1800,10 +1882,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     : postDamageEvents;
                 events.push(...filteredPostDamageEvents);
 
-                const hasBonusDiceRerollPost = postDamageEvents.some(e =>
-                    e.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                    !(e as any).payload?.settlement?.displayOnly
-                );
+                const hasBonusDiceRerollPost = postDamageEvents.some(isInteractiveBonusDiceRerollEvent);
                 if (hasBonusDiceRerollPost) {
                     return { events, halt: true };
                 }
@@ -1839,6 +1918,17 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 };
             }
 
+            const deferredCpEvents = resolveDeferredCpGrantEvents(
+                targetingCore,
+                pendingAttack,
+                command.type,
+                timestamp,
+            );
+            if (deferredCpEvents.length > 0) {
+                events.push(...deferredCpEvents);
+                targetingCore = applyEvents(targetingCore, deferredCpEvents, reduce);
+            }
+
             const defender = pendingAttack.defenderId
                 ? targetingCore.players[pendingAttack.defenderId]
                 : undefined;
@@ -1849,10 +1939,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 events.push(...preDefenseEventsSneak);
 
                 const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
-                const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some((event) =>
-                    event.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                    !(event as any).payload?.settlement?.displayOnly
-                );
+                const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some(isInteractiveBonusDiceRerollEvent);
                 if (hasSneakChoice || hasBonusDiceRerollPreDefenseSneak) {
                     return { events, halt: true };
                 }
@@ -1872,10 +1959,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 const postDamageEventsSneak = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
                 events.push(...postDamageEventsSneak.filter(e => e.type !== 'DAMAGE_DEALT'));
 
-                const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e =>
-                    e.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                    !(e as any).payload?.settlement?.displayOnly
-                );
+                const hasBonusDiceRerollSneak = postDamageEventsSneak.some(isInteractiveBonusDiceRerollEvent);
                 const hasPostDamageChoiceSneak = postDamageEventsSneak.some(isBlockingInteractionEvent);
                 const hasTokenResponseSneak = postDamageEventsSneak.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
                 if (hasBonusDiceRerollSneak || hasPostDamageChoiceSneak || hasTokenResponseSneak) {
@@ -1893,10 +1977,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             events.push(...preDefenseEvents);
 
             const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
-            const hasBonusDiceRerollPreDefense = preDefenseEvents.some((event) =>
-                event.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                !(event as any).payload?.settlement?.displayOnly
-            );
+            const hasBonusDiceRerollPreDefense = preDefenseEvents.some(isInteractiveBonusDiceRerollEvent);
             if (hasChoice || hasBonusDiceRerollPreDefense) {
                 return { events, halt: true };
             }
@@ -1931,10 +2012,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
             const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);
             const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-            const hasBonusDiceRerollOff = attackEvents.some((event) =>
-                event.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                !(event as any).payload?.settlement?.displayOnly
-            );
+            const hasBonusDiceRerollOff = attackEvents.some(isInteractiveBonusDiceRerollEvent);
             if (hasAttackChoice || hasTokenResponse || hasBonusDiceRerollOff) {
                 return { events, halt: true };
             }
@@ -1952,10 +2030,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                     const hasChoice = withDamageEvents.some(isBlockingInteractionEvent);
                     const hasTokenResponse = withDamageEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                    const hasBonusDiceReroll = withDamageEvents.some((event) =>
-                        event.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                        !(event as any).payload?.settlement?.displayOnly
-                    );
+                    const hasBonusDiceReroll = withDamageEvents.some(isInteractiveBonusDiceRerollEvent);
                     if (hasChoice || hasTokenResponse || hasBonusDiceReroll) {
                         return { events, halt: true };
                     }
@@ -1968,10 +2043,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                     const hasPostChoice = postDamageEvents.some(isBlockingInteractionEvent);
                     const hasPostTokenResponse = postDamageEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                    const hasPostBonusDiceReroll = postDamageEvents.some((event) =>
-                        event.type === 'BONUS_DICE_REROLL_REQUESTED' &&
-                        !(event as any).payload?.settlement?.displayOnly
-                    );
+                    const hasPostBonusDiceReroll = postDamageEvents.some(isInteractiveBonusDiceRerollEvent);
                     if (hasPostChoice || hasPostTokenResponse || hasPostBonusDiceReroll) {
                         return { events, halt: true };
                     }
@@ -2001,12 +2073,8 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         : postDamageEvents;
                     events.push(...filteredPostDamageEvents);
 
-                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
-                    // displayOnly settlement 不需要 halt（伤害已在同批事件中处理）
-                    const hasBonusDiceRerollPost = postDamageEvents.some(e => 
-                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                        !(e as any).payload?.settlement?.displayOnly
-                    );
+                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED；只要该 settlement 仍可改骰，就必须暂停。
+                    const hasBonusDiceRerollPost = postDamageEvents.some(isInteractiveBonusDiceRerollEvent);
                     if (hasBonusDiceRerollPost) {
                         return { events, halt: true };
                     }
@@ -2043,10 +2111,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);
                 const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                const hasBonusDiceReroll = attackEvents.some((event) => 
-                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
-                    !(event as any).payload?.settlement?.displayOnly
-                );
+                const hasBonusDiceReroll = attackEvents.some(isInteractiveBonusDiceRerollEvent);
                 
                 if (hasAttackChoice || hasTokenResponse || hasBonusDiceReroll) {
                     return { events, halt: true };
@@ -2188,14 +2253,15 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             // 确认所有阻塞已清除
             const hasActiveInteraction = state.sys.interaction?.current !== undefined;
             const hasActiveResponseWindow = state.sys.responseWindow?.current !== undefined;
+            const hasActiveCompareRoll = core.currentRollContext?.kind === 'compare'
+                && core.currentRollContext.policy.blocksPhaseFlow === true;
             // Token 响应窗口通过 pendingDamage 管理，需要等待玩家 USE_TOKEN 或 SKIP_TOKEN_RESPONSE
             // 特殊处理：TOKEN_RESPONSE_CLOSED 事件会清理 pendingDamage，但事件尚未 reduce 时
             // core.pendingDamage 仍为旧值。检测到该事件时应忽略 pendingDamage 检查。
             const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
             const hasPendingDamage = !hasTokenResponseClosed && (core.pendingDamage !== null && core.pendingDamage !== undefined);
             
-            // 检查是否有待处理的奖励骰结算（非 displayOnly）
-            // displayOnly 的奖励骰不需要用户交互，不应阻塞阶段推进
+            // 检查是否有待处理的奖励骰结算；displayOnly 但可改骰仍阻塞阶段推进。
             const hasPendingBonusDice = hasInteractivePendingBonusDiceSettlement(core);
             
             // 检查是否需要等待 offensiveRollEnd Token 选择的 CHOICE_RESOLVED 被 reduce 进 core。
@@ -2264,6 +2330,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 && !hasActiveResponseWindow
                 && !hasPendingDamage
                 && !hasPendingBonusDice
+                && !hasActiveCompareRoll
                 && !pendingOffensiveTokenChoice
                 && !pendingTargetingChoice
                 && !pendingAttackFollowUpChoice
@@ -2479,7 +2546,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         }
 
         // ========== 进入 offensiveRoll 阶段：检查缠绕状态 ==========
-        if (to === 'offensiveRoll') {
+        if (
+            to === 'offensiveRoll'
+            && core.extraAttackInProgress?.sourceStatusId !== 'war-monger'
+        ) {
             const player = core.players[core.activePlayerId];
 
             // 缠绕 (entangle) — 减少掷骰次数

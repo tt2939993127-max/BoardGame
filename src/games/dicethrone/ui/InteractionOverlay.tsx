@@ -258,7 +258,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                     <GameButton
                         onClick={onCancel}
                         variant="secondary"
-                        className="px-8"
+                        className="px-8 -translate-y-0.5 shadow-[0_6px_0_#334155] active:translate-y-[3px] active:shadow-[0_2px_0_#334155]"
                     >
                         {t('common.cancel')}
                     </GameButton>
@@ -266,7 +266,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                         onClick={onConfirm}
                         disabled={!canConfirm}
                         variant="primary"
-                        className="px-8"
+                        className="px-8 -translate-y-0.5 shadow-[0_6px_0_#b45309] active:translate-y-[3px] active:shadow-[0_2px_0_#b45309]"
                     >
                         {t('common.confirm')}
                     </GameButton>

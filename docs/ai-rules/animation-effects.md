@@ -41,7 +41,11 @@
 | **UI 状态过渡** | framer-motion / CSS transition | 组件进出场、hover/press 反馈、布局动画 | 手牌展开、横幅切换、按钮反馈、阶段指示脉冲 |
 | **精确设计动效** | Lottie（未接入，需美术资源） | 设计师在 AE 中制作的复杂动画，需要逐帧精确控制 | 暂无，未来可用于技能释放特写 |
 
-**PixiJS 已评估不适用（2026-02-08）**：已移除，当前特效规模下 Canvas 2D 全面优于 PixiJS。详见 `docs/refactor/pixi-performance-findings.md`。
+### PixiJS 选型结论（历史决策）
+
+**PixiJS 已评估不适用（2026-02-08）**：本项目当前特效规模保留 Canvas 2D，不引入 PixiJS。Chrome 隔离测量的代表结果为：单个飞行特效 Canvas 约 `100 FPS / 9.98ms`，PixiJS 约 `77 FPS / 14.53ms`；5 个并发飞行特效 Canvas 约 `73 FPS / P95 18ms`，PixiJS 约 `69 FPS / P95 21ms`。`Graphics.clear()` 每帧重绘、Sprite 对象池和共享 Application 均未改变结论。
+
+这条历史决策只约束当前规模下的技术选型，不否定按需使用 WebGL Shader：若出现同屏持续存在的 `500+` 个精灵、Sprite Sheet / 骨骼帧动画，或必须使用 WebGL shader 的效果，应重新测量后再裁决。完整旧压测报告已归并到本节，不再作为独立规范入口。
 
 **判断边界（快速自检）**：
 1. 需要每帧重绘复杂矢量路径（弧形/渐变）？→ 用 Canvas 2D 手写（如 SlashEffect）

@@ -11,6 +11,7 @@ import { getFaceCounts, getActiveDice, getTeamId, isTeamMode } from './rules';
 import { isTreantTreeSpiritToken } from './passiveAbility';
 import { getPendingAttackSettlementStage, updatePendingAttackSettlementStage } from './utils';
 import { buildArtificerBotStateAfterActivation, isArtificerBotTokenId } from './artificerBots';
+import { clearCurrentRollContext, createEvasionRollContext, replaceCurrentRollContext } from './rollContext';
 
 type EventHandler<E extends DiceThroneEvent> = (
     state: DiceThroneCore,
@@ -542,12 +543,13 @@ export const handleExtraAttackTriggered: EventHandler<Extract<DiceThroneEvent, {
     state,
     event
 ): DiceThroneCore => {
-    const { attackerId } = event.payload;
+    const { attackerId, sourceStatusId } = event.payload;
     return {
         ...state,
         extraAttackInProgress: {
             attackerId,
             originalActivePlayerId: state.activePlayerId,
+            sourceStatusId,
             phaseEntered: false,
         },
     };
@@ -783,7 +785,24 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
         };
     }
 
-    return { ...state, players, pendingDamage, pendingAttack, treantSpiritSpentThisTurn };
+    const nextState = { ...state, players, pendingDamage, pendingAttack, treantSpiritSpentThisTurn };
+    if (effectType === 'evasionAttempt' && evasionRoll && state.pendingDamage) {
+        const tokenDef = state.tokenDefinitions?.find(def => def.id === tokenId);
+        const successRange = tokenDef?.activeUse?.effect?.rollSuccess?.range ?? [1, 2] as [number, number];
+        return replaceCurrentRollContext(
+            nextState,
+            createEvasionRollContext({
+                ownerPlayerId: playerId,
+                targetPlayerId: state.pendingDamage.targetPlayerId,
+                sourceTokenId: tokenId,
+                value: evasionRoll.value,
+                successRange,
+                damageBeforeEvasion: state.pendingDamage.currentDamage,
+                pendingDamageId: state.pendingDamage.id,
+            }),
+        );
+    }
+    return nextState;
 };
 
 /**
@@ -799,5 +818,8 @@ export const handleTokenResponseClosed: EventHandler<Extract<DiceThroneEvent, { 
         )
         : state.pendingAttack;
 
-    return { ...state, pendingDamage: undefined, pendingAttack };
+    const nextState = { ...state, pendingDamage: undefined, pendingAttack };
+    return nextState.currentRollContext?.kind === 'evasion'
+        ? clearCurrentRollContext(nextState, nextState.currentRollContext.id)
+        : nextState;
 };

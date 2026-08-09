@@ -324,8 +324,8 @@
 | 半身人雇佣兵 | PASS | PASS | PASS | PASS | scoped-debt |
 | 虎骑士 | PASS | PASS | PASS | PASS | scoped-debt |
 | 一袋铁蒺藜 | PASS | PASS | PASS | PASS | scoped-debt |
-| 尖刺靴 | PASS | PASS | PASS | PASS | scoped-debt |
-| 火箭靴 | PASS | PASS | PASS | PASS | scoped-debt |
+| 尖刺靴 | PASS | PASS | PASS | PASS | PASS |
+| 火箭靴 | PASS | PASS | PASS | PASS | PASS |
 | 摆动的盾牌 | PASS | PASS | PASS | PASS | scoped-debt |
 | 血腥肢解电锯 | PASS | PASS | PASS | PASS | scoped-debt |
 | 大量宝藏 | PASS | PASS | PASS | PASS | scoped-debt |
@@ -337,13 +337,13 @@
 | 怯懦药水 | PASS | PASS | PASS | PASS | scoped-debt |
 | 口臭药水 | PASS | PASS | PASS | PASS | scoped-debt |
 | 愚蠢勇气药水 | PASS | PASS | PASS | PASS | scoped-debt |
-| 直线跑路药水 | PASS | PASS | PASS | PASS | scoped-debt |
+| 直线跑路药水 | PASS | PASS | PASS | PASS | PASS |
 | 麻痹药水 | PASS | PASS | PASS | PASS | scoped-debt |
 | 复制药水 | PASS | PASS | PASS | PASS | scoped-debt |
 | 探宝棒 | PASS | PASS | PASS | PASS | scoped-debt |
 | 许愿指环 | PASS | PASS | PASS | PASS | scoped-debt |
 
-> 宝藏 L2/L3 的直接证据为 `munchkinMechanics.test.ts`、`munchkinIntake.test.ts` 和当前工作区 `e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts` 的 132/132 全量真实入口回归；L4 不把“截图已生成”越权解释成“22 张逐对象图面已审计”。
+> 宝藏 L2/L3 的直接证据为 `munchkinMechanics.test.ts`、`munchkinIntake.test.ts` 和当前工作区 `e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts` 的真实入口回归；L4 不把“截图已生成”越权解释成“全部 22 张逐对象图面已审计”。截至 2026-08-08，《尖刺靴》《火箭靴》《直线跑路药水》已补齐 `844x390` 移动横屏对象级图面证据；其它宝藏仍按各自证据状态处理。
 
 ### 8 张唯一怪物
 

@@ -127,7 +127,7 @@ const TIANSHi_HERO_CARDS: AbilityCard[] = [
     {
         id: 'upgrade-tianshi-holy-blade-3-cherub-2',
         name: cardText('upgrade-tianshi-holy-blade-3-cherub-2', 'name'),
-        type: 'upgrade', cpCost: 4, timing: 'main', description: cardText('upgrade-tianshi-holy-blade-3-cherub-2', 'description'),
+        type: 'upgrade', cpCost: 3, timing: 'main', description: cardText('upgrade-tianshi-holy-blade-3-cherub-2', 'description'),
         previewRef: atlasPreview(27), sourceAtlasIndex: 27,
         effects: [replaceAbility('holy-blade', HOLY_BLADE_3, 3, abilityEffectText('upgrade-tianshi-holy-blade-3-cherub-2', 'upgrade')), custom('tianshi-cherub-card', abilityEffectText('upgrade-tianshi-holy-blade-3-cherub-2', 'secondary'))],
     },

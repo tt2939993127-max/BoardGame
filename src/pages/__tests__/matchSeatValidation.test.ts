@@ -3676,7 +3676,11 @@ describe('submitOnlineAiResolution', () => {
         });
 
         expect(sendBatch).not.toHaveBeenCalled();
-        expect(sendCommand).toHaveBeenCalledWith('SYS_INTERACTION_RESPOND', { optionId: 'pick-1' });
+        expect(sendCommand).toHaveBeenCalledWith(
+            'SYS_INTERACTION_RESPOND',
+            { optionId: 'pick-1' },
+            { onlineAiAttemptKey: 'attempt-single-confirmed' },
+        );
 
         stateListener?.(buildOnlineAiSeatState({ nextId: 14 }));
         expect(onConfirmed).toHaveBeenCalledWith(expect.objectContaining({
@@ -3927,6 +3931,58 @@ describe('submitOnlineAiResolution', () => {
         expect(lastAiAttemptKeyRef.current).toBeNull();
         expect(retry).not.toHaveBeenCalled();
         expect(onRejected).toHaveBeenCalledWith('online_ai_circuit_open');
+        expect(unsubscribeState).toHaveBeenCalledTimes(1);
+        expect(unsubscribeError).toHaveBeenCalledTimes(1);
+    });
+
+    it('单命令收到 stale_state 后应立即结束当前尝试，避免把重同步误认成命令确认', () => {
+        const retry = vi.fn();
+        const onWillResync = vi.fn();
+        const onConfirmed = vi.fn();
+        const onRejected = vi.fn();
+        const unsubscribeState = vi.fn();
+        const unsubscribeError = vi.fn();
+        let stateListener: ((state: unknown) => void) | null = null;
+        let errorListener: ((error: string) => void) | null = null;
+        const subscribeStateUpdate = vi.fn((listener: (state: unknown) => void) => {
+            stateListener = listener;
+            return unsubscribeState;
+        });
+        const subscribeError = vi.fn((listener: (error: string) => void) => {
+            errorListener = listener;
+            return unsubscribeError;
+        });
+        const lastAiAttemptKeyRef = { current: null as string | null };
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch: vi.fn(),
+                sendCommand: vi.fn(),
+                subscribeStateUpdate,
+                subscribeError,
+                latestState: buildOnlineAiSeatState({ nextId: 16 }),
+                updateLatestState: vi.fn(),
+                resync: vi.fn(),
+            },
+            resolution: buildResolution({
+                attemptKey: 'attempt-single-stale-state',
+                commands: [{ type: 'ROLL_DICE', payload: {} }],
+            }),
+            lastAiAttemptKeyRef,
+            scheduleRetry: retry,
+            onWillResync,
+            onConfirmed,
+            onRejected,
+        });
+
+        errorListener?.('stale_state');
+        stateListener?.(buildOnlineAiSeatState({ nextId: 17 }));
+
+        expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(onWillResync).toHaveBeenCalledWith('stale_state');
+        expect(retry).toHaveBeenCalledTimes(1);
+        expect(onRejected).toHaveBeenCalledWith('stale_state');
+        expect(onConfirmed).not.toHaveBeenCalled();
         expect(unsubscribeState).toHaveBeenCalledTimes(1);
         expect(unsubscribeError).toHaveBeenCalledTimes(1);
     });

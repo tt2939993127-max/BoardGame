@@ -3140,6 +3140,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     ) : (
                         <div
                             className={`bg-[#fef3c7] text-slate-800 p-3 pt-4 shadow-[2px_3px_5px_rgba(0,0,0,0.2)] -rotate-1 min-w-[140px] clip-path-jagged ${isMobileViewport ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                            data-testid="su-turn-tracker"
                             data-tutorial-id="su-turn-tracker"
                             style={turnTrackerStyle}
                         >

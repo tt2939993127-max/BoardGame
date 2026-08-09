@@ -10,9 +10,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$ProjectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($OpenDesignRoot)) {
-    $OpenDesignRoot = Join-Path $CodexHome "tools\open-design"
+    $OpenDesignRoot = Join-Path $ProjectRoot ".tools\open-design"
 }
+$LegacyOpenDesignRoot = Join-Path $CodexHome "tools\open-design"
 
 function Write-Step {
     param([string]$Message)
@@ -84,6 +86,14 @@ function Test-BetterSqliteBinding {
 }
 
 function Find-OdCommand {
+    $packageJson = Join-Path $OpenDesignRoot "package.json"
+    if (Test-Path $packageJson) {
+        return @{
+            Mode = "repo"
+            Path = $OpenDesignRoot
+        }
+    }
+
     $command = Get-Command od -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command) {
         return @{
@@ -92,11 +102,11 @@ function Find-OdCommand {
         }
     }
 
-    $packageJson = Join-Path $OpenDesignRoot "package.json"
-    if (Test-Path $packageJson) {
+    $legacyPackageJson = Join-Path $LegacyOpenDesignRoot "package.json"
+    if (([System.IO.Path]::GetFullPath($LegacyOpenDesignRoot) -ne [System.IO.Path]::GetFullPath($OpenDesignRoot)) -and (Test-Path $legacyPackageJson)) {
         return @{
-            Mode = "repo"
-            Path = $OpenDesignRoot
+            Mode = "repo-legacy"
+            Path = $LegacyOpenDesignRoot
         }
     }
 
@@ -157,20 +167,38 @@ function Invoke-Od {
 function Set-CodexMcpConfig {
     $configPath = Join-Path $CodexHome "config.toml"
     $nodeCommand = (Get-Command node -ErrorAction Stop).Source
-    $odBin = Join-Path $OpenDesignRoot "apps\daemon\bin\od.mjs"
+    $mcpCommand = $nodeCommand
+    $mcpArgs = @()
 
-    if (-not (Test-Path $odBin)) {
-        throw "Open Design od entry not found: $odBin"
+    if ($script:OdCommand.Mode -eq "path") {
+        $mcpCommand = $script:OdCommand.Path
+        $mcpArgs = @(
+            "mcp",
+            "--daemon-url",
+            "http://127.0.0.1:7456"
+        )
+    }
+    else {
+        $sourceRoot = $script:OdCommand.Path
+        $odBin = Join-Path $sourceRoot "apps\daemon\bin\od.mjs"
+        if (-not (Test-Path $odBin)) {
+            throw "Open Design od entry not found: $odBin"
+        }
+
+        $mcpArgs = @(
+            $odBin,
+            "mcp",
+            "--daemon-url",
+            "http://127.0.0.1:7456"
+        )
     }
 
+    $quotedArgs = ($mcpArgs | ForEach-Object { "  '$($_ -replace "'", "''")'," }) -join [Environment]::NewLine
     $block = @"
 [mcp_servers.open-design]
-command = '$nodeCommand'
+command = '$($mcpCommand -replace "'", "''")'
 args = [
-  '$odBin',
-  'mcp',
-  '--daemon-url',
-  'http://127.0.0.1:7456',
+$quotedArgs
 ]
 startup_timeout_sec = 120
 
@@ -204,6 +232,8 @@ if (-not (Test-Path $CodexHome)) {
 
 $env:CODEX_HOME = $CodexHome
 Write-Step "CODEX_HOME=$CodexHome"
+Write-Step "Project root=$ProjectRoot"
+Write-Step "Project Open Design root=$OpenDesignRoot"
 
 $script:OdCommand = Find-OdCommand
 if ($InstallSource) {

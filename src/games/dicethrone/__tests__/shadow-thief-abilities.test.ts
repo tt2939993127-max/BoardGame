@@ -18,7 +18,6 @@ import { SHADOW_THIEF_RESOURCES } from '../heroes/shadow_thief/resourceConfig';
 import { CHARACTER_DATA_MAP } from '../domain/characters';
 import { DiceThroneDomain } from '../domain';
 import { buildDiceThroneAiLegalActions } from '../ai';
-import { buildDiceThroneAiLegalActions } from '../ai';
 import { TOKEN_IDS, STATUS_IDS, SHADOW_THIEF_DICE_FACE_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { INITIAL_HEALTH, INITIAL_CP } from '../domain/types';
@@ -33,10 +32,10 @@ import {
     fixedRandom,
     cmd,
     assertState,
-    type DiceThroneExpectation,
 } from './test-utils';
 import { GameTestRunner } from '../../../engine/testing';
 import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
+import { reduce } from '../domain/reducer';
 
 // ============================================================================
 // 测试工具
@@ -1182,7 +1181,7 @@ describe('暗影守护 II - 完整防御结算流程', () => {
 // ============================================================================
 
 describe('潜行 Token - 完整流程测试', () => {
-    it('防御方有潜行时：跳过防御掷骰、免除伤害、消耗潜行', () => {
+    it('防御方有潜行时：跳过防御掷骰、免除伤害且不消耗潜行', () => {
         // 进攻掷骰 5 次 → 全 1（dagger）→ dagger-strike-5（8伤害）
         const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1]);
 
@@ -1195,7 +1194,7 @@ describe('潜行 Token - 完整流程测试', () => {
                 mutate: (core) => {
                     // 给防御者（玩家1）1层潜行
                     core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
-                    // 记录潜行获得回合（上一回合获得，本回合可消耗）
+                    // 记录潜行获得回合（上一回合获得，本回合仍按光环生效）
                     core.sneakGainedTurn = { '1': 0 };
                 },
             }),
@@ -1228,6 +1227,105 @@ describe('潜行 Token - 完整流程测试', () => {
         });
 
         expect(result.assertionErrors).toHaveLength(0);
+    });
+
+    it('防御方被眩晕时：潜行仍然自动免除非终极进攻伤害', () => {
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
+                    core.players['1'].statusEffects[STATUS_IDS.STUN] = 1;
+                    core.sneakGainedTurn = { '1': 0 };
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '潜行在眩晕下仍免除非终极伤害',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+            ],
+        });
+
+        expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SNEAK]).toBe(1);
+        expect(result.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH);
+    });
+
+    it('潜行不会免除终极技能伤害', () => {
+        const queuedRandom = createQueuedRandom([6, 6, 6, 6, 6]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    core.players['0'].resources[RESOURCE_IDS.CP] = 2;
+                    core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
+                    core.sneakGainedTurn = { '1': 0 };
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '潜行不免除终极伤害',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'shadow-shank' }),
+                cmd('ADVANCE_PHASE', '0'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: { [TOKEN_IDS.SNEAK]: 1 },
+                        resources: { [RESOURCE_IDS.HP]: INITIAL_HEALTH - 10 },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+    });
+
+    it('已持有潜行时再次获得不会刷新回合末移除计时', () => {
+        const state = createShadowThiefState(['0', '1'], fixedRandom).core;
+        state.players['0'].tokens[TOKEN_IDS.SNEAK] = 1;
+        state.sneakGainedTurn = { '0': 1 };
+        state.turnNumber = 2;
+
+        const afterGrant = reduce(state, {
+            type: 'TOKEN_GRANTED',
+            payload: {
+                targetId: '0',
+                tokenId: TOKEN_IDS.SNEAK,
+                amount: 1,
+                newTotal: 1,
+                sourceAbilityId: 'shadow-dance',
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        });
+
+        expect(afterGrant.players['0'].tokens[TOKEN_IDS.SNEAK]).toBe(1);
+        expect(afterGrant.sneakGainedTurn?.['0']).toBe(1);
     });
 
     it('潜行经过完整回合后在回合末自动弃除', () => {

@@ -1195,51 +1195,6 @@ function buildLatestDiscoveryDisplayEntry(
   };
 }
 
-function buildDiscoveryResolutionSteps(
-  discovery: BetrayalDiscoverySummary | null,
-): string[] {
-  if (discovery?.resolutionSteps?.length) {
-    return discovery.resolutionSteps
-      .map((step) => step.text.trim())
-      .filter((step) => step.length > 0);
-  }
-  if (!discovery?.detail) {
-    return [];
-  }
-  const steps = discovery.detail
-    .split("；")
-    .map((step) => step.trim())
-    .filter((step) => step.length > 0);
-  const summary = discovery.summary.trim();
-  if (
-    steps.length > 1 &&
-    summary.length > 0 &&
-    !steps.some((step) => step.includes(summary))
-  ) {
-    const lastIndex = steps.length - 1;
-    steps[lastIndex] = `${summary}：${steps[lastIndex]}`;
-  }
-  return steps;
-}
-
-function compactVisibleDiscoveryResolutionStep(step: string): string {
-  const withoutPrefix = step.replace(/^(事件效果|房间效果)：/, "").trim();
-  const parts = withoutPrefix
-    .split("；")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  if (parts.length <= 1) {
-    return withoutPrefix || step;
-  }
-  const resultParts = parts.filter(
-    (part) =>
-      !/[检骰]定|总点数/.test(part) &&
-      !/^获得\s*\d+\s*点/.test(part) &&
-      !/^失去\s*\d+\s*点/.test(part),
-  );
-  return (resultParts.length > 0 ? resultParts : parts.slice(-1)).join("；");
-}
-
 function isSpiderAdjacentRoomResolutionDiscovery(
   discovery: BetrayalDiscoverySummary | null,
 ): boolean {
@@ -2565,12 +2520,14 @@ function ScenarioBookTurnSheet({
   toPages,
   title,
   isPhoneLandscapeLayout = false,
+  onTurnComplete,
 }: {
   direction: "back" | "forward" | null;
   fromPages: [ScenarioReaderPage | null, ScenarioReaderPage | null];
   toPages: [ScenarioReaderPage | null, ScenarioReaderPage | null];
   title: string;
   isPhoneLandscapeLayout?: boolean;
+  onTurnComplete?: () => void;
 }) {
   const { t } = useTranslation("game-betrayal");
   if (!direction) return null;
@@ -2667,6 +2624,8 @@ function ScenarioBookTurnSheet({
         detailStageSize={{ width: stageWidth, height: stageHeight }}
         leftPageRect={{ left: "0%", top: "0%", width: "50%", height: "100%" }}
         rightPageRect={{ left: "50%", top: "0%", width: "50%", height: "100%" }}
+        onFlipToDetailComplete={onTurnComplete}
+        onFlipToOverviewComplete={onTurnComplete}
       />
     </div>
   );
@@ -6617,6 +6576,10 @@ export default function BetrayalBoard({
   const [inventoryPreviewCardId, setInventoryPreviewCardId] = React.useState<
     string | null
   >(null);
+  const [
+    latestDiscoverySearchRevealIndex,
+    setLatestDiscoverySearchRevealIndex,
+  ] = React.useState(0);
   const [confirmedExorciseRollId, setConfirmedExorciseRollId] = React.useState<
     string | null
   >(null);
@@ -7301,8 +7264,28 @@ export default function BetrayalBoard({
   }, [allExplorers, core, viewerPlayerId]);
   const inventoryActionPlayerId =
     recentRollRerollOwner?.playerId ?? core.currentExplorer.playerId;
-  const visibleInventoryCards =
-    recentRollRerollOwner?.inventory ?? core.currentExplorerInventory;
+  const pendingDiscoveryInventoryCardIds = React.useMemo(() => {
+    const pending = core.pendingCardResolutionQueue?.[0];
+    if (!pending) {
+      return new Set<string>();
+    }
+    const cardIds = new Set(
+      (pending.processCards ?? [])
+        .filter((card) => card.outcome === "gained" && Boolean(card.cardId))
+        .map((card) => card.cardId!),
+    );
+    if (
+      cardIds.size === 0 &&
+      pending.cardId &&
+      (pending.deckKind === "item" || pending.deckKind === "omen")
+    ) {
+      cardIds.add(pending.cardId);
+    }
+    return cardIds;
+  }, [core.pendingCardResolutionQueue]);
+  const visibleInventoryCards = (
+    recentRollRerollOwner?.inventory ?? core.currentExplorerInventory
+  ).filter((card) => !pendingDiscoveryInventoryCardIds.has(card.id));
   const selectedInventoryCard =
     visibleInventoryCards.find(
       (item) => item.id === previewState.selectedInventoryCardId,
@@ -10583,14 +10566,6 @@ export default function BetrayalBoard({
     };
   }, [shouldSuppressMobileBlockingRollChrome]);
   const latestDiscoveryTitle = latestDiscovery?.title;
-  const latestDiscoveryDetailSteps = React.useMemo(
-    () => buildDiscoveryResolutionSteps(latestDiscovery),
-    [latestDiscovery],
-  );
-  const shouldKeepLatestDiscoveryResolutionLedger =
-    Boolean(
-      latestDiscovery?.resolutionSteps?.some((step) => step.text.trim().length > 0),
-    ) || latestDiscoveryDetailSteps.length > 1;
   const latestDiscoveryKindLabel = latestDiscovery
     ? {
         event: t("board.discovery.eventCard"),
@@ -10639,27 +10614,21 @@ export default function BetrayalBoard({
       latestDiscoveryOwnerInventory,
     ],
   );
-  const shouldCompactLatestDiscoveryResolutionSteps = Boolean(
-    latestDiscoveryVisual && shouldShowLatestDiscoveryRoll && latestDiscoveryRecentRoll,
-  );
-  const latestDiscoveryVisibleDetailSteps = React.useMemo(
-    () =>
-      shouldCompactLatestDiscoveryResolutionSteps
-        ? latestDiscoveryDetailSteps.map(compactVisibleDiscoveryResolutionStep)
-        : latestDiscoveryDetailSteps,
-    [latestDiscoveryDetailSteps, shouldCompactLatestDiscoveryResolutionSteps],
-  );
-  const latestDiscoveryFinalEffectText = React.useMemo(() => {
-    if (latestDiscoveryDetailSteps.length > 0) {
-      return latestDiscoveryDetailSteps
-        .map(compactVisibleDiscoveryResolutionStep)
-        .filter((step) => step.length > 0)
-        .join("；");
+  const latestDiscoveryDisplaySummary = React.useMemo(() => {
+    const summary = latestDiscovery?.summary?.trim() ?? "";
+    if (latestDiscovery?.kind !== "none") {
+      return summary;
     }
-    return latestDiscovery?.detail?.trim() ?? "";
-  }, [latestDiscovery, latestDiscoveryDetailSteps]);
+    return summary
+      .replace(/[；;]\s*没有事件、物品或预兆发现牌[。.]?\s*$/, "")
+      .trim();
+  }, [latestDiscovery?.kind, latestDiscovery?.summary]);
   const shouldShowLatestDiscoveryCardFace = Boolean(
-    latestDiscovery && latestDiscovery.kind !== "none",
+    latestDiscovery &&
+      (latestDiscovery.kind !== "none" ||
+        (activePendingCardResolution?.cardId &&
+          (activePendingCardResolution.deckKind === "item" ||
+            activePendingCardResolution.deckKind === "omen"))),
   );
   const latestDiscoveryPendingCardResolution =
     React.useMemo<BetrayalPendingCardResolutionState | null>(() => {
@@ -10695,26 +10664,64 @@ export default function BetrayalBoard({
     latestDiscoveryCardResolutionRequiredPlayerIds.length;
   const latestDiscoveryViewerHasAcknowledgedCardResolution =
     latestDiscoveryCardResolutionAcknowledgedPlayerIds.includes(viewerPlayerId);
+  const latestDiscoverySearchSequence =
+    latestDiscoveryPendingCardResolution?.processCards ?? [];
+  const latestDiscoveryHasSearchSequence =
+    latestDiscoverySearchSequence.length > 0;
+  const isLatestDiscoverySearchOperator = Boolean(
+    latestDiscoveryPendingCardResolution &&
+      latestDiscoveryHasSearchSequence &&
+      latestDiscoveryPendingCardResolution.playerId === viewerPlayerId,
+  );
+  const latestDiscoverySearchVisibleIndex = latestDiscoveryHasSearchSequence
+    ? isLatestDiscoverySearchOperator
+      ? Math.min(
+          Math.max(0, latestDiscoverySearchRevealIndex),
+          latestDiscoverySearchSequence.length - 1,
+        )
+      : latestDiscoverySearchSequence.length - 1
+    : -1;
+  const latestDiscoveryVisibleProcessCard =
+    latestDiscoverySearchVisibleIndex >= 0
+      ? latestDiscoverySearchSequence[latestDiscoverySearchVisibleIndex] ?? null
+      : null;
+  const canAdvanceLatestDiscoverySearch = Boolean(
+    isLatestDiscoverySearchOperator &&
+      !latestDiscoveryViewerHasAcknowledgedCardResolution &&
+      latestDiscoverySearchVisibleIndex >= 0 &&
+      latestDiscoverySearchVisibleIndex < latestDiscoverySearchSequence.length - 1,
+  );
+  React.useEffect(() => {
+    setLatestDiscoverySearchRevealIndex(0);
+  }, [
+    latestDiscoveryPendingCardResolution?.id,
+    latestDiscoveryPendingCardResolution?.processCards?.length,
+    viewerPlayerId,
+  ]);
   const canCurrentViewerAcknowledgeCardResolution = Boolean(
     latestDiscoveryPendingCardResolution
       && latestDiscoveryCardResolutionRequiredPlayerIds.includes(viewerPlayerId)
-      && !latestDiscoveryViewerHasAcknowledgedCardResolution,
+      && !latestDiscoveryViewerHasAcknowledgedCardResolution
+      && !canAdvanceLatestDiscoverySearch,
   );
-  const latestDiscoveryContinueLabel = latestDiscoveryPendingCardResolution
-    ? latestDiscoveryViewerHasAcknowledgedCardResolution
-      ? t("board.discovery.waitingForAll", {
-          confirmed: latestDiscoveryCardResolutionConfirmedCount,
-          total: latestDiscoveryCardResolutionTotalCount,
-        })
-      : latestDiscoveryPendingCardResolution.total > 1
-      ? t("board.discovery.confirmCardStep", {
-          current: latestDiscoveryPendingCardResolution.index,
-          total: latestDiscoveryPendingCardResolution.total,
-        })
-      : t("board.discovery.confirmCard")
-    : t("board.roll.backToBoard");
-  const shouldShowLatestDiscoveryStepProgress =
-    latestDiscoveryDetailSteps.length > 1;
+  const latestDiscoveryContinueLabel = (() => {
+    if (!latestDiscoveryPendingCardResolution) {
+      return t("board.roll.backToBoard");
+    }
+    if (latestDiscoveryViewerHasAcknowledgedCardResolution) {
+      return t("board.discovery.waitingForAll", {
+        confirmed: latestDiscoveryCardResolutionConfirmedCount,
+        total: latestDiscoveryCardResolutionTotalCount,
+      });
+    }
+    if (canAdvanceLatestDiscoverySearch) {
+      return t("board.discovery.nextSearchCard");
+    }
+    if (latestDiscoveryHasSearchSequence) {
+      return t("board.discovery.confirmCard");
+    }
+    return t("board.discovery.confirmCard");
+  })();
   const latestDiscoveryPendingResolutionSeenRef = React.useRef<{
     sourceKey: string;
     resolutionId: string;
@@ -10746,6 +10753,12 @@ export default function BetrayalBoard({
   ]);
   const handleContinueLatestDiscovery = React.useCallback(() => {
     if (latestDiscoveryPendingCardResolution) {
+      if (canAdvanceLatestDiscoverySearch) {
+        setLatestDiscoverySearchRevealIndex((previousIndex) =>
+          Math.min(previousIndex + 1, latestDiscoverySearchSequence.length - 1),
+        );
+        return;
+      }
       if (!canCurrentViewerAcknowledgeCardResolution) {
         return;
       }
@@ -10758,8 +10771,10 @@ export default function BetrayalBoard({
   }, [
     dispatchCommand,
     handleDismissLatestDiscovery,
+    canAdvanceLatestDiscoverySearch,
     canCurrentViewerAcknowledgeCardResolution,
     latestDiscoveryPendingCardResolution,
+    latestDiscoverySearchSequence.length,
   ]);
   React.useEffect(() => {
     const pendingResolution = latestDiscoveryPendingCardResolution;
@@ -11098,10 +11113,6 @@ export default function BetrayalBoard({
         });
         playSound(BETRAYAL_SCENARIO_PAGE_TURN_KEY);
         setReferenceScenarioTurnDirection(direction);
-        window.setTimeout(() => {
-          setReferenceScenarioTurnDirection(null);
-          setReferenceScenarioTurnSnapshot(null);
-        }, SCENARIO_BOOK_TURN_DURATION_MS + 80);
       }
       return nextIndex;
     });
@@ -11109,6 +11120,19 @@ export default function BetrayalBoard({
   const latestDiscoveryPendingPossessionCard = React.useMemo<
     BetrayalInventoryCard | null
   >(() => {
+    if (
+      latestDiscoveryVisibleProcessCard &&
+      (latestDiscoveryVisibleProcessCard.deckKind === "item" ||
+        latestDiscoveryVisibleProcessCard.deckKind === "omen")
+    ) {
+      return {
+        id:
+          latestDiscoveryVisibleProcessCard.cardId ??
+          latestDiscoveryVisibleProcessCard.cardName,
+        name: latestDiscoveryVisibleProcessCard.cardName,
+        kind: latestDiscoveryVisibleProcessCard.deckKind,
+      };
+    }
     const pending = activePendingCardResolution;
     if (
       !pending?.cardId ||
@@ -11121,7 +11145,7 @@ export default function BetrayalBoard({
       name: pending.cardName,
       kind: pending.deckKind,
     };
-  }, [activePendingCardResolution]);
+  }, [activePendingCardResolution, latestDiscoveryVisibleProcessCard]);
   const latestDiscoveryPendingPossessionVisual = React.useMemo(
     () =>
       latestDiscoveryPendingPossessionCard
@@ -14650,7 +14674,7 @@ export default function BetrayalBoard({
                 {shouldShowLatestDiscovery && !shouldAutoReturnAfterLatestDiscovery ? (
                   <span>
                     {t("board.discovery.label")} {latestDiscovery!.title}{" "}
-                    {latestDiscovery!.summary} {latestDiscoveryFinalEffectText}
+                    {latestDiscoveryDisplaySummary}
                   </span>
                 ) : null}
                 {roomFocusState ? <span>{roomFocusState.label}</span> : null}
@@ -14722,21 +14746,8 @@ export default function BetrayalBoard({
                           isPhoneLandscapeLayout ? "text-[13px]" : "text-[16px]"
                         }`}
                       >
-                        {latestDiscovery!.summary} {latestDiscoveryFinalEffectText}
+                        {latestDiscoveryDisplaySummary}
                       </span>
-                      {latestDiscoveryPendingCardResolution ? (
-                        <span
-                          data-testid="betrayal-discovery-confirmation-status"
-                          className={`basis-full text-[#fff1b8] ${
-                            isPhoneLandscapeLayout ? "text-[12px]" : "text-[14px]"
-                          }`}
-                        >
-                          {t("board.discovery.confirmationProgress", {
-                            confirmed: latestDiscoveryCardResolutionConfirmedCount,
-                            total: latestDiscoveryCardResolutionTotalCount,
-                          })}
-                        </span>
-                      ) : null}
                     </div>
                   )}
                   <div
@@ -14782,6 +14793,7 @@ export default function BetrayalBoard({
                         disabled={
                           Boolean(
                             latestDiscoveryPendingCardResolution
+                              && !canAdvanceLatestDiscoverySearch
                               && !canCurrentViewerAcknowledgeCardResolution,
                           )
                         }
@@ -14795,7 +14807,7 @@ export default function BetrayalBoard({
                       className="sr-only"
                       data-testid="betrayal-discovery-detail"
                     >
-                      {latestDiscovery!.summary} {latestDiscovery!.detail}
+                      {latestDiscoveryDisplayedKindLabel} {latestDiscoveryDisplayedTitle}
                     </span>
                     {shouldShowLatestDiscoveryCardFace ||
                     (shouldShowLatestDiscoveryRoll &&
@@ -14885,66 +14897,6 @@ export default function BetrayalBoard({
                       ) : null}
                     </div>
                     ) : null}
-                    {latestDiscoveryFinalEffectText ? (
-                      <div
-                        data-testid="betrayal-discovery-final-effect"
-                        className="grid w-full max-w-[min(760px,calc(100vw-2rem))] gap-1.5 rounded-[9px] border border-[rgba(214,181,109,0.28)] bg-[rgba(12,14,11,0.78)] px-3 py-2 text-left shadow-[0_10px_22px_rgba(0,0,0,0.20)]"
-                      >
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#c4a265]">
-                          {t("board.discovery.finalEffectLabel")}
-                        </span>
-                        <span className="text-[12px] font-semibold leading-snug text-[#f3e5bd]">
-                          {latestDiscoveryFinalEffectText}
-                        </span>
-                        {latestDiscoveryPendingCardResolution ? (
-                          <span
-                            data-testid="betrayal-discovery-final-effect-confirmation"
-                            className="text-[11px] font-semibold text-[#fff1b8]"
-                          >
-                            {t("board.discovery.confirmationProgress", {
-                              confirmed: latestDiscoveryCardResolutionConfirmedCount,
-                              total: latestDiscoveryCardResolutionTotalCount,
-                            })}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {shouldKeepLatestDiscoveryResolutionLedger ? (
-                      <ol
-                        hidden
-                        aria-hidden="true"
-                        data-testid="betrayal-discovery-resolution-steps"
-                        data-ui-role="nonvisual-resolution-ledger"
-                        className={`grid w-full max-w-[min(760px,calc(100vw-2rem))] gap-1.5 rounded-[10px] border border-[rgba(214,181,109,0.26)] bg-[rgba(12,14,11,0.70)] p-2.5 text-left shadow-[0_12px_26px_rgba(0,0,0,0.22)] ${
-                          isPhoneLandscapeLayout
-                            ? "max-h-[78px] overflow-auto text-[12px]"
-                            : "text-[12px]"
-                        }`}
-                      >
-                        {latestDiscoveryDetailSteps.map((step, index) => (
-                          <li
-                            key={`${latestDiscoveryKey ?? "discovery"}-step-${index}`}
-                            data-testid="betrayal-discovery-resolution-step"
-                            data-visible-text={latestDiscoveryVisibleDetailSteps[index]}
-                            className="grid grid-cols-[40px_minmax(0,1fr)] items-start gap-2 text-[#eadbb0]"
-                          >
-                            <span className="rounded-[5px] border border-[rgba(214,181,109,0.24)] bg-[rgba(214,181,109,0.12)] px-1.5 py-0.5 text-center text-[12px] font-black tracking-[0.08em] text-[#fff1b8]">
-                              {shouldShowLatestDiscoveryStepProgress
-                                ? `${index + 1}/${latestDiscoveryDetailSteps.length}`
-                                : t("board.discovery.resultLabel")}
-                            </span>
-                            <span className="min-w-0 leading-snug">
-                              {shouldCompactLatestDiscoveryResolutionSteps ? (
-                                <span className="sr-only">{step}</span>
-                              ) : null}
-                              <span aria-hidden={shouldCompactLatestDiscoveryResolutionSteps}>
-                                {latestDiscoveryVisibleDetailSteps[index] ?? step}
-                              </span>
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : null}
                     {isPhoneLandscapeLayout &&
                     shouldShowLatestDiscoveryRoll &&
                     latestDiscoveryRecentRoll ? null : (
@@ -14973,6 +14925,7 @@ export default function BetrayalBoard({
                         disabled={
                           Boolean(
                             latestDiscoveryPendingCardResolution
+                              && !canAdvanceLatestDiscoverySearch
                               && !canCurrentViewerAcknowledgeCardResolution,
                           )
                         }
@@ -17741,7 +17694,7 @@ export default function BetrayalBoard({
                   : null}
                 <div
                   data-testid="betrayal-room-floor-switcher"
-                   className={`pointer-events-auto absolute bottom-3 z-[60] w-[54px] flex-col items-center overflow-hidden rounded-[10px] border bg-[rgba(8,10,8,0.76)] text-[11px] font-semibold text-[#d6c498] shadow-[0_10px_24px_rgba(0,0,0,0.36)] backdrop-blur-sm ${
+                   className={`pointer-events-auto absolute top-1/2 z-[60] w-[54px] -translate-y-1/2 flex-col items-center overflow-hidden rounded-[10px] border bg-[rgba(8,10,8,0.76)] text-[11px] font-semibold text-[#d6c498] shadow-[0_10px_24px_rgba(0,0,0,0.36)] backdrop-blur-sm ${
                     isPhoneLandscapeLayout ? "right-3" : "right-[228px]"
                   } ${
                     shouldHideTableChromeForBlockingOverlay
@@ -19270,6 +19223,10 @@ export default function BetrayalBoard({
                         }
                         title={activeHauntTitle}
                         isPhoneLandscapeLayout={isPhoneLandscapeLayout}
+                        onTurnComplete={() => {
+                          setReferenceScenarioTurnDirection(null);
+                          setReferenceScenarioTurnSnapshot(null);
+                        }}
                       />
                       {[
                         referenceScenarioLeftPage,

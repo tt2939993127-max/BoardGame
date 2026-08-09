@@ -778,6 +778,58 @@ describe('Feature: incremental-state-sync', () => {
       client.disconnect();
     });
 
+    it('在线 AI 命令应携带尝试编号和最近同步现场', () => {
+      const { client } = createConnectedClient();
+
+      simulateSync({ core: { turn: 0 } }, [{ id: 0 }], 7);
+      mockSocket.clearEmitted();
+
+      client.sendCommand('attack', { target: '1' }, { onlineAiAttemptKey: 'ai-attempt-1' });
+
+      const command = mockSocket.findEmitted('command')[0];
+      expect(command?.args[4]).toEqual(expect.objectContaining({
+        expectedStateID: 7,
+        onlineAiAttemptKey: 'ai-attempt-1',
+        clientTransport: expect.objectContaining({
+          lastStateEventKind: 'sync',
+          lastStateEventStateID: 7,
+          syncInFlight: false,
+          lastPatchIssue: null,
+        }),
+      }));
+
+      client.disconnect();
+    });
+
+    it('补丁断档后重新同步，下一次 AI 命令应保留补丁断档证据', () => {
+      const { client } = createConnectedClient();
+
+      simulateSync({ core: { turn: 0 } }, [{ id: 0 }], 7);
+      simulatePatch(
+        [{ op: 'replace', path: '/core/turn', value: 1 }],
+        { stateID: 9, randomCursor: 1 },
+      );
+      simulateSync({ core: { turn: 1 } }, [{ id: 0 }], 9);
+      mockSocket.clearEmitted();
+
+      client.sendCommand('attack', { target: '1' }, { onlineAiAttemptKey: 'ai-attempt-after-gap' });
+
+      const command = mockSocket.findEmitted('command')[0];
+      expect(command?.args[4]).toEqual(expect.objectContaining({
+        clientTransport: expect.objectContaining({
+          lastStateEventKind: 'sync',
+          lastStateEventStateID: 9,
+          lastPatchIssue: expect.objectContaining({
+            kind: 'discontinuity',
+            expectedStateID: 8,
+            receivedStateID: 9,
+          }),
+        }),
+      }));
+
+      client.disconnect();
+    });
+
     it.each(['stale_state', 'player_mismatch'])('command rejection %s triggers resync and blocks commands until the new state arrives', (reason) => {
       const onError = vi.fn();
       const client = new GameTransportClient({

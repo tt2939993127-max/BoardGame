@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, BookOpen, Download, HardDriveDownload, LoaderCircle, Plus, RefreshCw, Search, TableProperties } from 'lucide-react';
 import { type GameConfig } from '../../config/games.config';
+import { getGameConfigReviewPath, hasGameConfigReview } from '../../config/gameConfigReviewRoutes';
 import { preloadWarmImages, resolveCriticalImages, UI_Z_INDEX } from '../../core';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -644,7 +645,7 @@ const GameDetailsLeftContent = ({ game, onBack }: { game: GameConfig; onBack: ()
         .slice(0, 2);
     const leadParagraph = editorialParagraphs[0] || descriptionExcerpt;
     const secondaryParagraph = editorialParagraphs[1] || '';
-    const hasConfigReview = game.id === 'summonerwars' || game.id === 'dicethrone';
+    const hasConfigReview = hasGameConfigReview(game.id);
 
     const handleTutorial = () => {
         const gameId = game.id;
@@ -659,7 +660,7 @@ const GameDetailsLeftContent = ({ game, onBack }: { game: GameConfig; onBack: ()
     };
 
     const handleConfigReview = () => {
-        navigate(`/games/${game.id}/config`);
+        navigate(getGameConfigReviewPath(game.id));
     };
 
     return (

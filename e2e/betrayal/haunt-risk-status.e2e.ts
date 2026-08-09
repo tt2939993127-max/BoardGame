@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { BETRAYAL_DISCOVERY_POOLS } from '../../src/games/betrayal/scenarioConfig';
 import {
     assertNoFatalFrontendErrors,
@@ -6,6 +6,7 @@ import {
 } from '../helpers/common';
 import {
     createRuntimeCore,
+    dispatchHarnessCommand,
     initBetrayalContext,
     injectCore,
     saveScreenshot,
@@ -35,6 +36,55 @@ const TEAMMATE_OMEN_CARDS = [
     requireOmenCard('mask'),
     requireOmenCard('skull'),
 ];
+
+async function acknowledgeRemainingDiscoveryPlayers(page: Page) {
+    for (let safety = 0; safety < 8; safety += 1) {
+        const pending = await page.evaluate(() => {
+            const core = (
+                window as typeof window & {
+                    __BG_TEST_HARNESS__?: {
+                        state?: {
+                            get?: () => {
+                                core?: {
+                                    pendingCardResolutionQueue?: Array<{
+                                        id?: string;
+                                        playerId?: string;
+                                        requiredPlayerIds?: string[];
+                                        acknowledgedPlayerIds?: string[];
+                                    }>;
+                                };
+                            };
+                        };
+                    };
+                }
+            ).__BG_TEST_HARNESS__?.state?.get?.().core;
+            const resolution = core?.pendingCardResolutionQueue?.[0];
+            if (!resolution?.id) {
+                return null;
+            }
+            const requiredPlayerIds = resolution.requiredPlayerIds?.length
+                ? resolution.requiredPlayerIds
+                : resolution.playerId
+                    ? [resolution.playerId]
+                    : [];
+            const acknowledgedPlayerIds = new Set(resolution.acknowledgedPlayerIds ?? []);
+            return {
+                id: resolution.id,
+                nextPlayerId: requiredPlayerIds.find((playerId) => !acknowledgedPlayerIds.has(playerId)) ?? null,
+            };
+        });
+        if (!pending?.nextPlayerId) {
+            return;
+        }
+        await dispatchHarnessCommand(
+            page,
+            'ACKNOWLEDGE_CARD_RESOLUTION',
+            pending.nextPlayerId,
+            { resolutionId: pending.id },
+        );
+    }
+    throw new Error('作祟状态 E2E 的发现结算确认队列未能完成');
+}
 
 test.describe('山屋惊魂预兆状态条', () => {
     test('真实牌桌入口用预兆进度条承载作祟检定信息', async ({ page, context }) => {
@@ -161,12 +211,8 @@ test.describe('山屋惊魂预兆状态条', () => {
         await expect(riskStatus).toHaveAttribute('data-haunt-started', 'true');
         await expect(riskStatus).toHaveText(/作祟已开始/);
         await expect(riskStatus).toHaveAttribute('title', /不再进行作祟检定/);
-        for (let safety = 0; safety < 4; safety += 1) {
-            if (!await page.getByTestId('betrayal-discovery-continue').isVisible().catch(() => false)) {
-                break;
-            }
-            await page.getByTestId('betrayal-discovery-continue').click();
-        }
+        await page.getByTestId('betrayal-discovery-continue').click();
+        await acknowledgeRemainingDiscoveryPlayers(page);
         await expect(page.getByTestId('betrayal-discovery-panel')).toBeHidden();
         const scenarioReaderDialog = page.getByTestId('betrayal-scenario-reader-dialog');
         await expect(

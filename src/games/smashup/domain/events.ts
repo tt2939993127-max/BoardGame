@@ -99,6 +99,7 @@ export const SU_EVENTS = defineEvents({
   'su:action_def_blocked_this_turn': 'silent',
   'su:base_ability_suppressed': 'silent',
   'su:card_suppressed': 'silent',
+  'su:cards_suppressed_until_turn_end': 'silent',
   
   'su:power_counter_added': { audio: 'immediate', sound: POWER_GAIN_KEY },
   'su:power_counter_removed': { audio: 'immediate', sound: POWER_LOSE_KEY },
@@ -215,6 +216,7 @@ export const SU_EVENT_TYPES = {
   ACTION_DEF_BLOCKED_THIS_TURN: SU_EVENTS['su:action_def_blocked_this_turn'].type,
   BASE_ABILITY_SUPPRESSED: SU_EVENTS['su:base_ability_suppressed'].type,
   CARD_SUPPRESSED: SU_EVENTS['su:card_suppressed'].type,
+  CARDS_SUPPRESSED_UNTIL_TURN_END: SU_EVENTS['su:cards_suppressed_until_turn_end'].type,
   POWER_COUNTER_ADDED: SU_EVENTS['su:power_counter_added'].type,
   POWER_COUNTER_REMOVED: SU_EVENTS['su:power_counter_removed'].type,
   PERMANENT_POWER_ADDED: SU_EVENTS['su:permanent_power_added'].type,

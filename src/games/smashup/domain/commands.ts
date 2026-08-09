@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
 import { getCardDef, getFusionDef, getMinionDef, getMinionLikePower, getTitanDef } from '../data/cards';
+import { getMunchkinSpecialCardDescriptor } from '../data/factions/munchkin';
 import { isOperationRestricted } from './ongoingEffects';
 import {
     getScoringEligibleBaseIndices,
@@ -1335,6 +1336,29 @@ export function validate(
                 return { valid: false, error: 'player_mismatch' };
             }
             return validateTitanAbility(state, command, 'ongoing');
+        }
+
+        case SU_COMMANDS.DEFEAT_MUNCHKIN_MONSTER: {
+            if (phase !== 'playCards') {
+                return { valid: false, error: '只能在出牌阶段击败怪物' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            const { baseIndex, monsterUid } = command.payload;
+            const base = core.bases[baseIndex];
+            if (!base) return { valid: false, error: '无效的基地索引' };
+            const monster = base.monsters?.find(candidate => candidate.uid === monsterUid);
+            if (!monster) return { valid: false, error: '该基地没有这个怪物' };
+            if (monster.controllerId !== undefined) {
+                return { valid: false, error: '已受控怪物不能被击败' };
+            }
+            const monsterPower = getMunchkinSpecialCardDescriptor(monster.defId)?.power ?? 0;
+            const playerPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, command.playerId);
+            if (playerPower < monsterPower) {
+                return { valid: false, error: '力量不足，不能击败该怪物' };
+            }
+            return { valid: true };
         }
 
         default:

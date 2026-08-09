@@ -43,6 +43,8 @@ import type {
     VpAwardedEvent,
     ActionReturnToHandOptionArmedEvent,
     SpecialAfterScoringConsumedEvent,
+    MunchkinTreasureRewardRevealedEvent,
+    MunchkinTreasureRewardDistributedEvent,
 } from './types';
 import {
     PHASE_ORDER,
@@ -891,6 +893,40 @@ export function scoreOneBase(
         }
     }
 
+    const monsterTreasureRewardCount = (scoringBase.monsters ?? []).reduce((sum, monster) => (
+        sum + (getMunchkinSpecialCardDescriptor(monster.defId)?.treasureReward ?? 0)
+    ), 0);
+    const secretStashTreasureRewardCount = scoringBase.ongoingActions
+        .filter(action => action.defId === 'munchkin_thieves_secret_stash')
+        .length * 2;
+    const munchkinTreasureRewardCount = Math.min(
+        monsterTreasureRewardCount + secretStashTreasureRewardCount,
+        updatedCore.treasureDeck?.length ?? 0,
+    );
+    const eligibleMunchkinRewardPlayerIds = rankings.map(ranking => ranking.playerId);
+    if (
+        munchkinTreasureRewardCount > 0
+        && eligibleMunchkinRewardPlayerIds.length > 0
+        && (updatedCore.treasureDeck?.length ?? 0) > 0
+    ) {
+        const revealEvent: MunchkinTreasureRewardRevealedEvent = {
+            type: SU_EVENTS.MUNCHKIN_TREASURE_REWARD_REVEALED,
+            payload: {
+                baseIndex,
+                baseDefId: scoringBase.defId,
+                ...(scoringBase.instanceId ? { baseInstanceId: scoringBase.instanceId } : {}),
+                count: munchkinTreasureRewardCount,
+                eligiblePlayerIds: eligibleMunchkinRewardPlayerIds,
+                nextRecipientIndex: 0,
+                reason: 'munchkin_scoring_treasure_reward',
+            },
+            timestamp: now,
+        };
+        events.push(revealEvent);
+        updatedCore = reduce(updatedCore, revealEvent);
+        if (ms) ms = { ...ms, core: updatedCore };
+    }
+
     // 璁板綍 afterScoring 鍓嶇殑浜や簰鐘舵€侊紝鐢ㄤ簬鍒ゆ柇 afterScoring 鏄惁鏂板浜嗕氦浜?
     const afterScoringCore = updatedCore;
     const interactionBeforeAfterScoring = ms?.sys?.interaction?.current?.id ?? null;
@@ -1016,6 +1052,18 @@ export function scoreOneBase(
 
     // 构建清场 + 换基地 + onBaseRevealed 触发队列（延迟到当前基地彻底结算后再补发）
     const postScoringEvents: SmashUpEvent[] = [];
+    if (updatedCore.pendingMunchkinTreasureReward) {
+        const distributeTreasureRewardEvt: MunchkinTreasureRewardDistributedEvent = {
+            type: SU_EVENTS.MUNCHKIN_TREASURE_REWARD_DISTRIBUTED,
+            payload: {
+                baseIndex,
+                ...(scoringBase.instanceId ? { baseInstanceId: scoringBase.instanceId } : {}),
+                reason: 'munchkin_scoring_treasure_reward',
+            },
+            timestamp: now,
+        };
+        postScoringEvents.push(distributeTreasureRewardEvt);
+    }
     const clearEvt: BaseClearedEvent = {
         type: SU_EVENTS.BASE_CLEARED,
         payload: { baseIndex, baseDefId: scoringBase.defId, baseInstanceId: scoringBase.instanceId },

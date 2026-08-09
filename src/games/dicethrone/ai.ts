@@ -53,6 +53,7 @@ import { hasDebuffs, hasPurifyToken, getUsableTokensForTiming } from './domain/t
 import { getTokenEffectValue, type EffectAction, type RollDieConditionalEffect, type RollDieDefaultEffect } from './domain/tokenTypes';
 import { getDieFaceByValue } from './domain/diceRegistry';
 import { getCustomActionMeta } from './domain/effects';
+import { isCurrentBonusRollSettlement } from './domain/rollContext';
 import type { AbilityEffect, TriggerCondition } from './domain/combat';
 import type {
     AbilityCard,
@@ -2126,7 +2127,7 @@ const scoreResponseDefenseAction = (
 const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
     const settlement = state.core.pendingBonusDiceSettlement as PendingBonusDiceSettlement | undefined;
-    if (!settlement || settlement.attackerId !== playerId) return actions;
+    if (!settlement || settlement.attackerId !== playerId || !isCurrentBonusRollSettlement(state.core, settlement)) return actions;
 
     if (settlement.displayOnly === true) {
         if (settlement.allowDiceModification !== true) return actions;
@@ -2207,11 +2208,6 @@ const buildPassiveActions = (state: DiceThroneState, playerId: PlayerId, phase: 
             }
 
             if (passiveAction.type === 'rerollDie') {
-                // 强口径：避免“已确认骰面 → 触发响应窗口 → 关闭后又重掷 → 再次确认 → 再次触发响应窗口”的重复打扰链。
-                // 人类玩家可能会这么操作，但本地 AI 需要尽量把重掷决策放在 CONFIRM_ROLL 之前完成，减少 response-window 重触发。
-                if (state.core.rollConfirmed) {
-                    return;
-                }
                 activeDice
                     .filter((die) => !die.isKept)
                     .forEach((die) => {
@@ -2924,6 +2920,7 @@ const interactionValueScorer: LocalAiActionScorer = {
         const currentInteractionData = currentInteraction?.kind === 'multistep-choice'
             ? currentInteraction.data as DiceInteractionData | undefined
             : undefined;
+        const currentDice = getActiveDice(state.core);
         const targetOpponentDice = currentInteraction?.kind === 'multistep-choice'
             && (!interactionId || currentInteraction.id === interactionId)
             && currentInteractionData?.meta?.targetOpponentDice === true;
@@ -2948,7 +2945,7 @@ const interactionValueScorer: LocalAiActionScorer = {
                     const dieId = ids[index];
                     const die = dieId === undefined
                         ? null
-                        : state.core.dice.find((item) => item.id === dieId) ?? null;
+                        : currentDice.find((item) => item.id === dieId) ?? null;
                     if (!die) return sum;
                     const delta = value - die.value;
                     const normalized = targetOpponentDice ? -delta : delta;
@@ -3014,7 +3011,7 @@ const interactionValueScorer: LocalAiActionScorer = {
 
             if (dieIds.length > 0) {
                 const totalScore = dieIds.reduce((sum, currentDieId) => {
-                    const die = state.core.dice.find((item) => item.id === currentDieId);
+                    const die = currentDice.find((item) => item.id === currentDieId);
                     return sum + (die ? scoreForDieValue(die.value) * 12 : 0);
                 }, 0);
                 return {
@@ -3039,7 +3036,7 @@ const interactionValueScorer: LocalAiActionScorer = {
                 };
             }
             if (dieId !== null) {
-                const die = state.core.dice.find((item) => item.id === dieId);
+                const die = currentDice.find((item) => item.id === dieId);
                 if (die) {
                     return {
                         score: scoreForDieValue(die.value) * 12,

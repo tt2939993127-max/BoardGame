@@ -34,7 +34,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import { INITIAL_HEALTH, INITIAL_CP } from '../domain/types';
 import { getCustomActionHandler } from '../domain/effects';
 import { validateCommand } from '../domain/commandValidation';
-import { processTokenUsage, shouldOpenTokenResponse, getUsableTokensForTiming } from '../domain/tokenResponse';
+import { processTokenUsage, shouldOpenTokenResponse, getUsableTokensForTiming, finalizeTokenResponse } from '../domain/tokenResponse';
 import { initializeCustomActions } from '../domain/customActions';
 import { reduce } from '../domain/reducer';
 import { executeTokenCommand } from '../domain/executeTokens';
@@ -714,6 +714,59 @@ describe('神罚 (Retribution) Token 响应处理', () => {
 
         expect(result.success).toBe(true);
         expect(result.extra?.reflectDamage).toBe(4); // ceil(7/2) = 4
+    });
+
+    it('神罚计算忽略守护减半，但保留其它固定减伤', () => {
+        const retributionDef = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.RETRIBUTION)!;
+        const mockState = {
+            players: { '0': { tokens: { [TOKEN_IDS.RETRIBUTION]: 1 }, resources: { [RESOURCE_IDS.HP]: 50 } } },
+            pendingDamage: {
+                originalDamage: 10,
+                currentDamage: 3,
+                responseType: 'beforeDamageReceived',
+                modifiers: [
+                    { type: 'token', value: -5, sourceId: TOKEN_IDS.PROTECT },
+                    { type: 'token', value: -2, sourceId: 'fixed-prevention' },
+                ],
+            },
+        };
+
+        const { result } = processTokenUsage(
+            mockState as any,
+            retributionDef,
+            '0',
+            1,
+            undefined,
+            'beforeDamageReceived',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.extra?.reflectDamage).toBe(4); // (3 + 5) / 2 向上取整
+    });
+
+    it('完全闪避后，已声明的神罚反弹也应归零', () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom).core;
+        state.pendingDamage = {
+            id: 'retribution-after-evasion',
+            sourcePlayerId: '0',
+            targetPlayerId: '1',
+            originalDamage: 8,
+            currentDamage: 0,
+            responseType: 'beforeDamageReceived',
+            responderId: '1',
+            isFullyEvaded: true,
+            deferredDamageEvents: [{
+                targetId: '0',
+                amount: 0,
+                actualDamage: 0,
+                sourceAbilityId: 'retribution-reflect',
+                sourcePlayerId: '1',
+                reflectFromPendingDamage: true,
+            }],
+        };
+
+        const events = finalizeTokenResponse(state.pendingDamage, state, 1);
+        expect(events.some(event => event.type === 'DAMAGE_DEALT')).toBe(false);
     });
 
     it('protect Token 伤害减半（向上取整）', () => {
@@ -1783,6 +1836,57 @@ describe('守护 (Protect) 伤害减半集成测试', () => {
         expect(protectDef).toBeDefined();
         expect(protectDef!.activeUse?.timing).toContain('beforeDamageReceived');
         expect(protectDef!.activeUse?.timing).not.toContain('beforeDamageDealt');
+    });
+
+    it('同一伤害已使用一个守护时，第二个守护应免除剩余全部伤害', () => {
+        const protectDef = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.PROTECT)!;
+        const mockState = {
+            players: { '0': { tokens: { [TOKEN_IDS.PROTECT]: 2 }, resources: { [RESOURCE_IDS.HP]: 50 } } },
+            pendingDamage: {
+                originalDamage: 10,
+                currentDamage: 5,
+                responseType: 'beforeDamageReceived',
+                tokenUsageTotals: { [TOKEN_IDS.PROTECT]: 1 },
+                modifiers: [{ type: 'token', value: -5, sourceId: TOKEN_IDS.PROTECT }],
+            },
+        };
+
+        const { result } = processTokenUsage(
+            mockState as any,
+            protectDef,
+            '0',
+            1,
+            undefined,
+            'beforeDamageReceived',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.damageModifier).toBe(-5);
+    });
+
+    it('眩光结果为 2-3 时，一个守护应免除本次剩余全部伤害', () => {
+        const protectDef = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.PROTECT)!;
+        const mockState = {
+            players: { '0': { tokens: { [TOKEN_IDS.PROTECT]: 1 }, resources: { [RESOURCE_IDS.HP]: 50 } } },
+            pendingDamage: {
+                originalDamage: 5,
+                currentDamage: 3,
+                responseType: 'beforeDamageReceived',
+                modifiers: [{ type: 'percent', value: -50, sourceId: STATUS_IDS.DAZZLE }],
+            },
+        };
+
+        const { result } = processTokenUsage(
+            mockState as any,
+            protectDef,
+            '0',
+            1,
+            undefined,
+            'beforeDamageReceived',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.damageModifier).toBe(-3);
     });
 });
 

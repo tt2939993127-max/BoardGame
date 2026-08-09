@@ -1,19 +1,22 @@
 # 音频资源规范
 
-> 来源：从 `docs/ai-rules/asset-pipeline.md` 无损拆出。本文档承载音频运行时架构、共享音频包路径合同、音效触发路径和工具链；具体工作流优先走 `./.codex/skill/audio-integration/SKILL.md`。
+> 来源：从 `docs/ai-rules/asset-pipeline.md` 无损拆出。本文档承载跨游戏音频运行时架构、共享音频包路径合同和音效触发路径；具体工作流优先走系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`，命令、查找与试听入口见 `docs/audio/audio-usage.md`。
 
 ## 音频资源规范
 
-> 音频 workflow 优先走 `./.codex/skill/audio-integration/SKILL.md`；新增外部素材的产物合同详见：`docs/audio/add-audio.md`
+> 音频 workflow 优先走系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`；新增外部素材的产物合同详见：`docs/audio/add-audio.md`
 
-### 音频资源架构（强制）
+### 音频架构 / 音频资源架构（强制）
 
 **三层架构**：
 1. **通用注册表**（`src/assets/audio/registry.json`，构建时从 `public/assets/common/audio/` 生成）：所有音效资源的唯一来源，包含 key 和物理路径映射。代码中通过静态 import 加载，Vite 会自动打包。
-2. **游戏配置**（`src/games/<gameId>/audio.config.ts`）：定义事件→音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
+2. **事件与游戏配置**（`src/games/<gameId>/domain/events.ts` + `src/games/<gameId>/audio.config.ts`）：用 `defineEvents()` 定义事件音频策略，再用 `createFeedbackResolver(EVENTS)` 或少量高级覆盖生成 `feedbackResolver`，使用通用注册表中的 key。
 3. **FX 系统**（`src/games/<gameId>/ui/fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
 
 **核心原则**：
+- **策略显式优先**：事件音频策略只允许在 `ui`（本地交互）、`immediate`（即时反馈）、`fx`（动画驱动）、`silent`（无音效）中选择；新增即时事件默认写完整形式 `{ audio: 'immediate', sound: KEY }`，不要依赖字符串简写或命名猜测来决定正式音效。
+- **自动基线 + 可覆盖**：基础事件用 `createFeedbackResolver(EVENTS)` 生成；需要动态选择、条件静音或特殊逻辑时，在高级 `feedbackResolver` 中先调用基础 resolver，再做最小覆盖。
+- **百游戏标准**：新增游戏事件定义应保持短小集中，`feedbackResolver` 优先 1 行生成；确需高级覆盖时也应只保留特殊逻辑。UI 组件默认不直接写游戏态音效代码。
 - **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
 - **禁止**在游戏层定义音频资源（`audio.config.ts` 不得声明 `basePath/sounds`）。
 - **禁止**使用旧短 key（如 `click` / `dice_roll` / `card_draw`）。
@@ -40,7 +43,9 @@
   3. 补回归测试锁住“标准路径 + 历史路径”两条读取链
 - **远端可读不是合同修复**：`官方资源域名 / 服务器资源主源` 只负责在线可用性，不能作为“本地包路径合同已经正确”的证明。只要真实机日志里仍出现本地 `readInstalledAsset` 找不到文件，就不得把问题表述成“音频链路已完全修好”。
 
-### 音效触发规范（当前 + 长期规划）
+### 音效触发与迁移策略（主源）
+
+> **决策背景**：事件生成时刻与动画冲击帧不是同一时刻；若所有音效都在事件生成时播放，视听会错位。旧方案因此把“是否有动画”和“实际播放音效”拆在两个入口，容易出现重复配置和漏接线。当前以 `FeedbackPack.sound.timing` 作为有 FX 事件的播放时机声明，逐步收敛到单一配置源。
 
 #### 当前架构（过渡期）
 
@@ -59,11 +64,11 @@
 - 创建 `domain/animationSoundConfig.ts` 集中管理所有 `onImpact` 音效配置
 - 提供音效解析函数（如 `resolveDamageImpactKey`）
 - 在 `useAnimationEffects.ts` 中从配置读取音效 key，而不是硬编码
-- 详见 `docs/refactor/audio-architecture-improvement.md`
+- 迁移完成后删除该过渡配置，改由 `fxSetup.ts` 的 `FeedbackPack` 承担播放时机和 key 声明。
 
-#### 长期目标架构（FeedbackPack 单一配置源）
+#### 目标架构（FeedbackPack 单一配置源）
 
-> **详见**：`docs/refactor/audio-architecture-improvement.md`
+> 目标架构、迁移边界和当前正确示例统一由本节承载，不再另设重复的“音效架构改进方案”入口。
 
 **核心变化**：
 - `feedbackResolver` 只处理"无动画的即时音效"（如投骰子、阶段切换）
@@ -108,12 +113,10 @@ pushFlyingEffect({
 });
 ```
 
-### 音频工具链
+### 音频执行入口
 
-- **压缩脚本**：`npm run compress:audio -- public/assets/common/audio`
-- **生成 registry**：`node scripts/audio/generate_common_audio_registry.js`
-- **生成语义目录**：`npm run audio:catalog`（产出 `docs/audio/audio-catalog.md`，AI 查找音效首选）
-- **资源清单**：`node scripts/audio/generate_audio_assets_md.js`
-- **详见入口**：`./.codex/skill/audio-integration/SKILL.md`（workflow） + `docs/audio/audio-usage.md`（架构与运行时合同）
+- 具体 workflow 走系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`。
+- 压缩、registry / 语义目录生成、查找、试听和项目接入命令见 `docs/audio/audio-usage.md`。
+- 本文档只承载运行时合同；新增外部素材的目录、命名、产物和浏览器验收见 `docs/audio/add-audio.md`。
 
 **相关提案**：`openspec/changes/refactor-audio-common-layer/specs/audio-path-auto-compression.md`

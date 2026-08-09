@@ -28,9 +28,13 @@ import {
 
 const ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR = resolve(process.cwd(), 'evidence/betrayal-item-discovery-confirmation');
 const ARMORY_PLACEMENT_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/01-器械库-确认房间朝向.jpg`;
-const ARMORY_DISCOVERY_FIRST_STEP_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/02-器械库-发现确认1-房间获得武器.jpg`;
-const ARMORY_DISCOVERY_SECOND_STEP_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03-器械库-发现确认2-展示后掩埋.jpg`;
-const ARMORY_INVENTORY_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/04-器械库-确认完毕回牌桌持有区.jpg`;
+const ARMORY_DISCOVERY_BURIED_CARD_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/02-器械库-展示急救包.jpg`;
+const ARMORY_DISCOVERY_WEAPON_READY_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03-器械库-展示砍刀并确认.jpg`;
+const ARMORY_DISCOVERY_SELF_CONFIRMED_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03a-器械库-本人确认后等待其他玩家.jpg`;
+const ARMORY_PLAYER_ONE_CONFIRM_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03b-器械库-玩家一确认砍刀.jpg`;
+const ARMORY_DISCOVERY_TWO_CONFIRMED_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03c-器械库-两人确认后等待其他玩家.jpg`;
+const ARMORY_PLAYER_TWO_CONFIRM_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03d-器械库-玩家二确认砍刀.jpg`;
+const ARMORY_INVENTORY_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/04-器械库-全员确认完毕回牌桌持有区.jpg`;
 const ORDINARY_ITEM_DISCOVERY_EVIDENCE_DIR = resolve(process.cwd(), 'evidence/betrayal-ordinary-item-discovery-confirmation');
 const ORDINARY_ITEM_PLACEMENT_SCREENSHOT = `${ORDINARY_ITEM_DISCOVERY_EVIDENCE_DIR}/01-金库-确认房间朝向.jpg`;
 const ORDINARY_ITEM_DISCOVERY_SCREENSHOT = `${ORDINARY_ITEM_DISCOVERY_EVIDENCE_DIR}/02-金库-物品发现确认.jpg`;
@@ -86,6 +90,7 @@ const openBetrayalPage = async (
 };
 
 const openBetrayalAsPlayer = async (page: Page, playerId: string) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto(
         `/play/betrayal?players=3&playerID=${playerId}&seat0=human&seat1=human&seat2=human`,
         { waitUntil: 'domcontentloaded' },
@@ -194,6 +199,50 @@ const acknowledgeOtherPlayersForResolution = async (
         );
     }
     throw new Error(`山屋测试 harness 确认队列未能完成：${resolutionId}`);
+};
+
+const readPendingResolutionConfirmationCount = async (
+    page: Page,
+    resolutionId: string,
+) => {
+    const pending = (await readCurrentCore(page)).pendingCardResolutionQueue?.[0];
+    if (!pending || pending.id !== resolutionId) {
+        return -1;
+    }
+    return pending.acknowledgedPlayerIds?.length ?? 0;
+};
+
+const expectPendingResolutionConfirmationCount = async (
+    page: Page,
+    resolutionId: string,
+    confirmed: number,
+    total: number,
+) => {
+    await expect.poll(
+        () => readPendingResolutionConfirmationCount(page, resolutionId),
+        { message: `待确认结算 ${resolutionId} 应停在 ${confirmed}/${total}` },
+    ).toBe(confirmed);
+    await expect(page.getByTestId('betrayal-discovery-panel')).toBeVisible();
+    await expect(page.getByTestId('betrayal-discovery-continue'))
+        .toHaveAttribute('data-card-resolution-confirmed-count', String(confirmed));
+    const continueButton = page.getByTestId('betrayal-discovery-continue');
+    await expect(continueButton)
+        .toHaveAttribute('data-card-resolution-required-count', String(total));
+    await expect(page.getByTestId('betrayal-discovery-final-effect-confirmation')).toHaveCount(0);
+    await expect(page.getByTestId('betrayal-discovery-confirmation-status')).toHaveCount(0);
+    if (confirmed === 0) {
+        await expect(continueButton).toContainText('确认');
+        await expect(continueButton).not.toBeDisabled();
+    } else {
+        await expect(continueButton).toContainText(`等待其他玩家 ${confirmed}/${total}`);
+        await expect(continueButton).toBeDisabled();
+    }
+};
+
+const syncCoreFromPage = async (sourcePage: Page, ...targetPages: Page[]) => {
+    const core = await readCurrentCore(sourcePage);
+    await Promise.all(targetPages.map((targetPage) => injectCore(targetPage, core)));
+    return core;
 };
 
 const readOrdinaryItemDiscoveryState = async (
@@ -641,7 +690,12 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
 
     test('器械库代表房间发现抽牌：真实页面显示砍刀并进入持有区', async ({ page, context }) => {
         test.setTimeout(120000);
-        const diagnostics = await openBetrayalPage(page, context, 'betrayal-high-risk-armory-discovery');
+        const diagnostics = await openBetrayalPage(
+            page,
+            context,
+            'betrayal-high-risk-armory-discovery',
+            '/play/betrayal?players=3&playerID=0&seat0=human&seat1=human&seat2=human',
+        );
 
         await injectCore(page, createArmoryDiscoveryCore());
         await expect(page.getByTestId('betrayal-board')).toBeVisible({ timeout: 30000 });
@@ -658,38 +712,84 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
 
         const discoveryPanel = page.getByTestId('betrayal-discovery-panel');
         await expect(discoveryPanel).toBeVisible({ timeout: 30000 });
-        await expect(discoveryPanel).toHaveAttribute('aria-label', /物品牌 砍刀/);
-        await expect(page.getByTestId('betrayal-discovery-detail')).toContainText('器械库获得砍刀');
-        await expect(page.getByTestId('betrayal-discovery-detail')).toContainText('展示后埋葬急救包');
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText('器械库获得砍刀');
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText('展示后埋葬急救包');
-        await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('探索到器械库');
-        await expect(page.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toBeVisible();
-        await expect(page.locator('[data-testid="betrayal-inventory-medical-kit-0"]')).toHaveCount(0);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认本步（步骤 1/2）');
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute('data-pending-card-resolution-step', '1/2');
-        await saveScreenshot(page, ARMORY_DISCOVERY_FIRST_STEP_SCREENSHOT);
-
-        const armoryFirstResolutionId = (await readCurrentCore(page)).pendingCardResolutionQueue?.[0]?.id;
-        if (!armoryFirstResolutionId) {
-            throw new Error('器械库第一步缺少待确认结算');
-        }
-        await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
-        await acknowledgeOtherPlayersForResolution(page, armoryFirstResolutionId);
-        await expect(discoveryPanel).toBeVisible();
         await expect(discoveryPanel).toHaveAttribute('aria-label', /物品牌 急救包/);
         await expect(discoveryPanel.getByTestId('betrayal-discovery-card-front-atlas')).toBeVisible();
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认本步（步骤 2/2）');
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute('data-pending-card-resolution-step', '2/2');
-        await saveScreenshot(page, ARMORY_DISCOVERY_SECOND_STEP_SCREENSHOT);
+        await expect(page.getByTestId('betrayal-discovery-detail')).toContainText('物品牌 急救包');
+        await expect(page.getByTestId('betrayal-discovery-detail')).not.toContainText('器械库获得砍刀');
+        await expect(page.getByTestId('betrayal-discovery-detail')).not.toContainText('展示后埋葬急救包');
+        await expect(discoveryPanel).not.toContainText('无发现牌');
+        await expect(discoveryPanel).not.toContainText('没有事件、物品或预兆发现牌');
+        await expect(discoveryPanel).not.toContainText('军械库');
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(0);
+        await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('探索到器械库');
+        await expect(page.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toHaveCount(0);
+        await expect(page.locator('[data-testid="betrayal-inventory-medical-kit-0"]')).toHaveCount(0);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-search-step')).toHaveCount(0);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-final-effect')).toHaveCount(0);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('下一张');
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute('data-pending-card-resolution-step', '1/1');
+        await expect(discoveryPanel).not.toContainText('确认本步');
+        await saveScreenshot(page, ARMORY_DISCOVERY_BURIED_CARD_SCREENSHOT);
 
-        const armorySecondResolutionId = (await readCurrentCore(page)).pendingCardResolutionQueue?.[0]?.id;
-        if (!armorySecondResolutionId) {
-            throw new Error('器械库第二步缺少待确认结算');
-        }
         await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
-        await acknowledgeOtherPlayersForResolution(page, armorySecondResolutionId);
+        await expect(discoveryPanel).toBeVisible();
+        await expect(discoveryPanel).toHaveAttribute('aria-label', /物品牌 砍刀/);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-card-front-atlas')).toBeVisible();
+        await expect(discoveryPanel).not.toContainText('无发现牌');
+        await expect(discoveryPanel).not.toContainText('没有事件、物品或预兆发现牌');
+        await expect(discoveryPanel).not.toContainText('军械库');
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-search-step')).toHaveCount(0);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-final-effect')).toHaveCount(0);
+        await expect(page.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toHaveCount(0);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认');
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute('data-pending-card-resolution-step', '1/1');
+        await expect(discoveryPanel).not.toContainText('确认本步');
+        await saveScreenshot(page, ARMORY_DISCOVERY_WEAPON_READY_SCREENSHOT);
+
+        const armoryResolutionId = (await readCurrentCore(page)).pendingCardResolutionQueue?.[0]?.id;
+        if (!armoryResolutionId) {
+            throw new Error('器械库缺少待确认结算');
+        }
+        await expect((await readCurrentCore(page)).pendingCardResolutionQueue).toHaveLength(1);
+        await expectPendingResolutionConfirmationCount(page, armoryResolutionId, 0, 3);
+
+        const playerOnePage = await context.newPage();
+        const playerTwoPage = await context.newPage();
+        const playerOneDiagnostics = attachPageDiagnostics(playerOnePage, 'betrayal-high-risk-armory-discovery-player-1');
+        const playerTwoDiagnostics = attachPageDiagnostics(playerTwoPage, 'betrayal-high-risk-armory-discovery-player-2');
+        await openBetrayalAsPlayer(playerOnePage, '1');
+        await openBetrayalAsPlayer(playerTwoPage, '2');
+        await syncCoreFromPage(page, playerOnePage, playerTwoPage);
+
+        await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
+        await expectPendingResolutionConfirmationCount(page, armoryResolutionId, 1, 3);
+        expect((await readCurrentCore(page)).pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toEqual(['0']);
+        await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toBeDisabled();
+        await saveScreenshot(page, ARMORY_DISCOVERY_SELF_CONFIRMED_SCREENSHOT);
+
+        await syncCoreFromPage(page, playerOnePage, playerTwoPage);
+        const playerOneDiscoveryPanel = playerOnePage.getByTestId('betrayal-discovery-panel');
+        await expect(playerOneDiscoveryPanel).toBeVisible();
+        await expect(playerOneDiscoveryPanel).toHaveAttribute('aria-label', /物品牌 砍刀/);
+        await expect(playerOneDiscoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认');
+        await expect(playerOneDiscoveryPanel.getByTestId('betrayal-discovery-continue')).not.toBeDisabled();
+        await saveScreenshot(playerOnePage, ARMORY_PLAYER_ONE_CONFIRM_SCREENSHOT);
+        await playerOneDiscoveryPanel.getByTestId('betrayal-discovery-continue').click();
+
+        await syncCoreFromPage(playerOnePage, page, playerTwoPage);
+        await expectPendingResolutionConfirmationCount(page, armoryResolutionId, 2, 3);
+        expect((await readCurrentCore(page)).pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toEqual(['0', '1']);
+        await saveScreenshot(page, ARMORY_DISCOVERY_TWO_CONFIRMED_SCREENSHOT);
+
+        const playerTwoDiscoveryPanel = playerTwoPage.getByTestId('betrayal-discovery-panel');
+        await expect(playerTwoDiscoveryPanel).toBeVisible();
+        await expect(playerTwoDiscoveryPanel).toHaveAttribute('aria-label', /物品牌 砍刀/);
+        await expect(playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认');
+        await expect(playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue')).not.toBeDisabled();
+        await saveScreenshot(playerTwoPage, ARMORY_PLAYER_TWO_CONFIRM_SCREENSHOT);
+        await playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue').click();
+
+        await syncCoreFromPage(playerTwoPage, page, playerOnePage);
         await expect(discoveryPanel).toHaveCount(0);
         await expect(page.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toBeVisible();
         await expect(page.locator('[data-testid="betrayal-inventory-medical-kit-0"]')).toHaveCount(0);
@@ -697,7 +797,11 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
         await expect(page.getByTestId('betrayal-deck-resolution-ledger-step')).toHaveCount(0);
         await saveScreenshot(page, ARMORY_INVENTORY_SCREENSHOT);
 
-        assertNoFatalFrontendErrors([{ label: 'betrayal-high-risk-armory-discovery', diagnostics }]);
+        assertNoFatalFrontendErrors([
+            { label: 'betrayal-high-risk-armory-discovery', diagnostics },
+            { label: 'betrayal-high-risk-armory-discovery-player-1', diagnostics: playerOneDiagnostics },
+            { label: 'betrayal-high-risk-armory-discovery-player-2', diagnostics: playerTwoDiagnostics },
+        ]);
     });
 
     test('头骨死亡保护真实链路：攻击失败后投3骰阻止死亡并回牌桌', async ({ page, context }) => {

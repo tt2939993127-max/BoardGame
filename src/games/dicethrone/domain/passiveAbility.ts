@@ -13,6 +13,8 @@ import type { PlayerId } from '../../../engine/types';
 import type { DiceThroneCore, TurnPhase } from './core-types';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
+import { resolveCurrentRollContext } from './rollContext';
+import { isPlayerAllowedByRollContextPolicy } from './rules';
 
 // ============================================================================
 // 被动能力数据定义
@@ -27,7 +29,8 @@ export type PassiveActionTiming =
     | 'ownRollPhase'      // 仅自己的投掷阶段
     | 'ownUpkeepPhase'    // 仅自己的维持阶段
     | 'responseWindow'    // 仅响应窗口
-    | 'ownMainPhase';     // 仅自己的 main1/main2 主阶段
+    | 'ownMainPhase'      // 仅自己的 main1/main2 主阶段
+    | 'anyMainPhase';     // 任意玩家的 main1/main2 主阶段
 
 /** 被动触发器条件 */
 export interface PassiveTriggerDef {
@@ -226,19 +229,15 @@ export function isPassiveActionUsable(
         if (getPassiveTokenStackLimit(state, playerId, tokenId) < limit) return false;
     }
 
-    // rerollDie 额外检查：只能在投掷阶段重掷"自己的骰子"（和 roll 手牌一致）
+    // rerollDie 额外检查：只能重掷当前骰区里规则允许自己重掷的骰子。
     if (action.type === 'rerollDie') {
-        // 阶段限制：必须在投掷阶段
-        if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') return false;
-        // 内联 rollerId 判断，避免循环依赖 rules.ts
-        const rollerId = phase === 'defensiveRoll'
-            ? (state.pendingAttack?.defenderId ?? state.activePlayerId)
-            : state.activePlayerId;
-        if (rollerId !== playerId) return false;
-        // 必须已投掷过至少一次才能重掷（防止防御阶段未投掷就重掷）
-        if (state.rollCount === 0) return false;
-        // 还需要有活跃骰子（rollDiceCount 范围内且未锁定的骰子）
-        const hasUnlockedDie = state.dice.some((d, i) => i < state.rollDiceCount && !d.isKept);
+        const currentRollContext = resolveCurrentRollContext(state, phase);
+        if (!currentRollContext) return false;
+        if (currentRollContext.policy.allowPassiveReroll !== true) return false;
+        if (!isPlayerAllowedByRollContextPolicy(state, currentRollContext, playerId, 'reroll')) return false;
+        // 旧主骰兼容路径仍要求已投掷过；显式 currentRollContext（如闪避/奖励骰）以自身存在为准。
+        if (!state.currentRollContext && state.rollCount === 0) return false;
+        const hasUnlockedDie = currentRollContext.dice.some((d) => !d.isKept);
         if (!hasUnlockedDie) return false;
     }
 
@@ -257,6 +256,9 @@ export function isPassiveActionUsable(
     }
     if (action.timing === 'ownMainPhase') {
         return playerId === state.activePlayerId && (phase === 'main1' || phase === 'main2');
+    }
+    if (action.timing === 'anyMainPhase') {
+        return phase === 'main1' || phase === 'main2';
     }
     return true;
 }

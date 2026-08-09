@@ -3339,6 +3339,7 @@ describe('GameTransportServer（离座与重连）', () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
         const executeSpy = vi.fn(() => []);
+        const feedbackReporter = vi.fn(async () => undefined);
         const baseEngineConfig = createEngineConfig();
 
         await storage.createMatch('match-command-stale-ai-state', {
@@ -3359,6 +3360,8 @@ describe('GameTransportServer（离座与重连）', () => {
             authenticate: async (_matchID, playerID, credentials, metadata) => (
                 metadata.players[playerID]?.credentials === credentials
             ),
+            onlineAiCircuitFailureBudget: 1,
+            onlineAiFeedbackReporter: feedbackReporter,
         });
         server.start();
 
@@ -3377,7 +3380,25 @@ describe('GameTransportServer（离座与重连）', () => {
             'TEST_CMD',
             { stale: true },
             'cred-1',
-            { expectedStateID: 0 },
+            {
+                expectedStateID: 0,
+                onlineAiAttemptKey: 'ai-stale-attempt-1',
+                clientTransport: {
+                    sentAt: 1000,
+                    lastStateEventKind: 'patch',
+                    lastStateEventStateID: 0,
+                    lastStateEventAt: 900,
+                    syncInFlight: false,
+                    lastSyncRequestReason: null,
+                    lastSyncRequestedAt: null,
+                    lastPatchIssue: {
+                        kind: 'discontinuity',
+                        expectedStateID: 1,
+                        receivedStateID: 2,
+                        at: 800,
+                    },
+                },
+            },
         );
 
         expect(hasEvent(socket, 'error', (args) => args[1] === 'stale_state')).toBe(true);
@@ -3385,6 +3406,15 @@ describe('GameTransportServer（离座与重连）', () => {
 
         const persisted = await storage.fetch('match-command-stale-ai-state', { state: true });
         expect(persisted.state?._stateID).toBe(1);
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        const feedbackPayload = feedbackReporter.mock.calls[0]?.[0] as {
+            stateSnapshot?: string;
+            actionLog?: string;
+        } | undefined;
+        expect(feedbackPayload?.stateSnapshot).toContain('ai-stale-attempt-1');
+        expect(feedbackPayload?.stateSnapshot).toContain('lastPatchIssue');
+        expect(feedbackPayload?.actionLog).toContain('ai-stale-attempt-1');
+        expect(feedbackPayload?.actionLog).toContain('discontinuity');
     });
 
     it('线上形状：同一 AI 座位的旧卡牌命令与 watchdog 失败共用预算，达到预算后不再进入领域管线', async () => {

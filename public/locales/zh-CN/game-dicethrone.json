@@ -711,15 +711,7 @@
     "bonusDiceResponse": "响应奖励骰",
     "bonusDiceResponseEnabled": "奖励骰响应已启用",
     "bonusDiceResponseDisabled": "奖励骰响应已关闭",
-    "bonusDiceResponseRequiresManual": "开启手动响应后才能响应奖励骰",
-    "diceDisplay": {
-      "title": "骰子显示",
-      "hint": "切换局内骰子的展示方式，不改变真实掷骰结果。",
-      "board3d": "棋盘内 3D 骰子",
-      "board3dHint": "开启后，自己掷骰阶段会切到棋盘内 3D 骰台；改骰等必须直接点骰的场景会自动使用棋盘骰台。",
-      "enabled": "已开启",
-      "disabled": "已关闭"
-    }
+    "bonusDiceResponseRequiresManual": "开启手动响应后才能响应奖励骰"
   },
   "hero": {
     "monk": "僧侣",
@@ -923,6 +915,7 @@
     "rerollSelected": "已选",
     "confirm": "确认",
     "confirmed": "已确认",
+    "restoreCoveredRoll": "回到覆盖前骰区",
     "bonusRoll": "额外投掷",
     "bonusRolled": "额外掷骰：{{value}}（{{face}}）",
     "face": {
@@ -1202,7 +1195,9 @@
       "tianshi.supremeHoliness": "至高圣洁：圣洁吊坠获得 2 飞行和 2 净化，否则抽 1 张牌"
     },
     "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
+    "selectToRerollFree": "点击骰子免费重掷一次",
     "noTokenToReroll": "没有{{token}}标记可用于重掷",
+    "noRerollAvailable": "当前不能重掷",
     "rerollLimitReached": "已达到本次重掷上限",
     "diceResult": "投掷结果",
     "choiceResult": "选择结果",
@@ -1251,6 +1246,7 @@
     "requireIsNotRoller": "此卡只能由非投掷方使用（响应对手骰面）",
     "requireRollConfirmed": "需要骰面已确认后才能打出此卡",
     "requireNotRollConfirmed": "骰面已确认，无法再打出此卡",
+    "rollContextLocked": "当前骰区不允许打出改骰牌",
     "requireMinDamageDealt": "本次攻击未造成足够伤害，无法打出此卡",
     "noStatusOnBoard": "场上没有任何状态效果，无法打出此卡",
     "requirePendingDamage": "需要存在待结算伤害才能打出此卡",

@@ -1171,7 +1171,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '观察'],
                 visualId: 'observatory',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'east', 'south', 'west'],
+                doorways: ['north', 'east', 'south'],
             },
             {
                 name: '温室',
@@ -1179,7 +1179,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '植物'],
                 visualId: 'conservatory',
                 discoverySymbol: 'omen',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'south'],
             },
             {
                 name: '墓园',
@@ -1187,7 +1187,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '室外'],
                 visualId: 'graveyard',
                 discoverySymbol: 'omen',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '舞厅',
@@ -1195,7 +1195,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['会合', '开阔'],
                 visualId: 'ballroom',
                 discoverySymbol: 'omen',
-                doorways: ['south', 'west'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '厨房',
@@ -1203,7 +1203,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '物资'],
                 visualId: 'kitchen',
                 discoverySymbol: 'event',
-                doorways: ['east', 'south', 'west'],
+                doorways: ['north', 'south'],
             },
             {
                 name: '餐厅',
@@ -1211,7 +1211,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '会合'],
                 visualId: 'diningRoom',
                 discoverySymbol: 'event',
-                doorways: ['north', 'west'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '礼拜堂',
@@ -1219,7 +1219,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['神秘', '静压'],
                 visualId: 'chapel',
                 discoverySymbol: 'event',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'south', 'west'],
                 discoveryEffect: 'gainSanity1',
             },
             {
@@ -1236,7 +1236,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '目标'],
                 visualId: 'vault',
                 discoverySymbol: 'item',
-                doorways: ['north', 'east'],
+                doorways: ['north'],
             },
             {
                 name: '火炉房',
@@ -1253,7 +1253,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '上层', '卧室'],
                 visualId: 'guestQuarters',
                 discoverySymbol: 'event',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '血腥房间',
@@ -1261,7 +1261,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '上层', '危险'],
                 visualId: 'bloodyRoom',
                 discoverySymbol: 'item',
-                doorways: ['north', 'east'],
+                doorways: ['north', 'east', 'south'],
             },
             {
                 name: '标本室',
@@ -1269,7 +1269,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '事件'],
                 visualId: 'specimenRoom',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['east', 'south', 'west'],
             },
             {
                 name: '沙龙',
@@ -1277,7 +1277,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '会合'],
                 visualId: 'salon',
                 discoverySymbol: 'event',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '主卧',
@@ -1285,7 +1285,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '上层', '卧室'],
                 visualId: 'primaryBedroom',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '育婴室',
@@ -1293,7 +1293,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '上层', '事件'],
                 visualId: 'nursery',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '手术室',
@@ -1301,7 +1301,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['一层', '地下', '危险'],
                 visualId: 'operatingTheatre',
                 discoverySymbol: 'item',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '器械库',
@@ -1320,7 +1320,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '高处'],
                 visualId: 'tower',
                 discoverySymbol: 'event',
-                doorways: ['south', 'west'],
+                doorways: ['north', 'south'],
             },
             {
                 name: '雕像走廊',
@@ -1328,7 +1328,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '走廊'],
                 visualId: 'statuaryCorridor',
                 discoverySymbol: 'event',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'south'],
             },
             {
                 name: '书房',
@@ -1336,7 +1336,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['知识', '调查'],
                 visualId: 'study',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'east'],
+                doorways: ['north', 'east', 'south', 'west'],
                 discoveryEffect: 'gainKnowledge1',
             },
             {
@@ -1353,7 +1353,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['知识', '调查'],
                 visualId: 'library',
                 discoverySymbol: 'omen',
-                doorways: ['south', 'west'],
+                doorways: ['north', 'east', 'south', 'west'],
                 discoveryEffect: 'gainKnowledge1',
             },
             {
@@ -1362,7 +1362,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '卧室'],
                 visualId: 'winterBedroom',
                 discoverySymbol: 'omen',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '倒塌房间',
@@ -1370,7 +1370,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '危险'],
                 visualId: 'collapsedRoom',
                 discoverySymbol: 'none',
-                doorways: ['north', 'south'],
+                doorways: ['north', 'east'],
                 endTurnEffect: 'speedCheckFallToBasement',
             },
             {
@@ -1387,7 +1387,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '精神'],
                 visualId: 'organRoom',
                 discoverySymbol: 'event',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['east', 'south', 'west'],
             },
             {
                 name: '隔音室',
@@ -1403,7 +1403,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '事件'],
                 visualId: 'gameRoom',
                 discoverySymbol: 'item',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '体育馆',
@@ -1411,7 +1411,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '力量'],
                 visualId: 'gymnasium',
                 discoverySymbol: 'none',
-                doorways: ['north', 'east', 'south'],
+                doorways: ['north', 'east', 'south', 'west'],
                 discoveryEffect: 'gainSpeed1',
             },
             {
@@ -1428,7 +1428,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '地下', '特殊移动'],
                 visualId: 'mysticElevator',
                 discoverySymbol: 'none',
-                doorways: ['north', 'east', 'south', 'west'],
+                doorways: ['north'],
                 enterEffect: 'mysticElevator',
             },
         ],
@@ -1439,7 +1439,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['上层', '地下', '特殊移动'],
                 visualId: 'laundryChute',
                 discoverySymbol: 'none',
-                doorways: ['north', 'east'],
+                doorways: ['north'],
                 endTurnEffect: 'moveToBasementLanding',
             },
             {
@@ -1456,7 +1456,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['物资', '翻找'],
                 visualId: 'larder',
                 discoverySymbol: 'none',
-                doorways: ['north', 'east'],
+                doorways: ['north', 'west'],
                 discoveryEffect: 'gainMight1',
             },
             {
@@ -1465,7 +1465,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '水域'],
                 visualId: 'undergroundLake',
                 discoverySymbol: 'event',
-                doorways: ['north', 'west'],
+                doorways: ['north', 'east'],
             },
             {
                 name: '地下洞窟',
@@ -1473,7 +1473,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '危险'],
                 visualId: 'undergroundCavern',
                 discoverySymbol: 'event',
-                doorways: ['east', 'south'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '仪式室',
@@ -1481,7 +1481,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['仪式', '危险'],
                 visualId: 'ritualRoom',
                 discoverySymbol: 'omen',
-                doorways: ['west', 'south'],
+                doorways: ['north', 'east', 'west'],
             },
             {
                 name: '地下墓穴',
@@ -1489,7 +1489,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '墓穴'],
                 visualId: 'catacombs',
                 discoverySymbol: 'omen',
-                doorways: ['north', 'south'],
+                doorways: ['north', 'east', 'south', 'west'],
             },
             {
                 name: '密道楼梯',
@@ -1497,7 +1497,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '特殊移动'],
                 visualId: 'secretStaircase',
                 discoverySymbol: 'none',
-                doorways: ['north', 'east'],
+                doorways: ['north'],
             },
             {
                 name: '杂物间',
@@ -1505,7 +1505,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '物品'],
                 visualId: 'junkRoom',
                 discoverySymbol: 'item',
-                doorways: ['north', 'east'],
+                doorways: ['north', 'east', 'south'],
                 discoveryEffect: 'placeObstacleToken',
             },
             {
@@ -1514,7 +1514,7 @@ export const BETRAYAL_DISCOVERY_POOLS = {
                 tags: ['地下', '通道'],
                 visualId: 'crawlspace',
                 discoverySymbol: 'event',
-                doorways: ['north', 'east'],
+                doorways: ['north', 'east', 'west'],
             },
         ],
     } satisfies Record<BetrayalRoomSeed['floor'], BetrayalRoomDiscoveryTemplate[]>,

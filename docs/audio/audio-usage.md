@@ -1,12 +1,12 @@
 # 音频资源使用合同
 
-> 本文是 BoardGame 音频系统的“架构 + 运行时合同 + 命令入口”。
-> 执行型 workflow 已下沉到项目 skill：`./.codex/skill/audio-integration/SKILL.md`。
-> 如果任务是“对接音效 / 查匹配 key / 新增素材 / 补预加载 / 做试听收口”，先走该 skill，再回到本文查具体合同。
+> 本文承载 BoardGame 音频资源的目录、生成命令、查找/试听、BGM 分配和项目接入合同。
+> 跨游戏运行时架构、共享音频包路径和音效触发时机主源是 `docs/ai-rules/audio-assets.md`；执行型 workflow 走系统 skill：`D:\codex-home\skills\audio-integration\SKILL.md`。
+> 如果任务是“对接音效 / 查匹配 key / 新增素材 / 补预加载 / 做试听收口”，先走该 skill，再回到本文查具体项目合同。
 
 ## 0. 文档分工
 
-- `./.codex/skill/audio-integration/SKILL.md`
+- `D:\codex-home\skills\audio-integration\SKILL.md`
   承担执行步骤、查找链路、汇报模板、/dev/audio 收口动作
 - `docs/audio/add-audio.md`
   承担新增外部音频素材的目录、命名、产物和验收合同
@@ -16,29 +16,14 @@
   承担 AI 精简检索入口
 - `public/assets/common/audio/registry.json`
   承担运行时完整注册表
+- `docs/ai-rules/audio-assets.md`
+  承担跨游戏运行时架构、共享包路径和音效触发时机主合同
 
-## 1. 音频资源架构（强制）
+## 1. 运行时架构合同入口
 
-**三层架构**：
+跨游戏的三层架构、registry 唯一来源、FX `FeedbackPack`、完整 key 和 `compressed/` 路径禁令统一见 `docs/ai-rules/audio-assets.md` 的“音频架构 / 音频资源架构”。
 
-1. **通用注册表**
-   `src/assets/audio/registry.json`
-   构建来源是 `public/assets/common/audio/`，是所有音效资源的唯一来源。
-2. **游戏配置**
-   `src/games/<gameId>/audio.config.ts`
-   定义事件音效映射、预加载策略、BGM 分组和派系/角色音效池。
-3. **FX 系统**
-   `src/games/<gameId>/ui/fxSetup.ts`
-   直接使用 registry key 定义 `FeedbackPack`，不依赖游戏配置常量。
-
-**核心原则**：
-
-- 音效 key 只在通用注册表中定义一次
-- 游戏层和 FX 层直接引用完整 registry key
-- 禁止在 `src/games/<gameId>/` 下放音频文件或自建音频目录
-- 禁止在 `audio.config.ts` 中声明 `basePath/sounds`
-- 禁止使用旧短 key，如 `click`、`dice_roll`、`card_draw`
-- 禁止在代码里手写 `compressed/` 路径
+本文件只补充项目级资源使用细节：命令入口、候选查找、BGM 分配、游戏专用音效池、预加载和浏览器试听；若本文件与运行时主合同冲突，以 `audio-assets.md` 为准。
 
 ## 2. 目录与产物（强制）
 
@@ -58,6 +43,14 @@
 
 ```bash
 npm run compress:audio -- public/assets/common/audio
+```
+
+可选参数：
+
+```bash
+AUDIO_CLEAN=1 npm run compress:audio -- public/assets/common/audio
+AUDIO_OGG_BITRATE=96k npm run compress:audio -- public/assets/common/audio
+FFMPEG_PATH=tools/ffmpeg/bin/ffmpeg.exe npm run compress:audio -- public/assets/common/audio
 ```
 
 ### 3.2 生成运行时 registry
@@ -91,7 +84,7 @@ node scripts/audio/generate_ai_audio_registry.js
 DiceThrone 专用精简版：
 
 ```bash
-node scripts/games/dicethrone/audio/generate_ai_audio_registry_dicethrone.js
+node scripts/audio/generate_ai_audio_registry_dicethrone.js
 ```
 
 ### 3.5 生成语义目录
@@ -253,15 +246,9 @@ return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_sy
 
 详细代码示例见 `docs/ai-rules/golden-rules.md`。
 
-## 8. 已安装包 / 本地包 / 共享音频路径合同（强制）
+## 8. 已安装包 / 本地包 / 共享音频路径合同入口
 
-当音频来自 Android 已安装游戏包或共享音频包时：
-
-- 首个本地候选失败后，优先走 `readInstalledAsset -> blob URL` 或等价桥接读取
-- 当前播放请求必须续到新候选实例
-- 官方远端 URL 只能做最后兜底，不能充当本地主链修复
-- `common-audio` 的单一真相源是 `public/assets` 下的相对路径，如 `common/audio/bgm/...`
-- 打包脚本、索引、原生落盘和 H5 `relativePath` 必须使用同一相对路径合同
+Android 已安装包、共享音频包和 `common-audio` 的相对路径合同统一见 `docs/ai-rules/audio-assets.md` 的“共享音频包路径合同”。本文件不再复制本地读取、blob URL、播放续接和四层路径同构规则；这里只记录项目接入时应回查该主合同。
 
 ## 9. 质量检查清单
 

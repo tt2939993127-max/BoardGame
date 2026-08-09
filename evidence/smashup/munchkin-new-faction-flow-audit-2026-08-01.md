@@ -1305,3 +1305,48 @@
 | 本次新生成截图图面复核 | 当前 `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/` | `PASS / 92`：逐张复核怪物行桌面压力态、移动横屏、法师快速攻击目标、意外派对额外基地、打劫第二步“另一个随从”、木精灵赶紧逃跑吧多选；怪物行在基地下方，公共小牌只显示在牌库旁，选择高亮落在真实基地 / 随从本体，未发现源卡遮挡或重复承载。 |
 | 对打劫旧视觉结论的复核 | `打劫可从真实手牌入口转移仆从身上的行动到己方另一个仆从/168-打劫选择己方另一个仆从.jpg` | `fixed_scoped / visual_pass`：当前图明确显示“打劫：选择你的一个仆从”，另一个合法己方随从本体可见并高亮；这只修复和证明打劫第二步，不替代其它对象的完整视觉矩阵。 |
 | 当前范围裁决 | 本次全量 E2E 与截图复核 | `passed_batch / scoped_debt`：真实入口功能回归已完成；但逐对象 L0-L4 矩阵、所有负向 / 清理分支和移动端逐对象图面仍需逐项核销，因此不能把 `132/132` 直接解释为 Munchkin 新派系整体完成。 |
+
+## 2026-08-08 续审记录：领域合同测试结果对账
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 当前 Munchkin 机制与录入回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/munchkinMechanics.test.ts src/games/smashup/__tests__/munchkinIntake.test.ts --configLoader native --reporter=dot` | `passed`：当前工作区实际为 2 个测试文件、120/120；覆盖怪物基础机制、宝藏牌种和已录入规则合同。预期的“当前没有可选择宝藏牌”验证失败日志属于负向断言，测试整体通过。 |
+| 旧记录对账 | 本文 1294 行的 119/119 记录 | `historical_snapshot`：119/119 保留为此前运行记录；本次 120/120 是当前代码的最新结果，不把历史数字覆盖成当前执行结果。 |
+| 当前范围裁决 | 本次领域合同测试 + 本文整体范围表 | `in_progress / scoped_debt`：领域合同已闭环，但仍不能替代 8 个派系、宝藏/怪物对象的逐对象 L0-L4、负向/清理分支和移动端逐对象验收；Munchkin 新派系整体审计仍未完成。 |
+
+## 2026-08-08 续审记录：直线跑路药水最新截图图面核验
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 四段真实状态图面 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/直线跑路药水可从计分后响应窗口选择已展示宝藏进手牌/16-直线跑路药水计分前手牌与宝藏龙.jpg`、`17-直线跑路药水afterScoring响应入口.jpg`、`18-直线跑路药水选择已展示宝藏.jpg`、`19-直线跑路药水计分收口后状态.jpg` | `visual_pass_scoped`：计分前、响应入口、手动选择已展示宝藏和计分收口四个状态均可读；怪物行位于基地下方，持续行动、手牌、牌库、弃牌堆、记分板和结束回合入口未互相遮挡，选择层未重复承载源卡。 |
+| 当前范围裁决 | 本条四张截图 + 直线跑路药水对象证据 | `passed_object_visual / scoped_debt`：仅闭环直线跑路药水这条真实入口图面证据，不外推为宝藏牌堆、矮人派系或 Munchkin 新派系整体审计完成。 |
+
+## 2026-08-08 续审记录：尖刺靴移动端对象级交互
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "尖刺靴移动端横屏可从手牌手动选择宿主并收口" --project=chromium` | `passed`：1/1；当前工作区真实 Smash Up 牌桌、`844x390` 横屏；玩家先点击真实手牌《尖刺靴》，再用真实鼠标命中点点击宿主随从，没有通过测试状态直接提交隐藏目标。 |
+| 选择前截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\尖刺靴移动端横屏可从手牌手动选择宿主并收口\移动端-尖刺靴-选择前.jpg` | `visual_pass_scoped`：手牌、两个基地、怪物行、公共怪物 / 宝藏小牌和结束回合入口均在当前横屏视口内；没有新增公共弃牌堆。 |
+| 手动选择截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\尖刺靴移动端横屏可从手牌手动选择宿主并收口\移动端-尖刺靴-手动选择宿主.jpg` | `visual_pass_scoped`：真实宿主随从本体保持可见并高亮，中央《尖刺靴》选中态没有遮住目标；旁观随从未被当作已结算结果。 |
+| 收口截图与状态断言 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\尖刺靴移动端横屏可从手牌手动选择宿主并收口\移动端-尖刺靴-附着后收口.jpg`；同一测试的附着卡、`+1` 力量提示、公共牌堆数量、交互清空和几何断言 | `passed_object_mobile_visual`：尖刺靴离开手牌并附着到宿主，宿主显示尖刺靴的 `+1` 来源；公共怪物 / 宝藏数量仍为 `x20 / x22`，手牌区、宿主和公共小牌均在视口内，页面无横向溢出。 |
+| 当前范围裁决 | 尖刺靴对象行与本节三张当前工作区截图 | `尖刺靴移动端对象级图面与交互已通过`；其余 21 张宝藏、8 个派系和其它怪物对象仍不能由本条证据外推，整体审计继续保持 `in_progress / scoped_debt`。 |
+
+## 2026-08-08 续审记录：火箭靴移动端附着天赋与基地选择
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "火箭靴移动端横屏无需悬停即可手动选择目标基地并移动宿主" --project=chromium` | `passed`：1/1；`844x390` 横屏并启用项目现有粗指针测试入口；玩家先点击宿主展开附着行动，再点击《火箭靴》，最后手动点击目标基地，没有使用隐藏选项提交。 |
+| 收起 / 展开截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\火箭靴移动端横屏无需悬停即可手动选择目标基地并移动宿主\移动端-火箭靴-宿主与附着卡收起.jpg`、`移动端-火箭靴-点击宿主展开附着卡.jpg` | `visual_pass_scoped`：收起态保留宿主本体和附着标记；点击宿主后真实《火箭靴》卡面展开到宿主旁，不依赖鼠标悬停，且没有遮住基地主体。 |
+| 目标基地选择截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\火箭靴移动端横屏无需悬停即可手动选择目标基地并移动宿主\移动端-火箭靴-手动选择目标基地.jpg` | `visual_pass_scoped`：顶部只显示“火箭靴：选择目标基地”短提示；源基地变暗，目标基地本体高亮，两个基地没有重复中央源卡，也没有把提示层当成目标载体。 |
+| 收口截图与状态断言 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\火箭靴移动端横屏无需悬停即可手动选择目标基地并移动宿主\移动端-火箭靴-宿主与附着卡移动后.jpg`；同一测试的基地移动、附着保留、天赋已使用、触发队列清空和几何断言 | `passed_object_mobile_visual`：宿主和火箭靴一起移动到目标基地，源基地清空；目标基地、宿主、公共小牌和结束回合入口均在横屏视口内，页面无横向溢出。 |
+| 当前范围裁决 | 火箭靴对象行与本节四张当前工作区截图 | `火箭靴移动端对象级图面与交互已通过`；其余 20 张宝藏、8 个派系和其它怪物对象仍不能由本条证据外推，整体审计继续保持 `in_progress / scoped_debt`。 |
+
+## 2026-08-08 续审记录：直线跑路药水移动端对象级 afterScoring
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "直线跑路药水移动端横屏可手动选择计分后展示的宝藏" --project=chromium` | `passed`：1/1，29.8s；当前工作区真实 Smash Up 牌桌、`844x390` 横屏并启用粗指针模拟。玩家先通过页面可见响应入口手动选择《直线跑路药水》，再手动点击已展示宝藏《一袋铁蒺藜》，没有通过隐藏提交或单候选自动结算。 |
+| 四张当前截图 | `D:\\gongzuo\\webgame\\BoardGame\\test-results\\evidence-screenshots\\smashup\\smashup-munchkin-monster-treasure-ui.e2e\\直线跑路药水移动端横屏可手动选择计分后展示的宝藏\\移动端-直线跑路药水-计分前.jpg`、`移动端-直线跑路药水-afterScoring响应入口.jpg`、`移动端-直线跑路药水-手动选择已展示宝藏.jpg`、`移动端-直线跑路药水-计分收口后.jpg` | `PASS / object_mobile_visual`：计分前、afterScoring 响应入口、已展示宝藏选择层和收口状态均可读；基地、回合 / 阶段便签、公共宝藏小牌、手牌、弃牌堆和结束回合入口没有互相遮挡。 |
+| 短响应提示修正 | `src/games/smashup/ui/PromptOverlay.tsx`、`src/index.css`、`src/games/smashup/Board.tsx`；同一 E2E 内的 `smashup-docked-prompt`、基地牌和回合 / 阶段便签几何断言 | `fixed_scoped`：afterScoring 短响应提示改为移动横屏左侧停靠，不再压住中央基地或左上回合 / 阶段便签；提示层只承接响应按钮，不重复显示源卡。 |
+| 收口状态 | 同一测试断言公共宝藏牌堆从 `x4` 到 `x1`，交互与响应窗口清空，玩家手牌新增被选择的已展示宝藏 | `passed_object_mobile_visual`：直线跑路药水计分后展示宝藏的移动端对象级链路已完成真实点击、状态断言和图面核销。 |
+| 当前范围裁决 | 直线跑路药水对象行与本节四张当前工作区截图 | `直线跑路药水移动端对象级 L4 已通过`；本条只覆盖《直线跑路药水》移动端 afterScoring 链路，不外推为其它宝藏、8 个派系、怪物对象或 Munchkin 新派系整体完成，整体仍保持 `in_progress / scoped_debt`。 |

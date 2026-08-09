@@ -26,7 +26,7 @@ async function dragHandCardToPlay(page: any, cardId: string): Promise<void> {
 
 test.describe('DiceThrone - 选择骰子修改', () => {
     test('card-me-too 复制骰面时重复点源骰不会提前完成，点目标骰后才结算', async ({ page, game }, testInfo) => {
-        await game.openTestGame('dicethrone');
+        await game.openTestGame('dicethrone', { playerID: '0' });
 
         await game.setupScene({
             gameId: 'dicethrone',
@@ -67,6 +67,18 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             hasCard: true,
             diceCount: 5,
         });
+
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        await expect(diceTray).toBeVisible({ timeout: 10000 });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(5);
+        await expect.poll(async () => diceTray.getByTestId('dice-2d').evaluateAll((dice) => (
+            dice.every((die) => (
+                die.getAttribute('data-sprite-ready') === 'true'
+                && die.getAttribute('data-sprite-url')?.includes('/dicethrone/images/monk/')
+            ))
+        ))).toBe(true);
+        await expect(diceTray.locator('canvas')).toHaveCount(0);
+        await game.screenshot('01-真人自己的2D骰图已加载', testInfo);
 
         await dragHandCardToPlay(page, 'card-me-too');
 
@@ -353,5 +365,112 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         expect(finalHandIds).not.toContain('card-play-six');
         expect(finalEventTypes).toContain('CARD_PLAYED');
         expect(finalEventTypes).toContain('DIE_MODIFIED');
+    });
+
+    test('终极结算骰锁定时改骰牌应保留在手牌并显示拒绝提示', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone');
+
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                hand: ['card-play-six'],
+                resources: { CP: 2, HP: 50 },
+            },
+            player1: {
+                resources: { HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'monk', '1': 'barbarian' },
+                hostStarted: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollDiceCount: 1,
+                rollConfirmed: false,
+                dice: [],
+                pendingBonusDiceSettlement: {
+                    id: 'e2e-ultimate-locked-die',
+                    sourceAbilityId: 'e2e-ultimate-locked',
+                    attackerId: '0',
+                    targetId: '1',
+                    dice: [{
+                        index: 0,
+                        value: 3,
+                        face: 'palm',
+                        effectKey: 'bonusDie.effect.damage',
+                        effectParams: { value: 3 },
+                    }],
+                    rerollCostTokenId: '',
+                    rerollCostAmount: 0,
+                    rerollCount: 0,
+                    maxRerollCount: 0,
+                    readyToSettle: false,
+                    resolutionMode: 'none',
+                    allowDiceModification: false,
+                    ultimateLocked: true,
+                },
+                currentRollContext: {
+                    id: 'bonus:e2e-ultimate-locked-die',
+                    kind: 'bonus',
+                    ownerPlayerId: '0',
+                    targetPlayerId: '1',
+                    sourceAbilityId: 'e2e-ultimate-locked',
+                    dice: [{
+                        id: 0,
+                        definitionId: 'bonus:e2e-ultimate-locked',
+                        value: 3,
+                        symbol: 'palm',
+                        symbols: ['palm'],
+                        isKept: false,
+                        ownerId: '0',
+                    }],
+                    status: 'locked',
+                    policy: {
+                        modifiableBy: 'none',
+                        rerollableBy: 'none',
+                        allowPassiveReroll: false,
+                        allowRollCards: false,
+                        ultimateLocked: true,
+                        blocksPhaseFlow: true,
+                    },
+                    settlement: { mode: 'none' },
+                    display: { surface: 'bonusOverlay', replayOnly: false },
+                },
+            },
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
+                contextStatus: state?.core?.currentRollContext?.status ?? null,
+                allowRollCards: state?.core?.currentRollContext?.policy?.allowRollCards ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            hasCard: true,
+            contextStatus: 'locked',
+            allowRollCards: false,
+        });
+
+        await dragHandCardToPlay(page, 'card-play-six');
+
+        await expect(page.getByText('当前骰区不允许打出改骰牌')).toBeVisible({ timeout: 5000 });
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const eventTypes = (state?.sys?.eventStream?.entries ?? [])
+                .slice(-8)
+                .map((entry: any) => entry.event?.type);
+            return {
+                hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
+                interactionKind: state?.sys?.interaction?.current?.kind ?? null,
+                eventTypes,
+            };
+        }, { timeout: 5000 }).toMatchObject({
+            hasCard: true,
+            interactionKind: null,
+        });
+
+        await game.screenshot('终极结算骰-改骰牌锁定', testInfo);
     });
 });

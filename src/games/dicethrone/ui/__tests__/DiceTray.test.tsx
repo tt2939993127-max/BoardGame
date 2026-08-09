@@ -1,7 +1,7 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BoardDiceStage, DiceActions, DiceTray } from '../DiceTray';
+import { DiceActions, DiceTray } from '../DiceTray';
 import type { InteractionDescriptor, MultistepChoiceData } from '../../../../engine/systems/InteractionSystem';
 import type { MultistepInteractionState } from '../../../../engine/systems/useMultistepInteraction';
 import type { Die } from '../../types';
@@ -17,97 +17,24 @@ vi.mock('react-i18next', () => ({
     },
 }));
 
-const dice3DCalls: Array<Record<string, unknown>> = [];
-const diceField3DCalls: Array<Record<string, unknown>> = [];
-const diceBoxPhysicsSourceCalls: Array<Record<string, unknown>> = [];
+const dice2DCalls: Array<Record<string, unknown>> = [];
 
 afterEach(() => {
-    vi.useRealTimers();
+    dice2DCalls.length = 0;
 });
 
-vi.mock('../Dice3D', () => ({
-    Dice3D: (props: Record<string, unknown>) => {
-        dice3DCalls.push(props);
-        return <div data-testid="mock-dice-3d" />;
-    },
-    DiceField3D: (props: Record<string, unknown>) => {
-        diceField3DCalls.push(props);
-        return <div data-testid="mock-dice-field-3d" />;
-    },
-}));
-
-vi.mock('../../../../lib/dice-physics/DiceBoxPhysicsSource', () => ({
-    DiceBoxPhysicsSource: (props: Record<string, unknown>) => {
-        const didRecordCall = React.useRef(false);
-        if (!didRecordCall.current) {
-            diceBoxPhysicsSourceCalls.push(props);
-            didRecordCall.current = true;
-        }
-        React.useEffect(() => {
-            const dice = props.dice as Die[] | undefined;
-            const onPhysicsStatesChange = props.onPhysicsStatesChange as ((states: Array<{
-                id: number;
-                layout: {
-                    id: number;
-                    x: number;
-                    y: number;
-                    width: number;
-                    height: number;
-                    minX: number;
-                    maxX: number;
-                    minY: number;
-                    maxY: number;
-                    rotateX: number;
-                    rotateY: number;
-                    rotateZ: number;
-                };
-                motion: { x: number; y: number; z: number; rotateX: number; rotateY: number; rotateZ: number };
-                settled: boolean;
-                value: number | null;
-            }>) => void) | undefined;
-
-            if (!dice || !onPhysicsStatesChange) return;
-
-            onPhysicsStatesChange(dice.map((die, index) => {
-                const x = 120 + (index * 80);
-                const y = 90 + (index * 12);
-
-                return {
-                    id: die.id,
-                    layout: {
-                        id: die.id,
-                        x,
-                        y,
-                        width: 52,
-                        height: 52,
-                        minX: x - 26,
-                        maxX: x + 26,
-                        minY: y - 26,
-                        maxY: y + 26,
-                        rotateX: 0,
-                        rotateY: 0,
-                        rotateZ: 0,
-                    },
-                    motion: { x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0 },
-                    settled: true,
-                    value: die.value,
-                };
-            }));
-        }, [props.dice, props.onPhysicsStatesChange]);
-        return <div data-testid="mock-dice-box-physics-source" />;
+vi.mock('../Dice2D', () => ({
+    Dice2D: (props: Record<string, unknown>) => {
+        dice2DCalls.push(props);
+        return <div data-testid="mock-dice-2d" />;
     },
 }));
 
 const dice: Die[] = [
-    {
-        id: 0,
-        value: 1,
-        isKept: false,
-        definitionId: 'monk-dice',
-    },
+    { id: 0, value: 1, isKept: false, definitionId: 'monk-dice' },
 ];
 
-const boardDice: Die[] = [
+const twoDice: Die[] = [
     { id: 0, value: 1, isKept: false, definitionId: 'monk-dice' },
     { id: 1, value: 2, isKept: true, definitionId: 'monk-dice' },
 ];
@@ -138,7 +65,6 @@ function createModifyInteraction(
                 dtType: 'modifyDie',
                 dieModifyConfig,
                 selectCount,
-                diceOwnerId: undefined,
                 targetOpponentDice: false,
             },
         },
@@ -155,20 +81,22 @@ function createSelectInteraction(): InteractionDescriptor<MultistepChoiceData<un
             options: [],
             minSteps: 1,
             maxSteps: 1,
-            initialResult: { selectedDiceIds: [0] },
+            initialResult: { selectedDiceIds: [] },
             localReducer: (current) => current,
             toCommands: () => [],
             meta: {
                 dtType: 'selectDie',
                 selectCount: 1,
-                diceOwnerId: undefined,
                 targetOpponentDice: false,
             },
         },
     };
 }
 
-function createMultistepState(result: DiceModifyResult | DiceSelectResult, step = vi.fn()): MultistepInteractionState<DiceModifyResult | DiceSelectResult> {
+function createMultistepState(
+    result: DiceModifyResult | DiceSelectResult,
+    step = vi.fn(),
+): MultistepInteractionState<DiceModifyResult | DiceSelectResult> {
     return {
         result,
         stepCount: 0,
@@ -179,315 +107,82 @@ function createMultistepState(result: DiceModifyResult | DiceSelectResult, step 
     };
 }
 
-describe('DiceTray tutorial anchor', () => {
-    it('右侧传统骰盘应保留 dice-tray 教程标记', () => {
-        dice3DCalls.length = 0;
-        diceField3DCalls.length = 0;
-        diceBoxPhysicsSourceCalls.length = 0;
+describe('DiceTray', () => {
+    it('右侧 2D 骰盘保留真实入口和教程锚点', () => {
         render(
             <DiceTray
                 dice={dice}
                 rollCount={1}
                 onToggleLock={vi.fn()}
                 currentPhase="offensiveRoll"
-                canInteract={true}
+                canInteract
                 isRolling={false}
             />,
         );
 
-        expect(screen.getByTestId('mock-dice-3d').closest('[data-tutorial-id="dice-tray"]')).not.toBeNull();
+        const tray = screen.getByTestId('dicethrone-2d-dice-tray');
+        expect(tray).toHaveAttribute('data-tutorial-id', 'dice-tray');
+        expect(screen.getByTestId('mock-dice-2d')).toBeInTheDocument();
+        expect(screen.queryByTestId('dicethrone-board-dice-stage')).toBeNull();
+        expect(screen.queryByTestId('dicethrone-board-dice-box-canvas')).toBeNull();
     });
 
-    it('右侧传统骰盘应继续走原来的 Dice3D 链路，而不是强制非 WebGL 平替', () => {
-        dice3DCalls.length = 0;
-        diceField3DCalls.length = 0;
-        diceBoxPhysicsSourceCalls.length = 0;
+    it('右侧骰盘不接入棋盘物理骰台或中场骰台', () => {
+        render(
+            <DiceTray
+                dice={twoDice}
+                rollCount={1}
+                onToggleLock={vi.fn()}
+                currentPhase="offensiveRoll"
+                canInteract
+                isRolling={false}
+            />,
+        );
+
+        expect(dice2DCalls).toHaveLength(2);
+        expect(dice2DCalls.every((props) => props.size === '4vw')).toBe(true);
+        expect(screen.queryByTestId('mock-dice-field-3d')).toBeNull();
+        expect(screen.queryByTestId('mock-dice-box-physics-source')).toBeNull();
+    });
+
+    it('投掷完成后可以直接锁定右侧骰子', () => {
+        const onToggleLock = vi.fn();
         render(
             <DiceTray
                 dice={dice}
                 rollCount={1}
-                onToggleLock={vi.fn()}
+                onToggleLock={onToggleLock}
                 currentPhase="offensiveRoll"
-                canInteract={true}
+                canInteract
                 isRolling={false}
             />,
         );
 
-        expect(dice3DCalls).toHaveLength(2);
-        expect(dice3DCalls[0]?.enableWebgl).toBeUndefined();
+        fireEvent.click(screen.getByTestId('die-button-0'));
+        expect(onToggleLock).toHaveBeenCalledWith(0);
     });
 
-    it('棋盘内 3D 骰台不应复用 dice-tray 教程标记', () => {
-        dice3DCalls.length = 0;
-        diceField3DCalls.length = 0;
-        diceBoxPhysicsSourceCalls.length = 0;
-        const { container } = render(
-            <DiceTray
-                dice={dice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-            />,
-        );
-
-        expect(screen.queryByTestId('dicethrone-board-dice-custom-reference-layer')).toBeNull();
-        expect(screen.getByTestId('dicethrone-board-dice-hit-layer')).toBeInTheDocument();
-        expect(screen.getByTestId('mock-dice-box-physics-source')).toBeInTheDocument();
-        expect(container.querySelector('[data-tutorial-id="dice-tray"]')).toBeNull();
-    });
-
-    it('棋盘内 3D 骰台和物理源应保留锁定骰子并标记不参与重投', () => {
-        dice3DCalls.length = 0;
-        diceField3DCalls.length = 0;
-        diceBoxPhysicsSourceCalls.length = 0;
-        render(
-            <DiceTray
-                dice={[
-                    {
-                        id: 0,
-                        value: 1,
-                        isKept: false,
-                        definitionId: 'monk-dice',
-                    },
-                    {
-                        id: 1,
-                        value: 2,
-                        isKept: true,
-                        definitionId: 'monk-dice',
-                    },
-                ]}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-            />,
-        );
-
-        expect(diceField3DCalls).toHaveLength(0);
-        expect(diceBoxPhysicsSourceCalls).toHaveLength(1);
-        expect(diceBoxPhysicsSourceCalls[0]?.dice).toMatchObject([
-            { id: 0, value: 1, isKept: false },
-            { id: 1, value: 2, isKept: true },
-        ]);
-    });
-
-    it('棋盘内 3D 锁定骰子的锁定框和文案不应被裁成省略号', () => {
-        const { container } = render(
-            <DiceTray
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-            />,
-        );
-
-        expect(screen.getByTestId('die-locked-ring-1')).toHaveClass('rounded-full');
-        expect(screen.getByTestId('die-locked-ring-1').parentElement).toHaveStyle({
-            width: '70px',
-            height: '70px',
-        });
-        expect(screen.getByTestId('die-locked-ring-1').closest('[data-testid="die-button-1"]')).toBeNull();
-        const lockedLabel = screen.getByTestId('die-locked-label-1');
-        const lockedLabelLayer = screen.getByTestId('die-locked-label-layer-1');
-        const physicsLayerStyle = diceBoxPhysicsSourceCalls[0]?.style as React.CSSProperties | undefined;
-        expect(Number(lockedLabelLayer.style.zIndex)).toBeGreaterThan(Number(physicsLayerStyle?.zIndex ?? 0));
-        expect(lockedLabel).toHaveClass('min-w-max');
-        expect(lockedLabel).toHaveClass('whitespace-nowrap');
-        expect(lockedLabel).not.toHaveClass('overflow-hidden');
-        expect(lockedLabel).not.toHaveClass('text-ellipsis');
-        expect(container.querySelector('[data-testid="die-locked-ring-1"].rounded-2xl')).toBeNull();
-    });
-
-    it('棋盘内 3D 骰子的选择框应锚定在真实物理骰投影上', () => {
-        render(
-            <DiceTray
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-                interaction={createSelectInteraction()}
-                multistepInteraction={createMultistepState({ selectedDiceIds: [0] })}
-            />,
-        );
-
-        const selectedRing = screen.getByTestId('die-selected-ring-0');
-        expect(selectedRing).toHaveClass('rounded-full');
-        expect(selectedRing.parentElement).toHaveStyle({
-            width: '70px',
-            height: '70px',
-        });
-        expect(selectedRing.closest('[data-testid="die-button-0"]')).toBeNull();
-        expect(selectedRing).not.toHaveClass('rounded-2xl');
-
-        const operationAnchor = screen.getByTestId('die-button-0');
-        expect(operationAnchor).toHaveAttribute('data-render-mode', 'engine');
-        expect(operationAnchor).toHaveAttribute('data-board-dice-operation-anchor', 'true');
-        expect(operationAnchor).toHaveStyle({
-            left: '120px',
-            top: '90px',
-            width: '70px',
-            height: '70px',
-        });
-        expect(operationAnchor).toHaveClass('pointer-events-auto');
-        expect(screen.getByTestId('die-selected-operation-ring-0').parentElement).toBe(operationAnchor);
-        const visibleValue = screen.getByTestId('die-board-visible-value-0');
-        expect(visibleValue).toHaveTextContent('1');
-        expect(visibleValue).toHaveAttribute('data-visible-die-value', '1');
-        expect(visibleValue).toHaveClass('rounded-full');
-        expect(visibleValue).not.toHaveClass('bg-slate-950/88');
-    });
-
-    it('棋盘内 3D 改骰应显示提示、可见骰面和完整加减操作条', () => {
-        vi.useFakeTimers();
+    it('右侧骰盘的调整模式使用骰子本体旁的加减按钮', () => {
         const step = vi.fn();
         render(
             <DiceTray
-                dice={boardDice}
+                dice={dice}
                 rollCount={1}
                 onToggleLock={vi.fn()}
                 currentPhase="offensiveRoll"
-                canInteract={true}
+                canInteract
                 isRolling={false}
-                presentation="board"
                 interaction={createModifyInteraction('adjust')}
                 multistepInteraction={createMultistepState({ modifications: {}, modCount: 0, totalAdjustment: 0 }, step)}
             />,
         );
 
-        const decrementButton = screen.getByTestId('die-adjust-decrement-0');
-        const incrementButton = screen.getByTestId('die-adjust-increment-0');
-        const operationAnchor = screen.getByTestId('die-button-0');
-        expect(decrementButton).toBeVisible();
-        expect(incrementButton).toBeVisible();
-        expect(operationAnchor).toHaveStyle({
-            left: '120px',
-            top: '90px',
-            width: '128px',
-            height: '128px',
-        });
-        expect(operationAnchor).toHaveClass('pointer-events-none');
-        expect(Number(operationAnchor.style.zIndex)).toBeGreaterThan(1000);
-        expect(screen.getByTestId('die-board-visible-value-0')).toHaveTextContent('1');
-        expect(screen.getByTestId('die-board-adjust-controls-0')).toContainElement(decrementButton);
-        expect(screen.getByTestId('die-board-adjust-controls-0')).toContainElement(incrementButton);
-        expect(operationAnchor).toHaveAttribute('data-board-dice-interaction-armed', 'false');
-
-        incrementButton.click();
-        expect(step).not.toHaveBeenCalled();
-
-        act(() => {
-            vi.advanceTimersByTime(180);
-        });
-
-        expect(decrementButton).toHaveClass('pointer-events-auto');
-        expect(incrementButton).toHaveClass('pointer-events-auto');
-        expect(decrementButton.closest('[data-testid="die-button-0"]')).toHaveAttribute('data-board-dice-operation-anchor', 'true');
-        expect(incrementButton.closest('[data-testid="die-button-0"]')).toHaveAttribute('data-board-dice-operation-anchor', 'true');
-        expect(operationAnchor).toHaveAttribute('data-board-dice-interaction-armed', 'true');
-
-        incrementButton.click();
+        fireEvent.click(screen.getByTestId('die-adjust-increment-0'));
         expect(step).toHaveBeenCalledWith({ action: 'adjust', dieId: 0, delta: 1, currentValue: 1 });
+        expect(screen.getByTestId('dicethrone-2d-dice-tray')).toHaveClass('ring-amber-500');
     });
 
-    it('棋盘整体 HUD 应承接 3D 复制改骰源骰和目标骰提示', () => {
-        render(
-            <BoardDiceStage
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-                interaction={createModifyInteraction('copy', 2)}
-                multistepInteraction={createMultistepState({ modifications: {}, modCount: 0, totalAdjustment: 0 })}
-            />,
-        );
-
-        expect(screen.getByTestId('dicethrone-board-dice-operation-hint')).toHaveTextContent('interaction.hint_copy_step1');
-
-        render(
-            <BoardDiceStage
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-                interaction={createModifyInteraction('copy', 2)}
-                multistepInteraction={createMultistepState({ modifications: { 0: 1 }, modCount: 1, totalAdjustment: 0 })}
-            />,
-        );
-
-        expect(screen.getAllByTestId('dicethrone-board-dice-operation-hint')[1]).toHaveTextContent('interaction.hint_copy_step2');
-    });
-
-    it('棋盘整体 HUD 应承接 3D 任意改面提示，不塞进骰台内部', () => {
-        render(
-            <BoardDiceStage
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                interaction={createModifyInteraction('adjust')}
-                multistepInteraction={createMultistepState({ modifications: {}, modCount: 0, totalAdjustment: 0 })}
-            />,
-        );
-
-        const hint = screen.getByTestId('dicethrone-board-dice-operation-hint');
-        expect(hint).toHaveTextContent('interaction.hint_adjust');
-        expect(hint).toHaveClass('fixed');
-        expect(hint.closest('[data-testid="dicethrone-board-dice-stage"]')).not.toBeNull();
-        expect(hint.closest('[data-testid="dicethrone-board-dice-stage"]')).toContainElement(screen.getByTestId('die-button-0'));
-    });
-
-    it('棋盘内 3D 选骰刚接管时不吃拖牌释放后的残留点击', () => {
-        vi.useFakeTimers();
-        const step = vi.fn();
-        render(
-            <DiceTray
-                dice={boardDice}
-                rollCount={1}
-                onToggleLock={vi.fn()}
-                currentPhase="defensiveRoll"
-                canInteract={true}
-                isRolling={false}
-                presentation="board"
-                interaction={createSelectInteraction()}
-                multistepInteraction={createMultistepState({ selectedDiceIds: [] }, step)}
-            />,
-        );
-
-        const operationAnchor = screen.getByTestId('die-button-0');
-        expect(operationAnchor).toHaveAttribute('data-board-dice-interaction-armed', 'false');
-
-        fireEvent.click(operationAnchor);
-        expect(step).not.toHaveBeenCalled();
-
-        act(() => {
-            vi.advanceTimersByTime(180);
-        });
-
-        expect(operationAnchor).toHaveAttribute('data-board-dice-interaction-armed', 'true');
-        fireEvent.click(operationAnchor);
-        expect(step).toHaveBeenCalledWith({ action: 'toggle', dieId: 0 });
-    });
-
-    it('右侧传统骰盘的任意改面模式应允许分别修改两颗骰子', () => {
+    it('右侧骰盘的任意改面模式可以分别修改两颗骰子', () => {
         const step = vi.fn();
         render(
             <DiceTray
@@ -498,39 +193,41 @@ describe('DiceTray tutorial anchor', () => {
                 rollCount={1}
                 onToggleLock={vi.fn()}
                 currentPhase="offensiveRoll"
-                canInteract={true}
+                canInteract
                 isRolling={false}
                 interaction={createModifyInteraction('any', 2)}
                 multistepInteraction={createMultistepState({ modifications: {}, modCount: 0, totalAdjustment: 0 }, step)}
             />,
         );
 
-        screen.getByTestId('die-adjust-decrement-0').click();
-        screen.getByTestId('die-adjust-decrement-1').click();
-
+        fireEvent.click(screen.getByTestId('die-adjust-decrement-0'));
+        fireEvent.click(screen.getByTestId('die-adjust-decrement-1'));
         expect(step).toHaveBeenNthCalledWith(1, { action: 'setAny', dieId: 0, newValue: 5 });
         expect(step).toHaveBeenNthCalledWith(2, { action: 'setAny', dieId: 1, newValue: 5 });
     });
 
-    it('棋盘内 3D 物理骰应等 DiceThrone 骰面皮肤就绪后再生成和投掷', () => {
-        diceBoxPhysicsSourceCalls.length = 0;
+    it('响应选骰直接点击右侧骰子本体', () => {
+        const step = vi.fn();
         render(
             <DiceTray
-                dice={boardDice}
-                rollCount={0}
+                dice={twoDice}
+                rollCount={1}
                 onToggleLock={vi.fn()}
-                currentPhase="offensiveRoll"
-                canInteract={true}
-                isRolling={true}
-                presentation="board"
+                currentPhase="defensiveRoll"
+                canInteract
+                isRolling={false}
+                interaction={createSelectInteraction()}
+                multistepInteraction={createMultistepState({ selectedDiceIds: [] }, step)}
             />,
         );
 
-        expect(diceBoxPhysicsSourceCalls).toHaveLength(1);
-        expect(diceBoxPhysicsSourceCalls[0]?.requireDieSkins).toBe(true);
+        fireEvent.click(screen.getByTestId('die-button-0'));
+        expect(step).toHaveBeenCalledWith({ action: 'toggle', dieId: 0 });
     });
+});
 
-    it('右侧默认掷骰按钮在首掷前仍应保持原来的双按钮布局', () => {
+describe('DiceActions', () => {
+    it('首掷前显示投掷和确认两个按钮', () => {
         const { container } = render(
             <DiceActions
                 rollCount={0}
@@ -539,10 +236,9 @@ describe('DiceTray tutorial anchor', () => {
                 onRoll={vi.fn()}
                 onConfirm={vi.fn()}
                 currentPhase="offensiveRoll"
-                canInteract={true}
+                canInteract
                 isRolling={false}
                 setIsRolling={vi.fn()}
-                setRerollingDiceIds={vi.fn()}
             />,
         );
 
@@ -550,7 +246,7 @@ describe('DiceTray tutorial anchor', () => {
         expect(container.querySelector('[data-tutorial-id="dice-confirm-button"]')).not.toBeNull();
     });
 
-    it('非投掷阶段时掷骰按钮应直接置灰', () => {
+    it('非投掷阶段时投掷按钮置灰', () => {
         const { container } = render(
             <DiceActions
                 rollCount={0}
@@ -559,15 +255,12 @@ describe('DiceTray tutorial anchor', () => {
                 onRoll={vi.fn()}
                 onConfirm={vi.fn()}
                 currentPhase="main1"
-                canInteract={true}
+                canInteract
                 isRolling={false}
                 setIsRolling={vi.fn()}
-                setRerollingDiceIds={vi.fn()}
             />,
         );
 
-        const rollButton = container.querySelector('[data-tutorial-id="dice-roll-button"]');
-        expect(rollButton).not.toBeNull();
-        expect(rollButton).toBeDisabled();
+        expect(container.querySelector('[data-tutorial-id="dice-roll-button"]')).toBeDisabled();
     });
 });

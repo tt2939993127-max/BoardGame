@@ -275,9 +275,10 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '0'),
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'blessing-of-might' }),
+                    cmd('ADVANCE_PHASE', '0'),
                 ],
                 expect: {
-                    turnPhase: 'offensiveRoll',
+                    turnPhase: 'main2',
                     players: {
                         '0': {
                             cp: 4,
@@ -406,6 +407,7 @@ describe('cross hero battles', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('CONFIRM_COMPARE_ROLL', '1'),
                     cmd('SYS_INTERACTION_RESPOND', '1', { optionId: 'option-1' }),
                 ],
                 expect: {
@@ -536,6 +538,7 @@ describe('cross hero battles', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('CONFIRM_COMPARE_ROLL', '1'),
                     cmd('SYS_INTERACTION_CONFIRM', '1'),
                 ],
                 expect: {
@@ -635,6 +638,7 @@ describe('cross hero battles', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('CONFIRM_COMPARE_ROLL', '1'),
                     cmd('SYS_INTERACTION_CONFIRM', '1'),
                 ],
                 expect: {
@@ -753,6 +757,21 @@ describe('cross hero battles', () => {
 
             expect(advanceResult.success).toBe(true);
             state = advanceResult.state as MatchState<DiceThroneCore>;
+
+            const compareConfirmResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'CONFIRM_COMPARE_ROLL',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds,
+            );
+            expect(compareConfirmResult.success).toBe(true);
+            state = compareConfirmResult.state as MatchState<DiceThroneCore>;
 
             const compareRollPrompt = getCompareRollChoicePrompt(state, 'showdown');
             expect(compareRollPrompt).toMatchObject({

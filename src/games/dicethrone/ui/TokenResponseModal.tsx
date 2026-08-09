@@ -267,7 +267,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                         onClick={() => onUseToken(tokenDef.id, useAmount)}
                         disabled={isDisabled}
                         className={clsx(
-                            'ml-4',
+                            'ml-4 -translate-y-0.5 shadow-[0_6px_0_#b45309] active:translate-y-[3px] active:shadow-[0_2px_0_#b45309]',
                             category === 'evasive' && 'border-cyan-500/50 hover:bg-cyan-500/20 text-cyan-100',
                         )}
                     >
@@ -369,7 +369,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                     onClick={onSkip}
                     variant="secondary"
                     fullWidth
-                    className="mt-2 max-[1023px]:mt-0"
+                    className="mt-2 -translate-y-0.5 shadow-[0_6px_0_#334155] active:translate-y-[3px] active:shadow-[0_2px_0_#334155] max-[1023px]:mt-0"
                 >
                     {pendingDamage.isFullyEvaded ? t('tokenResponse.confirm') : t('tokenResponse.skip')}
                 </GameButton>

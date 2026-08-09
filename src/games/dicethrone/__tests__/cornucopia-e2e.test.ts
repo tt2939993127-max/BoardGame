@@ -7,11 +7,12 @@ import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { DiceThroneDomain } from '../domain';
 import { diceThroneSystemsForTest } from '../game';
-import { createQueuedRandom, cmd, assertState, advanceTo } from './test-utils';
+import { createQueuedRandom, cmd, assertState, advanceTo, getDefenderChoicePrompt } from './test-utils';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import type { DiceThroneCore, DiceThroneCommand } from '../domain/types';
 import { initHeroState } from '../domain/characters';
+import { CORNUCOPIA_2 } from '../heroes/shadow_thief/abilities';
 
 const shadowThiefSetupCommands = [
     { type: 'SELECT_CHARACTER', playerId: '0', payload: { characterId: 'shadow_thief' } },
@@ -221,5 +222,74 @@ describe('聚宝盆效果端到端测试', () => {
 
         expect(cardDrawnEvents.length).toBe(2);
         expect(cardDiscardedEvents.length).toBe(0);
+    });
+
+    it('4 人模式：卡牌大师 II 的弃牌需要先索敌并只作用于选中的对手', () => {
+        const queuedRandom = createQueuedRandom([5, 5, 6, 1, 2, 6]);
+        const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+        let player1InitialHandCount = 0;
+        let player3InitialHandCount = 0;
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: diceThroneSystemsForTest,
+            playerIds,
+            random: queuedRandom,
+            setup: (playerIds, random) => {
+                const state = createShadowThiefFourPlayerState(playerIds, random);
+                state.core.players['0'].hand = [];
+                state.core.players['0'].abilities = state.core.players['0'].abilities.map((ability) => (
+                    ability.id === 'cornucopia' ? CORNUCOPIA_2 : ability
+                ));
+                state.core.players['0'].abilityLevels.cornucopia = 2;
+                player1InitialHandCount = state.core.players['1'].hand.length;
+                player3InitialHandCount = state.core.players['3'].hand.length;
+                return state;
+            },
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '卡牌大师 II 4 人索敌后弃选中对手牌',
+            commands: [
+                ...advanceTo('offensiveRoll', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'cornucopia' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('ADVANCE_PHASE', '0'),
+            ],
+        });
+
+        expect(result.finalState.sys.phase).toBe('targetingRoll');
+        const defenderPrompt = getDefenderChoicePrompt(result.finalState);
+        expect(defenderPrompt.playerId).toBe('0');
+        const options = defenderPrompt.options as Array<{ customId: string }>;
+        expect(options.map((option) => option.customId).sort()).toEqual(['select-target:1', 'select-target:3']);
+
+        const resolveResult = executePipeline(
+            { domain: DiceThroneDomain, systems: diceThroneSystemsForTest },
+            result.finalState,
+            {
+                type: 'SELECT_DEFENDER_TARGET',
+                playerId: '0',
+                payload: { defenderId: '3' },
+                timestamp: Date.now(),
+            } as DiceThroneCommand,
+            queuedRandom,
+            playerIds,
+        );
+
+        expect(resolveResult.success).toBe(true);
+        if (!resolveResult.success) return;
+
+        const finalState = resolveResult.state as MatchState<DiceThroneCore>;
+        expect(finalState.sys.phase).toBe('main2');
+        expect(finalState.core.players['0'].hand).toHaveLength(2);
+        expect(finalState.core.players['1'].hand).toHaveLength(player1InitialHandCount);
+        expect(finalState.core.players['3'].hand).toHaveLength(player3InitialHandCount - 1);
     });
 });

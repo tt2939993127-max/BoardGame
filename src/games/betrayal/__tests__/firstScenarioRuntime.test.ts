@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-    acknowledgePendingCardResolution,
     acknowledgePendingCardResolutions,
     applyBetrayalCommand,
     BETRAYAL_FIXED_RANDOM,
@@ -204,6 +203,46 @@ function discoverTestRoom(core: BetrayalCore, roomId: string, name: string): voi
             }
             : room
     ));
+}
+
+function createMysticElevatorRoomEffectReadyCore(): BetrayalCore {
+    const core = createStartedFirstScenarioCore();
+    const upperDestination = core.rooms.find((room) => room.id === 'upper-north');
+    const mysticElevator = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find(
+        (room) => room.visualId === 'mysticElevator',
+    );
+    if (!mysticElevator || !upperDestination) {
+        throw new Error('测试夹具缺少神秘电梯房间模板');
+    }
+
+    // 图面只有北门；在上层北侧放置时旋转为南门，连接上层平台。
+    core.rooms = [
+        ...core.rooms.map((room) => (
+        room.id === 'upper-north'
+            ? {
+                ...room,
+                name: mysticElevator.name,
+                hint: mysticElevator.hint,
+                tags: [...mysticElevator.tags],
+                visualId: mysticElevator.visualId,
+                state: 'discovered',
+                discoveryReward: null,
+                enterEffect: mysticElevator.enterEffect,
+                endTurnEffect: mysticElevator.endTurnEffect,
+            }
+            : room
+        )),
+        {
+            ...upperDestination,
+            id: 'upper-elevator-destination',
+            name: '上层电梯测试目标',
+            x: upperDestination.x + 1,
+        },
+    ];
+    setTestExplorerRoom(core, '0', 'upper-north');
+    core.turnEndedByDiscovery = false;
+    setScenarioTestTurnMovement(core, 2);
+    return core;
 }
 
 function activateBloodFromStoneMonsterTurn(core: BetrayalCore, controllerPlayerId = '0'): void {
@@ -6991,10 +7030,10 @@ describe('Betrayal first scenario runtime', () => {
             },
         ];
         const collapsedRoom = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'collapsedRoom')!;
-        const mysticElevator = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'mysticElevator')!;
+        const gymnasium = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'gymnasium')!;
         setTestRoomDiscoveryDeck(core, [
             { floor: 'upper', room: collapsedRoom },
-            { floor: 'upper', room: mysticElevator },
+            { floor: 'upper', room: gymnasium },
         ]);
         setTestExplorerInventory(core, '1', [{ id: 'holy-symbol', name: '圣符', kind: 'omen' }]);
         const speedBeforeExplore = core.currentExplorer.traits.speed;
@@ -7014,12 +7053,12 @@ describe('Betrayal first scenario runtime', () => {
             createBetrayalScriptedRandom(1),
         );
 
-        expect(core.rooms.find((room) => room.id === 'upper-north')?.visualId).toBe('mysticElevator');
+        expect(core.rooms.find((room) => room.id === 'upper-north')?.visualId).toBe('gymnasium');
         expect(core.latestDiscovery?.kind).toBe('none');
-        expect(core.latestDiscovery?.title).toBe('神秘电梯');
+        expect(core.latestDiscovery?.title).toBe('体育馆');
         expect(core.currentExplorer.traits.speed).toBe(speedBeforeExplore);
         expect(core.activityLog[0]?.text).toContain('圣符埋葬倒塌房间');
-        expect(core.activityLog[0]?.text).toContain('继续发现神秘电梯');
+        expect(core.activityLog[0]?.text).toContain('继续发现体育馆');
     });
 
     it('灰尘阶段继续探索事件符号时雕像仍可跳过事件且不结算事件效果', () => {
@@ -20449,21 +20488,34 @@ describe('Betrayal first scenario runtime', () => {
         expect(core.latestDiscovery?.kind).toBe('none');
         expect(core.latestDiscovery?.title).toBe('器械库');
         expect(core.latestDiscovery?.resolutionSteps?.map((step) => step.text)).toEqual([
-            '器械库获得砍刀',
             '展示后埋葬急救包',
+            '器械库获得砍刀',
         ]);
         expect(core.latestDiscovery?.resolutionSteps?.map((step) => step.kind)).toEqual([
-            'room-discovery-card',
             'buried-room-discovery-card',
+            'room-discovery-card',
         ]);
         expect(core.pendingCardResolutionQueue.map((resolution) => ({
             stepKind: resolution.stepKind,
             text: resolution.text,
             index: resolution.index,
             total: resolution.total,
+            processCards: resolution.processCards?.map((card) => ({
+                cardName: card.cardName,
+                outcome: card.outcome,
+                text: card.text,
+            })),
         }))).toEqual([
-            { stepKind: 'room-discovery-card', text: '器械库获得砍刀', index: 1, total: 2 },
-            { stepKind: 'buried-room-discovery-card', text: '展示后埋葬急救包', index: 2, total: 2 },
+            {
+                stepKind: 'room-discovery-card',
+                text: '展示后埋葬急救包；器械库获得砍刀',
+                index: 1,
+                total: 1,
+                processCards: [
+                    { cardName: '急救包', outcome: 'buried', text: '展示后埋葬急救包' },
+                    { cardName: '砍刀', outcome: 'gained', text: '器械库获得砍刀' },
+                ],
+            },
         ]);
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },
@@ -20475,8 +20527,16 @@ describe('Betrayal first scenario runtime', () => {
         core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION, '0', {
             resolutionId: core.pendingCardResolutionQueue[0]!.id,
         });
-        expect(core.pendingCardResolutionQueue.map((resolution) => resolution.index)).toEqual([2]);
-        core = acknowledgePendingCardResolution(core, '0');
+        expect(core.pendingCardResolutionQueue[0]?.acknowledgedPlayerIds).toEqual(['0']);
+        expect(core.pendingCardResolutionQueue.map((resolution) => resolution.index)).toEqual([1]);
+        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION, '1', {
+            resolutionId: core.pendingCardResolutionQueue[0]!.id,
+        });
+        expect(core.pendingCardResolutionQueue[0]?.acknowledgedPlayerIds).toEqual(['0', '1']);
+        expect(core.pendingCardResolutionQueue.map((resolution) => resolution.index)).toEqual([1]);
+        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION, '2', {
+            resolutionId: core.pendingCardResolutionQueue[0]!.id,
+        });
         expect(core.pendingCardResolutionQueue).toEqual([]);
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },
@@ -21427,9 +21487,6 @@ describe('Betrayal first scenario runtime', () => {
 
     it('神秘电梯进入后可按骰点移动到对应楼层开放门口且每回合只能用一次', () => {
         let core = createStartedFirstScenarioCore();
-        core.roomDiscoveryOrderByFloor.upper = [
-            BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'mysticElevator')!,
-        ];
 
         expect(resolveBetrayalRoomSpecialActionStatus(core)).toMatchObject({
             sourceKind: 'roomEffect',
@@ -21438,10 +21495,8 @@ describe('Betrayal first scenario runtime', () => {
             reason: '当前房间没有可使用的房间效果。',
         });
 
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'hallway' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'grand-staircase' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'upper-landing' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.EXPLORE_ROOM, '0', { roomId: 'upper-north' });
+        core = createMysticElevatorRoomEffectReadyCore();
+        core.turnEndedByDiscovery = true;
         expect(resolveBetrayalRoomSpecialActionStatus(core)).toMatchObject({
             sourceKind: 'roomEffect',
             sourceId: 'mysticElevator',
@@ -21510,15 +21565,7 @@ describe('Betrayal first scenario runtime', () => {
     });
 
     it('兔脚可以重掷神秘电梯刚投过的一颗骰子并重算楼层', () => {
-        let core = createStartedFirstScenarioCore();
-        core.roomDiscoveryOrderByFloor.upper = [
-            BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'mysticElevator')!,
-        ];
-
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'hallway' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'grand-staircase' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.MOVE_TO_ROOM, '0', { roomId: 'upper-landing' });
-        core = applyBetrayalCommand(core, BETRAYAL_COMMANDS.EXPLORE_ROOM, '0', { roomId: 'upper-north' });
+        let core = createMysticElevatorRoomEffectReadyCore();
         core.currentExplorer = {
             ...core.currentExplorer,
             inventory: [
@@ -23986,10 +24033,10 @@ describe('Betrayal first scenario runtime', () => {
             },
         ];
         const collapsedRoom = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'collapsedRoom')!;
-        const mysticElevator = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'mysticElevator')!;
+        const gymnasium = BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'gymnasium')!;
         setTestRoomDiscoveryDeck(core, [
             { floor: 'upper', room: collapsedRoom },
-            { floor: 'upper', room: mysticElevator },
+            { floor: 'upper', room: gymnasium },
         ]);
         core.currentExplorer.inventory = [
             { id: 'holy-symbol', name: '圣符', kind: 'omen' },
@@ -24012,16 +24059,16 @@ describe('Betrayal first scenario runtime', () => {
         );
 
         const discoveredRoom = core.rooms.find((room) => room.id === 'upper-north');
-        expect(discoveredRoom?.visualId).toBe('mysticElevator');
+        expect(discoveredRoom?.visualId).toBe('gymnasium');
         expect(discoveredRoom?.discoveryReward).toBeNull();
         expect(discoveredRoom?.endTurnEffect).toBeUndefined();
-        expect(discoveredRoom?.enterEffect).toBe('mysticElevator');
+        expect(discoveredRoom?.enterEffect).toBeUndefined();
         expect(core.latestDiscovery?.kind).toBe('none');
-        expect(core.latestDiscovery?.title).toBe('神秘电梯');
+        expect(core.latestDiscovery?.title).toBe('体育馆');
         expect(core.latestDiscovery?.detail).toContain('没有事件、物品或预兆发现牌');
         expect(core.currentExplorer.traits.speed).toBe(speedBeforeExplore);
         expect(core.activityLog[0]?.text).toContain('圣符埋葬倒塌房间');
-        expect(core.activityLog[0]?.text).toContain('继续发现神秘电梯');
+        expect(core.activityLog[0]?.text).toContain('继续发现体育馆');
     });
 
     it('没有圣符或本回合刚获得圣符时，不能声明埋葬发现板块', () => {
@@ -24177,6 +24224,9 @@ describe('Betrayal first scenario runtime', () => {
 
     it('正式探索会从真实开放门位动态生成下一批未知房间，并在探索后结束当前回合', () => {
         let core = createStartedFirstScenarioCore();
+        core.roomDiscoveryOrderByFloor.upper = [
+            BETRAYAL_DISCOVERY_POOLS.roomDiscoveryByFloor.upper.find((room) => room.visualId === 'gymnasium')!,
+        ];
 
         expect(core.rooms.some((room) => room.id === 'upper-north' && room.state === 'unexplored')).toBe(true);
         expect(core.rooms.some((room) => room.id === 'frontier-upper-north-east')).toBe(false);

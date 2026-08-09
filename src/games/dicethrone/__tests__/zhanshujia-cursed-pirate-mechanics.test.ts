@@ -28,6 +28,7 @@ import {
     getCardInteractionPrompt,
     getDefenderChoicePrompt,
     getSimpleChoicePrompt,
+    injectPendingInteraction,
     respondToPrompt,
     testSystems,
 } from './test-utils';
@@ -62,6 +63,40 @@ const command = (
     payload,
     timestamp: 100,
 } as DiceThroneCommand);
+
+const settleBonusDice = (
+    state: MatchState<DiceThroneCore>,
+    playerId: PlayerId,
+    random = fixedRandom,
+) => {
+    const events = execute(
+        state,
+        command('SKIP_BONUS_DICE_REROLL', playerId),
+        random,
+    ) as DiceThroneEvent[];
+    return {
+        events,
+        state: { ...state, core: applyEvents(state.core, events) },
+    };
+};
+
+const settleBonusDiceThroughPipeline = (
+    state: MatchState<DiceThroneCore>,
+    playerId: PlayerId,
+    random = fixedRandom,
+) => {
+    const result = executePipeline(
+        { domain: DiceThroneDomain, systems: testSystems },
+        state,
+        command('SKIP_BONUS_DICE_REROLL', playerId),
+        random,
+        Object.keys(state.core.players) as PlayerId[],
+    );
+    if (!result.success) {
+        throw new Error(`奖励骰收口失败: ${result.error}`);
+    }
+    return result;
+};
 
 const eventsOfType = <T extends DiceThroneEvent['type']>(events: DiceThroneEvent[], type: T) =>
     events.filter((event): event is Extract<DiceThroneEvent, { type: T }> => event.type === type);
@@ -560,6 +595,174 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
             .some(event => event.payload.statusId === STATUS_IDS.POWDER_KEG)).toBe(false);
     });
 
+    it.each([1, 2])('致盲判定为 %s 时视为未成功激活攻击并触发海盗火药桶被动', (blindedValue) => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        setPlayerBoardFace(state, '1', 'cursed');
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].statusEffects[STATUS_IDS.BLINDED] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'test-blinded-pirate-passive',
+            isDefendable: true,
+        } as DiceThroneCore['pendingAttack'];
+        state.core.offensiveRollAttackMadeThisTurn = { '0': true };
+
+        const hookResult = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: createQueuedRandom([blindedValue]),
+            exitEvents: [],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const checkEvents = Array.isArray(hookResult) ? hookResult : (hookResult?.events ?? []);
+        const afterCheck = applyEvents(state.core, checkEvents as DiceThroneEvent[]);
+        expect(afterCheck.pendingBonusDiceSettlement?.customResolutionId).toBe('blinded-check');
+
+        const settled = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            { ...state, core: afterCheck },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([blindedValue]),
+            ['0', '1'],
+        );
+
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+
+        const advanced = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            settled.state,
+            command('ADVANCE_PHASE', '0'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(advanced.success).toBe(true);
+        if (!advanced.success) return;
+        expect(advanced.state.core.players['0'].statusEffects[STATUS_IDS.POWDER_KEG]).toBe(1);
+    });
+
+    it('眩光判定为 1 时视为未成功激活攻击并触发海盗火药桶被动', () => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        setPlayerBoardFace(state, '1', 'cursed');
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].statusEffects[STATUS_IDS.DAZZLE] = 1;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'test-dazzle-pirate-passive',
+            isDefendable: true,
+        } as DiceThroneCore['pendingAttack'];
+        state.core.offensiveRollAttackMadeThisTurn = { '0': true };
+
+        const hookResult = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: createQueuedRandom([1]),
+            exitEvents: [],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const checkEvents = Array.isArray(hookResult) ? hookResult : (hookResult?.events ?? []);
+        const afterCheck = applyEvents(state.core, checkEvents as DiceThroneEvent[]);
+        expect(afterCheck.pendingBonusDiceSettlement?.customResolutionId).toBe('tianshi-dazzle-check');
+
+        const settled = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            { ...state, core: afterCheck },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+            ['0', '1'],
+        );
+
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+
+        const advanced = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            settled.state,
+            command('ADVANCE_PHASE', '0'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(advanced.success).toBe(true);
+        if (!advanced.success) return;
+        expect(advanced.state.core.players['0'].statusEffects[STATUS_IDS.POWDER_KEG]).toBe(1);
+    });
+
+    it('额外进攻投掷阶段未发起攻击时仍触发海盗火药桶被动', () => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        setPlayerBoardFace(state, '1', 'cursed');
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.extraAttackInProgress = {
+            attackerId: '0',
+            originalActivePlayerId: '0',
+            phaseEntered: true,
+        };
+        state.core.offensiveRollAttackMadeThisTurn = { '0': true };
+        state.core.pendingAttack = null;
+
+        const result = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: fixedRandom,
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const events = Array.isArray(result) ? result : (result?.events ?? []);
+        const next = applyEvents(state.core, events as DiceThroneEvent[]);
+
+        expect(next.players['0'].statusEffects[STATUS_IDS.POWDER_KEG]).toBe(1);
+    });
+
+    it('战争贩子额外进攻投掷阶段不清理紧缚、刺藤、缠绕或休战', () => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        state.core.activePlayerId = '0';
+        state.core.extraAttackInProgress = {
+            attackerId: '0',
+            originalActivePlayerId: '0',
+            phaseEntered: true,
+            sourceStatusId: 'war-monger',
+        } as any;
+        state.core.players['0'].tokens[TOKEN_IDS.THORN] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.BIND] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.ENTANGLE] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.PARLEY] = 1;
+
+        const enterResult = diceThroneFlowHooks.onPhaseEnter?.({
+            state: { ...state, sys: { ...state.sys, phase: 'defensiveRoll' } },
+            from: 'defensiveRoll',
+            to: 'offensiveRoll',
+            command: command('ADVANCE_PHASE', '0'),
+            random: fixedRandom,
+            exitEvents: [],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseEnter>>[0]);
+        const enterEvents = enterResult ?? [];
+        const entered = applyEvents(state.core, enterEvents as DiceThroneEvent[]);
+
+        expect(entered.players['0'].statusEffects[STATUS_IDS.ENTANGLE] ?? 0).toBe(1);
+
+        const exitResult = diceThroneFlowHooks.onPhaseExit?.({
+            state: { ...state, core: entered, sys: { ...state.sys, phase: 'offensiveRoll' } },
+            from: 'offensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: fixedRandom,
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const exitEvents = Array.isArray(exitResult) ? exitResult : (exitResult?.events ?? []);
+        const next = applyEvents(entered, exitEvents as DiceThroneEvent[]);
+
+        expect(next.players['0'].tokens[TOKEN_IDS.THORN] ?? 0).toBe(1);
+        expect(next.players['0'].statusEffects[STATUS_IDS.BIND] ?? 0).toBe(1);
+        expect(next.players['0'].statusEffects[STATUS_IDS.PARLEY] ?? 0).toBe(1);
+    });
+
     it('火药桶维持投骰 1-2 时爆炸并造成 3 点独立不可防御伤害', () => {
         const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
         state.sys.phase = 'discard';
@@ -1025,6 +1228,31 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         expect(next.players['0'].statusEffects[STATUS_IDS.BIND] ?? 0).toBe(0);
     });
 
+    it('倒地跳过进攻投掷阶段时不会移除紧缚', () => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        state.sys.phase = 'main1';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
+        state.core.players['0'].statusEffects[STATUS_IDS.BIND] = 1;
+
+        const result = diceThroneFlowHooks.onPhaseExit?.({
+            state,
+            from: 'main1',
+            to: 'offensiveRoll',
+            command: command('ADVANCE_PHASE', '0'),
+            random: fixedRandom,
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const events = Array.isArray(result) ? result : (result?.events ?? []);
+        const next = applyEvents(state.core, events as DiceThroneEvent[]);
+
+        expect(Array.isArray(result)).toBe(false);
+        expect((result as Exclude<typeof result, DiceThroneEvent[] | void>)?.overrideNextPhase).toBe('main2');
+        expect(next.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0).toBe(0);
+        expect(next.players['0'].statusEffects[STATUS_IDS.BIND] ?? 0).toBe(1);
+        expect(eventsOfType(events as DiceThroneEvent[], 'STATUS_REMOVED')
+            .some(event => event.payload.statusId === STATUS_IDS.BIND)).toBe(false);
+    });
+
     it('战术优势可按动作消耗 token 取得 CP、重掷、抽牌、锁定、守护和转移入口', () => {
         const gainCp = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
         gainCp.sys.phase = 'main1';
@@ -1221,6 +1449,47 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         expect(validatePassive(4, 4).valid).toBe(true);
         expect(validatePassive(5, 4).valid).toBe(false);
         expect(validatePassive(5, 4, 'main1').valid).toBe(true);
+    });
+
+    it('对手准备移除或转移战术优势时，战术家仍可先花费', () => {
+        for (const [sourceCardId, titleKey, transferConfig] of [
+            ['card-bye-bye', 'interaction.selectStatusToRemove', undefined],
+            ['card-transfer-status', 'interaction.selectStatusToTransfer', {}],
+        ] as const) {
+            const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+            state.sys.phase = 'main1';
+            state.core.activePlayerId = '1';
+            state.core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] = 1;
+            state.core.players['0'].resources[RESOURCE_IDS.CP] = 0;
+            injectPendingInteraction(state, {
+                id: `${sourceCardId}-tactical-advantage`,
+                playerId: '1',
+                sourceCardId,
+                type: 'selectStatus',
+                titleKey,
+                selectCount: 1,
+                selected: [],
+                targetPlayerIds: ['0', '1'],
+                ...(transferConfig ? { transferConfig } : {}),
+            });
+
+            const spent = executePipeline(
+                { domain: DiceThroneDomain, systems: testSystems },
+                state,
+                command('USE_PASSIVE_ABILITY', '0', {
+                    passiveId: 'zhanshujia-tactical-advantage',
+                    actionIndex: 0,
+                }),
+                fixedRandom,
+                ['0', '1'],
+            );
+
+            expect(spent.success).toBe(true);
+            if (!spent.success) continue;
+            expect(spent.state.core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? 0).toBe(0);
+            expect(spent.state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(1);
+            expect(getCardInteractionPrompt(spent.state).playerId).toBe('1');
+        }
     });
 
     it('战术家反制措施按防御骰结算反击、防伤与战术优势', () => {
@@ -1722,6 +1991,50 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         });
     });
 
+    it('攻击不进入防御投掷阶段时，不应误触发咒缚海盗火药桶被动', () => {
+        const state = createHeroMatchup('zhanshujia', 'cursed_pirate')(['0', '1'], fixedRandom);
+        setPlayerBoardFace(state, '1', 'cursed');
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 3;
+        state.core.rollDiceCount = 5;
+        state.core.rollConfirmed = true;
+        state.core.dice = state.core.dice.map((die, index) => ({
+            ...die,
+            value: [6, 6, 6, 6, 1][index] ?? die.value,
+            symbol: [
+                ZHANSHUJIA_DICE_FACE_IDS.MEDAL,
+                ZHANSHUJIA_DICE_FACE_IDS.MEDAL,
+                ZHANSHUJIA_DICE_FACE_IDS.MEDAL,
+                ZHANSHUJIA_DICE_FACE_IDS.MEDAL,
+                ZHANSHUJIA_DICE_FACE_IDS.SABRE,
+            ][index] ?? die.symbol,
+        }));
+
+        const selected = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('SELECT_ABILITY', '0', { abilityId: 'strategic-shift' }),
+            fixedRandom,
+            ['0', '1'],
+        );
+        expect(selected.success).toBe(true);
+
+        const advanced = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            selected.state,
+            command('ADVANCE_PHASE', '0'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(advanced.success).toBe(true);
+        expect(advanced.state.sys.phase).toBe('main2');
+        expect(advanced.state.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 5);
+        expect(advanced.state.core.players['0'].statusEffects[STATUS_IDS.POWDER_KEG] ?? 0).toBe(0);
+    });
+
     it('战术家地毯式轰炸 II 在 2v2 中必须选择两名不同对手造成附属伤害', () => {
         const state = createFourPlayerZhanshujiaState();
         const { state: upgradedState } = playZhanshujiaUpgrade('upgrade-zhanshujia-carpet-bombing-2');
@@ -1793,8 +2106,13 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const sabreEvents = execute(sabreState, command('PLAY_CARD', '0', {
             cardId: 'card-zhanshujia-disengage',
         }), createQueuedRandom([1]));
-        const afterSabre = applyEvents(sabreState.core, sabreEvents);
-        expect(eventsOfType(sabreEvents, 'DAMAGE_DEALT')[0]?.payload).toMatchObject({
+        const sabreSettled = settleBonusDice(
+            { ...sabreState, core: applyEvents(sabreState.core, sabreEvents) },
+            '0',
+        );
+        const sabreAllEvents = [...sabreEvents, ...sabreSettled.events];
+        const afterSabre = sabreSettled.state.core;
+        expect(eventsOfType(sabreAllEvents, 'DAMAGE_DEALT')[0]?.payload).toMatchObject({
             targetId: '1',
             amount: 2,
             sourceAbilityId: 'card-zhanshujia-disengage',
@@ -1805,7 +2123,11 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const bannerEvents = execute(bannerState, command('PLAY_CARD', '0', {
             cardId: 'card-zhanshujia-disengage',
         }), createQueuedRandom([4]));
-        expect(eventsOfType(bannerEvents, 'DAMAGE_SHIELD_GRANTED')[0]?.payload).toMatchObject({
+        const bannerSettled = settleBonusDice(
+            { ...bannerState, core: applyEvents(bannerState.core, bannerEvents) },
+            '0',
+        );
+        expect(eventsOfType([...bannerEvents, ...bannerSettled.events], 'DAMAGE_SHIELD_GRANTED')[0]?.payload).toMatchObject({
             targetId: '0',
             value: 3,
             sourceId: 'card-zhanshujia-disengage',
@@ -1815,7 +2137,11 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const medalEvents = execute(medalState, command('PLAY_CARD', '0', {
             cardId: 'card-zhanshujia-disengage',
         }), createQueuedRandom([6]));
-        const afterMedal = applyEvents(medalState.core, medalEvents);
+        const medalSettled = settleBonusDice(
+            { ...medalState, core: applyEvents(medalState.core, medalEvents) },
+            '0',
+        );
+        const afterMedal = medalSettled.state.core;
         expect(afterMedal.players['0'].tokens[TOKEN_IDS.PROTECT]).toBe(1);
     });
 
@@ -1838,6 +2164,20 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         });
         expect(next.players['1'].statusEffects[STATUS_IDS.BIND]).toBe(1);
         expect(next.players['0'].damageShields?.[0]).toMatchObject({ value: 3 });
+
+        const exitResult = diceThroneFlowHooks.onPhaseExit?.({
+            state: { ...state, core: next, sys: { ...state.sys, phase: 'defensiveRoll' } },
+            from: 'defensiveRoll',
+            to: 'main2',
+            command: command('ADVANCE_PHASE', '0'),
+            random: fixedRandom,
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
+        const exitEvents = Array.isArray(exitResult) ? exitResult : (exitResult?.events ?? []);
+        const afterDefense = applyEvents(next, exitEvents as DiceThroneEvent[]);
+
+        expect(eventsOfType(exitEvents as DiceThroneEvent[], 'STATUS_REMOVED')
+            .some(event => event.payload.targetId === '1' && event.payload.statusId === STATUS_IDS.BIND)).toBe(false);
+        expect(afterDefense.players['1'].statusEffects[STATUS_IDS.BIND] ?? 0).toBe(1);
     });
 
     it('战术家作战室按骰值一半向上取整获得战术优势', () => {
@@ -1954,12 +2294,17 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
             },
             { random: createQueuedRandom([1, 1, 2, 3]) },
         );
-        const cutlassDamageEvents = eventsOfType(markedCutlassEvents, 'DAMAGE_DEALT')
+        const markedCutlassSettled = settleBonusDice(
+            { ...markedCutlass, core: applyEvents(markedCutlass.core, markedCutlassEvents) },
+            '0',
+        );
+        const markedCutlassAllEvents = [...markedCutlassEvents, ...markedCutlassSettled.events];
+        const cutlassDamageEvents = eventsOfType(markedCutlassAllEvents, 'DAMAGE_DEALT')
             .filter(event => event.payload.sourceAbilityId === 'marked-for-death');
         expect(cutlassDamageEvents).toHaveLength(4);
         expect(cutlassDamageEvents.every(event => event.payload.amount === 2 && event.payload.unblockable === true)).toBe(true);
-        expect(markedCutlassEvents.some(event => event.type === 'CARD_DRAWN')).toBe(false);
-        expect(markedCutlassEvents.some(event => (
+        expect(markedCutlassAllEvents.some(event => event.type === 'CARD_DRAWN')).toBe(false);
+        expect(markedCutlassAllEvents.some(event => (
             event.type === 'STATUS_APPLIED' && event.payload.statusId === STATUS_IDS.CURSED_COIN
         ))).toBe(false);
 
@@ -1978,10 +2323,15 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
             },
             { random: createQueuedRandom([4, 5, 6, 6]) },
         );
-        const markedLootAndSkullNext = applyEvents(markedLootAndSkull.core, markedLootAndSkullEvents);
+        const markedLootAndSkullSettled = settleBonusDice(
+            { ...markedLootAndSkull, core: applyEvents(markedLootAndSkull.core, markedLootAndSkullEvents) },
+            '0',
+        );
+        const markedLootAndSkullAllEvents = [...markedLootAndSkullEvents, ...markedLootAndSkullSettled.events];
+        const markedLootAndSkullNext = markedLootAndSkullSettled.state.core;
         expect(markedLootAndSkullNext.players['0'].hand).toHaveLength(2);
         expect(markedLootAndSkullNext.players['1'].statusEffects[STATUS_IDS.CURSED_COIN]).toBe(2);
-        expect(markedLootAndSkullEvents.some(event => event.type === 'DAMAGE_DEALT')).toBe(false);
+        expect(markedLootAndSkullAllEvents.some(event => event.type === 'DAMAGE_DEALT')).toBe(false);
 
         const claw = createHeroMatchup('cursed_pirate', 'zhanshujia')(['0', '1'], fixedRandom);
         setPlayerBoardFace(claw, '0', 'cursed');
@@ -2459,11 +2809,16 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const skullEvents = execute(skullState, command('PLAY_CARD', '0', {
             cardId: 'card-cursed-pirate-weigh-anchor',
         }), createQueuedRandom([6]));
-        const afterSkull = applyEvents(skullState.core, skullEvents);
+        const skullSettled = settleBonusDice(
+            { ...skullState, core: applyEvents(skullState.core, skullEvents) },
+            '0',
+        );
+        const skullAllEvents = [...skullEvents, ...skullSettled.events];
+        const afterSkull = skullSettled.state.core;
 
-        expect(eventsOfType(skullEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
+        expect(eventsOfType(skullAllEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(afterSkull.players['1'].statusEffects[STATUS_IDS.PARLEY]).toBe(1);
-        expect(eventsOfType(skullEvents, 'CARD_DRAWN')).toHaveLength(0);
+        expect(eventsOfType(skullAllEvents, 'CARD_DRAWN')).toHaveLength(0);
         expect(afterSkull.players['0'].hand).toHaveLength(0);
 
         const otherState = createCursedPirateCardPlayState('card-cursed-pirate-weigh-anchor');
@@ -2471,10 +2826,15 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const otherEvents = execute(otherState, command('PLAY_CARD', '0', {
             cardId: 'card-cursed-pirate-weigh-anchor',
         }), createQueuedRandom([1]));
-        const afterOther = applyEvents(otherState.core, otherEvents);
+        const otherSettled = settleBonusDice(
+            { ...otherState, core: applyEvents(otherState.core, otherEvents) },
+            '0',
+        );
+        const otherAllEvents = [...otherEvents, ...otherSettled.events];
+        const afterOther = otherSettled.state.core;
 
-        expect(eventsOfType(otherEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
-        expect(eventsOfType(otherEvents, 'CARD_DRAWN')).toHaveLength(1);
+        expect(eventsOfType(otherAllEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
+        expect(eventsOfType(otherAllEvents, 'CARD_DRAWN')).toHaveLength(1);
         expect(afterOther.players['0'].hand.map(card => card.id)).toEqual(['card-flick']);
         expect(afterOther.players['1'].statusEffects[STATUS_IDS.PARLEY] ?? 0).toBe(0);
     });
@@ -2541,15 +2901,20 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const cutlassEvents = execute(cutlassState, command('PLAY_CARD', '0', {
             cardId: 'card-cursed-pirate-bluster',
         }), createQueuedRandom([1]));
-        const afterCutlass = applyEvents(cutlassState.core, cutlassEvents);
-        const cutlassDamage = eventsOfType(cutlassEvents, 'DAMAGE_DEALT')
+        const cutlassSettled = settleBonusDice(
+            { ...cutlassState, core: applyEvents(cutlassState.core, cutlassEvents) },
+            '0',
+        );
+        const cutlassAllEvents = [...cutlassEvents, ...cutlassSettled.events];
+        const afterCutlass = cutlassSettled.state.core;
+        const cutlassDamage = eventsOfType(cutlassAllEvents, 'DAMAGE_DEALT')
             .find(event => event.payload.sourceAbilityId === 'card-cursed-pirate-bluster');
-        expect(eventsOfType(cutlassEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
+        expect(eventsOfType(cutlassAllEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(cutlassDamage?.payload).toMatchObject({
             targetId: '1',
             amount: 2,
         });
-        expect(eventsOfType(cutlassEvents, 'CARD_DRAWN')).toHaveLength(0);
+        expect(eventsOfType(cutlassAllEvents, 'CARD_DRAWN')).toHaveLength(0);
         expect(afterCutlass.players['1'].statusEffects[STATUS_IDS.POWDER_KEG] ?? 0).toBe(0);
         expect(afterCutlass.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
 
@@ -2562,10 +2927,15 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const lootEvents = execute(lootState, command('PLAY_CARD', '0', {
             cardId: 'card-cursed-pirate-bluster',
         }), createQueuedRandom([4]));
-        const afterLoot = applyEvents(lootState.core, lootEvents);
-        expect(eventsOfType(lootEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
-        expect(eventsOfType(lootEvents, 'CARD_DRAWN')).toHaveLength(2);
-        expect(eventsOfType(lootEvents, 'DAMAGE_DEALT')).toHaveLength(0);
+        const lootSettled = settleBonusDice(
+            { ...lootState, core: applyEvents(lootState.core, lootEvents) },
+            '0',
+        );
+        const lootAllEvents = [...lootEvents, ...lootSettled.events];
+        const afterLoot = lootSettled.state.core;
+        expect(eventsOfType(lootAllEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
+        expect(eventsOfType(lootAllEvents, 'CARD_DRAWN')).toHaveLength(2);
+        expect(eventsOfType(lootAllEvents, 'DAMAGE_DEALT')).toHaveLength(0);
         expect(afterLoot.players['0'].hand.map(card => card.id)).toEqual([
             'card-flick',
             'card-surprise',
@@ -2577,11 +2947,16 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const skullEvents = execute(skullState, command('PLAY_CARD', '0', {
             cardId: 'card-cursed-pirate-bluster',
         }), createQueuedRandom([6]));
-        const afterSkull = applyEvents(skullState.core, skullEvents);
-        expect(eventsOfType(skullEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
+        const blusterSkullSettled = settleBonusDice(
+            { ...skullState, core: applyEvents(skullState.core, skullEvents) },
+            '0',
+        );
+        const blusterSkullAllEvents = [...skullEvents, ...blusterSkullSettled.events];
+        const afterSkull = blusterSkullSettled.state.core;
+        expect(eventsOfType(blusterSkullAllEvents, 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(afterSkull.players['1'].statusEffects[STATUS_IDS.POWDER_KEG]).toBe(1);
-        expect(eventsOfType(skullEvents, 'CARD_DRAWN')).toHaveLength(0);
-        expect(eventsOfType(skullEvents, 'DAMAGE_DEALT')).toHaveLength(0);
+        expect(eventsOfType(blusterSkullAllEvents, 'CARD_DRAWN')).toHaveLength(0);
+        expect(eventsOfType(blusterSkullAllEvents, 'DAMAGE_DEALT')).toHaveLength(0);
     });
 
     it('赎金先选择对手骰子，再由对手支付 2CP 或重掷该骰子', () => {
@@ -3132,18 +3507,20 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
             { attackerId: '0', defenderId: '1', sourceAbilityId: 'make-your-mark' },
             createQueuedRandom([1, 4, 6]),
         );
+        const settledResult = settleBonusDiceThroughPipeline(result.state, '0');
+        const settledState = settledResult.state;
 
-        expect(result.state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(cpBefore + 1);
-        expect(result.state.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(hpBefore - 2);
-        expect(result.state.core.players['0'].hand.length).toBe(handBefore + 1);
+        expect(settledState.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(cpBefore + 1);
+        expect(settledState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(hpBefore - 2);
+        expect(settledState.core.players['0'].hand.length).toBe(handBefore + 1);
 
-        const prompt = getSimpleChoicePrompt(result.state, 'make-your-mark');
+        const prompt = getSimpleChoicePrompt(settledState, 'make-your-mark');
         const accept = prompt.options.find(option => (
             option.value as { statusId?: string; value?: number }
         ).statusId === STATUS_IDS.CURSED_COIN);
         expect(accept).toBeDefined();
 
-        const accepted = respondToPrompt(result.state, accept!.id, '0');
+        const accepted = respondToPrompt(settledState, accept!.id, '0');
         expect(accepted.success).toBe(true);
         expect(accepted.state.core.players['0'].statusEffects[STATUS_IDS.CURSED_COIN]).toBe(1);
     });
@@ -4277,5 +4654,38 @@ describe('DiceThrone 战术家 / 咒缚海盗机制', () => {
         const accepted = respondToPrompt(result.state, accept!.id, '0');
         expect(accepted.success).toBe(true);
         expect(accepted.state.core.players['0'].statusEffects[STATUS_IDS.CURSED_COIN]).toBe(1);
+    });
+
+    it('human 面防御技能获得诅咒金币时可以选择不获得', () => {
+        const state = createHeroMatchup('cursed_pirate', 'zhanshujia')(['0', '1'], fixedRandom);
+        state.core = applyEvents(state.core, [{
+            type: 'PLAYER_BOARD_FACE_CHANGED',
+            payload: { playerId: '0', face: 'normal', sourceAbilityId: 'test-setup' },
+            sourceCommandType: 'TEST',
+            timestamp: 90,
+        } as DiceThroneEvent]);
+        state.core.players['0'].statusEffects[STATUS_IDS.CURSED_COIN] = 0;
+        state.core.rollDiceCount = 4;
+        setCursedPirateDiceValues(state, [1, 1, 4, 6]);
+        const cpBefore = state.core.players['0'].resources[RESOURCE_IDS.CP] ?? 0;
+
+        const result = resolveAbilityEffectsWithSystem(
+            state,
+            getAbilityEffects(state.core, '0', 'human-still-wet-behind-ears'),
+            'withDamage',
+            { attackerId: '0', defenderId: '1', sourceAbilityId: 'human-still-wet-behind-ears' },
+        );
+
+        const prompt = getSimpleChoicePrompt(result.state, 'human-still-wet-behind-ears');
+        const decline = prompt.options.find(option => (
+            (option.value as { statusId?: string }).statusId !== STATUS_IDS.CURSED_COIN
+        ));
+        expect(decline).toBeDefined();
+
+        const declined = respondToPrompt(result.state, decline!.id, '0');
+        expect(declined.success).toBe(true);
+        expect(declined.state.core.players['0'].statusEffects[STATUS_IDS.CURSED_COIN] ?? 0).toBe(0);
+        expect(declined.state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(cpBefore + 1);
+        expect(declined.state.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
     });
 });

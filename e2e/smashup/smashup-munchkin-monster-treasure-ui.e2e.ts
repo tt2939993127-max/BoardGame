@@ -235,6 +235,32 @@ async function passOpenReactionOrResponseWindow(
     return false;
 }
 
+async function passOpenReactionOrResponseWindowVisibly(
+    page: Page,
+    game: GameTestContext,
+    description: string,
+): Promise<boolean> {
+    const status = await getReactionWindowStatus(page);
+    if (status.sourceId === 'smashup_reaction_choose') {
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) => option.value?.kind === 'pass',
+            description,
+        );
+        return true;
+    }
+
+    const passButton = page.getByTestId('me-first-pass-button').first();
+    if (await passButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await passButton.click({ force: true });
+        await page.waitForTimeout(300);
+        return true;
+    }
+
+    return false;
+}
+
 async function chooseReactionBySourceDefId(
     page: Page,
     game: GameTestContext,
@@ -302,7 +328,7 @@ async function expectManualChoiceVisible(
     page: Page,
     selector: string,
     description: string,
-    options: { forbidPromptContext?: boolean; minVisibleHitCount?: number } = {},
+    options: { allowPromptCardGrid?: boolean; forbidPromptContext?: boolean; minVisibleHitCount?: number } = {},
 ): Promise<void> {
     await expect(page.getByTestId('smashup-action-fx-card')).toHaveCount(0);
     if (options.forbidPromptContext) {
@@ -310,7 +336,7 @@ async function expectManualChoiceVisible(
     }
     await expect(page.locator(selector).first()).toBeVisible({ timeout: 15000 });
 
-    const visibility = await page.evaluate((targetSelector) => {
+    const visibility = await page.evaluate(({ targetSelector, allowPromptCardGrid }) => {
         const target = document.querySelector<HTMLElement>(targetSelector);
         if (!target) {
             return {
@@ -353,7 +379,7 @@ async function expectManualChoiceVisible(
             '[data-testid="smashup-action-fx-card"]',
             '[data-testid="prompt-context-card"]',
             '[data-testid="su-card-magnify-overlay"]',
-            '[data-testid="prompt-card-grid"]',
+            ...(allowPromptCardGrid ? [] : ['[data-testid="prompt-card-grid"]']),
             '[data-card-view-panel]',
             '[data-discard-view-panel]',
         ];
@@ -382,7 +408,7 @@ async function expectManualChoiceVisible(
             blockingOverlays,
             hits,
         };
-    }, selector);
+    }, { targetSelector: selector, allowPromptCardGrid: options.allowPromptCardGrid === true });
 
     expect(visibility.exists, `${description}：候选节点必须存在`).toBe(true);
     expect(visibility.visible, `${description}：候选本体必须有可读尺寸`).toBe(true);
@@ -7620,6 +7646,360 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('移动端横屏-怪物行和公共小牌堆不抢原版布局', testInfo);
     });
 
+    test('尖刺靴移动端横屏可从手牌手动选择宿主并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinSpikyBootsScene());
+
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-card-uid="spiky-boots-hand-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="spiky-host"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="spiky-bystander"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-尖刺靴-选择前', testInfo);
+
+        await page.locator('[data-card-uid="spiky-boots-hand-1"]').first().click({ force: true });
+        await page.waitForTimeout(400);
+        await expectManualMinionChoiceVisible(
+            page,
+            'spiky-host',
+            '移动端尖刺靴必须显示真实宿主随从供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-尖刺靴-手动选择宿主', testInfo);
+
+        await clickManualMinionChoice(page, 'spiky-host', '移动端尖刺靴选择宿主');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect(page.locator('[data-attached-action-uid="spiky-boots-hand-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-minion-power-badge-spiky-host')).toHaveAttribute('title', /尖刺靴: \+1/);
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+
+        const mobileResolutionEvidence = await page.evaluate(() => ({
+            noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+            handVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-testid="su-hand-area"]')?.getBoundingClientRect();
+                return !!rect && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.bottom <= window.innerHeight + 2;
+            })(),
+            hostVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-minion-uid="spiky-host"]')?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+            supplyVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-testid="su-special-supply-row"]')?.getBoundingClientRect();
+                return !!rect && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+        }));
+        expect(mobileResolutionEvidence, '移动端尖刺靴结算后应保留手牌区、宿主和公共小牌堆且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            handVisible: true,
+            hostVisible: true,
+            supplyVisible: true,
+        });
+        await game.screenshot('移动端-尖刺靴-附着后收口', testInfo);
+    });
+
+    test('火箭靴移动端横屏无需悬停即可手动选择目标基地并移动宿主', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinRocketBootsScene());
+
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
+        const host = page.locator('[data-minion-uid="rocket-host"]').first();
+        const rocketBoots = page.locator('[data-attached-action-uid="rocket-boots-1"]').first();
+        await expect(host).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-火箭靴-宿主与附着卡收起', testInfo);
+
+        await host.click({ force: true });
+        await expect(host).toHaveAttribute('data-attached-overlay-visible', 'true');
+        await expect(rocketBoots, '移动端点击宿主后附着行动卡必须可见').toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-火箭靴-点击宿主展开附着卡', testInfo);
+
+        await rocketBoots.click({ force: true });
+        await game.waitForInteraction('munchkin_treasure_rocket_boots_move', 10000);
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="1"]',
+            '移动端火箭靴必须显示目标基地本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-火箭靴-手动选择目标基地', testInfo);
+
+        await clickManualBaseChoice(page, 1, '移动端火箭靴选择目标基地');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            const sourceUids = core.bases[0].minions.map(minion => minion.uid);
+            const targetHost = core.bases[1].minions.find(minion => minion.uid === 'rocket-host');
+            const rocket = targetHost?.attachedActions?.find(action => action.uid === 'rocket-boots-1');
+            return {
+                sourceUids,
+                targetHasHost: Boolean(targetHost),
+                targetHasRocketBoots: rocket?.defId === 'munchkin_treasure_rocket_boots',
+                rocketTalentUsed: rocket?.talentUsed === true,
+                triggerQueueLength: core.triggerQueue?.length ?? 0,
+            };
+        }, { timeout: 10000 }).toEqual({
+            sourceUids: [],
+            targetHasHost: true,
+            targetHasRocketBoots: true,
+            rocketTalentUsed: true,
+            triggerQueueLength: 0,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => ({
+            noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+            targetBaseVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-base-index="1"]')?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+            hostVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-minion-uid="rocket-host"]')?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+        }));
+        expect(mobileResolutionEvidence, '移动端火箭靴收口后目标基地和宿主应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            targetBaseVisible: true,
+            hostVisible: true,
+        });
+        await game.screenshot('移动端-火箭靴-宿主与附着卡移动后', testInfo);
+    });
+
+    test('直线跑路药水移动端横屏可手动选择计分后展示的宝藏', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinStraightLineRunningAwayScene());
+
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-card-uid="straight-line-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-monster-uid="straight-line-treasure-dragon"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 4');
+        await game.screenshot('移动端-直线跑路药水-计分前', testInfo);
+
+        await game.advancePhase();
+        await game.waitForPhase('scoreBases', 10000);
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.core?.pendingMunchkinTreasureReward?.treasureCards?.length === 3
+                    && (
+                        state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose'
+                        || Boolean(state?.sys?.responseWindow?.current?.windowType)
+                    );
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            const status = await getReactionWindowStatus(page);
+            const options = status.sourceId === 'smashup_reaction_choose'
+                ? await game.getInteractionOptions() as InteractionOption[]
+                : [];
+            const hasStraightLineOption = status.windowType === 'afterScoring'
+                && options.some((option) =>
+                    option.value?.kind === 'play_action'
+                    && option.value?.cardUid === 'straight-line-1'
+                );
+            if (hasStraightLineOption) break;
+
+            const didPass = await passOpenReactionOrResponseWindowVisibly(
+                page,
+                game,
+                `移动端直线跑路药水前置响应让过 ${attempt + 1}`,
+            );
+            expect(didPass, '移动端等待 afterScoring 直线跑路药水入口时必须存在可见让过按钮或选项').toBe(true);
+            await page.waitForTimeout(300);
+        }
+
+        await expect.poll(async () => {
+            const status = await getReactionWindowStatus(page);
+            const options = status.sourceId === 'smashup_reaction_choose'
+                ? await game.getInteractionOptions() as InteractionOption[]
+                : [];
+            return {
+                windowType: status.windowType,
+                hasStraightLineOption: options.some((option) =>
+                    option.value?.kind === 'play_action'
+                    && option.value?.cardUid === 'straight-line-1'
+                ),
+            };
+        }, { timeout: 10000 }).toEqual({
+            windowType: 'afterScoring',
+            hasStraightLineOption: true,
+        });
+        const responsePromptLayout = await page.evaluate(() => {
+            const prompt = document.querySelector<HTMLElement>('[data-testid="smashup-docked-prompt"]');
+            const turnTracker = document.querySelector<HTMLElement>('[data-testid="su-turn-tracker"]');
+            const promptRect = prompt?.getBoundingClientRect();
+            const baseRects = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index]'))
+                .map(element => element.getBoundingClientRect());
+            const overlapsBase = promptRect
+                ? baseRects.some(rect => (
+                    promptRect.left < rect.right
+                    && promptRect.right > rect.left
+                    && promptRect.top < rect.bottom
+                    && promptRect.bottom > rect.top
+                ))
+                : true;
+            const turnRect = turnTracker?.getBoundingClientRect();
+            const overlapsTurnTracker = promptRect && turnRect
+                ? promptRect.left < turnRect.right
+                    && promptRect.right > turnRect.left
+                    && promptRect.top < turnRect.bottom
+                    && promptRect.bottom > turnRect.top
+                : true;
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                promptVisible: Boolean(promptRect && promptRect.width > 24 && promptRect.height > 24),
+                noBaseOverlap: !overlapsBase,
+                noTurnTrackerOverlap: !overlapsTurnTracker,
+            };
+        });
+        expect(responsePromptLayout, '移动端直线跑路药水 afterScoring 短提示必须可见，且不能压住基地牌或回合/阶段牌').toEqual({
+            noUnexpectedOverflow: true,
+            promptVisible: true,
+            noBaseOverlap: true,
+            noTurnTrackerOverlap: true,
+        });
+        await game.screenshot('移动端-直线跑路药水-afterScoring响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'straight-line-1',
+            '移动端 afterScoring 手动选择直线跑路药水',
+        );
+        await game.waitForInteraction('munchkin_treasure_potion_of_straight_line_running_away_choose_treasure', 10000);
+
+        const treasureOptions = await game.getInteractionOptions() as InteractionOption[];
+        const targetTreasureOption = treasureOptions.find((option) =>
+            option.value?.treasureDefId === 'munchkin_treasure_bag_of_caltrops'
+        );
+        expect(targetTreasureOption?.id, '移动端直线跑路药水必须暴露已展示宝藏的真实可选项').toBeTruthy();
+        await expectManualChoiceVisible(
+            page,
+            `[data-option-id="${targetTreasureOption!.id}"]`,
+            '移动端直线跑路药水必须显示已展示宝藏卡面供玩家手动选择',
+            { allowPromptCardGrid: true, forbidPromptContext: true },
+        );
+
+        const treasureChoiceLayout = await page.evaluate((optionId) => {
+            const grid = document.querySelector<HTMLElement>('[data-testid="prompt-card-grid"]');
+            const target = document.querySelector<HTMLElement>(`[data-option-id="${optionId}"]`);
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                gridVisible: Boolean(grid && grid.getBoundingClientRect().width > 24 && grid.getBoundingClientRect().height > 24),
+                targetVisible: Boolean(target && target.getBoundingClientRect().width > 24 && target.getBoundingClientRect().height > 24),
+                targetInViewport: (() => {
+                    const rect = target?.getBoundingClientRect();
+                    return !!rect
+                        && rect.left >= -2
+                        && rect.right <= window.innerWidth + 2
+                        && rect.top >= -2
+                        && rect.bottom <= window.innerHeight + 2;
+                })(),
+            };
+        }, targetTreasureOption!.id);
+        expect(treasureChoiceLayout, '移动端直线跑路药水的宝藏选择层必须可见、可点且不横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            gridVisible: true,
+            targetVisible: true,
+            targetInViewport: true,
+        });
+        await game.screenshot('移动端-直线跑路药水-手动选择已展示宝藏', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) =>
+                option.value?.treasureDefId === 'munchkin_treasure_bag_of_caltrops',
+            '移动端直线跑路药水选择一袋铁蒺藜',
+        );
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as StraightLineRunningAwayCoreState;
+            const player0HandDefIds = core.players?.['0']?.hand?.map(card => card.defId) ?? [];
+            const player0DiscardDefIds = core.players?.['0']?.discard?.map(card => card.defId) ?? [];
+            return {
+                pendingTreasureReward: core.pendingMunchkinTreasureReward ?? null,
+                player0TreasureHandDefIds: player0HandDefIds.filter(defId => defId.startsWith('munchkin_treasure_')),
+                player0DiscardHasPotion: player0DiscardDefIds.includes('munchkin_treasure_potion_of_straight_line_running_away'),
+                treasureDeck: core.treasureDeck ?? [],
+                triggerQueueLength: core.triggerQueue?.length ?? 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            pendingTreasureReward: null,
+            player0TreasureHandDefIds: [
+                'munchkin_treasure_bag_of_caltrops',
+                'munchkin_treasure_dwarf_hireling',
+                'munchkin_treasure_wishing_ring',
+            ],
+            player0DiscardHasPotion: true,
+            treasureDeck: ['munchkin_treasure_tiger_steed'],
+            triggerQueueLength: 0,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 1');
+
+        const mobileResolutionEvidence = await page.evaluate(() => ({
+            noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+            handVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-testid="su-hand-area"]')?.getBoundingClientRect();
+                return !!rect && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.bottom <= window.innerHeight + 2;
+            })(),
+            supplyVisible: (() => {
+                const rect = document.querySelector<HTMLElement>('[data-testid="su-special-supply-row"]')?.getBoundingClientRect();
+                return !!rect && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+            finishTurnVisible: (() => {
+                const button = Array.from(document.querySelectorAll<HTMLElement>('button')).find(element =>
+                    /^(结束回合|Finish Turn|End)$/i.test(element.textContent?.trim() ?? '')
+                );
+                const rect = button?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2;
+            })(),
+        }));
+        expect(mobileResolutionEvidence, '移动端直线跑路药水收口后手牌、公共小牌和结束回合入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            handVisible: true,
+            supplyVisible: true,
+            finishTurnVisible: true,
+        });
+        await game.screenshot('移动端-直线跑路药水-计分收口后', testInfo);
+    });
+
     test('兽人剑王真实入口显示同基地己方力量加成并排除自身、对手和其他基地', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -12909,7 +13289,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 3');
         await game.screenshot('30-探宝棒手牌与公共宝藏牌堆', testInfo);
 
-        await game.playCard('munchkin_treasure_treasure_finder');
+        await page.locator('[data-card-uid="treasure-finder-1"]').first().click({ force: true });
+        await page.locator('[data-card-uid="treasure-finder-1"]').first().click({ force: true });
         await game.waitForNoInteraction(10000);
 
         await expect.poll(async () => {

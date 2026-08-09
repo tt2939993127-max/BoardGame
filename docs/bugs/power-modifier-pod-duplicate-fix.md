@@ -272,7 +272,7 @@ registerPowerModifier('my_card', (ctx) => {
 - `src/games/smashup/abilities/ongoing_modifiers.ts` - 力量修正注册
 - `src/games/smashup/abilities/index.ts` - POD 别名系统调用
 - `src/games/smashup/__tests__/steampunk-aggromotive-fix.test.ts` - 测试用例
-- `docs/refactor/pod-system-architecture.md` - POD 系统架构文档
+- `docs/games/smashup/refactor/pod/pod-system-architecture.md` - POD 系统架构文档
 
 ## 教训
 

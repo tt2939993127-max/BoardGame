@@ -216,6 +216,8 @@
     "button_label": "Tap mascot",
     "image_alt": "Yi Board Game mascot",
     "community_welcome": "Join our QQ group:",
+    "force_end_phase_tip": "If a phase gets stuck, the floating ball can force-end it.",
+    "switch_view_tip": "Click an opponent's score or avatar to switch views and check the discard pile.",
     "copy_success": "Group number copied",
     "copy_failed": "Copy failed. Please copy the group number manually."
   },

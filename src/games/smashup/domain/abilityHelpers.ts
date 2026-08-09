@@ -71,6 +71,7 @@ import { collectTriggers } from './ongoingEffects';
 import { reduce } from './reduce';
 import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
+import { normalizeFactionSelectionId, SMASHUP_FACTION_IDS } from './ids';
 
 // ============================================================================
 // 交互选项工厂函数
@@ -238,6 +239,26 @@ export function removeTitanFromPlay(
         },
         timestamp: now,
     };
+}
+
+const MUNCHKIN_EXPANSION_FACTION_IDS = new Set<string>([
+    SMASHUP_FACTION_IDS.MUNCHKIN_DWARVES,
+    SMASHUP_FACTION_IDS.MUNCHKIN_HALFLINGS,
+    SMASHUP_FACTION_IDS.MUNCHKIN_THIEVES,
+    SMASHUP_FACTION_IDS.MUNCHKIN_MAGES,
+    SMASHUP_FACTION_IDS.MUNCHKIN_ELVES,
+    SMASHUP_FACTION_IDS.MUNCHKIN_CLERICS,
+    SMASHUP_FACTION_IDS.MUNCHKIN_ORCS,
+    SMASHUP_FACTION_IDS.MUNCHKIN_WARRIORS,
+]);
+
+export function hasMunchkinExpansionFaction(
+    players: Record<PlayerId, { factions?: readonly string[] }>,
+): boolean {
+    return Object.values(players).some(player => (player.factions ?? []).some(factionId => (
+        MUNCHKIN_EXPANSION_FACTION_IDS.has(factionId)
+        || MUNCHKIN_EXPANSION_FACTION_IDS.has(normalizeFactionSelectionId(factionId))
+    )));
 }
 
 // ============================================================================

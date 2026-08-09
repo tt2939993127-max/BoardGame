@@ -32,7 +32,6 @@ export interface CenterBoardProps {
     onMagnifyCard: (card: AbilityCard) => void;
     abilityOverlaysRef?: React.Ref<AbilityOverlaysHandle>;
     playerTokens?: Record<string, number>;
-    diceStage?: React.ReactNode;
 }
 
 export const CenterBoard = ({
@@ -56,7 +55,6 @@ export const CenterBoard = ({
     onMagnifyCard,
     abilityOverlaysRef,
     playerTokens,
-    diceStage,
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
@@ -374,7 +372,6 @@ export const CenterBoard = ({
                 </div>
                 </div>
             </div>
-            {diceStage}
         </>
     );
 };

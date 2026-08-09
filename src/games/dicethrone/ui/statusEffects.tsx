@@ -861,6 +861,18 @@ export const TokenBadge = ({
             data-token-amount={amount}
             data-token-max={maxAmount}
         >
+            {isClickable && (
+                <button
+                    type="button"
+                    aria-label={info.name}
+                    data-testid={dataTestId ? `${dataTestId}-hit-target` : undefined}
+                    className="absolute left-1/2 top-1/2 z-20 min-h-[50px] min-w-[50px] -translate-x-1/2 -translate-y-1/2 rounded-full border-0 bg-transparent p-0 opacity-0"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onClick?.();
+                    }}
+                />
+            )}
             <div
                 className={`
                     ${sizeClass} rounded-full flex items-center justify-center overflow-hidden
@@ -868,7 +880,7 @@ export const TokenBadge = ({
                     ${hasSprite
                         ? 'bg-transparent border-0 shadow-none'
                         : `bg-gradient-to-br ${info.color ?? 'from-gray-500 to-gray-600'} shadow-lg border border-white/30`}
-                    transition-transform duration-200 hover:scale-110 ${isClickable ? 'cursor-pointer' : 'cursor-help'}
+                    transition-transform duration-200 hover:scale-110 ${isClickable ? 'cursor-pointer pointer-events-none' : 'cursor-help'}
                     ${isClickable ? 'ring-2 ring-amber-400/50 hover:ring-amber-400 animate-pulse' : ''}
                 `}
             >

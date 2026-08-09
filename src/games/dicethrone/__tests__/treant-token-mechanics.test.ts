@@ -180,6 +180,42 @@ describe('DiceThrone Treant Token 机制', () => {
         expect(next.players['0'].resources[RESOURCE_IDS.CP]).toBe(2);
     });
 
+    it('木苗树灵可在其他玩家的主要阶段花费，且同回合两种动作仍只允许一次', () => {
+        const state = createHeroMatchup('treant', 'ninja')(['0', '1'], createQueuedRandom([1]));
+        state.sys.phase = 'main1';
+        state.core.activePlayerId = '1';
+        state.core.players['0'].tokens[TOKEN_IDS.TREANT_SAPLING] = 2;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 40;
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+
+        const healCommand = command('USE_PASSIVE_ABILITY', '0', {
+            passiveId: 'treant-sapling-cultivation',
+            actionIndex: 0,
+        });
+        expect(validateCommand(state.core, healCommand, state.sys.phase).valid).toBe(true);
+        let events = execute(state, healCommand, createQueuedRandom([1]));
+        const next = applyEvents(state.core, events);
+        expect(next.players['0'].tokens[TOKEN_IDS.TREANT_SAPLING]).toBe(1);
+        expect(next.players['0'].resources[RESOURCE_IDS.HP]).toBe(41);
+        expect(next.players['0'].resources[RESOURCE_IDS.CP]).toBe(2);
+
+        const drawCommand = command('USE_PASSIVE_ABILITY', '0', {
+            passiveId: 'treant-sapling-cultivation',
+            actionIndex: 1,
+        });
+        expect(validateCommand(next, drawCommand, 'main2').valid).toBe(false);
+        events = execute({ core: next, sys: { phase: 'main2' } }, drawCommand, createQueuedRandom([1]));
+        expect(events).toHaveLength(0);
+
+        const nextTurn = reduce(next, {
+            type: 'TURN_CHANGED',
+            payload: { previousPlayerId: '1', nextPlayerId: '0', turnNumber: next.turnNumber + 1 },
+            sourceCommandType: 'ADVANCE_PHASE',
+            timestamp: 200,
+        } as DiceThroneEvent);
+        expect(validateCommand(nextTurn, drawCommand, 'main1').valid).toBe(true);
+    });
+
     it('野性怒吼 II 升级后 12345 大顺子应可选择，野蛮生长 II 仍只吃 2 树枝 + 3 树叶', () => {
         const state = createHeroMatchup('treant', 'ninja')(['0', '1'], createQueuedRandom([1]));
         state.sys.phase = 'offensiveRoll';

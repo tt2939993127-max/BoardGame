@@ -298,6 +298,51 @@ describe('雷霆万钧技能', () => {
         expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(0);
     });
 
+    it('风暴突袭 II 只能花费 1 个太极重掷 1 颗奖励骰', () => {
+        const queuedRandom = createQueuedRandom([3, 3, 3, 1, 1, 4, 5, 6, 2]);
+        const stormAssault = MONK_CARDS.find(card => card.id === 'card-storm-assault-2');
+        expect(stormAssault).toBeDefined();
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: diceThroneSystemsForTest,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: (playerIds, random) => {
+                const state = createMonkState(playerIds, random);
+                state.core.players['0'].tokens = { [TOKEN_IDS.TAIJI]: 2 };
+                state.core.players['1'].tokens = {};
+                state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+                state.core.players['0'].hand = stormAssault ? [{ ...stormAssault }] : [];
+                state.core.players['1'].hand = [];
+                return state;
+            },
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '风暴突袭 II 超过一次重掷限制',
+            commands: [
+                { type: 'PLAY_UPGRADE_CARD', playerId: '0', payload: { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' } },
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                { type: 'ROLL_DICE', playerId: '0', payload: {} },
+                { type: 'CONFIRM_ROLL', playerId: '0', payload: {} },
+                { type: 'SELECT_ABILITY', playerId: '0', payload: { abilityId: 'thunder-strike' } },
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                { type: 'ROLL_DICE', playerId: '1', payload: {} },
+                { type: 'CONFIRM_ROLL', playerId: '1', payload: {} },
+                { type: 'RESPONSE_PASS', playerId: '1', payload: {} },
+                { type: 'ADVANCE_PHASE', playerId: '1', payload: {} },
+                { type: 'REROLL_BONUS_DIE', playerId: '0', payload: { dieIndex: 0 } },
+                { type: 'REROLL_BONUS_DIE', playerId: '0', payload: { dieIndex: 1 } },
+            ],
+        });
+
+        expect(result.actualErrors).toEqual([expect.objectContaining({ error: 'bonus_reroll_limit_reached' })]);
+        expect(result.finalState.core.pendingBonusDiceSettlement?.rerollCount).toBe(1);
+        expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(1);
+    });
+
     it('应该直接结算伤害（没有太极标记时）', () => {
         // 骰子序列：
         // - 进攻掷骰 5 次（前3个会被使用）→ [3,3,3,1,1] = 3 Palm + 2 其他

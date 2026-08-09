@@ -21,6 +21,7 @@ import type {
     MatchPlayerInfo,
     BatchDispatchMeta,
     CommandDispatchMeta,
+    OnlineAiClientTransportDiagnostics,
 } from './protocol';
 import type {
     TrainingCompletedMatch,
@@ -815,6 +816,8 @@ type ExecuteCommandInternalOptions = {
     feedbackSource?: CommandFailureFeedbackPayload['feedbackSource'];
     expectedStateID?: number;
     onlineAiCircuitSource?: OnlineAiCircuitSource;
+    onlineAiAttemptKey?: string | null;
+    clientTransport?: OnlineAiClientTransportDiagnostics | null;
 };
 
 const GENERIC_COMMAND_FAILURE_REASON = 'command_failed';
@@ -988,6 +991,78 @@ function cloneDiagnosticValue(value: unknown): unknown {
     }
 }
 
+const ONLINE_AI_ATTEMPT_KEY_MAX_LENGTH = 180;
+const ONLINE_AI_DIAGNOSTIC_ERROR_MAX_LENGTH = 300;
+const ONLINE_AI_STATE_EVENT_KINDS = new Set(['none', 'sync', 'update', 'patch']);
+const ONLINE_AI_PATCH_ISSUE_KINDS = new Set(['discontinuity', 'apply-failed']);
+
+function normalizeOnlineAiAttemptKey(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0
+        ? normalized.slice(0, ONLINE_AI_ATTEMPT_KEY_MAX_LENGTH)
+        : null;
+}
+
+function normalizeOnlineAiClientTransportDiagnostics(
+    value: unknown,
+): OnlineAiClientTransportDiagnostics | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    const raw = value as Record<string, unknown>;
+    if (typeof raw.sentAt !== 'number' || !Number.isFinite(raw.sentAt)) {
+        return null;
+    }
+    const lastStateEventKind = ONLINE_AI_STATE_EVENT_KINDS.has(String(raw.lastStateEventKind))
+        ? String(raw.lastStateEventKind) as OnlineAiClientTransportDiagnostics['lastStateEventKind']
+        : 'none';
+    const rawPatchIssue = raw.lastPatchIssue;
+    let lastPatchIssue: OnlineAiClientTransportDiagnostics['lastPatchIssue'] = null;
+    if (rawPatchIssue && typeof rawPatchIssue === 'object' && !Array.isArray(rawPatchIssue)) {
+        const patchIssue = rawPatchIssue as Record<string, unknown>;
+        if (
+            ONLINE_AI_PATCH_ISSUE_KINDS.has(String(patchIssue.kind))
+            && typeof patchIssue.at === 'number'
+            && Number.isFinite(patchIssue.at)
+        ) {
+            lastPatchIssue = {
+                kind: String(patchIssue.kind) as NonNullable<typeof lastPatchIssue>['kind'],
+                expectedStateID: typeof patchIssue.expectedStateID === 'number'
+                    ? patchIssue.expectedStateID
+                    : null,
+                receivedStateID: typeof patchIssue.receivedStateID === 'number'
+                    ? patchIssue.receivedStateID
+                    : null,
+                error: typeof patchIssue.error === 'string'
+                    ? patchIssue.error.slice(0, ONLINE_AI_DIAGNOSTIC_ERROR_MAX_LENGTH)
+                    : null,
+                at: patchIssue.at,
+            };
+        }
+    }
+    return {
+        sentAt: raw.sentAt,
+        lastStateEventKind,
+        lastStateEventStateID: typeof raw.lastStateEventStateID === 'number'
+            ? raw.lastStateEventStateID
+            : null,
+        lastStateEventAt: typeof raw.lastStateEventAt === 'number'
+            ? raw.lastStateEventAt
+            : null,
+        syncInFlight: raw.syncInFlight === true,
+        lastSyncRequestReason: typeof raw.lastSyncRequestReason === 'string'
+            ? raw.lastSyncRequestReason.slice(0, ONLINE_AI_DIAGNOSTIC_ERROR_MAX_LENGTH)
+            : null,
+        lastSyncRequestedAt: typeof raw.lastSyncRequestedAt === 'number'
+            ? raw.lastSyncRequestedAt
+            : null,
+        lastPatchIssue,
+    };
+}
+
 export class GameTransportServer {
     private readonly io: IOServer;
     private readonly storage: MatchStorage;
@@ -1117,13 +1192,22 @@ export class GameTransportServer {
                     })
                     : meta.normalizedPayload;
                 const expectedStateID = commandMeta?.expectedStateID;
-                if (typeof expectedStateID === 'number') {
+                const commandOptions = typeof expectedStateID === 'number'
+                    || Boolean(commandMeta?.onlineAiAttemptKey)
+                    || Boolean(commandMeta?.clientTransport)
+                    ? {
+                        ...(typeof expectedStateID === 'number' ? { expectedStateID } : {}),
+                        onlineAiAttemptKey: normalizeOnlineAiAttemptKey(commandMeta?.onlineAiAttemptKey),
+                        clientTransport: normalizeOnlineAiClientTransportDiagnostics(commandMeta?.clientTransport),
+                    }
+                    : undefined;
+                if (commandOptions) {
                     await this.handleCommand(
                         matchID,
                         resolvedPlayerId,
                         commandType,
                         tutorialInjectedPayload,
-                        { expectedStateID },
+                        commandOptions,
                     );
                 } else {
                     await this.handleCommand(
@@ -1490,6 +1574,8 @@ export class GameTransportServer {
         commandType?: string;
         commandPayload?: unknown;
         reason?: string;
+        onlineAiAttemptKey?: string | null;
+        clientTransport?: OnlineAiClientTransportDiagnostics | null;
     }): string {
         return JSON.stringify({
             feedbackSource: 'online-ai-circuit-breaker',
@@ -1503,6 +1589,8 @@ export class GameTransportServer {
                 }
                 : null,
             reason: args.reason ?? null,
+            onlineAiAttemptKey: args.onlineAiAttemptKey ?? null,
+            clientTransport: args.clientTransport ?? null,
             stateID: args.match.stateID,
             progressMarker: buildAiProgressMarker(args.match.state, {
                 engineConfig: args.match.engineConfig,
@@ -1526,6 +1614,8 @@ export class GameTransportServer {
         expectedStateID?: number | null;
         stateID: number;
         progressMarker?: string | null;
+        onlineAiAttemptKey?: string | null;
+        clientTransport?: OnlineAiClientTransportDiagnostics | null;
     }): Promise<OnlineAiCircuitSnapshot> {
         const snapshot = this.onlineAiCircuitBreaker.recordFailure({
             matchId: args.match.matchID,
@@ -1537,6 +1627,8 @@ export class GameTransportServer {
                 stateID: args.stateID,
                 progressMarker: args.progressMarker,
                 commandSummary: JSON.stringify(cloneDiagnosticValue(args.commandPayload)),
+                attemptKey: args.onlineAiAttemptKey ?? null,
+                clientTransport: args.clientTransport ?? null,
                 source: args.source,
             },
         });
@@ -1575,6 +1667,8 @@ export class GameTransportServer {
                     commandType: args.commandType,
                     commandPayload: args.commandPayload,
                     reason,
+                    onlineAiAttemptKey: args.onlineAiAttemptKey,
+                    clientTransport: args.clientTransport,
                 }),
                 actionLog: JSON.stringify({
                     type: 'online-ai-circuit-breaker',
@@ -1594,6 +1688,8 @@ export class GameTransportServer {
         reason: OnlineAiCircuitBlockReason;
         commandType: string;
         expectedStateID?: number | null;
+        onlineAiAttemptKey?: string | null;
+        clientTransport?: OnlineAiClientTransportDiagnostics | null;
         snapshot: OnlineAiCircuitSnapshot;
     }): false {
         const failureReason = args.reason === 'stale-epoch' ? 'stale_state' : 'online_ai_circuit_open';
@@ -1604,6 +1700,8 @@ export class GameTransportServer {
             playerID: args.playerId,
             commandType: args.commandType,
             expectedStateID: args.expectedStateID ?? null,
+            onlineAiAttemptKey: args.onlineAiAttemptKey ?? null,
+            clientTransport: args.clientTransport ?? null,
             stateID: args.match.stateID,
             circuitBlockReason: args.reason,
             failureCount: args.snapshot.failureCount,
@@ -4686,6 +4784,8 @@ export class GameTransportServer {
                                         engineConfig: match.engineConfig,
                                         gameId: match.gameId,
                                     }),
+                                    onlineAiAttemptKey: next.options?.onlineAiAttemptKey,
+                                    clientTransport: next.options?.clientTransport,
                                 });
                             }
                         }
@@ -4841,6 +4941,8 @@ export class GameTransportServer {
                         feedbackSource: options?.feedbackSource,
                         expectedStateID: options?.expectedStateID,
                         onlineAiCircuitSource: options?.onlineAiCircuitSource,
+                        onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                        clientTransport: options?.clientTransport,
                     },
                     resolve,
                 });
@@ -4857,6 +4959,8 @@ export class GameTransportServer {
                 {
                     reportFailureFeedback: true,
                     expectedStateID: options?.expectedStateID,
+                    onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                    clientTransport: options?.clientTransport,
                 },
             );
             await this.drainCommandQueue(match);
@@ -4935,6 +5039,8 @@ export class GameTransportServer {
                 const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload, {
                     suppressBroadcast: true,
                     reportFailureFeedback: true,
+                    onlineAiAttemptKey: normalizeOnlineAiAttemptKey(meta?.onlineAiAttemptKey),
+                    clientTransport: normalizeOnlineAiClientTransportDiagnostics(meta?.clientTransport),
                 });
                 if (!success) {
                     const failureReason = match.lastCommandFailureReason ?? GENERIC_COMMAND_FAILURE_REASON;
@@ -5012,6 +5118,8 @@ export class GameTransportServer {
             const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload, {
                 suppressBroadcast: true,
                 reportFailureFeedback: true,
+                onlineAiAttemptKey: normalizeOnlineAiAttemptKey(meta?.onlineAiAttemptKey),
+                clientTransport: normalizeOnlineAiClientTransportDiagnostics(meta?.clientTransport),
             });
             if (!success) {
                 const failureReason = match.lastCommandFailureReason ?? GENERIC_COMMAND_FAILURE_REASON;
@@ -5093,6 +5201,8 @@ export class GameTransportServer {
                     engineConfig: match.engineConfig,
                     gameId: match.gameId,
                 }),
+                onlineAiAttemptKey: normalizeOnlineAiAttemptKey(meta?.onlineAiAttemptKey),
+                clientTransport: normalizeOnlineAiClientTransportDiagnostics(meta?.clientTransport),
             });
         }
 
@@ -5447,6 +5557,8 @@ export class GameTransportServer {
                     reason: circuitAdmission.reason ?? 'circuit-open',
                     commandType,
                     expectedStateID: options?.expectedStateID,
+                    onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                    clientTransport: options?.clientTransport,
                     snapshot: circuitAdmission.snapshot,
                 });
             }
@@ -5482,6 +5594,8 @@ export class GameTransportServer {
                 expectedStateID: options.expectedStateID,
                 stateID: stateIdBefore,
                 progressMarker: progressMarkerBeforeCommand,
+                onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                clientTransport: options?.clientTransport,
             });
             logger.warn('[GameTransport] online AI command rejected due to stale state precondition', {
                 matchID: match.matchID,
@@ -5491,6 +5605,8 @@ export class GameTransportServer {
                 commandPayload: cloneDiagnosticValue(effectivePayload),
                 expectedStateID: options.expectedStateID,
                 actualStateID: stateIdBefore,
+                onlineAiAttemptKey: options?.onlineAiAttemptKey ?? null,
+                clientTransport: options?.clientTransport ?? null,
                 circuitFailureCount: circuitSnapshot.failureCount,
                 circuitTripped: circuitSnapshot.tripped,
             });
@@ -5535,6 +5651,8 @@ export class GameTransportServer {
                     expectedStateID: options?.expectedStateID,
                     stateID: stateIdBefore,
                     progressMarker: progressMarkerBeforeCommand,
+                    onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                    clientTransport: options?.clientTransport,
                 });
             }
             gameLogger.commandFailed(
@@ -5600,6 +5718,8 @@ export class GameTransportServer {
                     expectedStateID: options?.expectedStateID,
                     stateID: stateIdBefore,
                     progressMarker: progressMarkerBeforeCommand,
+                    onlineAiAttemptKey: options?.onlineAiAttemptKey,
+                    clientTransport: options?.clientTransport,
                 });
             }
             gameLogger.commandFailed(

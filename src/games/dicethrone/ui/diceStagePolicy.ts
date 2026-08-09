@@ -11,7 +11,6 @@ export interface DiceStagePolicyParams {
     currentResponderId?: string;
     rootPid: string;
     diceInteractionPlayerId?: string;
-    boardDice3dEnabled: boolean;
     isRollPhase: boolean;
     rollCount: number;
     isRolling: boolean;
@@ -33,35 +32,12 @@ export function canInteractDiceForCurrentBoard(params: DiceStagePolicyParams): b
         && !params.isDuelDirectDefenseOnly;
 }
 
-export function shouldUseBoardDiceStage(params: DiceStagePolicyParams): boolean {
-    if (!params.boardDice3dEnabled) return false;
-
-    const shouldShowForRolling = params.boardDice3dEnabled
-        && params.isRollPhase
-        && params.isViewRolling
-        && !params.isAttackShowcaseVisible
-        && !params.isDuelDirectDefenseOnly;
-
-    const shouldShowForResponseDice = params.diceInteractionPlayerId === params.rootPid
-        && !params.isSpectator
-        && (params.isManualSelfResponseWindow || params.isDirectDiceActor || params.currentResponderId === params.rootPid);
-    const shouldShowForOwnedDiceInteraction = params.hasDiceMultistepInteraction
-        && params.diceInteractionPlayerId === params.rootPid
-        && !params.isSpectator;
-
-    const shouldShowForInteraction = params.hasDiceMultistepInteraction
-        && (params.isViewRolling || shouldShowForResponseDice || shouldShowForOwnedDiceInteraction);
-
-    return shouldShowForRolling || shouldShowForInteraction;
-}
-
 export function shouldShowRailDiceTray(params: {
-    useBoardDiceStage: boolean;
     hasKeptDice: boolean;
 }): boolean {
-    return !params.useBoardDiceStage;
+    return true;
 }
 
-export function getRailDiceForCurrentBoard(dice: Die[], useBoardDiceStage: boolean): Die[] {
-    return useBoardDiceStage ? [] : dice;
+export function getRailDiceForCurrentBoard(dice: Die[]): Die[] {
+    return dice;
 }

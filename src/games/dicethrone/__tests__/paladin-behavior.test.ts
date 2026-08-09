@@ -384,5 +384,46 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             expect(after.players['0'].tokens[TOKEN_IDS.BLESSING_OF_DIVINITY]).toBe(0);
             expect(after.players['0'].resources[RESOURCE_IDS.HP]).toBe(1);
         });
+
+        it('主伤害触发祝福后，后续独立伤害仍可将圣骑士击败', () => {
+            const state = createState({ attackerBlessing: 1, attackerHP: 3 });
+            state.tokenDefinitions = PALADIN_TOKENS;
+
+            const attackEvents = resolveEffectsToEvents([
+                {
+                    description: '10 点致死主伤害',
+                    timing: 'withDamage',
+                    action: { type: 'damage', target: 'opponent', value: 10 },
+                },
+            ], 'withDamage', {
+                attackerId: '1',
+                defenderId: '0',
+                sourceAbilityId: 'test-lethal-attack',
+                state,
+                damageDealt: 0,
+                timestamp: 1200,
+            });
+            const afterBlessing = applyEvents(state, attackEvents, reduce);
+
+            expect(afterBlessing.players['0'].resources[RESOURCE_IDS.HP]).toBe(1);
+            expect(afterBlessing.players['0'].tokens[TOKEN_IDS.BLESSING_OF_DIVINITY]).toBe(0);
+
+            const independentDamage: DiceThroneEvent = {
+                type: 'DAMAGE_DEALT',
+                payload: {
+                    targetId: '0',
+                    amount: 1,
+                    actualDamage: 1,
+                    sourceAbilityId: 'ninja-chronic-poison',
+                    sourcePlayerId: '1',
+                    damageScope: 'direct',
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp: 1201,
+            } as DiceThroneEvent;
+            const defeated = applyEvents(afterBlessing, [independentDamage], reduce);
+
+            expect(defeated.players['0'].resources[RESOURCE_IDS.HP]).toBe(0);
+        });
     });
 });

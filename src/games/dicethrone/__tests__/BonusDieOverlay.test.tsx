@@ -187,6 +187,25 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('(bonusDie.knockdownTrigger)');
     });
 
+    it('免费重掷时不应显示花费 0 或错误兜底为太极', () => {
+        const html = renderToStaticMarkup(
+            <BonusDieOverlay
+                isVisible
+                onClose={vi.fn()}
+                bonusDice={buildBonusDice()}
+                canReroll
+                onReroll={vi.fn()}
+                onSkipReroll={vi.fn()}
+                rerollCostAmount={0}
+                rerollCostTokenId=""
+            />
+        );
+
+        expect(html).toContain('bonusDie.selectToRerollFree');
+        expect(html).not.toContain('bonusDie.selectToReroll:cost=0');
+        expect(html).not.toContain('tokens.taiji.name');
+    });
+
     it('无太极时显示无法重掷提示但仍保留确认伤害按钮', () => {
         const html = renderToStaticMarkup(
             <BonusDieOverlay
@@ -530,7 +549,7 @@ describe('BonusDieOverlay', () => {
             vi.advanceTimersByTime(1200);
         });
 
-        expect(screen.getByTestId('dice-3d')).toBeInTheDocument();
+        expect(screen.getByTestId('dice-2d')).toBeInTheDocument();
         expect(screen.queryByTestId('bonus-die-spotlight-face')).toBeNull();
     });
 

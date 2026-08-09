@@ -479,7 +479,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
             || promptTitleKey === 'ui.munchkin_warriors_taunter_mode_title'
             || promptTitleKey === 'ui.munchkin_warriors_dungeon_bait_mode_title'
             || promptTitleKey === 'ui.munchkin_warriors_ruckus_mode_title'
-            // 计分前响应动作选择必须避开正在被选择的基地与随从。
+            // 响应动作只有短标题和按钮，停在牌桌上沿，避免压住基地/随从本体。
             || prompt?.sourceId === 'smashup_reaction_choose');
 
     // 少量选项 + 非卡牌模式 → 内联面板
@@ -1194,10 +1194,11 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
         return (
             <motion.div
                 key={`prompt-inline-${promptRenderKey}`}
+                data-testid={shouldDockMunchkinPlayerPrompt ? 'smashup-docked-prompt' : undefined}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                className={`fixed inset-x-0 ${shouldDockMunchkinPlayerPrompt ? 'top-[6rem]' : 'inset-0 items-center'} flex justify-center pointer-events-none`}
+                className={`fixed inset-x-0 ${shouldDockMunchkinPlayerPrompt ? 'top-2 smashup-docked-prompt' : 'inset-0 items-center'} flex justify-center pointer-events-none`}
                 style={{ zIndex: UI_Z_INDEX.overlay }}
             >
                 <div className="flex flex-col items-center gap-4 pointer-events-auto">

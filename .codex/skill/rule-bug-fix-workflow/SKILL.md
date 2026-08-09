@@ -5,15 +5,25 @@ description: "BoardGame 规则 bug 修复流程。用于卡牌、技能、Token�
 
 # 规则 Bug 修复流程
 
-## 先读
+## 渐进式披露入口
 
-- 合同门禁：`docs/ai-rules/rule-contract-audit.md`
-- 回归收口：`docs/ai-rules/regression-closeout.md`
-- 全面审计入口：`docs/ai-rules/testing-audit.md`
-- 全面审计核心原则与矩阵：`docs/ai-rules/testing-audit-core-principles.md`
-- 录入复核：`.codex/skill/data-entry-workflow/SKILL.md`
-- 全面游戏审计：`.codex/skill/game-audit-workflow/SKILL.md`
-- 不确定入口时：`docs/ai-rules/doc-index.md`
+先读 ./.codex/skill/game-audit-workflow/references/reading-map.md，按反馈对象选择下面的规范，不要把所有审计分卷默认全文加载。
+本 skill 负责规则 bug 的执行顺序；规则合同、回归收口和审计维度仍以对应 docs/ai-rules 主源为准。
+
+## 按需读取
+
+默认读取：
+
+- 合同门禁：docs/ai-rules/rule-contract-audit.md。
+- 回归收口：docs/ai-rules/regression-closeout.md。
+
+按命中情况追加：
+
+- 用户要求“全面审计 / 为什么没审出来”：进入 .codex/skill/game-audit-workflow/SKILL.md，由其 reading-map 选择审计主源和 D 维度。
+- 规则合同缺失、图片/卡图/规则书冲突或对象归属未锁：进入 .codex/skill/data-entry-workflow/SKILL.md，并读取 docs/ai-rules/data-entry.md。
+- 反馈涉及真实 UI 入口、按钮、提示、截图或 E2E：读取 docs/ai-rules/e2e-verification.md，必要时读取 docs/ai-rules/ui-change-gates.md。
+- 只需要命令、状态注入、骰子/随机数或 TestHarness API：读取 docs/testing-tools-quick-reference.md；项目脚本目录查 docs/tools.md。
+- 入口不明确：回 docs/ai-rules/doc-index.md，不要自行拼接一套阅读清单。
 
 ## 判层
 

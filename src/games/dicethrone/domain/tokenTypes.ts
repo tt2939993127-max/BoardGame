@@ -99,6 +99,12 @@ export interface TokenEffectContext<TState = unknown> {
         originalDamage: number;
         currentDamage: number;
         responseType: 'beforeDamageDealt' | 'beforeDamageReceived';
+        modifiers?: Array<{
+            type: 'defense' | 'token' | 'shield' | 'status';
+            value: number;
+            sourceId?: string;
+            sourceName?: string;
+        }>;
     };
     /** 其他上下文数据 */
     extra?: Record<string, unknown>;

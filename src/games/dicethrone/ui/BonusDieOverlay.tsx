@@ -118,7 +118,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
     const isSingleDieRerollSpotlight = Boolean(bonusDice && bonusDice.length === 1);
     const costAmount = rerollCostAmount ?? 1;
-    const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
+    const isFreeReroll = costAmount === 0;
+    const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : '';
     const summaryEffectText = React.useMemo(() => {
         if (!summaryEffectKey || !summaryEffectParams) {
             return undefined;
@@ -287,10 +288,14 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             {displayOnly
                                 ? t(presentationKind === 'choice' ? 'bonusDie.choiceResult' : 'bonusDie.diceResult')
                                 : canReroll
-                                    ? t('bonusDie.selectToReroll', { cost: costAmount, token: tokenName })
+                                    ? isFreeReroll
+                                        ? t('bonusDie.selectToRerollFree')
+                                        : t('bonusDie.selectToReroll', { cost: costAmount, token: tokenName })
                                     : rerollLimitReached
                                         ? t('bonusDie.rerollLimitReached')
-                                        : t('bonusDie.noTokenToReroll', { token: tokenName })}
+                                        : tokenName
+                                            ? t('bonusDie.noTokenToReroll', { token: tokenName })
+                                            : t('bonusDie.noRerollAvailable')}
                         </span>
                     </motion.div>
 

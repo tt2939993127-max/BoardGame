@@ -4098,6 +4098,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('SELECT_ABILITY', '1', { abilityId: 'elusive-step' }),
                     cmd('ADVANCE_PHASE', '1'),
                     cmd('USE_TOKEN', '1', { tokenId: TOKEN_IDS.EVASIVE, amount: 1 }),
+                    cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -4824,7 +4825,7 @@ describe('王权骰铸流程测试', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
-        it('多次重掷并结算', () => {
+        it('二级技能第二次重掷被拒绝后仍可结算', () => {
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 1, 1];
             const random = createQueuedRandom(diceValues);
 
@@ -4856,15 +4857,17 @@ describe('王权骰铸流程测试', () => {
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 1 }),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('SKIP_TOKEN_RESPONSE', '0'),
                 ],
                 expect: {
+                    expectError: { command: 'REROLL_BONUS_DIE', error: 'bonus_reroll_limit_reached' },
                     turnPhase: 'main2',
                     pendingBonusDiceSettlement: null,
                     players: {
-                        '0': { tokens: { taiji: 0 } },
+                        '0': { tokens: { taiji: 1 } },
                         '1': {
-                            hp: 37,
-                            statusEffects: { knockdown: 1 },
+                            hp: 42,
+                            statusEffects: { knockdown: 0 },
                         },
                     },
                 },

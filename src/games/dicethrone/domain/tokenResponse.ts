@@ -26,7 +26,7 @@ import type {
 } from './tokenTypes';
 import { getMaxTokenUseAmount, getTokenEffectValue } from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
-import { TOKEN_IDS } from './ids';
+import { STATUS_IDS, TOKEN_IDS } from './ids';
 import { hasSpentTreantTreeSpiritThisTurn } from './passiveAbility';
 import { getTokenStackLimit } from './rules';
 import { isPurifiableDebuffId } from './statusRemoval';
@@ -512,6 +512,20 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
         const isProtect = tokenDef.id === TOKEN_IDS.PROTECT;
         if (isProtect) {
             const currentDamage = pendingDamage?.currentDamage ?? 0;
+            const usedProtect = ((ctx.extra?.tokenUsageTotals as Record<string, number> | undefined)?.[TOKEN_IDS.PROTECT] ?? 0)
+                + amount;
+            const hasDazzleHalfDamage = pendingDamage?.modifiers?.some(modifier => (
+                modifier.sourceId === STATUS_IDS.DAZZLE
+                && modifier.value === -50
+            )) === true;
+            // FAQ：眩光 2-3 已经让攻击减半时，一个守护即可吃掉剩余伤害；
+            // 同一伤害来源花费两个守护时，两个“半伤”效果合并为完全免伤。
+            if (hasDazzleHalfDamage || usedProtect >= 2) {
+                return {
+                    success: true,
+                    damageModifier: -currentDamage,
+                };
+            }
             // 减半向上取整：减的量 = ceil(currentDamage / 2)
             const reduction = -Math.ceil(currentDamage / 2);
             return {
@@ -524,7 +538,11 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
         const isRetribution = tokenDef.id === TOKEN_IDS.RETRIBUTION;
         if (isRetribution) {
             const currentDamage = pendingDamage?.currentDamage ?? 0;
-            const reflectAmount = Math.ceil(currentDamage / 2);
+            const protectPrevented = pendingDamage?.modifiers
+                ?.filter(modifier => modifier.sourceId === TOKEN_IDS.PROTECT && modifier.type === 'token' && modifier.value < 0)
+                .reduce((sum, modifier) => sum + Math.abs(modifier.value), 0) ?? 0;
+            // 神罚忽略守护的“减半”部分，但保留其它固定减伤/完全免伤的结果。
+            const reflectAmount = Math.ceil((currentDamage + protectPrevented) / 2);
             return {
                 success: true,
                 damageModifier: 0,
@@ -677,6 +695,7 @@ export function processTokenUsage(
             originalDamage: state.pendingDamage.originalDamage,
             currentDamage: state.pendingDamage.currentDamage,
             responseType: state.pendingDamage.responseType,
+            modifiers: state.pendingDamage.modifiers,
         } : undefined,
         extra: {
             tokenUsageTotals: state.pendingDamage?.tokenUsageTotals,
@@ -753,6 +772,24 @@ export function processTokenUsage(
 // Token 响应窗口关闭
 // ============================================================================
 
+function getRetributionReflectionAmount(
+    pendingDamage: PendingDamage,
+    state: DiceThroneCore,
+): number {
+    if (pendingDamage.isFullyEvaded) return 0;
+
+    const protectPrevented = pendingDamage.modifiers
+        ?.filter(modifier => modifier.sourceId === TOKEN_IDS.PROTECT && modifier.type === 'token' && modifier.value < 0)
+        .reduce((sum, modifier) => sum + Math.abs(modifier.value), 0) ?? 0;
+    const damageBeforeProtect = Math.max(0, pendingDamage.currentDamage + protectPrevented);
+    const damageAfterFixedPrevention = estimateDamageAfterExistingShields(
+        state,
+        pendingDamage.targetPlayerId,
+        damageBeforeProtect,
+    );
+    return Math.ceil(damageAfterFixedPrevention / 2);
+}
+
 /**
  * 生成 Token 响应关闭事件和最终伤害事件
  */
@@ -803,12 +840,19 @@ export function finalizeTokenResponse(
     const deferredDamages = pendingDamage.deferredDamageEvents ?? [];
     for (let i = 0; i < deferredDamages.length; i++) {
         const deferredDamage = deferredDamages[i];
+        const deferredAmount = deferredDamage.reflectFromPendingDamage
+            ? getRetributionReflectionAmount(pendingDamage, state)
+            : deferredDamage.amount;
+        if (deferredAmount <= 0) continue;
+        const attackerHp = state.players[deferredDamage.targetId]?.resources[RESOURCE_IDS.HP] ?? 0;
         const damageEvent: DamageDealtEvent = {
             type: 'DAMAGE_DEALT',
             payload: {
                 targetId: deferredDamage.targetId,
-                amount: deferredDamage.amount,
-                actualDamage: deferredDamage.actualDamage,
+                amount: deferredAmount,
+                actualDamage: deferredDamage.reflectFromPendingDamage
+                    ? Math.min(deferredAmount, attackerHp)
+                    : deferredDamage.actualDamage,
                 sourceAbilityId: deferredDamage.sourceAbilityId,
                 sourcePlayerId: deferredDamage.sourcePlayerId,
                 damageScope: deferredDamage.damageScope,

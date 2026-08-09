@@ -34,6 +34,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **最低回答格式**：回答这类问题时，必须先标明“以下只针对当前对话”或等价口径；若当前对话里的改动并不是用户原始 bug 的直接修复，必须直接说清“这笔改动解决的是部署/门禁/排障问题，不是原始业务 bug 本体”。
 - **接续摘要不得接管目标（强制）**：上下文压缩摘要、交接摘要、`task_plan.md`、`progress.md`、`findings.md`、`temp/**`、evidence 清单或上个模型总结只能作为候选线索，不能自动替代用户最近明确的当前目标。接续、恢复或用户说“继续”时，先按 `docs/ai-rules/conversation-handoff-target-lock.md` 锁定目标；若摘要目标与当前对话主线冲突，必须立即停在“目标冲突 / 前提未锁定”，不得按摘要改代码、测试、文档或发布。
 
+#### 本地代码任务工具路由（强制）
+
+- **触发条件**：当前任务是本仓库内的代码读取、实现、修复、重构、测试、文档补丁或审计进度更新，且用户没有当轮明确要求子 agent、多 agent、并行协作或等待其他 agent 结果。
+- **核心不变量**：本地代码任务的读取文件、执行命令、打补丁、跑测试、更新计划或写进度，统一通过 `exec` 里的本地 shell / patch 能力完成；不得把协作类工具当成本地执行入口。
+- **禁止行为**：禁止连续调用 `collaboration.*`、`wait_agent` 或 agent 列表查询来替代真实本地读写/验证；禁止把“只读 agent 状态”“等待超时”“只有 /root running”当作代码任务进展证据。
+- **允许例外**：只有用户当轮明确要求子 agent / 多 agent / 并行，或更高优先级系统规则明确要求协作工具时，才可调用 `collaboration.*`；调用前必须说明每个 agent 的边界、产物和验证口径。
+- **误路由补救**：一旦在本地代码任务中误调用协作工具，下一次工具调用必须回到 `exec` 执行真实本地动作；如果连续两次仍未产生文件读取、补丁或测试证据，必须停止并完整汇报工具路由阻塞，不得继续空转。
+
 ### 执行优先级与归并口径（强制）
 
 #### 1. 单一优先级口径
@@ -83,32 +91,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - 用户当轮明确授权“这边不要了 / 直接丢弃另一边内容，不需要保留差异”。
 - **默认动作**：若目标是“统一只留一边”，应先迁移/补齐保留侧，再删除另一边；若尚未完成比对，只能先停在“存在双边内容，暂不允许删边”的结论上。
 
-#### 2. `无校验 / 直接提交 / 直接 push` 统一定义
+#### 2. 提交 / push 的入口与动作上限
 
-- **触发词统一视为同义**：`无校验`、`跳过验证`、`不跑测试`、`直接提交`、`直接 push`、`无校验交付`，都表示进入“直接执行 git 目标动作”的快速路径。
-- **快速路径的默认含义**：不主动运行任何测试、lint、typecheck、`npm run i18n:check`、构建、静态审查、状态核对、部署前检查；只执行完成目标 git 动作所必需的最少命令。
-- **门禁/guard/预算绕过必须显式授权（强制）**：无论是 `--no-verify`、环境变量 bypass、跳过 quality gate、跳过 pre-push/pre-commit、绕过全局预算门禁、绕过 git command guard，还是任何语义等价的“先放行再说”，都必须有用户当轮**明确允许**。没有明确允许时，只能等门禁通过，或停在 blocker 上汇报原因与最小补救动作；不得因为“只是环境问题”“这次只改文档”“已经快完成了”就自行绕过。
-- **ESLint warning-only 的 push 口径**：当 pre-push 已确认只剩 `0 errors` 的新增 ESLint warning，且不涉及类型失败、测试失败、安全问题或真实玩法症状时，按 `.codex/skill/git-operations/SKILL.md` 的 warning-only 规则处理；用户当轮明确说“不影响游玩不用管 / 按这个口径 / 以我的口径为真相 / 跳过 warning 门禁”即视为本次 warning-only 阻塞的明确放行授权，不等同于永久降低其它门禁。
-- **口语化提交口令单独解释**：像“看下没问题就提交”“检查没问题就推”这类表达，默认指**先做静态代码审查**（阅读 `git diff`、关键实现与明显风险点），再提交/推送；**不默认主动跑测试**。若审查发现范围外改动、真实业务分歧、需要用户验收的取舍、钩子生成的新 E2E 产物是否纳入、或需要绕过门禁，必须按 review 口径停止并汇报 finding / blocker，等待用户明确说“修复 / 补齐 / 继续改”后才能动代码。若仓库已配置对应 `pre-commit` / `pre-push` 钩子，默认直接依赖钩子执行同类门禁，**不再额外手工预跑一遍同类测试/检查**；钩子失败时，若失败项属于当前提交范围且只有一个明显最小修法（例如测试断言与当前业务文案不同步、lint/typecheck 小修、格式漂移），应直接修复并折进同一笔未推送提交，不要为这种简单 blocker 反复找用户确认。只有明确说出“无校验 / 直接提交 / 直接 push / 不跑测试”时，才进入快速路径。
-- **提交阻塞必须基于当前仍成立的问题（强制）**：提交前审查只能用当前工作区仍然存在的具体事实作为 blocker，例如当前 diff 里的真实 bug、当前失败测试、当前门禁失败、当前未确认归属。已经被后续 diff 修正、当前文件不再包含、定向验证通过、或只属于中间排查过程的问题，必须降级为历史排查记录，不得继续作为提交 / push 阻塞理由。若用户已确认“全部改动都可作为本次提交范围”，不得再用“不是同一轮任务 / 并行任务混在一起”阻塞提交；只需确保提交消息覆盖主要改动面。
-- **纯格式小问题不得阻塞提交/push（强制）**：`git diff --check` 里只涉及 EOF 多余空行、末尾空白、文件末尾换行这类不改变运行结果的格式问题时，默认直接按最小改动自动修复后继续提交/push；若用户已经催促“提交 / push / 继续”，不得停下来把它当 blocker 汇报。只有格式问题出现在生成文件、二进制文件、无法确认改动归属，或自动修复会改动大量无关内容时，才停下说明影响和最小补救。
-- **快速路径只覆盖本次明确点名的动作**：例如“无校验 push”只覆盖这次 push；完成后立即恢复默认门禁，后续提交/推送不得自动继承。
-- **快速路径禁止任务扩展**：用户要的是提交/推送时，不得顺手追加测试、检查、部署准备、工作区审计、文档核对或其他旁支动作。
+- **唯一流程源**：提交、推送、快速路径、门禁、warning-only、并发工作区与提交信息的可执行细则，统一以 `.codex/skill/git-operations/SKILL.md` 为准；本节只保留入口和不可越过的边界。
+- **口语化提交口令**：像“看下没问题就提交”“检查没问题就推”只表示“静态审查后执行 Git 动作”，不表示运行测试、E2E、截图、UI 审计、构建、lint 或 typecheck，也不表示授权修复。
+- **专项默认规则不得扩张 Git 目标（强制）**：即使当前 diff 涉及 UI，UI 审计、截图、Playwright、E2E 与其它专项默认流程都不能把“审查后提交 / push”升级为验证任务。只有用户当轮明确点名，或实际 `pre-commit` / `pre-push` 钩子自行执行时，才允许运行；后台测试、并发 agent 和生成物不接管本次提交链路。
+- **快速路径与绕过边界**：`无校验 / 跳过验证 / 不跑测试 / 直接提交 / 直接 push` 的定义，以及任何 `--no-verify`、环境变量 bypass、质量门禁或 Git guard 绕过，统一按 Git skill 执行；绕过仍必须有用户当轮明确授权。
 
-#### 3. 提交 / push 的单一执行模板
-
-- **用户说“提交你的修复 / 只提交这一笔”时**：只处理本轮明确范围内的改动，不得自动扩大到整个工作区。
-- **用户说“都提交 / 全修改 / 所有修改 / 全部改动”时**：才按整个当前工作区执行 `git add/commit`；这里的“整个当前工作区”默认指当前仓库里**已暂存 + 未暂存 + 未跟踪**的改动，**不包含 ignored 文件**。若用户同时说“看下没问题就提交”，则审查范围也必须覆盖这整个集合。
-- **提交信息语言默认按强制口径执行**：`git commit -m` 必须使用中文；只有用户当轮明确要求英文、指定上游约定格式、或自动化发布流程有硬性模板时，才允许偏离。
-- **提交信息必须有足够信息密度**：禁止使用“修复问题”“收口反馈”“更新代码”“E2E覆盖”等无法反映主要改动面的泛化标题；提交消息必须服务后续 `git log` 回溯。
-- **多模块/大提交必须覆盖主要改动面**：当一次提交涉及多个模块、多个游戏、UI + 领域逻辑 + 测试/文档，或超过约 10 个文件时，`git commit` 必须使用中文多行提交信息；第一行概括 2-4 个主要改动面，body 用列表列出核心模块与行为变化，并至少覆盖用户明确提到的关键事项。
-- **提交消息不得低于用户语义粒度**：如果用户明确提到“悬浮球”“DiceThrone bug”“SmashUp”“i18n”等事项，提交消息必须点名这些事项或等价业务名；不得用“收口/修复/覆盖”把不同业务线合并成空泛描述。
-- **提交消息不得吞掉用户已点名的修复项**：如果本次提交实际包含用户先前完成、用户明确关心、或对话中反复追问的修复/反馈项，提交消息必须在标题或 body 中点名这些事项；不得只写本 agent 后补的小修、门禁修复或抽象桶名，导致 `git log` 看不出该提交已经带上用户那笔修复。
-- **当分支已 `ahead N` 且用户目标是 `push` 时**：默认直接执行 `git push`；未提交改动不会随 push 上远端，不得先因工作区脏而岔开去排查。尤其是提交完成后又追加出现的未提交改动，默认不纳入本次待推送提交范围；只需简要说明它仍留在本地，不得因此阻塞已提交内容的 push。
-- **`--no-verify` 只在两类场景可用**：文档/配置/样式且无逻辑变更，或用户当轮明确要求无校验推进。
-- **用户明确催促执行时**：先走最短路径动作；失败后只报告“执行了什么、哪里失败、下一步最小补救”。
-
-#### 3.1 用户动作口令不得擅自升级目标级别（强制）
+#### 3. 用户动作口令不得擅自升级目标级别（强制）
 
 - **真实根因**：问题不在某个具体动作词，而在助手把用户已经点名的动作对象、影响范围、执行环境或交付级别，擅自脑补成“更完整”“更正式”或“更高影响”的版本。
 - **触发条件**：当用户给出一个已带边界的动作口令，例如安装、提交、部署、删除、查看、修某个页面、只改这一处、装到这台设备、发测试包、看截图、先不要动别的。
@@ -117,7 +107,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **升级门禁**：如果按用户原口令执行遇到阻塞，只能先说明阻塞点，并按影响从低到高给出最小替代路径；在用户明确确认之前，不得自动切到更高影响方案。
 - **最低汇报证据**：执行任何会改外部状态的动作前，必须先在汇报里把本次要动的具体目标说清楚，例如装哪个包、覆盖哪个对象、改哪组文件、推哪个环境；若准备动作超出了用户原口令边界，必须先停下来说明并等确认。
 
-#### 3.1.1 Bug 修复目标不得迁移或替换（强制）
+#### 3.1 Bug 修复目标不得迁移或替换（强制）
 
 - **真实根因**：修 bug 失守通常不是“没找到另一个问题”，而是把排查中发现的外围异常、前置门禁、资源链路、测试缺口或体验优化，擅自升级成了本轮修复目标，导致原始 bug 没被直接解决，反而改了用户没授权的逻辑。
 - **触发条件**：当用户报告具体 bug、回归、卡顿、跳过、某一步失败、某个座位/玩家异常、某条交互链不符合预期，或明确质疑“你修的是这个问题吗 / 你改我逻辑干什么 / 跑错方向”时。
@@ -145,7 +135,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **收口证据**：最终验证必须覆盖用户原始链路和原始失败位点；如果只验证了辅助发现、资源加载、测试稳定性或相邻体验，必须明确说“原始 bug 仍未证明修复”，不得收口。
 - **事故回代自审**：每次因跑偏被指出后，必须反问“这条改动在事故发生前能否阻止我修改那组范围外文件/逻辑”。如果答案是否定的，规则还不够硬，必须继续补强到能直接拦住该错误动作。
 
-#### 3.1.2 多代理工作区撤回边界（强制）
+#### 3.2 多代理工作区撤回边界（强制）
 
 - **触发条件**：当工作区可能存在用户、其他 AI、并行 agent、工具进程或历史会话的未提交改动，且本轮需要撤回、还原、清理、收窄 diff、修正跑偏改动时。
 - **核心不变量**：撤回动作只能覆盖当前对话中有明确证据证明由本 agent 产生的具体 hunk、文件片段或新增文件；`git status`、`git diff --name-only`、文件修改时间、同目录相关性、文件名相似性都不能单独作为“这是我改的”证据。
@@ -153,7 +143,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **最低证据**：撤回前必须能说明要撤的每个 hunk 对应本对话哪一次编辑、哪一个目的、为什么确认不是他人改动。无法区分归属时必须停止在该 hunk 前，只能汇报不确定性并请求确认。
 - **允许做法**：优先用 `apply_patch` 精确删除或恢复本轮明确加入的行；撤回后用定向 `git diff -- <path>` 证明只移除了目标 hunk。若只剩无内容 diff、换行警告、stat-only 变化或并发改动痕迹，不得继续猜测处理。
 
-#### 3.2 共享逻辑改动的影响面与反馈真相门禁（强制）
+#### 3.3 共享逻辑改动的影响面与反馈真相门禁（强制）
 
 - **触发条件**：当本轮准备修改共享工具、共享状态结构、共享配置、共享默认值、跨入口复用组件、跨游戏引擎门禁，或用户明确提到“线上反馈 / 回归 / 之前好的现在坏了 / 只坏一部分 / 连续两次”这类症状时。
 - **先确认共享消费者，再动共享实现**：必须先列出这段共享逻辑当前服务的入口/页面/游戏/服务端分支，明确哪些调用方语义相同，哪些只是“共用结构但语义不同”。禁止因为两个场景复用了同一个字段/对象，就默认它们应该继承完全相同的默认行为。
@@ -262,11 +252,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/data-entry.md` — 按图片/规则书/Wiki/截图录入业务数据时必读。
   - **图片优先于 Wiki（强制）**：凡清晰图片、截图或扫描件能覆盖当前字段，图片就是当前字段主真相源；Wiki 只能作为对照源。只有用户故事/需求单/当轮用户明确说明要偏离图片时，才允许覆盖图片口径，且必须留档写明覆盖原因、影响范围和验收标准。
 - `docs/user-stories/README.md` — 用户在对话中明确提出、会影响规则裁定/实现口径/验收方式/长期流程的需求留档入口。项目级需求放 `docs/user-stories/project/`，游戏级需求统一放 `docs/games/<gameId>/user-stories/`；凡允许偏离图片、规则书或既有实现的用户故事，必须在这里留档。
-- `.codex/skill/audio-integration/SKILL.md` — 音频对接、查找/替换音效 key、补预加载或导入新音效素材时必读；配套参考 `docs/audio/audio-usage.md`、`docs/audio/add-audio.md`、`docs/audio/audio-catalog.md`、`docs/tools.md`。
+- 系统 skill `D:\codex-home\skills\audio-integration\SKILL.md` — 音频对接、查找/替换音效 key、补预加载或导入新音效素材时必读；配套参考 `docs/audio/audio-usage.md`、`docs/audio/add-audio.md`、`docs/audio/audio-catalog.md`、`docs/tools.md`。
 - `docs/ai-rules/engine-systems.md` — 引擎系统、框架层、游戏 `move/command` 时必读。
 - `docs/ai-rules/undo-auto-advance.md` — 排查撤回后自动推进问题时必读；引擎层已统一处理，游戏层通常无需额外代码。
 - **多 afterScoring 交互链式传递（通用方案）**：`_deferredPostScoringEvents` 必须沿交互链传递；引擎层已在 `InteractionSystem.resolveInteraction` 自动转交到下一个交互。游戏层只需在最后一个交互补发延迟事件，并在补发后立即清空，避免重复补发。详见 `evidence/smashup/smashup-multi-base-infinite-loop-fix.md` 和 `evidence/smashup/smashup-multi-base-duplicate-events-fix.md`。
-- `docs/ai-rules/testing-audit.md` — 审计、审查、审核、核对描述与代码，或处理“回归 / 以前能用现在不能用 / 又坏了 / 本轮修改后旧功能异常”时必读；以 D1-D49 通用缺陷维度为主框架。
+- `./.codex/skill/game-audit-workflow/SKILL.md` — 审计、审查、审核、核对描述与代码，或处理“回归 / 以前能用现在不能用 / 又坏了 / 本轮修改后旧功能异常”时先读；按该 skill 的 references/reading-map.md 渐进读取 docs/ai-rules/ 主源、工具文档和 E2E 证据规范。
 - `docs/ai-rules/shared-refactor-guard.md` — 重构共享 helper、共享 transport/watchdog/recovery、通用化 override、调整 fallback 顺序、或排查“为什么重构改坏功能”时必读。
 - `docs/ai-rules/e2e-verification.md` — E2E 与截图验收时必读；覆盖状态注入、真实开房适用边界、截图路径、看图结论和 evidence 要求。
 - **审计证据文档强制落地（强制）**：凡是对外宣称“已审计/已审过/审计完成/已收口”的游戏、派系、模块或专项，必须在 `evidence/` 下存在对应审计文档；**无文档一律视为未审计**。文档至少要写明：审计范围、权威来源、逐项/逐卡结论、命中的审计维度、验证/测试证据、未覆盖风险。禁止只写“已核对正常”“已完成收口”这类不可复查结论。
@@ -281,23 +271,19 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `.codex/skill/adapt-game-mobile/SKILL.md` — 给现有游戏做移动端适配时必读。
 - `.codex/skill/git-operations/SKILL.md` — 需要提交、push、同步主分支、处理 pre-push 阻塞、PR、merge、fork、worktree、远端协议时必读。
 - `.codex/skill/create-new-game/SKILL.md` — 创建/添加新游戏时必读。通用新游戏 workflow、现场锁定和阶段门禁由该 skill 负责；进入当前游戏的具体设计、提案、运行时边界或任务拆分时，按该 skill 指引切到 OpenSpec。
-- `docs/deploy.md` — 部署、构建产物、环境变量注入、线上/本地差异、服务器素材主源 / 公开资源域名问题时必读。
-  - **生产部署操作规范（强制）**：生产环境更新默认使用统一发布入口 `node scripts/release/deploy-and-ota.mjs`，由本机/CI 输送 GHCR 镜像到服务器并在生产机执行 `bash scripts/deploy/deploy-image.sh update-local`（基于 `docker-compose.prod.yml`）。`deploy-image.sh update` / `--deploy-mode remote` 只用于用户明确要求“服务器直接拉镜像”或排障旧链路。**禁止在生产服务器上直接运行 `docker compose up -d`**（会使用默认的 `docker-compose.yml`，端口映射和环境变量与生产不同）。排查生产问题时，必须先读 `docs/deploy.md` 了解部署架构，禁止凭猜测给出服务器操作命令。
-  - **生产最新部署入口口径（强制）**：用户说“更新部署 / 部署最新 / 发线上”且未明确指定版本时，默认目标不是“只更新服务器”，而是一次完整上线：版本自增 + 镜像输送到服务器并 `update-local` + Android stable OTA 发布。默认必须优先走 `node scripts/release/deploy-and-ota.mjs --prepare-version` 准备版本，再在版本提交并 push、CI 镜像构建完成后执行 `node scripts/release/deploy-and-ota.mjs`；禁止手工拆成“只执行 `bash scripts/deploy/deploy-image.sh update` 后就汇报完成”。只有用户明确说“只更新服务器 / 不发 OTA / 本次不改版本”时，才允许缩小对应范围，且汇报必须写明这是缩小发布，不是完整更新部署。
-  - **生产最新部署 tag 口径（强制）**：服务器步骤默认由项目发布编排输送 CI 推送到 GHCR 的 `latest`，并在服务器本地执行 `update-local`。禁止根据 commit SHA、短 SHA、run number 或个人推测临时拼出 `update <tag>` / `update-local <tag>`；只有用户明确指定 tag，或已经用 CI 输出 / GHCR / `docker manifest inspect` 证明 `web` 与 `game-server` 两个镜像都存在同一个精确 tag 时，才允许部署指定 tag，并必须在汇报中写明验证证据。
-  - **生产最新部署收口门槛（强制）**：镜像输送 + `update-local` 成功（或用户明确要求的 remote `update` 成功）只代表服务器镜像已更新，**不等于完整上线完成**。完整“更新部署 / 发线上”收口前必须同时验证：① 服务器 `WEB_REV` / `GAME_REV` 或等价健康检查命中目标发布对象；② Android `stable` OTA 已触发并成功，且 `git_ref` / `expected_base_version` / channel 对得上本次发布；③ 若本次按默认口径发版，`package.json.version` 与 Android `androidVersionCode` 已随发布提交同步增加。任一项缺失、失败、需审批或尚未执行时，只能汇报“服务器已更新，但完整上线未完成 / OTA 未完成”，不得把任务标记完成。
-  - **Git 工作区变更控制（强制）**：未经用户当轮明确许可，不得执行会改变工作区状态或文件内容的操作（例如 `git stash`、`git clean`、`git restore`）。如确需隔离/清理未提交改动，必须先说明目的与影响，再等用户确认。项目内 Git command guard 的能力边界、wrapper 用法与 `pre-rebase` 硬拦方案，统一以 `.codex/skill/git-operations/SKILL.md` 为准。
-  - **Android OTA 包体规范（强制）**：Android OTA 只允许承载 H5 bundle 与轻量静态文件，**禁止**把 `public/assets/i18n/**`、大图集、大卡图或其他应走服务器素材主源 / 游戏包链路的资源打进 OTA zip。发布 Android OTA 时必须使用 `scripts/mobile/publish-android-ota.mjs` 这条受门禁保护的链路；若产物异常超过轻量包体阈值（当前脚本门禁 `20MB`）必须直接失败，禁止继续发布。
-  - **Android OTA 版本门禁规范（强制）**：当前项目规则是“所有已安装版本默认都必须更新 OTA”。禁止再通过 `targetNativeVersion`、`minNativeVersion`、`maxNativeVersion`、`allow-legacy-shells` 等方式把 OTA 只发给某个原生版本或版本区间；发布脚本与 GitHub Actions 都必须保持这一禁令，若误传相关参数必须直接失败，不能静默带着错误门禁发出去。
-  - **Android OTA 版本命名规范（强制）**：正式 OTA 的用户可见 bundle 版本必须继续沿用项目既有口径 `package.json.version-ota-UTC时间戳`。未经老板明确要求，不得因为切换发布入口（本地脚本 / GitHub Actions / 手工补发）而擅自改成 `gha-*`、run number、临时别名或其他展示格式。
-  - **Android 发布前 TypeScript 门禁（强制）**：发布 Android OTA / Native / Full 前必须通过一次 TypeScript `typecheck`（避免仅在移动端分支触发的漏 import / 漏导出在构建期被放过）。推荐统一使用 `node scripts/mobile/release-android.mjs <ota|native|full>`（该入口已内置 typecheck）；如因特殊原因绕过该入口，必须在发布前显式执行 `npm run typecheck` 并确保通过。
+- `.codex/skill/android-app-release/SKILL.md` — Android App 构建、原生更新、游戏包、OTA、网站下载入口和发布后回查时必读；执行细节、分流和验收清单以该 skill 为主源。
+- `docs/mobile-release.md` + `docs/android-app-build.md` — Android 日常发布速查和底层构建 / manifest / OTA 细节；`docs/ios-testflight-build.md` 负责 iOS TestFlight / OTA 专项。
+- `docs/deploy.md` — 服务器部署架构、构建产物、环境变量注入、线上/本地差异、服务器素材主源和公开资源域名问题时必读。
+  - **生产发布硬红线**：默认生产入口是 `node scripts/release/deploy-and-ota.mjs`；禁止在生产服务器直接运行默认 `docker compose up -d`，也禁止把只更新服务器、只更新镜像、只发布 OTA 或 workflow 成功冒充“完整更新部署”。详细步骤与例外以 `android-app-release`、`docs/deploy.md`、`docs/mobile-release.md` 为准。
+  - **发布收口硬红线**：完整上线必须回查服务器健康版本、OTA manifest / bundle / CORS 和用户原始验收位点；缺任何一项只能汇报局部发布结果，不能写完整上线完成。
 
 ---
 
 ## 📋 角色与背景
 
-你是一位**资深全栈游戏开发工程师**，专精 React 19 + TypeScript、自研游戏引擎（DomainCore + Pipeline + Systems）、现代化 UI/UX、AI 驱动开发。
-项目是 AI 驱动的现代化桌游平台，核心解决"桌游教学"与"轻量级联机"。包含用户系统（JWT）、游戏大厅、状态机驱动的游戏核心、分步教学系统。`UGC` 相关能力处于待移除状态，不再作为默认活跃模块考虑。
+> 本项目是 AI 驱动的现代化桌游平台，包含游戏大厅、联机对局、状态机驱动的游戏核心和分步教学系统；`UGC` 相关能力处于待移除状态，不作为默认活跃模块。
+
+> 技术实现、游戏规则和专项工作流以本文件列出的入口文档及 `docs/games/<gameId>/` 下的专项文档为准；本节不重复展开技术百科。
 
 ### 测试编写规范（强制）
 
@@ -313,6 +299,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `docs/testing-best-practices.md`：测试 seam、TDD 反模式、巨型测试拆分、何时该先补夹具/状态注入。
   - `docs/ai-rules/e2e-verification.md`：E2E 起跑位点、状态注入、截图证据、长链停损与组合式验证。
   - 不确定先读哪份时，先看 `docs/ai-rules/doc-index.md`。
+- **测试前置依赖与运行模式**：缺少仓库声明的必要依赖时，先按 lockfile / 项目入口补齐并重试原命令；默认优先 lite / 内存运行，不因缺少外部服务擅自升级测试、跳过验证或改用替代流程。具体依赖安装、E2E 运行模式和数据库升级条件以 `docs/automated-testing.md` 为准。
 - **新增或修改测试前必须先读测试规范（强制）**：凡本轮准备新增、删除、改写测试用例，或把某个行为升级成会阻断后续提交的测试门禁时，必须先按上面的默认读法至少打开 `docs/automated-testing.md`；若属于测试分层、测试 seam、何时该补夹具/代表态这类判断，再补读 `docs/testing-best-practices.md`。未完成这一步，不得实施测试改动。
 - **根文件只保留三条测试红线（强制）**：
   - 不得把主页/大厅/进房、`match` 内语义、终局/复盘/刷新恢复机械绑成一条默认巨型 E2E。
@@ -332,26 +319,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 #### 大杀四方 Wiki 爬虫规范（仅 `smashup` 相关任务触发）
 
-> **涉及大杀四方时，禁止凭记忆。若用户已提供并明确指定清晰的本地图片/截图/扫描件为本轮真相源，则本地图片优先；Wiki 爬虫仅作为缺图、看不清、或用户明确要求交叉核对时的补充来源。**
-
-**触发场景**：数据录入、数据核对、审计检查、效果描述查询
-
-**工具**：
-- `scripts/scrape-wiki-with-descriptions.mjs` — 抓取 Wiki 数据
-- `scripts/final-wiki-code-comparison.mjs` — 对比代码与 Wiki
-
-**流程**：
-1. `node scripts/scrape-wiki-with-descriptions.mjs` 抓取数据
-2. `node scripts/final-wiki-code-comparison.mjs` 生成差异报告
-3. 根据报告用编辑工具 / 补丁修复
-
-**注意**：
-- **默认入口强制收敛**：Smash Up Wiki 的常规抓取、单卡核对、派系对照、差异补证，默认优先使用项目现有脚本与当前会话浏览能力；必要时再用 `agent-reach` 打开单页补证。**默认不引入 Firecrawl**。
-- **仅在脚本明显不覆盖时才评估 Firecrawl**：只有出现批量分页抓取、脚本难以覆盖的 JS 动态站点、必须真实浏览器交互/登录、或明确要沉淀成长期复用采集流水线时，才考虑 Firecrawl；在此之前，不得把 Firecrawl 当作 Smash Up Wiki 的默认工具。
-- 若用户明确指定“以本地图片/截图为准”，则先看图，只有图片不足以确定结论时才允许补跑 Wiki
-- Wiki 用弯引号（`'`），代码用直引号（`'`），对比时需考虑编码差异
-- Wiki 可能有勘误重复（如 Saucy Wench vs Cut Lass），代码只保留勘误版
-- 数据可缓存，除非用户要求"重新抓取"
+- **不要凭记忆或直接在根文件执行流程**：涉及大杀四方的数据录入、核对、审计或效果描述查询时，先读 `docs/games/smashup/workflows/smashup-faction-intake.md` 的“Wiki 对照工具”小节。
+- 若用户明确指定清晰的本地图片 / 截图 / 扫描件为本轮真相源，本地图片优先；Wiki 只作缺图、看不清或明确要求交叉核对时的补充来源。
 
 #### 交互高亮回归排查（通用）
 
@@ -463,30 +432,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **本地启动默认用 lite（强制）**：未确认 Docker 已安装、可用，且本地 Mongo / 相关环境已配置前，默认使用 `npm run dev:lite` 作为启动方式。只有在任务明确依赖完整后端环境时，才切换到 `npm run dev`，例如认证/社交/管理后台、本地 Mongo 数据排查、需要 API 的联机链路、或完整 E2E 环境。禁止把 `npm run dev` 当作所有任务的默认起点。
 
 #### 1.4 分支、协作与 Git 纪律（强制）
-- **Git 复杂细则下沉到项目 skill（强制）**：根 `AGENTS.md` 只保留日常 `status/diff/commit/push` 入口和不可越过的红线；同步主分支、远端协议、pre-push 阻塞、PR、merge、fork、worktree 等细则统一以 `.codex/skill/git-operations/SKILL.md` 为准，不要再把整套 Git 提示词堆回根文件。
-- **分支 / worktree 目标锁定入口（强制）**：凡涉及清理、删除、合并、吸收、迁移、跨 worktree 收口，或发现某游戏改动落到另一游戏分支，必须先读 `docs/ai-rules/worktree-branch-target-lock.md`。未完成“用户点名对象、实际 branch/worktree、当前执行现场、游戏归属、删改影响”五项锁定前，不得删除任何分支/worktree，也不得继续改代码。
-- **开工先看当前目录职责**：开始任何实质工作前，默认以当前 `cwd` 所在工作目录为执行现场，先确认当前分支、已有改动和本轮目标是否匹配。若当前目录已有本任务进度，默认继续在这里推进；只有证据显示当前分支明显服务于另一任务线、另一游戏、另一 PR，或本任务进度明确落在其他 worktree 时，才停止并调整落点。
-- **改前锁定当前执行现场（强制）**：开始改代码前，必须同时确认 ① 当前 `cwd` 对应的是哪一棵 worktree、哪个分支；② 当前目录里的已有改动/进度是否命中本轮任务；③ 本轮准备改的文件是否属于当前目录职责。三项里任一未锁定，只能继续核对，不能直接开改；不得因为存在兄弟 worktree 就跳过当前目录。
-- **分支无关改动默认回主分支（强制）**：若发现要改的是共享规范、共享脚本、跨游戏基础设施、工具目录、构建链路、清理归档，且它们不直接服务当前功能分支主目标，则默认应回 `main` 主工作树或用户明确指定的收口分支处理；不得因为“顺手一起改”就落在当前游戏分支里。
-- **协作者分支例外必须显式成立（强制）**：只有在用户明确说明“这是协作者分支/这条分支本来就承载该共享改动”，或已有证据证明该共享改动就是当前分支实现目标的必要组成时，才允许把跨分支共享修改留在当前 worktree。否则默认视为改错现场，应停下并调整落点。
-- **分支和 worktree 有固定职责**：新分支必须从主分支创建；仓库根目录默认承担当前检出的分支职责，不因它是根目录或 `main` 就自动判为错误现场；未获确认时禁止自行创建 git worktree。
-- **PR 修复/合并的 worktree 例外（强制）**：当用户明确进入“修 PR 并合并 / 走 PR 合并流程”且目标 PR 可写时，如果仓库根目录主工作区已脏、目标 PR 与 `main` 漂移较大、或已预判存在较高冲突风险，默认允许为该 PR **创建隔离 worktree** 作为执行现场；这视为当前动作的内建执行手段，不需要再把“能不能建 worktree”单独当成阻塞问题反复询问。该授权只覆盖当前明确点名的 PR，结束后必须汇报 worktree 路径、职责和收尾状态。
-- **未经允许不得擅自创建/切换分支**：未获用户明确许可，不得擅自创建、切换、重建、删除分支，默认停留在当前分支处理；若确需切换到 main、功能分支或其他 worktree，必须先说明目标、原因和影响并获得确认。只有用户明确要求“合并到主分支 / 清理分支 / 批量收口”时，才可执行相应切换与删除。
-- **禁止把“排查/顺手清理/准备合并”当成默认授权**：即使只是为了查看差异、验证主分支、处理冲突、整理 worktree 或做发布前准备，只要会创建、切换、重建、删除分支或 worktree，也必须先拿到用户当轮明确许可；禁止先斩后奏。
-- **主分支收口规范**：涉及批量收口、统一集成、准备发布、清理工作树时，默认以 main 作为唯一收口分支；除用户明确指定外，不得把“已完成收口”的结果停留在临时分支、同步分支或孤立 worktree 中。
-- **并发改动默认存在**：默认假设工作区里始终有其他 AI 或用户并发改动，禁止把“工作区干净”当作前提；看到陌生改动时，不得擅自回滚、清空、隐藏或覆盖。
-- **已有脏工作区默认直接继续（强制）**：开始本轮任务时若已存在未提交改动，默认视为常态背景，主 agent 应直接在该基线上推进，不得仅因“工作区不干净”单独向用户二次确认是否继续。只有在执行过程中出现“新产生且无法归因到本轮操作”的异常变动、并已构成结果污染风险时，才允许暂停并说明证据后询问用户。
-- **“看着删 / 该删的删该留的留 / 帮我整理改动”默认是“先看内容再决定”，不是回滚授权（强制）**：用户这样说时，必须先逐个查看实际 diff / 文件内容，再输出“保留 / 可删 / 待确认”的判断与理由；**除非用户当轮明确要求删除、回滚、按 HEAD 覆盖或清空具体目标**，否则不得执行 `git restore`、`git checkout --`、`git clean`、覆盖回写、批量恢复到 HEAD 等会抹掉现有改动的操作。只要内容没看过或性质不明，就默认保留，不得先斩后奏。
-- **Git 回退和 stash 默认禁止**：未经用户明确许可，禁止执行 `git stash*`、历史回滚、`git restore`、`git checkout --` 等会影响现有工作区状态的命令；修 bug 必须通过编辑工具直接改代码。
-- **默认无必要不使用变基**：未获用户明确要求时，不执行 `git pull --rebase` 或其他 `rebase` 操作。
-- **merge / push 统一口径**：提交、push、`--no-verify`、快速路径都以前文“执行优先级与归并口径”为准；本节只补充 Git 协作细则，不再重复定义无校验语义。
-- **“3 权限开放”默认为一次性**：用户当轮开放 3 权限时，仅覆盖当次明确范围；任务切换、下一次提交或后续操作均不自动继承，除非用户再次明确说明继续开放。
-- **高风险 UI/规则文件合并不得只看静态门禁（强制）**：`Board.tsx`、游戏 `ui/`、共享交互组件、规则文档、agent 规则文件、关键测试断言文件，一旦在 merge 中发生冲突或大幅 diff，必须做语义对比与关键交互验证；禁止仅凭 `merge:audit` / lint / typecheck / 页面可打开收口。
-- **命令超时统一按 30 分钟上限**：shell/脚本/测试/推送命令默认最长 30 分钟，用户明确要求 `push` 时不要先用短超时试错。
+- **Git 复杂细则下沉到项目 skill（强制）**：根 `AGENTS.md` 只保留入口和不可越过的红线；日常 `status/diff/commit/push`、pre-push、远端协议、提交粒度、fork、PR、merge、worktree 细则统一以 `.codex/skill/git-operations/SKILL.md` 为准。
+- **分支 / worktree 目标锁定入口（强制）**：凡涉及清理、删除、合并、吸收、迁移、跨 worktree 收口，或发现某游戏改动落到另一游戏分支，必须先读 `docs/ai-rules/worktree-branch-target-lock.md` 并完成五项锁定：用户点名对象、实际 branch/worktree、当前执行现场、游戏归属、删改影响。
+- **PR / 分支合并入口（强制）**：PR 或分支合并执行走 `.codex/skill/merge-pr-workflow/SKILL.md`；需要让用户判断“保留哪边 / 能不能都保留”时走 `.codex/skill/merge-decision-package/SKILL.md`。
+- **禁止无授权改 Git 状态（强制）**：未经用户当轮明确许可，不得创建、切换、重建、删除分支或 worktree；不得执行 `git stash*`、历史回滚、`git restore`、`git checkout --`、`git clean`、rebase/squash 等会改变或抹掉现有状态的操作。
+- **脏工作区与并发改动默认存在（强制）**：已有未提交改动默认作为当前背景继续推进；看到陌生改动只能核对和避让，不得擅自回滚、清空、隐藏、覆盖。用户说“看着删 / 该删的删该留的留”默认是先看内容并给判断，不是回滚授权。
+- **高风险合并不得只看静态门禁（强制）**：`Board.tsx`、游戏 `ui/`、共享交互组件、规则文档、agent 规则文件、关键测试断言文件发生冲突或大幅 diff 时，必须做语义对比与关键交互验证；禁止仅凭 `merge:audit`、lint、typecheck 或页面可打开收口。
 - **文件移动/复制优先安全方案**：禁止 `robocopy /MOVE`；先复制、再验证、最后按需删除源文件。
-- **提交粒度规范（强制）**：默认以“单一问题/功能链路”合并提交；实现 + 测试/证据 + 文案/规则 + 必要版本号应归于同一提交。**禁止**把截图补证、轻量文案、单点版本号这种细碎改动拆成独立提交。
-- **允许拆分的例外（需自洽）**：影响面巨大需要风险隔离、多个模块完全不互相依赖时，可按模块拆分；发布流程确需单独版本号/发布脚本时允许单独提交，但必须明确说明原因。
-- **细碎提交的收敛要求（强制）**：若过程中产生过细提交，应在合并/交付前进行合理粒度的 squash；任何历史改写（rebase/squash）必须先征得用户明确确认。
+- **merge / push 快速路径统一口径**：提交、push、`--no-verify`、快速路径、命令超时和一次性权限，统一按前文“执行优先级与归并口径”和 `.codex/skill/git-operations/SKILL.md` 执行，本节不再复制命令细则。
 
 #### 1.5 排查与证据链（修 bug 时强制）
 - **bug 口径统一以上文 1.1 为准**：用户明确报 bug / 反馈时，默认按真实 bug 进入全链路排查，不再在本节重复定义。
@@ -509,7 +462,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **先搜代码、读规则、看真相源，再改实现**：禁止凭记忆改代码。
 - **用户报 bug 的处理口径与排查流程以上文 1.1 + 1.5 为准**。
 - **React 渲染错误 / 白屏 / 高频交互异常先看 `docs/ai-rules/golden-rules.md`**。
-- **动画 / 特效先看 `docs/ai-rules/animation-effects.md`；UI / 双端 / 布局先看 `docs/ai-rules/ui-ux.md` 与 `docs/architecture/ui-dual-platform-architecture.md`；引擎 / 领域 / move / command 先看 `docs/ai-rules/engine-systems.md`；资源 / 图集 / 音频 / CDN 先看 `docs/ai-rules/asset-pipeline.md`、`.codex/skill/audio-integration/SKILL.md`、`docs/tools.md`。**
+- **动画 / 特效先看 `docs/ai-rules/animation-effects.md`；UI / 双端 / 布局先看 `docs/ai-rules/ui-ux.md` 与 `docs/architecture/ui-dual-platform-architecture.md`；引擎 / 领域 / move / command 先看 `docs/ai-rules/engine-systems.md`；资源 / 图集 / 音频 / CDN 先看 `docs/ai-rules/asset-pipeline.md`、系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`、`docs/tools.md`。**
 
 ## React 核心规范（强制）
 
@@ -769,42 +722,23 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 
 ---
 
-（核心规则）
+### 图片 / 音频资源（核心规则）
 
-> **新增/修改图片或音频资源引用时必须先阅读 `docs/ai-rules/asset-pipeline.md`**
+> 根文件只保留资源入口和硬红线；完整图片、图集、压缩、manifest、服务器素材主源、移动包和音频合同统一看 `docs/ai-rules/asset-pipeline.md`、`docs/ai-rules/critical-image-preload.md`、`docs/ai-rules/audio-assets.md`。
 
-- **所有图片必须压缩后使用**：用 `OptimizedImage` / `getOptimizedImageUrls`，路径不含 `compressed/`（自动补全）。
-- **图片压缩规范（强制）**：
-  - **生成与运行时**：未压缩先按 `docs/ai-rules/asset-pipeline.md` 选择压缩入口；正式对局素材默认跑 `npm run compress:images` / `npm run compress:runtime-images` 且禁止降采样。运行时统一走 `OptimizedImage` / `getOptimizedImageUrls`，路径不写 `compressed/`。
-  - **统一链路优先**：图片组件、精灵图、3D 骰子、CSS background 精灵图都必须优先复用 `AssetLoader`、`OptimizedImage`、`CardPreview`、`getLocalizedImageUrls`、`getOptimizedImageUrls`；确需特殊渲染，也只能在统一链路上做最小封装。
-  - **回归先查接线一致性**：图片从“之前正常”变成空白/错图/偶发失败时，先查是否偏离统一图片链路、是否引入组件内特判、是否绕过语言化/压缩/缓存逻辑，禁止继续叠加特例。
-- **国际化资源架构（强制）**：
-  - **资源落点**：当前图片资源统一落在 `public/assets/i18n/zh-CN/<gameId>/` 目录。
-  - **代码行为**：`OptimizedImage` 和 `CardPreview` 会自动从 `i18next` 获取当前语言（`i18n.language`），无需手动传递 `locale` prop。路径会自动从 `<gameId>/images/foo.png` 转成 `i18n/<locale>/<gameId>/images/foo.png`。
-  - **无需手动传递 locale（强制）**：所有使用 `OptimizedImage`/`CardPreview` 的地方，禁止手动传递 `locale` prop（除非测试或特殊场景需要覆盖）。组件会自动从 i18next 获取当前语言。
-  - **图集加载最佳实践（强制）**：
-    - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从预加载缓存自动解析，零配置文件。
-    - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，`config` 从静态 JSON import。
-    - **注册时机**：模块顶层同步注册，禁止在 `useEffect` 中异步注册（消除首帧 shimmer）。
-    - **核心原则**：图片资源需要国际化（路径包含 `/i18n/{locale}/`），图集配置文件不需要国际化。
-  - **未来扩展**：英文版上线时，将英文图片放入 `i18n/en/<gameId>/`，代码无需修改。
-    - **服务器素材主源发布**：运行 `npm run assets:upload -- --sync` 同步到服务器素材主源，并通过公开资源域名回查。
-- **音频架构（强制）**：
-  - **设计规范**：显式 > 隐式、智能默认 + 可覆盖、单一真实来源、类型安全
-  - **事件定义**（`domain/events.ts`）：使用 `defineEvents()` 定义音频策略；`immediate` 事件必须写完整形式 `{ audio: 'immediate', sound: KEY }`，不能偷写成字符串。
-  - **音效策略**：`'ui'`（本地交互）| `'immediate'`（即时反馈）| `'fx'`（动画驱动）| `'silent'`（无音效）
-  - **feedbackResolver**：基础版 `createFeedbackResolver(EVENTS)`（1 行），高级版保留特殊逻辑 + 调用基础版（~30 行）
-  - **禁止重复播放**：每个事件的音效只在一个地方播放（UI 层 / EventStream / FX 系统）
-  - **百游戏标准**：新增游戏事件定义 ≤ 20 行，feedbackResolver 1 行或 ~30 行，UI 组件 0 行音效代码
+- **资源改动先读主源（强制）**：新增/修改图片、图集、CSS background、3D 骰子纹理、音频、移动资源包或服务器素材引用时，先读 `docs/ai-rules/asset-pipeline.md`；涉及音频接入执行时走对应 audio workflow。
+- **运行时只走统一链路（强制）**：图片统一复用 `AssetLoader`、`OptimizedImage`、`CardPreview`、`getLocalizedImageUrls`、`getOptimizedImageUrls` 等公共链路；音频统一使用通用 registry、`defineEvents()`、`createFeedbackResolver(EVENTS)` / FX 系统，禁止在单组件里自建第二套候选、压缩、locale、fallback 或播放真相。
+- **正式媒体只交付压缩运行时产物（强制）**：图片/音频运行时路径不得手写 `compressed/`，正式对局素材不得降采样；服务器素材主源、Android 素材包和 OTA 包体边界按 `asset-pipeline` 执行。
+- **国际化和图集合同回主源（强制）**：图片资源落点、`i18n.language` 默认 locale、图集注册时机、critical/warm 预加载和 manifest 回查统一看 `asset-pipeline` 与 `critical-image-preload`，根文件不再复制细则。
+- **音效只能有一个播放责任点（强制）**：UI 交互音、EventStream 即时音、FX / `onImpact` 动画音三者必须互斥；有动画事件的 `feedbackResolver` 必须返回 `null`，禁止重复播放。
 
 ---
 
 ## 🔄 标准工作流
 
 ### 代码质量检查（强制）
-- **ESLint 检查（强制）**：修改 `.ts`/`.tsx` 文件后，必须运行 `npx eslint <修改的文件路径>` 确认 0 errors（warnings 可忽略）。存在 error 时必须立即修复再继续。
-- **审查默认只做静态分析（强制）**：当用户要“检查/审查/看一下然后提交”，且当前改动对应功能在之前轮次已经完成过测试时，默认只做静态分析，不重复跑同类功能测试。最低要求是：代码改动跑 `eslint` 确认 0 errors；涉及 OpenSpec 变更时补跑 `openspec validate --all --strict --no-interactive`。理由必须按项目口径执行：已完成功能默认视为已测试过，且 `push` 后还会继续执行测试。
-- **TypeScript 编译检查（推荐）**：大范围重构后运行 `npx tsc --noEmit` 确认无类型错误。
+- **代码改动验证入口（强制）**：修改 `.ts`/`.tsx` 后按前文“文件修改与编码”执行最小验证，至少用 `npx eslint <修改的文件路径>` 确认 0 errors；大范围重构再补 `npx tsc --noEmit`。
+- **审查 / 提交 / push 口径回主源（强制）**：“检查/审查/看一下然后提交”、静态分析、hook 依赖、快速路径和 warning-only 口径统一看前文“执行优先级与归并口径”以及 `.codex/skill/git-operations/SKILL.md`，本节不再重复展开。
 - **生产依赖验证（强制）**：修改 `server.ts`、`src/server/`、`src/engine/transport/server.ts` 的 import 或修改 `package.json` 的 dependencies 时，必须运行 `npm run check:prod-deps` 确认无幽灵依赖。**教训**：`nanoid` 未显式声明，靠 devDependencies 间接提升偶然可用，生产环境 `--omit=dev` 后直接崩溃。
 
 ### 验证测试（Playwright 优先）
@@ -812,33 +746,16 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **工具/环境/命令**：统一看 `docs/automated-testing.md`。
 - **E2E 起跑位点、状态注入、截图验收、长链停损**：统一看 `docs/ai-rules/e2e-verification.md`。
 - **测试 seam、文件组织、TDD 反模式、何时拆层**：统一看 `docs/testing-best-practices.md`。
-- **审计、D1-D49、描述→实现全链路审查**：统一看 `docs/ai-rules/testing-audit.md`。
+- **审计、D 维度、描述→实现全链路审查**：统一从 `./.codex/skill/game-audit-workflow/SKILL.md` 进入，再按 references/reading-map.md 读取 testing-audit*、描述→实现、规则合同、E2E 和工具文档。
 - **引擎测试工具与系统级门禁**：统一看 `docs/ai-rules/engine-systems.md` 与 `src/engine/testing/`。
 ---
 
 ## 🎨 UI/UX 规范（核心规则）
 
-> **任何 UI 改动前都必须先阅读 `docs/ai-rules/ui-ux.md`**
+> 根文件只保留 UI 入口和硬红线；完整门禁、双端适配、截图验收、组件复用、动态提示和设计系统规则统一看 `docs/ai-rules/ui-ux.md`、`docs/ai-rules/ui-change-gates.md`、`docs/ai-rules/ui-responsive-layout.md`、`docs/mobile-adaptation.md`。
 
-- **双端默认视角（强制）**：现在默认按“网页 + App / 桌面 + 移动”双端并行设计。任何页面、共享组件、游戏 UI、交互方案在设计阶段都必须同时判断桌面端和移动端如何落地，**禁止**把移动端当作发布前再补的收尾项。
-- **PC 仍是固定构图类权威基线（强制）**：对于棋盘、战区、固定栏位、几何关系明确的复杂游戏界面，桌面端仍是结构权威来源；移动端默认做条件化适配与同构缩放，不是另起一套手机稿。这里的 `1920x1080` 只表示桌面取证视口和设计稿尺寸，不能理解成页面视觉外框或真实视口宽度上限。
-- **manifest 决定“游戏是否支持”，不是“架构是否考虑移动”（强制）**：某个游戏可以通过 `mobileProfile` 显式声明 `none`/`tablet-only` 等能力边界；但共享页面层、壳层、组件层、交互层依然必须按可扩展双端架构设计，避免以后接移动端时重做整条链路。
-- **移动端适配基线**：当前默认包含横屏建议、非游戏页竖屏自适应、双指缩放/拖拽平移和 `44px` 触控下限；详细规则见 `docs/mobile-adaptation.md`。
-- **双端分层（强制）**：
-  - 页面层统一负责路由、加载态、方向提示、对局根 `data-*` 属性和运行时终端门禁。
-  - 壳层统一负责安全区、缩放舞台、顶部 rail / side dock / bottom rail；游戏 Board 不得各写一套移动外壳。
-  - 交互层允许按设备改“触发方式”，但 `可用 / 已用 / 不可用 / 可选目标` 的真值来源必须与领域校验共用，不得桌面和移动各算一份。
-  - App 壳专属能力必须继续通过统一运行时探测 helper 隔离，不能让网页端共享 UI 直接感知原生桥。
-- **单位规范（强制）**：
-  - 文本、按钮、表单、日志、普通 HUD：默认使用 `rem`，必要时配 `clamp()`，**禁止**再用裸 `vw` 作为主字号或主控件尺寸。
-  - 固定构图类主布局：`px` 设计画布 + 外层统一等比 `scale` 只适用于 HUD、固定栏位、命中区和棋盘内容本身的尺寸换算，公式为 `scale = min(availableWidth / designWidth, availableHeight / designHeight)`；不得把它升级成“页面只能固定设计宽高”。开放式地图、棋盘、牌桌必须先有铺满真实视口的底图 / 桌面层，再把可缩放的地图内容和 HUD 放进去；宽屏或窄屏不能露纯色块、黑边、遮罩条或固定舞台边界。
-  - 触控命中区：使用 `px/rem` 下限（如 `44px`），不要跟 viewport 宽度一起漂。
-  - `vw/vh` 只允许作为局部比例辅助单位、装饰偏移或历史桌面区域的过渡方案；一旦进入 `board-shell` / 双端同构主链路，优先迁移到统一缩放或 `rem/clamp`。
-- **深度感分级**：重点区域毛玻璃+软阴影，高频更新区域禁止毛玻璃。
-- **动态提示 UI 必须 `absolute/fixed`**，禁止占用布局空间。层级：提示 z-[100-150]，交互 z-[150-200]，Modal z-[200+]。
-- **临时/瞬态 UI 不得挤压已有布局（强制）**：攻击修正徽章、buff 提示、倒计时标签等"出现/消失"的临时 UI 元素，必须使用 `absolute`/`fixed` 定位，禁止插入 flex/grid 正常流导致其他元素位移。
-- **数据/逻辑/UI 分离**：UI 只负责展示与交互。
-- **游戏 UI 设计系统**：`design-system/game-ui/MASTER.md`（通用）+ `design-system/styles/`（风格）。
-- **新增 UI 元素必须配合现有风格（强制）**：即使只改一个文件，新增的按钮/面板/提示等 UI 元素必须复用同模块已有组件（如 `GameButton`）和现有样式变量，禁止手写不一致的原生样式。修 bug 和微调不受此约束。
-- **游戏内 UI 组件单一来源（强制）**：同一类 UI 功能只允许一个主组件实现，所有场景复用该主组件；卡牌展示、选择、提示这类共享交互不得并行维护两套功能重叠实现。若某游戏已有既定主组件，就继续沿用，不要另起炉灶。详见 `docs/ai-rules/ui-ux.md` §1.1。
-- **大规模 UI 改动**（≥3 组件文件 / 新增页面 / 全局风格调整）须先读设计系统，详见 `docs/ai-rules/ui-ux.md` §0。
+- **UI 改动先读入口（强制）**：凡改 UI、样式、布局、交互壳层、截图验收、回归恢复或主交互槽位，先读 `docs/ai-rules/ui-ux.md`；涉及端到端截图和视觉判定时补读 `docs/ai-rules/ui-change-gates.md`。
+- **双端默认视角（强制）**：网页/App、桌面/移动必须在设计阶段并行考虑；`mobileProfile` 只定义当前游戏能力边界，不代表共享架构可忽略移动端。
+- **固定构图有桌面权威但不是固定外框（强制）**：`1920x1080` 是桌面取证和设计基线，不是页面最大宽高；开放式地图、棋盘和牌桌必须 Scene 铺满、HUD 独立锚定，不能露黑边、纯色块或固定舞台边界。
+- **语义不分叉（强制）**：桌面和移动可以改变触发方式，但 `可用 / 已用 / 不可用 / 可选目标` 等业务真值必须来自同一领域校验，不得两端各算一份。
+- **UI 单一来源（强制）**：同类按钮、面板、提示、卡牌展示、目标选择和共享交互必须优先复用既有组件 / 设计系统；新增 UI 元素、大规模 UI 改动和游戏专属风格合同按 `ui-change-gates` 与 `design-system/` 执行。

@@ -308,7 +308,7 @@ async function expectCardSpotlightClearOfCriticalAreas(page: Page): Promise<void
             { label: '生命/CP 面板', selector: '[data-testid="dt-player-stats-panel"]' },
             { label: '玩家面板', selector: '[data-testid="player-board-surface"]' },
             { label: '提示板', selector: '[data-testid="tip-board-surface"]' },
-            { label: '骰盘', selector: '[data-testid="dicethrone-board-dice-stage"]' },
+            { label: '右侧 2D 骰盘', selector: '[data-testid="dicethrone-2d-dice-tray"]' },
             { label: '弃牌堆', selector: '[data-testid="discard-pile"]' },
         ].flatMap(({ label, selector }) => Array.from(document.querySelectorAll(selector))
             .map((element) => ({ label, rect: toRect(element) }))
@@ -2582,7 +2582,7 @@ test('selected attack should show visible attack-modifier ui above the dice tray
     const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
     await expect(rollButton).toBeVisible({ timeout: 5000 });
     await rollButton.click();
-    await page.locator('.animate-dice3d-tumble').first().waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[data-testid="dice-2d"].animate-pulse').first().waitFor({ state: 'visible', timeout: 5000 });
     await game.screenshot('08-attack-modifier-ui-rolling', testInfo);
 
     await activeBadge.hover();
@@ -4339,7 +4339,7 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     const discardPileInspectButton = page.locator('[data-testid="discard-pile-inspect-button"]');
     const autoResponseToggle = page.locator('[data-testid="auto-response-toggle"]');
     const boardMagnifyOverlay = page.locator('[data-testid="board-magnify-overlay"]');
-    const diceFaces = page.locator('[data-testid="dice-3d"]');
+    const diceFaces = page.getByTestId('dice-2d');
     const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
     const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
     const handArea = page.locator('[data-testid="hand-area"]');

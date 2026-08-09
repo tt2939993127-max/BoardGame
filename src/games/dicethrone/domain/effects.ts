@@ -10,7 +10,7 @@ import type { EffectAction, RollDieConditionalEffect, RollDieDefaultEffect } fro
 export type { RollDieConditionalEffect, RollDieDefaultEffect };
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { getActiveDice, getAttackDiceFaceCounts, getAttackDiceValues, getFaceCounts, getOpponents, getPlayerDieFace, getTokenStackLimit } from './rules';
+import { getActiveDice, getAttackDiceFaceCounts, getAttackDiceValues, getFaceCounts, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS } from './ids';
 import type {
@@ -320,6 +320,7 @@ export function createBonusDiceWithReroll(
     const { attackerId, sourceAbilityId, state, timestamp, random } = ctx;
     const targetId = config.damageTargetId ?? ctx.targetId;
     if (!random) return [];
+    const allowDiceModification = config.allowDiceModification;
 
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
@@ -374,7 +375,7 @@ export function createBonusDiceWithReroll(
             attackBonusSourceCardId: config.attackBonusSourceCardId,
             postSettleBonusDamageAdds: config.postSettleBonusDamageAdds,
             customResolutionId: config.customResolutionId,
-            allowDiceModification: config.allowDiceModification,
+            allowDiceModification,
             opensAfterRollConfirmedResponseWindow,
         };
         events.push({
@@ -408,7 +409,7 @@ export function createBonusDiceWithReroll(
                     attackBonusSourceCardId: config.attackBonusSourceCardId,
                     postSettleBonusDamageAdds: config.postSettleBonusDamageAdds,
                     customResolutionId: config.customResolutionId,
-                    allowDiceModification: config.allowDiceModification,
+                    allowDiceModification,
                     opensAfterRollConfirmedResponseWindow,
                 },
             },
@@ -417,7 +418,7 @@ export function createBonusDiceWithReroll(
         } as BonusDiceRerollRequestedEvent);
 
         // 可被改骰的 displayOnly 奖励骰必须等玩家确认后，用改后的骰面结算。
-        if (!config.allowDiceModification) {
+        if (!allowDiceModification) {
             events.push(...resolveNoToken(dice));
         }
     }
@@ -498,7 +499,8 @@ function resolveEffectAction(
     ctx: EffectContext,
     bonusDamage?: number,
     random?: RandomFn,
-    sfxKey?: string
+    sfxKey?: string,
+    rollDieBonusDamageMode?: 'inline' | 'standalone',
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const timestamp = ctx.timestamp ?? 0;
@@ -783,45 +785,43 @@ function resolveEffectAction(
                     timestamp,
                     sfxKey,
                 };
-                const perDieEvents: DiceThroneEvent[] = [bonusDieEvent];
-
-                // 触发匹配的条件效果，或 defaultEffect
-                if (matchedEffect) {
-                    const conditionalEvents = resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey, random);
-                    perDieEvents.push(...conditionalEvents);
-                } else if (action.defaultEffect) {
-                    perDieEvents.push(...resolveDefaultEffect(action.defaultEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey, random));
-                }
-
-                events.push(...perDieEvents);
-
-                // rollDie 的多颗奖励骰需要按顺序“看到”前一颗骰子的落点。
-                // 否则像“连续两颗骷髅各施加 1 层状态”或“连续两颗战利品各抽 1 张牌”
-                // 会都基于旧状态计算，导致后续骰子的累计效果被吞掉。
-                for (const evt of perDieEvents) {
-                    ctx.state = reduceDiceThroneCore(ctx.state, evt);
-                }
+                events.push(bonusDieEvent);
             }
 
-            // 骰子特写展示（单骰或多骰都显示）
-            if (diceCount >= 1) {
-                events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, rollDice, timestamp));
-            }
-
-            if (action.resolutionMode === 'attackBonus' && ctx.accumulatedBonusDamage && ctx.accumulatedBonusDamage > 0) {
-                events.push({
-                    type: 'BONUS_DAMAGE_ADDED',
-                    payload: {
-                        playerId: attackerId,
-                        amount: ctx.accumulatedBonusDamage,
-                        sourceCardId: action.attackBonusSourceCardId ?? sourceAbilityId,
+            const rollDieUltimateLocked = state.pendingAttack?.isUltimate === true
+                && state.pendingAttack.sourceAbilityId === sourceAbilityId;
+            events.push({
+                type: 'BONUS_DICE_REROLL_REQUESTED',
+                payload: {
+                    settlement: {
+                        id: sourceAbilityId + '-roll-' + timestamp,
+                        sourceAbilityId,
+                        attackerId,
+                        targetId: ctx.defenderId,
+                        dice: rollDice,
+                        rerollCostTokenId: '',
+                        rerollCostAmount: 0,
+                        rerollCount: 0,
+                        maxRerollCount: 0,
+                        readyToSettle: false,
+                        resolutionMode: 'none',
+                        allowDiceModification: rollDieUltimateLocked ? false : true,
+                        ultimateLocked: rollDieUltimateLocked,
+                        rollDieResolution: {
+                            conditionalEffects: action.conditionalEffects,
+                            defaultEffect: action.defaultEffect,
+                            effectTargetId: targetId,
+                            bonusDamageMode: rollDieBonusDamageMode,
+                            resolutionMode: action.resolutionMode,
+                            attackBonusSourceCardId: action.attackBonusSourceCardId,
+                            isDefensiveContext: ctx.isDefensiveContext,
+                            sfxKey,
+                        },
                     },
-                    sourceCommandType: 'ABILITY_EFFECT',
-                    timestamp,
-                    sfxKey,
-                } as BonusDamageAddedEvent);
-                ctx.accumulatedBonusDamage = 0;
-            }
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as BonusDiceRerollRequestedEvent);
             break;
         }
 
@@ -1260,6 +1260,110 @@ function resolveDefaultEffect(
 }
 
 /**
+ * 在 rollDie settlement 收口时，按最终骰面执行条件/默认效果。
+ * 投掷阶段只负责产生骰面与当前骰区，避免改骰后仍执行旧骰面的副作用。
+ */
+export function resolveRollDieSettlement(params: {
+    state: DiceThroneCore;
+    settlement: PendingBonusDiceSettlement;
+    random: RandomFn;
+    timestamp: number;
+}): DiceThroneEvent[] {
+    const { state, settlement, random, timestamp } = params;
+    const resolution = settlement.rollDieResolution;
+    if (!resolution) return [];
+    const effectTargetId = resolution.effectTargetId ?? settlement.targetId;
+
+    const ctx: EffectContext = {
+        attackerId: settlement.attackerId,
+        defenderId: settlement.targetId,
+        sourceAbilityId: settlement.sourceAbilityId,
+        state,
+        damageDealt: 0,
+        timestamp,
+        isDefensiveContext: resolution.isDefensiveContext,
+    };
+    const events: DiceThroneEvent[] = [];
+
+    for (const die of getPendingBonusSettlementDice(settlement)) {
+        const matchedEffect = resolution.conditionalEffects?.find(effect => effect.face === die.face);
+        const perDieEvents = matchedEffect
+            ? resolveConditionalEffect(
+                matchedEffect,
+                ctx,
+                effectTargetId,
+                settlement.sourceAbilityId,
+                timestamp,
+                resolution.sfxKey,
+                random,
+            )
+            : resolution.defaultEffect
+                ? resolveDefaultEffect(
+                    resolution.defaultEffect,
+                    ctx,
+                    effectTargetId,
+                    settlement.sourceAbilityId,
+                    timestamp,
+                    resolution.sfxKey,
+                    random,
+                )
+                : [];
+
+        events.push(...perDieEvents);
+        for (const event of perDieEvents) {
+            ctx.state = reduceDiceThroneCore(ctx.state, event);
+        }
+    }
+
+    if (
+        (
+            resolution.resolutionMode === 'attackBonus'
+            || resolution.bonusDamageMode === 'inline'
+        )
+        && (ctx.accumulatedBonusDamage ?? 0) > 0
+    ) {
+        events.push({
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: settlement.attackerId,
+                amount: ctx.accumulatedBonusDamage,
+                ...(resolution.resolutionMode === 'attackBonus'
+                    ? { sourceCardId: resolution.attackBonusSourceCardId ?? settlement.sourceAbilityId }
+                    : {}),
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+            sfxKey: resolution.sfxKey,
+        } as BonusDamageAddedEvent);
+        ctx.accumulatedBonusDamage = 0;
+    } else if (
+        resolution.resolutionMode !== 'none'
+        && (ctx.accumulatedBonusDamage ?? 0) > 0
+    ) {
+        // 普通 rollDie 的 bonusDamage 没有后续 damage 动作消费时，
+        // 延后到最终骰面确认后按原规则造成一笔独立伤害。
+        const target = ctx.state.players[settlement.targetId];
+        const bonusDamage = ctx.accumulatedBonusDamage;
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: settlement.targetId,
+                amount: bonusDamage,
+                actualDamage: target ? Math.min(bonusDamage, targetHp) : 0,
+                sourceAbilityId: settlement.sourceAbilityId,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+            sfxKey: resolution.sfxKey,
+        } as DamageDealtEvent);
+        ctx.accumulatedBonusDamage = 0;
+    }
+
+    return events;
+}
+
+/**
  * 解析指定时切的所有效果，生成事件
  */
 export function resolveEffectsToEvents(
@@ -1305,8 +1409,17 @@ export function resolveEffectsToEvents(
 
     const timedEffects = combatAbilityManager.instance.getEffectsByTiming(effects, timing);
 
-    for (const effect of timedEffects) {
+    for (let effectIndex = 0; effectIndex < timedEffects.length; effectIndex += 1) {
+        const effect = timedEffects[effectIndex];
         if (!effect.action) {
+            continue;
+        }
+        // 奖励骰收口后会恢复同一攻击链。已经接受的 rollDie 不能再次投掷，
+        // 否则恢复主伤害时会覆盖当前骰区并重复消耗随机数。
+        if (
+            effect.action.type === 'rollDie'
+            && ctx.state.pendingAttack?.bonusDiceResolved === true
+        ) {
             continue;
         }
         const isDamageAction = effect.action.type === 'damage'
@@ -1340,7 +1453,25 @@ export function resolveEffectsToEvents(
             totalBonus += ctx.accumulatedBonusDamage;
         }
 
-        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey).filter(e => e !== undefined);
+        const rollDieBonusDamageMode = effect.action.type === 'rollDie'
+            && timing === 'withDamage'
+            && ctx.state.pendingAttack?.attackerId === ctx.attackerId
+            && timedEffects.slice(effectIndex + 1).some(candidate => (
+                candidate.action?.type === 'damage'
+                || (candidate.action?.type === 'custom'
+                    && !!candidate.action.customActionId
+                    && isCustomActionCategory(candidate.action.customActionId, 'damage'))
+            ))
+            ? 'inline' as const
+            : 'standalone' as const;
+        const effectEvents = resolveEffectAction(
+            effect.action,
+            ctx,
+            totalBonus || undefined,
+            config?.random,
+            effect.sfxKey,
+            rollDieBonusDamageMode,
+        ).filter(e => e !== undefined);
         const immediateEvents: DiceThroneEvent[] = [];
         for (const event of effectEvents) {
             if (
