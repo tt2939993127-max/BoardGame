@@ -6,6 +6,9 @@ RUNNER_USER="${RUNNER_USER:-root}"
 RUNNER_HOST="${RUNNER_HOST:-}"
 RUNNER_PORT="${RUNNER_PORT:-18761}"
 RUNNER_TOKEN="${RUNNER_TOKEN:-}"
+ASSET_PUBLISH_TOKEN="${ASSET_PUBLISH_TOKEN:-}"
+ASSET_PUBLISH_HOST="${ASSET_PUBLISH_HOST:-}"
+ASSET_PUBLISH_PORT="${ASSET_PUBLISH_PORT:-}"
 UNIT_PATH="/etc/systemd/system/boardgame-deploy-runner.service"
 ENV_PATH="/etc/boardgame-deploy-runner.env"
 
@@ -25,6 +28,14 @@ if [ -z "$RUNNER_TOKEN" ]; then
     RUNNER_TOKEN="$(openssl rand -hex 32)"
   else
     RUNNER_TOKEN="$(date +%s | sha256sum | awk '{print $1}')"
+  fi
+fi
+
+if [ -z "$ASSET_PUBLISH_TOKEN" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    ASSET_PUBLISH_TOKEN="$(openssl rand -hex 32)"
+  else
+    ASSET_PUBLISH_TOKEN="$(date +%s%N | sha256sum | awk '{print $1}')"
   fi
 fi
 
@@ -65,6 +76,14 @@ $SUDO tee "$ENV_PATH" >/dev/null <<EOF
 BG_DEPLOY_RUNNER_HOST=${RUNNER_HOST}
 BG_DEPLOY_RUNNER_PORT=${RUNNER_PORT}
 BG_DEPLOY_RUNNER_TOKEN=${RUNNER_TOKEN}
+BG_ASSET_PUBLISH_TOKEN=${ASSET_PUBLISH_TOKEN}
+BG_ASSET_PUBLISH_ASSETS_ROOT=/home/admin/storage/assets
+BG_ASSET_PUBLISH_MAX_UPLOAD_BYTES=5368709120
+BG_ASSET_PUBLISH_MAX_CHUNK_BYTES=8388608
+BG_ASSET_PUBLISH_MAX_SESSIONS=4
+BG_ASSET_PUBLISH_SESSION_TTL_SECONDS=3600
+BG_ASSET_PUBLISH_HOST=${ASSET_PUBLISH_HOST:-${RUNNER_HOST}}
+BG_ASSET_PUBLISH_PORT=${ASSET_PUBLISH_PORT}
 # 后台部署由 deploy-runner 的 30 分钟整步超时兜底，避免部署长时间无结果。
 BG_DEPLOY_RUNNER_DEPLOY_STEP_TIMEOUT_SECONDS=1800
 # runner 已提供整次部署总时限，关闭脚本内层总时限与单镜像时限，避免重复计时。
@@ -103,3 +122,6 @@ echo
 echo "BoardGame deploy runner installed."
 echo "Write this token into the web runtime env as BG_DEPLOY_RUNNER_TOKEN:"
 echo "${RUNNER_TOKEN}"
+echo
+echo "Use this token for ASSET_SERVER_UPLOAD_TOKEN / BG_ASSET_PUBLISH_TOKEN:"
+echo "${ASSET_PUBLISH_TOKEN}"

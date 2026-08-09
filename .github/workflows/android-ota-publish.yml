@@ -128,8 +128,8 @@ jobs:
         shell: bash
         env:
           ANDROID_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || vars.ANDROID_VITE_BACKEND_URL || secrets.VITE_BACKEND_URL || secrets.ANDROID_VITE_BACKEND_URL }}
-          ASSET_SERVER_SSH_PRIVATE_KEY: ${{ secrets.ASSET_SERVER_SSH_PRIVATE_KEY }}
-          ASSET_SERVER_SSH_KNOWN_HOSTS: ${{ secrets.ASSET_SERVER_SSH_KNOWN_HOSTS }}
+          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL }}
+          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
           DRY_RUN: ${{ steps.params.outputs.dry_run }}
         run: |
           missing=()
@@ -139,8 +139,8 @@ jobs:
           fi
 
           if [[ "${DRY_RUN}" != "true" ]]; then
-            [[ -n "${ASSET_SERVER_SSH_PRIVATE_KEY}" ]] || missing+=("ASSET_SERVER_SSH_PRIVATE_KEY")
-            [[ -n "${ASSET_SERVER_SSH_KNOWN_HOSTS}" ]] || missing+=("ASSET_SERVER_SSH_KNOWN_HOSTS")
+            [[ -n "${ASSET_SERVER_UPLOAD_URL}" ]] || missing+=("ASSET_SERVER_UPLOAD_URL")
+            [[ -n "${ASSET_SERVER_UPLOAD_TOKEN}" ]] || missing+=("ASSET_SERVER_UPLOAD_TOKEN")
           fi
 
           if [[ ${#missing[@]} -eq 0 ]]; then
@@ -248,25 +248,11 @@ jobs:
         if: steps.prereq.outputs.ready == 'true'
         run: npm run mobile:android:sync
 
-      - name: Configure asset server SSH
-        if: steps.prereq.outputs.ready == 'true' && steps.params.outputs.dry_run != 'true'
-        shell: bash
-        env:
-          ASSET_SERVER_SSH_PRIVATE_KEY: ${{ secrets.ASSET_SERVER_SSH_PRIVATE_KEY }}
-          ASSET_SERVER_SSH_KNOWN_HOSTS: ${{ secrets.ASSET_SERVER_SSH_KNOWN_HOSTS }}
-        run: |
-          install -d -m 700 "${HOME}/.ssh"
-          printf '%s\n' "${ASSET_SERVER_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/asset-publisher"
-          chmod 600 "${HOME}/.ssh/asset-publisher"
-          printf '%s\n' "${ASSET_SERVER_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
-          chmod 600 "${HOME}/.ssh/known_hosts"
-
       - name: Publish Android OTA bundle
         if: steps.prereq.outputs.ready == 'true'
         env:
-          ASSET_SERVER_SSH_TARGET: ${{ vars.ASSET_SERVER_SSH_TARGET || 'admin@8.148.71.102' }}
-          ASSET_SERVER_SSH_KEY_PATH: /home/runner/.ssh/asset-publisher
-          ASSET_SERVER_SSH_KNOWN_HOSTS_PATH: /home/runner/.ssh/known_hosts
+          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL }}
+          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
         shell: bash
         run: |
           args=(

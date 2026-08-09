@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import {
     createReadStream,
     createWriteStream,
@@ -13,10 +15,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
+import { URL } from 'node:url';
 
 export const SERVER_PUBLISH_MANIFEST_FILE = '.boardgame-publish-manifest.json';
 const DEFAULT_SSH_TARGET = 'admin@8.148.71.102';
 const MAX_PROCESS_OUTPUT_CHARS = 256 * 1024;
+const DEFAULT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 
 const appendProcessOutput = (current, chunk) => {
     const next = current + chunk.toString();
@@ -60,6 +64,13 @@ const waitForProcess = (child, label) => new Promise((resolve, reject) => {
         reject(new Error(`${label} 失败，exit=${code}: ${stderr.trim() || stdout.trim()}`));
     });
 });
+
+const resolveAssetUploadToken = () => (
+    process.env.ASSET_SERVER_UPLOAD_TOKEN?.trim()
+    || process.env.BG_ASSET_PUBLISH_TOKEN?.trim()
+    || process.env.BG_DEPLOY_RUNNER_TOKEN?.trim()
+    || ''
+);
 
 const normalizeAssetKey = (key) => {
     const normalized = String(key || '').replace(/\\/g, '/').replace(/^\/+/, '');
@@ -146,7 +157,145 @@ export const stagePrimaryAssetUploads = async (uploads) => {
     }
 };
 
-export const publishStagedAssetsToServer = async ({ stagingRoot }) => {
+const resolvePositiveInteger = (value, fallback, label) => {
+    if (value === undefined) return fallback;
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+        throw new Error(`${label} 必须是正整数`);
+    }
+    return parsed;
+};
+
+const appendUploadPath = (endpointUrl, suffix) => {
+    const url = new URL(endpointUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${suffix}`;
+    return url;
+};
+
+const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body }) => new Promise((resolve, reject) => {
+    const client = endpointUrl.protocol === 'https:' ? https : http;
+    let settled = false;
+    const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+    };
+    const request = client.request(endpointUrl, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            ...headers,
+        },
+    }, (response) => {
+        let responseBody = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+            responseBody = appendProcessOutput(responseBody, chunk);
+        });
+        response.on('end', () => {
+            if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+                settled = true;
+                resolve(responseBody.trim());
+                return;
+            }
+            fail(new Error(
+                `素材上传入口发布失败，status=${response.statusCode}: ${responseBody.trim() || response.statusMessage || ''}`,
+            ));
+        });
+    });
+    request.on('error', fail);
+    if (!body) {
+        request.end();
+        return;
+    }
+    pipeline(body, request).catch(fail);
+});
+
+const createAssetUploadArchive = async (stagingRoot) => {
+    const archiveRoot = mkdtempSync(path.join(tmpdir(), 'boardgame-asset-upload-'));
+    const archivePath = path.join(archiveRoot, 'upload.tar');
+    const tarProcess = spawn('tar', ['-C', stagingRoot, '-cf', '-', '.'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+    });
+    try {
+        const [tarResult] = await Promise.all([
+            waitForProcess(tarProcess, '创建服务器发布归档'),
+            pipeline(tarProcess.stdout, createWriteStream(archivePath)),
+        ]);
+        if (tarResult.stderr.trim()) {
+            console.warn(`[server-primary] tar: ${tarResult.stderr.trim()}`);
+        }
+        return { archiveRoot, archivePath, size: statSync(archivePath).size };
+    } catch (error) {
+        if (!tarProcess.killed) {
+            tarProcess.kill('SIGTERM');
+        }
+        await removeStagingRoot(archiveRoot);
+        throw error;
+    }
+};
+
+export const publishStagedAssetsToUploadEndpoint = async ({
+    stagingRoot,
+    uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim() || '',
+    token = resolveAssetUploadToken(),
+    chunkSizeBytes = resolvePositiveInteger(
+        process.env.ASSET_SERVER_UPLOAD_CHUNK_BYTES,
+        DEFAULT_UPLOAD_CHUNK_BYTES,
+        '素材上传分块大小',
+    ),
+}) => {
+    if (!uploadUrl) {
+        throw new Error('缺少素材上传入口 ASSET_SERVER_UPLOAD_URL');
+    }
+    if (!token) {
+        throw new Error('缺少素材上传 token：请配置 ASSET_SERVER_UPLOAD_TOKEN 或 BG_ASSET_PUBLISH_TOKEN');
+    }
+
+    let endpointUrl;
+    try {
+        endpointUrl = new URL(uploadUrl);
+    } catch {
+        throw new Error(`素材上传入口 URL 无效: ${uploadUrl}`);
+    }
+    if (endpointUrl.protocol !== 'http:' && endpointUrl.protocol !== 'https:') {
+        throw new Error(`素材上传入口协议无效: ${uploadUrl}`);
+    }
+
+    const safeChunkSizeBytes = resolvePositiveInteger(chunkSizeBytes, DEFAULT_UPLOAD_CHUNK_BYTES, '素材上传分块大小');
+    const archive = await createAssetUploadArchive(stagingRoot);
+    const uploadId = randomUUID();
+    try {
+        for (let start = 0; start < archive.size; start += safeChunkSizeBytes) {
+            const end = Math.min(start + safeChunkSizeBytes, archive.size) - 1;
+            await sendAssetUploadRequest({
+                endpointUrl: appendUploadPath(endpointUrl, `chunks/${uploadId}`),
+                token,
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'Content-Length': String(end - start + 1),
+                    'Content-Range': `bytes ${start}-${end}/${archive.size}`,
+                },
+                body: createReadStream(archive.archivePath, { start, end }),
+            });
+        }
+        const responseBody = await sendAssetUploadRequest({
+            endpointUrl: appendUploadPath(endpointUrl, `complete/${uploadId}`),
+            token,
+            headers: { 'Content-Length': '0' },
+        });
+        if (responseBody) {
+            console.log(responseBody);
+        }
+    } catch (error) {
+        throw error;
+    } finally {
+        await removeStagingRoot(archive.archiveRoot);
+    }
+};
+
+export const publishStagedAssetsBySsh = async ({ stagingRoot }) => {
     const sshTarget = process.env.ASSET_SERVER_SSH_TARGET?.trim() || DEFAULT_SSH_TARGET;
     const sshArgs = [
         '-o', 'BatchMode=yes',
@@ -191,6 +340,18 @@ export const publishStagedAssetsToServer = async ({ stagingRoot }) => {
     if (sshResult.stderr.trim()) {
         console.warn(`[server-primary] ssh: ${sshResult.stderr.trim()}`);
     }
+};
+
+export const publishStagedAssetsToServer = async (staged) => {
+    const uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim();
+    if (uploadUrl) {
+        await publishStagedAssetsToUploadEndpoint({
+            stagingRoot: staged.stagingRoot,
+            uploadUrl,
+        });
+        return;
+    }
+    await publishStagedAssetsBySsh(staged);
 };
 
 export const publishPrimaryAssetBatch = async (uploads, options = {}) => {

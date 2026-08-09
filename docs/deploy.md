@@ -152,6 +152,16 @@ BG_DEPLOY_RUNNER_URL=http://host.docker.internal:18761
 BG_DEPLOY_RUNNER_TOKEN=安装脚本输出的token
 ```
 
+安装脚本还会输出一串独立素材发布 token。协作者或 CI 发布素材时使用：
+
+```bash
+# 协作者 / CI 使用对外开放或反代后的专用素材上传入口，例如：
+ASSET_SERVER_UPLOAD_URL=https://assets-upload.easyboardgame.top/asset-publish
+ASSET_SERVER_UPLOAD_TOKEN=安装脚本输出的素材发布token
+```
+
+上传脚本会把 tar 自动拆成 8MiB 请求块，全部接收后才触发服务器校验和原子发布；协作者只需配置上面的 URL 与 token，不需要 SSH 私钥或 known-hosts。若只给服务器 `web` 容器内部调用，也可以使用 `http://host.docker.internal:18761/asset-publish`。若要开放独立端口，安装 runner 时设置 `ASSET_PUBLISH_HOST=0.0.0.0 ASSET_PUBLISH_PORT=<port>`，再用防火墙或 Nginx/TLS 只暴露 `/asset-publish`。`ASSET_SERVER_UPLOAD_TOKEN` 只允许向 runner 的 `/asset-publish` 入口提交素材发布包；它不是生产 SSH 私钥，也不授予部署 /回滚权限。
+
 > **部署总超时口径**：直接执行 `deploy-image.sh deploy/update/deploy-local/update-local/rollback/rollback-last` 时，`DEPLOY_TOTAL_TIMEOUT_SECONDS=1800` 会为整次变更操作提供 30 分钟总时限；`DEPLOY_IMAGE_PULL_TIMEOUT_SECONDS=1800` 只是单个镜像拉取的次级保护，不能替代整次部署总时限。`boardgame-deploy-runner` 安装脚本会把脚本内层总时限和单镜像时限都设为 `0`，统一由 `BG_DEPLOY_RUNNER_DEPLOY_STEP_TIMEOUT_SECONDS=1800` 提供唯一的 30 分钟整步保护，避免重复计时。超过总时限必须失败，不得继续后台假卡死；重新执行前先检查当前容器状态，确认旧版本仍在运行或完成必要回退。
 >
 > **脚本执行入口**：需要变更生产状态的操作必须先把 `deploy-image.sh` 下载为文件，再执行该文件。禁止继续使用 `curl ... | bash` 直接管道执行变更操作，因为管道模式无法安全自重入并施加整次部署总时限。
@@ -474,7 +484,7 @@ GitHub Actions 自动化：
 - **大型发布包同样服务器直连**：`official/app-updates/**`、`official/mobile-packages/**`、`official/native-app-updates/**` 与普通素材一样，统一由服务器 443 的 `/home/admin/storage/assets/current` 返回，不再配置 Worker / R2 路由。
 - **服务器是在线下载主源**：`/home/admin/storage/assets/current` 保存所有 `official/**/assets-manifest.json` 展开的普通素材，以及当前公开清单递归引用的 OTA、游戏包和原生安装包。2026-07-10 本地 12 份分层素材清单约 2.55GiB，叠加当前移动发布集合预计约 3GiB；同步默认设置 4GiB 活动集合上限，并至少保留 5GiB 磁盘空闲，不复制历史发布全集。
 - **服务器 current 只保留运行时交付物**：普通素材清单递归展开时只能把 `compressed/*.webp`、`compressed/*.ogg`、运行时 `.svg/.json` 以及 OTA / 原生 / 移动包所需 `.zip/.apk` 纳入活动集合；源 `.png/.jpg/.jpeg/.mp3/.wav` 只能留在本地用于再压缩，不能进入线上 `current`。
-- **服务器也是正式发布主源**：上传、移动包和 OTA 命令不变，但脚本现在通过专用受限 SSH 密钥把本批对象直接写入服务器 staging，校验后原子切换 `current`。不再等待或依赖对象存储才能上线。
+- **服务器也是正式发布主源**：上传、移动包和 OTA 命令不变，但脚本现在优先通过专用素材上传入口把本批对象交给宿主机 runner；runner 写入服务器 staging，校验后原子切换 `current`。受限 SSH 只保留为管理员应急 fallback，不再作为协作者默认发布前提；也不再等待或依赖对象存储才能上线。
 - **发布成功判据绑定本次产物**：大型 ZIP / APK 通过服务器来源头和本次 `Content-Length` 校验；file-index / latest manifest 通过服务器正文大小和 SHA-256 校验。不得用已经存在的旧 fallback ZIP 证明新的索引或 manifest 已经同步。
 - **玩家素材下载必须是服务器直连**：`https://assets.easyboardgame.top/official/**` 的完成态是 Cloudflare 灰云 `A -> 8.148.71.102`，由服务器本机 `boardgame-asset-origin.service` 在 443 端口直接返回素材。只把服务器放在 Cloudflare Worker 后面当源站，不算玩家直连。
 - **直连验收口径**：必须用真实域名 `https://assets.easyboardgame.top/official/**` 发起带 SNI 的 HTTPS 请求，同时满足 `remote_ip=8.148.71.102`、响应里没有 `CF-Ray` / `Server: cloudflare`、`X-Asset-Source: server`、目标 URL 返回真实素材大小而不是主站 HTML。`https://8.148.71.102/official/**`、服务器本机 curl 或 `http://8.148.71.102/official/**` 都不能替代域名直连验收。

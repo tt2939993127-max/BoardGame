@@ -2,19 +2,36 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import {
+    createWriteStream,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { pipeline } from 'node:stream/promises';
 
 const rootDir = process.cwd();
 const host = process.env.BG_DEPLOY_RUNNER_HOST || '127.0.0.1';
 const port = Number.parseInt(process.env.BG_DEPLOY_RUNNER_PORT || '18761', 10);
 const token = process.env.BG_DEPLOY_RUNNER_TOKEN || '';
+const assetPublishToken = process.env.BG_ASSET_PUBLISH_TOKEN || token;
 const allowUnauthenticated = process.env.BG_DEPLOY_RUNNER_ALLOW_UNAUTHENTICATED === '1';
 const outputLimit = 200_000;
 const deployStepTimeoutMs = readPositiveIntegerEnv('BG_DEPLOY_RUNNER_DEPLOY_STEP_TIMEOUT_SECONDS', 30 * 60) * 1000;
 const mobileReleaseStepTimeoutMs = readPositiveIntegerEnv('BG_DEPLOY_RUNNER_MOBILE_STEP_TIMEOUT_SECONDS', 30 * 60) * 1000;
+const assetPublishMaxUploadBytes = readPositiveIntegerEnv('BG_ASSET_PUBLISH_MAX_UPLOAD_BYTES', 5 * 1024 * 1024 * 1024);
+const assetPublishMaxChunkBytes = readPositiveIntegerEnv('BG_ASSET_PUBLISH_MAX_CHUNK_BYTES', 8 * 1024 * 1024);
+const assetPublishMaxSessions = readPositiveIntegerEnv('BG_ASSET_PUBLISH_MAX_SESSIONS', 4);
+const assetPublishSessionTtlMs = readPositiveIntegerEnv('BG_ASSET_PUBLISH_SESSION_TTL_SECONDS', 60 * 60) * 1000;
+const assetPublishAssetsRoot = process.env.BG_ASSET_PUBLISH_ASSETS_ROOT || '/home/admin/storage/assets';
+const assetPublishHost = process.env.BG_ASSET_PUBLISH_HOST || host;
+const assetPublishPort = Number.parseInt(process.env.BG_ASSET_PUBLISH_PORT || '', 10);
 const jobs = new Map();
+const assetPublishSessions = new Map();
 
 let activeJobId = null;
 
@@ -31,6 +48,11 @@ const server = createServer(async (req, res) => {
                 activeJobId,
                 scriptReady: deployScriptReady(),
                 release: mobileReleaseStatus(),
+                assetPublish: {
+                    script: assetPublishScriptReady(),
+                    assetsRoot: assetPublishAssetsRoot,
+                    maxUploadBytes: assetPublishMaxUploadBytes,
+                },
             });
             return;
         }
@@ -189,6 +211,21 @@ const server = createServer(async (req, res) => {
             return;
         }
 
+        if (req.method === 'POST' && req.url?.startsWith('/asset-publish/chunks/')) {
+            await handleAssetPublishChunkRequest(req, res);
+            return;
+        }
+
+        if (req.method === 'POST' && req.url?.startsWith('/asset-publish/complete/')) {
+            await handleAssetPublishCompleteRequest(req, res);
+            return;
+        }
+
+        if (req.method === 'POST' && req.url === '/asset-publish') {
+            await handleAssetPublishRequest(req, res);
+            return;
+        }
+
         if (req.method === 'POST' && req.url === '/deploy/rollback/execute') {
             if (!authorize(req)) {
                 sendJson(res, 401, { ok: false, error: 'Unauthorized' });
@@ -235,6 +272,217 @@ server.listen(port, host, () => {
     console.log(`Deploy runner listening on http://${host}:${port}`);
 });
 
+if (
+    Number.isFinite(assetPublishPort)
+    && assetPublishPort > 0
+    && (assetPublishPort !== port || assetPublishHost !== host)
+) {
+    const assetServer = createServer(async (req, res) => {
+        try {
+            if (req.method === 'GET' && req.url === '/health') {
+                sendJson(res, 200, {
+                    ok: true,
+                    activeJobId,
+                    assetPublish: {
+                        script: assetPublishScriptReady(),
+                        assetsRoot: assetPublishAssetsRoot,
+                        maxUploadBytes: assetPublishMaxUploadBytes,
+                    },
+                });
+                return;
+            }
+            if (req.method === 'POST' && req.url?.startsWith('/asset-publish/chunks/')) {
+                await handleAssetPublishChunkRequest(req, res);
+                return;
+            }
+            if (req.method === 'POST' && req.url?.startsWith('/asset-publish/complete/')) {
+                await handleAssetPublishCompleteRequest(req, res);
+                return;
+            }
+            if (req.method === 'POST' && req.url === '/asset-publish') {
+                await handleAssetPublishRequest(req, res);
+                return;
+            }
+            sendJson(res, 404, { ok: false, error: 'Not found' });
+        } catch (error) {
+            sendJson(res, 400, {
+                ok: false,
+                error: error instanceof Error ? error.message : 'Bad request',
+            });
+        }
+    });
+    assetServer.listen(assetPublishPort, assetPublishHost, () => {
+        console.log(`Asset publish runner listening on http://${assetPublishHost}:${assetPublishPort}`);
+    });
+}
+
+async function handleAssetPublishRequest(req, res) {
+    if (!authorizeAssetPublish(req)) {
+        sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+        return;
+    }
+    if (!assetPublishScriptReady()) {
+        sendJson(res, 503, { ok: false, error: 'Asset publish script not found' });
+        return;
+    }
+    if (activeJobId) {
+        sendJson(res, 409, { ok: false, error: 'Deploy runner is busy', activeJobId });
+        return;
+    }
+
+    const job = createJob([], 'node scripts/assets/apply-server-asset-publish.mjs');
+    try {
+        const result = await runAssetPublish(job, req);
+        finishJob(job, 0);
+        sendJson(res, 200, {
+            ok: true,
+            mode: 'asset-publish',
+            jobId: job.id,
+            command: job.command,
+            output: result.output,
+            parsed: parseScriptOutput(result.output),
+        });
+    } catch (error) {
+        appendJobOutput(job, `\n${error instanceof Error ? error.message : String(error)}\n`);
+        finishJob(job, 1);
+        sendJson(res, 503, {
+            ok: false,
+            mode: 'asset-publish',
+            jobId: job.id,
+            command: job.command,
+            output: job.output,
+            error: error instanceof Error ? error.message : 'Asset publish failed',
+        });
+    }
+}
+
+async function handleAssetPublishChunkRequest(req, res) {
+    if (!authorizeAssetPublish(req)) {
+        sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+        return;
+    }
+
+    let session;
+    try {
+        const sessionId = readAssetPublishSessionId(req.url, 'chunks');
+        const range = parseAssetUploadContentRange(req.headers['content-range']);
+        if (range.total > assetPublishMaxUploadBytes) {
+            throw new Error(`Asset upload exceeds ${assetPublishMaxUploadBytes} byte limit`);
+        }
+        if (range.length > assetPublishMaxChunkBytes) {
+            throw new Error(`Asset upload chunk exceeds ${assetPublishMaxChunkBytes} byte limit`);
+        }
+
+        cleanupExpiredAssetPublishSessions();
+        session = assetPublishSessions.get(sessionId) || createAssetPublishSession(sessionId, range.total);
+        if (session.totalBytes !== range.total) {
+            throw new Error('Asset upload total size does not match the existing session');
+        }
+        if (session.writing) {
+            sendJson(res, 409, { ok: false, error: 'Asset upload session is busy' });
+            return;
+        }
+        if (range.start < session.receivedBytes) {
+            if (range.end < session.receivedBytes) {
+                req.resume();
+                res.writeHead(204);
+                res.end();
+                return;
+            }
+            throw new Error(`Asset upload range overlaps existing data at ${session.receivedBytes}`);
+        }
+        if (range.start !== session.receivedBytes) {
+            sendJson(res, 409, {
+                ok: false,
+                error: 'Asset upload range is out of order',
+                expectedStart: session.receivedBytes,
+            });
+            return;
+        }
+
+        session.writing = true;
+        const receivedBytes = await writeRequestBody(req, session.archivePath, {
+            maxBytes: assetPublishMaxChunkBytes,
+            append: true,
+        });
+        if (receivedBytes !== range.length) {
+            throw new Error(`Asset upload chunk length mismatch: expected=${range.length} actual=${receivedBytes}`);
+        }
+        session.receivedBytes += receivedBytes;
+        session.updatedAt = Date.now();
+        res.writeHead(204);
+        res.end();
+    } catch (error) {
+        if (session) {
+            removeAssetPublishSession(session.id);
+        }
+        sendJson(res, 400, {
+            ok: false,
+            error: error instanceof Error ? error.message : 'Asset upload chunk rejected',
+        });
+    } finally {
+        if (session) {
+            session.writing = false;
+        }
+    }
+}
+
+async function handleAssetPublishCompleteRequest(req, res) {
+    if (!authorizeAssetPublish(req)) {
+        sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+        return;
+    }
+
+    const sessionId = readAssetPublishSessionId(req.url, 'complete');
+    cleanupExpiredAssetPublishSessions();
+    const session = assetPublishSessions.get(sessionId);
+    if (!session) {
+        sendJson(res, 404, { ok: false, error: 'Asset upload session not found' });
+        return;
+    }
+    if (session.writing || activeJobId) {
+        sendJson(res, 409, { ok: false, error: 'Deploy runner is busy', activeJobId });
+        return;
+    }
+    if (session.receivedBytes !== session.totalBytes) {
+        sendJson(res, 409, {
+            ok: false,
+            error: 'Asset upload is incomplete',
+            receivedBytes: session.receivedBytes,
+            totalBytes: session.totalBytes,
+        });
+        return;
+    }
+
+    const job = createJob([], 'node scripts/assets/apply-server-asset-publish.mjs');
+    session.writing = true;
+    try {
+        const result = await runAssetPublishArchive(job, session.archivePath, session.workRoot);
+        finishJob(job, 0);
+        sendJson(res, 200, {
+            ok: true,
+            mode: 'asset-publish',
+            jobId: job.id,
+            command: job.command,
+            output: result.output,
+            parsed: parseScriptOutput(result.output),
+        });
+    } catch (error) {
+        appendJobOutput(job, `\n${error instanceof Error ? error.message : String(error)}\n`);
+        finishJob(job, 1);
+        sendJson(res, 503, {
+            ok: false,
+            mode: 'asset-publish',
+            jobId: job.id,
+            command: job.command,
+            output: job.output,
+            error: error instanceof Error ? error.message : 'Asset publish failed',
+        });
+    } finally {
+        removeAssetPublishSession(session.id);
+    }
+}
+
 function authorize(req) {
     if (allowUnauthenticated) return true;
     const provided = readToken(req);
@@ -245,7 +493,20 @@ function authorize(req) {
     return timingSafeEqual(expectedBuffer, providedBuffer);
 }
 
+function authorizeAssetPublish(req) {
+    if (allowUnauthenticated) return true;
+    const provided = readToken(req);
+    const expected = assetPublishToken || token;
+    if (!provided || !expected) return false;
+    const expectedBuffer = Buffer.from(expected);
+    const providedBuffer = Buffer.from(provided);
+    if (expectedBuffer.length !== providedBuffer.length) return false;
+    return timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
 function readToken(req) {
+    const assetHeaderToken = req.headers['x-asset-publish-token'];
+    if (typeof assetHeaderToken === 'string') return assetHeaderToken;
     const headerToken = req.headers['x-deploy-runner-token'];
     if (typeof headerToken === 'string') return headerToken;
     const auth = req.headers.authorization;
@@ -451,6 +712,190 @@ function finishJob(job, exitCode) {
     activeJobId = null;
 }
 
+async function runAssetPublish(job, req) {
+    const workRoot = mkdtempSync(path.join(tmpdir(), 'boardgame-asset-runner-'));
+    const archivePath = path.join(workRoot, 'upload.tar');
+    try {
+        await writeRequestBody(req, archivePath, { maxBytes: assetPublishMaxUploadBytes });
+        return await runAssetPublishArchive(job, archivePath, workRoot);
+    } finally {
+        rmSync(workRoot, { recursive: true, force: true });
+    }
+}
+
+async function runAssetPublishArchive(job, archivePath, workRoot) {
+    const stagingRoot = path.join(workRoot, 'staging');
+    mkdirSync(stagingRoot, { recursive: true });
+    const entriesResult = await runCapturedCommand('tar', ['-tf', archivePath], {
+        label: 'list asset archive',
+    });
+    assertSafeAssetArchiveEntries(entriesResult.output);
+    await runCapturedCommand('tar', [
+        '--no-same-owner',
+        '--no-same-permissions',
+        '-xf',
+        archivePath,
+        '-C',
+        stagingRoot,
+    ], {
+        label: 'extract asset archive',
+    });
+    const applyResult = await runCapturedCommand(process.execPath, [
+        assetPublishScriptPath(),
+        '--staging',
+        stagingRoot,
+        '--assets-root',
+        assetPublishAssetsRoot,
+    ], {
+        label: 'apply asset publish',
+    });
+    appendJobOutput(job, applyResult.output);
+    return applyResult;
+}
+
+async function writeRequestBody(req, targetPath, { maxBytes, append = false } = {}) {
+    const contentLength = Number(req.headers['content-length']);
+    if (Number.isSafeInteger(contentLength) && contentLength > maxBytes) {
+        req.resume();
+        throw new Error(`Asset upload too large: ${contentLength} > ${maxBytes}`);
+    }
+    let receivedBytes = 0;
+    req.on('data', (chunk) => {
+        receivedBytes += chunk.length;
+        if (receivedBytes > maxBytes) {
+            req.destroy(new Error(`Asset upload too large: ${receivedBytes} > ${maxBytes}`));
+        }
+    });
+    await pipeline(req, createWriteStream(targetPath, { flags: append ? 'a' : 'w' }));
+    return receivedBytes;
+}
+
+function readAssetPublishSessionId(rawUrl, action) {
+    const pathname = new URL(rawUrl, 'http://deploy-runner').pathname;
+    const prefix = `/asset-publish/${action}/`;
+    if (!pathname.startsWith(prefix)) {
+        throw new Error('Asset upload session URL is invalid');
+    }
+    const sessionId = pathname.slice(prefix.length);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+        throw new Error('Asset upload session ID is invalid');
+    }
+    return sessionId;
+}
+
+function parseAssetUploadContentRange(value) {
+    const raw = Array.isArray(value) ? value[0] : value;
+    const match = typeof raw === 'string'
+        ? raw.match(/^bytes (\d+)-(\d+)\/(\d+)$/)
+        : null;
+    if (!match) {
+        throw new Error('Asset upload Content-Range is invalid');
+    }
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    const total = Number(match[3]);
+    if (
+        !Number.isSafeInteger(start)
+        || !Number.isSafeInteger(end)
+        || !Number.isSafeInteger(total)
+        || start < 0
+        || end < start
+        || total <= 0
+        || end >= total
+    ) {
+        throw new Error('Asset upload Content-Range is out of bounds');
+    }
+    return { start, end, total, length: end - start + 1 };
+}
+
+function createAssetPublishSession(id, totalBytes) {
+    if (assetPublishSessions.size >= assetPublishMaxSessions) {
+        throw new Error('Too many active asset upload sessions');
+    }
+    const workRoot = mkdtempSync(path.join(tmpdir(), 'boardgame-asset-session-'));
+    const session = {
+        id,
+        totalBytes,
+        receivedBytes: 0,
+        workRoot,
+        archivePath: path.join(workRoot, 'upload.tar'),
+        writing: false,
+        updatedAt: Date.now(),
+    };
+    assetPublishSessions.set(id, session);
+    return session;
+}
+
+function removeAssetPublishSession(id) {
+    const session = assetPublishSessions.get(id);
+    if (!session) return;
+    assetPublishSessions.delete(id);
+    rmSync(session.workRoot, { recursive: true, force: true });
+}
+
+function cleanupExpiredAssetPublishSessions() {
+    const now = Date.now();
+    for (const session of assetPublishSessions.values()) {
+        if (!session.writing && now - session.updatedAt > assetPublishSessionTtlMs) {
+            removeAssetPublishSession(session.id);
+        }
+    }
+}
+
+function assertSafeAssetArchiveEntries(output) {
+    for (const entry of output.split(/\r?\n/)) {
+        if (!entry) continue;
+        const normalized = entry.replace(/^\.\//, '');
+        if (
+            normalized === ''
+            || normalized === '.'
+            || normalized === 'official'
+            || normalized === 'official/'
+            || normalized === '.boardgame-publish-manifest.json'
+        ) {
+            continue;
+        }
+        if (
+            normalized.startsWith('official/')
+            && !normalized.includes('\0')
+            && !normalized.includes('\\')
+            && !`/${normalized}/`.includes('/../')
+            && !`/${normalized}/`.includes('/./')
+        ) {
+            continue;
+        }
+        throw new Error(`archive entry rejected: ${entry}`);
+    }
+}
+
+function runCapturedCommand(command, args, options = {}) {
+    const label = options.label || command;
+    return new Promise((resolve, reject) => {
+        let output = '';
+        const child = spawn(command, args, {
+            cwd: rootDir,
+            env: process.env,
+            windowsHide: true,
+        });
+        const append = (chunk) => {
+            output += chunk.toString('utf8');
+            if (output.length > outputLimit) {
+                output = output.slice(output.length - outputLimit);
+            }
+        };
+        child.stdout.on('data', append);
+        child.stderr.on('data', append);
+        child.on('error', (error) => reject(error));
+        child.on('exit', (code) => {
+            if (code === 0) {
+                resolve({ exitCode: 0, output });
+                return;
+            }
+            reject(new Error(`${label} failed: exit=${code ?? 'unknown'}\n${output}`));
+        });
+    });
+}
+
 function deployScriptPath() {
     return path.join(rootDir, 'scripts/deploy/deploy-image.sh');
 }
@@ -476,6 +921,14 @@ function mobileReleaseStatus() {
         releaseApk: existsSync(path.join(rootDir, 'android/app/build/outputs/apk/release/easyboardgame-release.apk')),
         serverAssetsReady: existsSync(path.join(rootDir, 'scripts/assets/apply-server-asset-publish.mjs')),
     };
+}
+
+function assetPublishScriptPath() {
+    return path.join(rootDir, 'scripts/assets/apply-server-asset-publish.mjs');
+}
+
+function assetPublishScriptReady() {
+    return existsSync(assetPublishScriptPath());
 }
 
 function validateMobileReleaseArgs(body) {
