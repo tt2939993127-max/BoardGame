@@ -2549,7 +2549,7 @@ function ScenarioBookTurnSheet({
           {page ? `剧本 ${String(page.pageNumber).padStart(2, "0")}` : title}
         </div>
         <h3 className="mt-2 text-[21px] font-black tracking-[0.04em] text-[#3b2211] lg:text-[27px]">
-          {page?.type === "cover" ? title : section ? title : "下一页"}
+          {page?.type === "cover" ? title : section ? title : t("board.scenario.readerNext")}
         </h3>
         {section ? (
           <>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Route, Routes } from 'react-router-dom';
 import {
   CONFIG_REVIEW_GAME_IDS,
@@ -19,11 +20,15 @@ export const CONFIG_REVIEW_PAGE_ROUTES = CONFIG_REVIEW_GAME_IDS.map((gameId) => 
   Component: CONFIG_REVIEW_PAGE_BY_GAME_ID[gameId],
 }));
 
-const ConfigReviewRouteLoading = () => (
-  <main className="flex min-h-screen items-center justify-center bg-[#1d130c] font-serif text-[#f3e3c3]">
-    加载配置表…
-  </main>
-);
+const ConfigReviewRouteLoading = () => {
+  const { t } = useTranslation('common');
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#1d130c] font-serif text-[#f3e3c3]">
+      {t('loading')}
+    </main>
+  );
+};
 
 export function ConfigReviewRoutePage({ Component }: { Component: ConfigReviewPageComponent }) {
   return (

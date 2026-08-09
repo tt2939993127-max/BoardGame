@@ -1179,6 +1179,7 @@
     "card_not_in_hand": "Card is not in hand",
     "invalid_phase": "Cannot perform this action in current phase",
     "roll_limit_reached": "Roll limit reached",
+    "defense_reroll_die_limit_exceeded": "This defense ability can only reroll a limited number of dice this time",
     "roll_already_confirmed": "Roll already confirmed",
     "no_roll_yet": "Please roll the dice first",
     "ability_not_available": "This ability is not available",

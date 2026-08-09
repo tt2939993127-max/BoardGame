@@ -1,6 +1,6 @@
 {
   "title": "法师战争",
-  "description": "2 人法术战棋。首轮 foundation 锁定正式竞技场、法师状态、法术书与事件驱动特效合同。",
+  "description": "双人法术战棋。首轮基础流程锁定正式竞技场、法师状态、法术书与事件驱动特效合同。",
   "players": "2 人",
   "arena": {
     "mode": "正式竞技场",
@@ -162,7 +162,7 @@
     }
   },
   "error": {
-    "unsupportedCommand": "当前命令尚未进入 foundation 实现范围。"
+    "unsupportedCommand": "当前命令尚未进入基础流程实现范围。"
   },
   "spellbook": {
     "previousPage": "上一页",

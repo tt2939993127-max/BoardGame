@@ -148,7 +148,8 @@
     },
     "material": {
       "ready": "Card image wired",
-      "missing-sprite": "Missing card image"
+      "missing-sprite": "Missing card image",
+      "noPreview": "No card image is available"
     },
     "values": {
       "configVersion": {

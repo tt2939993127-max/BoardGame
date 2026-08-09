@@ -148,7 +148,8 @@
     },
     "material": {
       "ready": "已接入卡图",
-      "missing-sprite": "缺卡图"
+      "missing-sprite": "缺卡图",
+      "noPreview": "没有可用卡图"
     },
     "values": {
       "configVersion": {

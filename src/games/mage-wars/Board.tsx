@@ -78,6 +78,22 @@ const VISIBLE_STATUS_TOKENS = [
     { id: 'stun', image: TOKEN_IMAGES.stun, labelKey: 'tokens.stun' },
 ] as const;
 
+type VisibleStatusTokenId = (typeof VISIBLE_STATUS_TOKENS)[number]['id'];
+
+const getVisibleStatusTokenLabel = (
+    t: ReturnType<typeof useTranslation>['t'],
+    statusTokenId: VisibleStatusTokenId,
+) => {
+    switch (statusTokenId) {
+        case 'burn': return t('tokens.burn');
+        case 'daze': return t('tokens.daze');
+        case 'weak': return t('tokens.weak');
+        case 'cripple': return t('tokens.cripple');
+        case 'rot': return t('tokens.rot');
+        case 'stun': return t('tokens.stun');
+    }
+};
+
 const SPELL_CARD_BACK = 'mage-wars/cards/backs/spell-card-back';
 const SPELL_CARD_BACK_ASPECT_RATIO = 992 / 1391;
 
@@ -636,14 +652,14 @@ function ZoneFieldCard({
                     'pointer-events-none absolute flex items-center gap-1',
                     compact ? '-bottom-1 left-0.5 scale-[0.78] origin-bottom-left' : '-bottom-2 left-2',
                 )}>
-                    {VISIBLE_STATUS_TOKENS.map(({ id, image, labelKey }) => {
+                    {VISIBLE_STATUS_TOKENS.map(({ id, image }) => {
                         const count = object.statusTokens[id] ?? 0;
                         return count > 0 ? (
                             <span
                                 key={id}
                                 className="inline-flex items-center gap-0.5 rounded-full bg-black/62 px-1 py-0.5 text-[0.62rem] font-bold text-amber-50 shadow-[0_4px_12px_rgba(0,0,0,0.38)]"
                             >
-                                <TokenImage src={image} alt={t(labelKey)} className="h-5 w-5" />
+                                <TokenImage src={image} alt={getVisibleStatusTokenLabel(t, id)} className="h-5 w-5" />
                                 {count > 1 ? count : null}
                             </span>
                         ) : null;
@@ -1111,14 +1127,14 @@ function ZoneOccupant({
                 {player.guarding ? (
                     <TokenImage src={TOKEN_IMAGES.guard} alt={t('tokens.guard')} className="h-7 w-7" />
                 ) : null}
-                {VISIBLE_STATUS_TOKENS.map(({ id, image, labelKey }) => {
+                {VISIBLE_STATUS_TOKENS.map(({ id, image }) => {
                     const count = player.statusTokens[id] ?? 0;
                     return count > 0 ? (
                         <span
                             key={id}
                             className="inline-flex items-center gap-0.5 rounded-full bg-black/62 px-1 py-0.5 text-[0.62rem] font-bold text-amber-50 shadow-[0_4px_12px_rgba(0,0,0,0.38)]"
                         >
-                            <TokenImage src={image} alt={t(labelKey)} className="h-5 w-5" />
+                            <TokenImage src={image} alt={getVisibleStatusTokenLabel(t, id)} className="h-5 w-5" />
                             {count > 1 ? count : null}
                         </span>
                     ) : null;

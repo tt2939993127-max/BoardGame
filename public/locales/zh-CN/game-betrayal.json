@@ -11,7 +11,12 @@
     "rowSummary": "当前 {{filtered}} 行 / 全部 {{total}} 行；无效草稿 {{invalid}} 个",
     "pendingEdits": "已暂存 {{count}} 个字段修改；提交后会作为“配置修正提案”保存，正式合入仍需要回写代码并验证。",
     "auditCoverage": "字段覆盖由配置适配器统一定义：{{count}} 个必审字段。表格不会展示独立配置副本；来源文档和核对证据只用于审查。",
-    "feedbackInitialContent": "小黑屋配置表字段修正：请根据当前值、修改后值和来源证据审核。"
+    "feedbackInitialContent": "小黑屋配置表字段修正：请根据当前值、修改后值和来源证据审核。",
+    "material": {
+      "noPreview": "没有可预览房间图",
+      "closePreview": "关闭房间图预览",
+      "previewMetadata": "图像编号：{{visualId}} · 图集帧：{{frameIndex}}"
+    }
   },
   "players": "3-6 人",
   "actionLog": {

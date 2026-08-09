@@ -213,7 +213,7 @@ export const BetrayalConfigReview = () => {
         if (columnKey !== 'image') return undefined;
         const target = resolveRoomPreviewTarget(row);
         if (!target) {
-          return <div className="flex h-[58px] w-[74px] items-center justify-center rounded-[6px] border border-[#8f6642]/30 bg-[#ead8b8]/60 text-[#8f6642]" title="没有可预览房间图"><ImageOff aria-hidden="true" className="h-4 w-4" /></div>;
+          return <div className="flex h-[58px] w-[74px] items-center justify-center rounded-[6px] border border-[#8f6642]/30 bg-[#ead8b8]/60 text-[#8f6642]" title={t('configReview.material.noPreview')}><ImageOff aria-hidden="true" className="h-4 w-4" /></div>;
         }
         return (
           <button
@@ -251,13 +251,13 @@ export const BetrayalConfigReview = () => {
       runtimeContext={{ mode: 'local', gameId: 'betrayal' }}
       testIdPrefix="betrayal-config"
     />
-    <MagnifyOverlay isOpen={Boolean(magnifiedRoom)} onClose={() => setMagnifiedRoom(null)} closeLabel="关闭房间图预览" overlayClassName="bg-black/55" overlayTestId="betrayal-config-room-magnify">
+    <MagnifyOverlay isOpen={Boolean(magnifiedRoom)} onClose={() => setMagnifiedRoom(null)} closeLabel={t('configReview.material.closePreview')} overlayClassName="bg-black/55" overlayTestId="betrayal-config-room-magnify">
       {magnifiedRoom ? (
         <div className="flex max-h-[88vh] w-[min(88vw,760px)] flex-col gap-3 rounded-[14px] bg-[#2a1a10] p-4 text-[#f7e6c6] shadow-2xl">
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-xl font-bold">{magnifiedRoom.name}</div>
-              <div className="text-xs text-[#d9bd8c]">visualId: {magnifiedRoom.visualId} · 图集帧: {magnifiedRoom.visual.frameIndex}</div>
+              <div className="text-xs text-[#d9bd8c]">{t('configReview.material.previewMetadata', { visualId: magnifiedRoom.visualId, frameIndex: magnifiedRoom.visual.frameIndex })}</div>
             </div>
           </div>
           <RoomTilePreviewImage {...magnifiedRoom} locale={locale} className="mx-auto max-h-[76vh] w-full" />
