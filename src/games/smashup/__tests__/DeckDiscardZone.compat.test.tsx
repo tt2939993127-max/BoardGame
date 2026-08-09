@@ -59,4 +59,24 @@ describe('DeckDiscardZone 移动兼容布局', () => {
         expect(titanCard.style.height).toBe('100%');
         expect(titanFrame?.style.height).toContain('calc(');
     });
+
+    it('公共怪物和宝藏牌库同时保留小牌本体与数量锚点', () => {
+        const { getByTestId } = render(
+            <DeckDiscardZone
+                deckCount={12}
+                monsterDeckCount={20}
+                treasureDeckCount={22}
+                discard={[]}
+                isMyTurn
+                compactLayout
+                dispatch={vi.fn()}
+                playerID="0"
+            />,
+        );
+
+        expect(getByTestId('su-munchkin-monster-supply-card')).toBeTruthy();
+        expect(getByTestId('su-munchkin-monster-supply-count')).toHaveTextContent('x 20');
+        expect(getByTestId('su-munchkin-treasure-supply-card')).toBeTruthy();
+        expect(getByTestId('su-munchkin-treasure-supply-count')).toHaveTextContent('x 22');
+    });
 });

@@ -82,7 +82,11 @@ export function useGameProviderRuntime(args: {
         return Boolean(optimisticEngineRef.current);
     }, []);
 
-    const requestProviderResync = useCallback(() => {
+    const requestProviderResync = useCallback((force = false) => {
+        if (force) {
+            clientRef.current?.resync({ force: true });
+            return;
+        }
         clientRef.current?.resync();
     }, []);
 
@@ -262,7 +266,7 @@ export function useGameProviderRuntime(args: {
             const client = clientRef.current;
             if (!client) return;
             resetOptimisticProviderRuntime();
-            requestProviderResync();
+            requestProviderResync(true);
         });
     }, [requestProviderResync, resetOptimisticProviderRuntime]);
 

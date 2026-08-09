@@ -82,7 +82,6 @@ const ACTION_LOG_ALLOWLIST = [
     'USE_PASSIVE_ABILITY',
     // 确认投掷：记录最终骰面结果
     'CONFIRM_ROLL',
-    'RESTORE_COVERED_ROLL',
     // 交互确认会承载关键选择结果（如暴击/精准），需要进入操作日志
     'SYS_INTERACTION_RESPOND',
 ] as const;

@@ -20,6 +20,8 @@ interface TokenResponseModalProps {
     lastEvasionRoll?: { value: number; success: boolean };
     statusIconAtlas?: StatusAtlases | null;
     tokenUsableOverrides?: Record<string, number>;
+    /** 闪避骰仍是当前骰区时，允许从棋盘/右侧被动入口继续干预它。 */
+    allowBackgroundInteraction?: boolean;
 }
 
 function getTokenCategory(
@@ -136,6 +138,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     lastEvasionRoll,
     statusIconAtlas,
     tokenUsableOverrides,
+    allowBackgroundInteraction = false,
 }) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -183,7 +186,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
             autoSkipTimerRef.current = null;
         }
 
-        if (hadAnyAction && !hasAnyAction) {
+        if (hadAnyAction && !hasAnyAction && !lastEvasionRoll) {
             if (autoSkipTimerRef.current === null) {
                 autoSkipTimerRef.current = setTimeout(() => {
                     autoSkipTimerRef.current = null;
@@ -265,6 +268,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                         size="sm"
                         variant={category === 'evasive' ? 'glass' : 'primary'}
                         onClick={() => onUseToken(tokenDef.id, useAmount)}
+                        data-testid={`token-response-use-${tokenDef.id}`}
                         disabled={isDisabled}
                         className={clsx(
                             'ml-4 -translate-y-0.5 shadow-[0_6px_0_#b45309] active:translate-y-[3px] active:shadow-[0_2px_0_#b45309]',
@@ -284,6 +288,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
             title={isAttackerPhase ? t('tokenResponse.attackerTitle') : t('tokenResponse.defenderTitle')}
             width="lg"
             closeOnBackdrop={false}
+            allowBackgroundInteraction={allowBackgroundInteraction}
         >
             <div className="flex w-full flex-col gap-6 max-[1023px]:gap-3" data-testid="token-response-modal">
                 <p className="text-sm sm:text-base max-[1023px]:text-xs text-slate-400 text-center">

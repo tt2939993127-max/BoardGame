@@ -607,6 +607,33 @@ describe('Feature: incremental-state-sync', () => {
       client.disconnect();
     });
 
+    it('恢复可见时应强制刷新正在进行中的同步，避免等待旧同步超时', () => {
+      const onDebugEvent = vi.fn();
+      const visibleClient = new GameTransportClient({
+        server: '',
+        matchID: 'test-match',
+        playerID: '0',
+        credentials: 'test-cred',
+        onDebugEvent,
+      });
+      visibleClient.connect();
+      mockSocket.simulateEvent('connect');
+      simulateSync({ core: { hp: 100 } }, [{ id: 0 }], 7);
+      mockSocket.clearEmitted();
+
+      visibleClient.resync();
+      expect(mockSocket.findEmitted('sync')).toHaveLength(1);
+
+      visibleClient.resync({ force: true });
+      expect(mockSocket.findEmitted('sync')).toHaveLength(2);
+      expect(onDebugEvent).toHaveBeenCalledWith(expect.objectContaining({
+        stage: 'sync-requested',
+        reason: 'forced-manual-resync',
+      }));
+
+      visibleClient.disconnect();
+    });
+
     it('manual resync on disconnected socket should request reconnect instead of emitting sync', () => {
       const onDebugEvent = vi.fn();
       const client = new GameTransportClient({
@@ -844,7 +871,7 @@ describe('Feature: incremental-state-sync', () => {
       simulateSync({ core: { turn: 0 } }, [{ id: 0 }], 7);
       mockSocket.clearEmitted();
 
-      client.sendCommand('attack', { target: '1' });
+      expect(client.sendCommand('attack', { target: '1' })).toBe(true);
       expect(mockSocket.findEmitted('command')).toHaveLength(1);
 
       mockSocket.simulateEvent('error', 'test-match', reason);
@@ -855,12 +882,12 @@ describe('Feature: incremental-state-sync', () => {
       expect(mockSocket.findEmitted('sync')).toHaveLength(1);
 
       // 全量同步尚未回来时，不能继续发送仍基于旧 stateID 的命令。
-      client.sendCommand('defend', { target: '1' });
+      expect(client.sendCommand('defend', { target: '1' })).toBe(false);
       expect(mockSocket.findEmitted('command')).toHaveLength(1);
 
       // 收到新权威状态后才恢复发送，并使用新的 stateID。
       simulateSync({ core: { turn: 1 } }, [{ id: 0 }], 9);
-      client.sendCommand('defend', { target: '1' });
+      expect(client.sendCommand('defend', { target: '1' })).toBe(true);
       const commandEmits = mockSocket.findEmitted('command');
       expect(commandEmits).toHaveLength(2);
       expect(commandEmits[1]?.args[4]).toEqual({ expectedStateID: 9 });

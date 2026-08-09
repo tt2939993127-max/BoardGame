@@ -1730,7 +1730,7 @@ test.describe('DiceThrone hand card preview regression', () => {
 
       const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
       await expect(overlay).toBeVisible({ timeout: 5000 });
-      const bonusDie = overlay.locator('.dice3d-perspective').first();
+      const bonusDie = overlay.getByTestId('dice-2d').first();
       await expect(bonusDie).toBeVisible({ timeout: 5000 });
       await bonusDie.click({ force: true });
 
@@ -2240,7 +2240,7 @@ test.describe('DiceThrone hand card preview regression', () => {
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
-    await expect(bonusDieOverlay.locator('[data-testid="dice-3d"]')).toHaveCount(6, { timeout: 10000 });
+    await expect(bonusDieOverlay.getByTestId('dice-2d')).toHaveCount(6, { timeout: 10000 });
     await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
     await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*2.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
 

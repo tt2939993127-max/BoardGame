@@ -25,7 +25,6 @@ import { getChoiceResolvedEventHandler } from './choiceResolvedEvents';
 import { hasCurrentChoiceAnchor } from './choiceEffects';
 import {
     getActiveDice,
-    getCombatOpponentId,
     getResponderQueue,
     isInteractiveBonusDiceSettlement,
     shouldOpenAfterRollConfirmedForBonusSettlement,
@@ -36,6 +35,7 @@ import {
     buildAfterRollConfirmedSignature,
     hasAfterRollConfirmedWindowBeenHandled,
 } from './responseWindowGuards';
+import { buildBonusDiceSettlementEvents } from './executeTokens';
 
 const UNSATISFIABLE_CHOICE_REASONS = new Set([
     'empty-options',
@@ -70,13 +70,12 @@ const buildBonusDiceAfterRollConfirmedWindowEvent = (
 
     const rollerId = settlement.attackerId;
     const phase = (state.sys.phase || 'main1') as TurnPhase;
-    const responseTriggerId = getCombatOpponentId(state.core, rollerId) ?? rollerId;
     const responderQueue = getResponderQueue(
         state.core,
         'afterRollConfirmed',
-        responseTriggerId,
-        undefined,
         rollerId,
+        undefined,
+        undefined,
         phase,
     );
     if (responderQueue.length === 0) {
@@ -151,6 +150,29 @@ function isStaleOffensiveRollEndChoiceResolved(core: DiceThroneCore, event: Choi
     }
 
     return (player.tokens[tokenId] ?? 0) <= 0;
+}
+
+function isModificationOnlyBonusSettlement(
+    settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
+): boolean {
+    return Boolean(
+        settlement
+        && settlement.allowDiceModification === true
+        && settlement.maxRerollCount === 0
+        && settlement.rerollCount === 0
+        && settlement.ultimateLocked !== true,
+    );
+}
+
+function isClosedBonusDiceResponseWindow(
+    state: MatchState<DiceThroneCore>,
+    event: DiceThroneEvent,
+): boolean {
+    if (event.type !== 'RESPONSE_WINDOW_CLOSED') return false;
+    const settlement = state.core.pendingBonusDiceSettlement;
+    return isModificationOnlyBonusSettlement(settlement)
+        && shouldOpenAfterRollConfirmedForBonusSettlement(settlement)
+        && state.core.afterRollResponseWindowSignature?.includes(`|settlement:${settlement.id}`) === true;
 }
 
 function queueDiceThroneInteraction(
@@ -700,26 +722,6 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     continue;
                 }
 
-                if (dtEvent.type === 'ROLL_CONTEXT_RESTORED') {
-                    // 恢复事件已经把领域状态切回覆盖前步骤；新骰区对应的交互和响应锁
-                    // 也必须一起清掉，否则系统会继续等待已经不存在的奖励骰/对掷输入。
-                    newState = {
-                        ...newState,
-                        sys: {
-                            ...newState.sys,
-                            interaction: {
-                                ...newState.sys.interaction,
-                                current: undefined,
-                                queue: [],
-                            },
-                            responseWindow: {
-                                current: undefined,
-                            },
-                        },
-                    };
-                    continue;
-                }
-
                 // ---- INTERACTION_REQUESTED → 根据类型创建不同交互 ----
                 if (dtEvent.type === 'INTERACTION_REQUESTED') {
                     const payload = (dtEvent as InteractionRequestedEvent).payload;
@@ -969,16 +971,6 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // 用户点击 Continue → SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED → resolveInteraction
                 if (dtEvent.type === 'BONUS_DICE_REROLL_REQUESTED') {
                     const payload = (dtEvent as BonusDiceRerollRequestedEvent).payload;
-                    // displayOnly 且不可改骰的 settlement 不创建交互；displayOnly 但可改骰仍是当前骰区交互。
-                    if (isInteractiveBonusDiceSettlement(payload.settlement)) {
-                        const interaction: EngineInteractionDescriptor = {
-                            id: `dt-bonus-dice-${payload.settlement.id}`,
-                            kind: 'dt:bonus-dice',
-                            playerId: payload.settlement.attackerId,
-                            data: null,
-                        };
-                        newState = syncCurrentChoiceAnchorWithInteraction(queueInteraction(newState, interaction));
-                    }
                     const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
                     const responseWindowEvent = buildBonusDiceAfterRollConfirmedWindowEvent(
                         newState,
@@ -988,6 +980,36 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     );
                     if (responseWindowEvent) {
                         nextEvents.push(responseWindowEvent);
+                    } else if (isModificationOnlyBonusSettlement(payload.settlement)) {
+                        // 没有任何合法改骰牌时，奖励骰立即按当前骰面收口；不把“等待介入”伪装成攻击骰确认。
+                        nextEvents.push(...buildBonusDiceSettlementEvents({
+                            state: newState.core,
+                            settlement: payload.settlement,
+                            random,
+                            timestamp: eventTimestamp,
+                            sourceCommandType: 'BONUS_DICE_AUTO_SETTLE',
+                        }));
+                    } else if (isInteractiveBonusDiceSettlement(payload.settlement)) {
+                        const interaction: EngineInteractionDescriptor = {
+                            id: `dt-bonus-dice-${payload.settlement.id}`,
+                            kind: 'dt:bonus-dice',
+                            playerId: payload.settlement.attackerId,
+                            data: null,
+                        };
+                        newState = syncCurrentChoiceAnchorWithInteraction(queueInteraction(newState, interaction));
+                    }
+                }
+
+                if (isClosedBonusDiceResponseWindow(newState, dtEvent)) {
+                    const settlement = newState.core.pendingBonusDiceSettlement;
+                    if (settlement) {
+                        nextEvents.push(...buildBonusDiceSettlementEvents({
+                            state: newState.core,
+                            settlement,
+                            random,
+                            timestamp: typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0,
+                            sourceCommandType: 'BONUS_DICE_AUTO_SETTLE',
+                        }));
                     }
                 }
 

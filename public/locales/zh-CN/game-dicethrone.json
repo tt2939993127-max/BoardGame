@@ -915,7 +915,6 @@
     "rerollSelected": "已选",
     "confirm": "确认",
     "confirmed": "已确认",
-    "restoreCoveredRoll": "回到覆盖前骰区",
     "bonusRoll": "额外投掷",
     "bonusRolled": "额外掷骰：{{value}}（{{face}}）",
     "face": {

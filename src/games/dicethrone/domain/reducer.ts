@@ -338,7 +338,7 @@ const handlePlayerUnready: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER
 
 /**
  * 处理奖励骰结算事件
- * 清除 pendingBonusDiceSettlement。
+ * 清除 pendingBonusDiceSettlement，并保留最终骰面供右侧骰盘只读回看。
  * 非 displayOnly 时标记 pendingAttack.bonusDiceResolved，
  * 避免 autoContinue 重入 defensiveRoll exit 时重复执行 resolveAttack。
  */
@@ -360,9 +360,20 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
         ? `bonus:${state.pendingBonusDiceSettlement.id}`
         : undefined;
     const nextState = { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
-    return currentBonusContextId
-        ? clearCurrentRollContext(nextState, currentBonusContextId)
-        : nextState;
+    if (currentBonusContextId && nextState.currentRollContext?.id === currentBonusContextId) {
+        return {
+            ...nextState,
+            currentRollContext: {
+                ...nextState.currentRollContext,
+                status: 'settled',
+                display: {
+                    ...nextState.currentRollContext.display,
+                    replayOnly: true,
+                },
+            },
+        };
+    }
+    return nextState;
 };
 
 /**
@@ -1282,18 +1293,6 @@ const handleCompareRollSettled: EventHandler<Extract<DiceThroneEvent, { type: 'C
     event
 ) => clearCurrentRollContext(state, event.payload.contextId);
 
-const handleRollContextRestored: EventHandler<Extract<DiceThroneEvent, { type: 'ROLL_CONTEXT_RESTORED' }>> = (
-    _state,
-    event,
-) => {
-    if (event.payload.restoreState.currentRollContext?.id !== event.payload.coveredRollId) {
-        throw new Error(
-            `[DiceThrone] ROLL_CONTEXT_RESTORED 破坏骰区恢复契约: expected=${event.payload.coveredRollId}`,
-        );
-    }
-    return event.payload.restoreState;
-};
-
 /**
  * 处理奖励骰重掷事件
  * 更新待结算的骰子状态，消耗 Token
@@ -1536,8 +1535,6 @@ export const reduce = (
             return handleCompareRollRequested(state, event);
         case 'COMPARE_ROLL_SETTLED':
             return handleCompareRollSettled(state, event);
-        case 'ROLL_CONTEXT_RESTORED':
-            return handleRollContextRestored(state, event);
         case 'BONUS_DIE_REROLLED':
             return handleBonusDieRerolled(state, event);
         case 'BONUS_DICE_SETTLED':

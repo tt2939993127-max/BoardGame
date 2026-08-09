@@ -226,6 +226,75 @@ describe('AI 手动选派系', () => {
         expect(resolution).toBeNull();
     });
 
+    it('勾选 manualSetupSelection 后，AI 已选角色时仍应自动提交 setup-ready', async () => {
+        const gameId = '__test_manual_setup_selection_ready_after_character__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                if (playerId !== '1') return [];
+                const selectedCharacters = (state.core as {
+                    selectedCharacters?: Record<string, unknown>;
+                }).selectedCharacters ?? {};
+                const readyPlayers = (state.core as {
+                    readyPlayers?: Record<string, unknown>;
+                }).readyPlayers ?? {};
+                if (selectedCharacters[playerId] !== 'samurai' || readyPlayers[playerId] === true) {
+                    return [];
+                }
+                return [{
+                    actionId: 'setup-player-ready',
+                    kind: 'setup-ready',
+                    label: '准备完成',
+                    commands: [{ type: 'PLAYER_READY', payload: {} }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const selectedState = {
+            ...buildCharacterSelectState(),
+            core: {
+                ...(buildCharacterSelectState().core as Record<string, unknown>),
+                selectedCharacters: {
+                    '0': 'monk',
+                    '1': 'samurai',
+                },
+                readyPlayers: {
+                    '0': true,
+                    '1': false,
+                },
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {},
+                systems: [],
+            } as never,
+            state: selectedState,
+            matchId: 'local:manual-setup-selection-ready-after-character',
+            seatControllers: {
+                '1': { type: 'local-ai', manualSetupSelection: true },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('setup-ready');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'PLAYER_READY', payload: {} },
+        ]);
+    });
+
     it('自定义前置选择 action kind 未提供 adapter 时，manualSetupSelection 不应误拦截自动动作', async () => {
         const gameId = '__test_manual_setup_selection_custom_kind_without_adapter__';
         registerGameAiRuntime({

@@ -54,7 +54,7 @@ test.describe('DiceThrone - 雷霆万钧（精简）', () => {
 
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay.locator('.dice3d-perspective')).toHaveCount(3, { timeout: 5000 });
+        await expect(overlay.getByTestId('dice-2d')).toHaveCount(3, { timeout: 5000 });
 
         const state = await game.getState();
         const settlement = state?.core?.pendingBonusDiceSettlement;

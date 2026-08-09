@@ -337,7 +337,7 @@ test.describe('DiceThrone - 选择骰子重投', () => {
 
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay.locator('.dice3d-perspective')).toHaveCount(1, { timeout: 5000 });
+        await expect(overlay.getByTestId('dice-2d')).toHaveCount(1, { timeout: 5000 });
 
         const finalState = await game.getState();
         const finalDiceValues = (finalState?.core?.dice ?? []).map((die: any) => die.value);
@@ -534,7 +534,7 @@ test.describe('DiceThrone - 选择骰子重投', () => {
 
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay.locator('.dice3d-perspective')).toHaveCount(1, { timeout: 5000 });
+        await expect(overlay.getByTestId('dice-2d')).toHaveCount(1, { timeout: 5000 });
         await game.screenshot('gunslinger-high-noon-bullet-overlay', testInfo);
 
         await overlay.click({ force: true });
@@ -606,7 +606,7 @@ test.describe('DiceThrone - 选择骰子重投', () => {
 
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay.locator('.dice3d-perspective')).toHaveCount(1, { timeout: 5000 });
+        await expect(overlay.getByTestId('dice-2d')).toHaveCount(1, { timeout: 5000 });
         await game.screenshot('gunslinger-high-noon-dash-overlay', testInfo);
 
         await overlay.click({ force: true });
@@ -678,7 +678,7 @@ test.describe('DiceThrone - 选择骰子重投', () => {
 
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay.locator('.dice3d-perspective')).toHaveCount(1, { timeout: 5000 });
+        await expect(overlay.getByTestId('dice-2d')).toHaveCount(1, { timeout: 5000 });
         await game.screenshot('gunslinger-high-noon-bullseye-overlay', testInfo);
 
         await overlay.click({ force: true });

@@ -544,6 +544,15 @@
         }
       }
     },
+    "tokens/status/compressed/cripple-token": {
+      "variants": {
+        "webp": {
+          "sha256": "06f0328d346ba4102622c4bf517f66a441356440ae195e8a54ec7dbea92ff672",
+          "bytes": 130926,
+          "mime": "image/webp"
+        }
+      }
+    },
     "tokens/status/compressed/daze-token": {
       "variants": {
         "webp": {
@@ -589,6 +598,24 @@
         }
       }
     },
+    "tokens/status/compressed/weak-token": {
+      "variants": {
+        "webp": {
+          "sha256": "ec4c847ebba62d0c46a84390d4fef41fb9037c27a8b969e6fd5d9b0c57cc45f3",
+          "bytes": 110032,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "tokens/status/cripple-token": {
+      "variants": {
+        "png": {
+          "sha256": "6dac9069efc9938e889b3a82f4d53687d15c400201161fe0f69c23355700e328",
+          "bytes": 642962,
+          "mime": "image/png"
+        }
+      }
+    },
     "tokens/status/daze-token": {
       "variants": {
         "png": {
@@ -630,6 +657,15 @@
         "png": {
           "sha256": "4be3b2ed19070e4b4417482b2df0cf9394d744636db4f3b4614e0cc25cd50766",
           "bytes": 651320,
+          "mime": "image/png"
+        }
+      }
+    },
+    "tokens/status/weak-token": {
+      "variants": {
+        "png": {
+          "sha256": "ce440fc58b37fabf1936e1eb81a89ab58c65ee37da96de467ffa96a9ef30b448",
+          "bytes": 504783,
           "mime": "image/png"
         }
       }

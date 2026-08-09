@@ -132,7 +132,7 @@ function handleSimpleChoiceRespond<TCore>(
         return { halt: true, error: '当前交互不是 simple-choice' };
     }
     if (typeof payload.interactionId === 'string' && payload.interactionId !== current.id) {
-        return { halt: true };
+        return { halt: true, error: '交互已过期' };
     }
 
     const data = current.data as SimpleChoiceData;

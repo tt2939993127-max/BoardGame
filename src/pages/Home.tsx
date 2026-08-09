@@ -48,6 +48,7 @@ import { HomeVersionFooter } from '../components/home/HomeVersionFooter';
 import { sortGamesForLobbyDirectory } from '../components/home-v2/lobbyDirectorySorting';
 import { HomeModalErrorBoundary } from './HomeModalErrorBoundary';
 import { requireLazyModuleExport } from '../lib/lazyModuleExport';
+import { isNativeMobileRuntime } from '../lib/mobile/mobileRuntime';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const HOME_GAME_DETAILS_MODAL_IDLE_TIMEOUT_MS = 1500;
@@ -361,7 +362,13 @@ export const Home = () => {
         };
     }, [gameUrlModal]);
 
-    useEffect(() => scheduleHomeGameDetailsModalWarmup(loadGameDetailsModalModule), []);
+    useEffect(() => {
+        if (!isNativeMobileRuntime()) {
+            return undefined;
+        }
+
+        return scheduleHomeGameDetailsModalWarmup(loadGameDetailsModalModule);
+    }, []);
 
     useEffect(() => {
         const unsubscribe = subscribeGameRegistry(() => {

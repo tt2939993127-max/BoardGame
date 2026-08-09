@@ -35,6 +35,155 @@ import { applyEvents } from './utils';
 import { isCurrentBonusRollSettlement } from './rollContext';
 
 /**
+ * 按当前奖励骰面生成最终结算事件。
+ *
+ * 奖励骰既可以由玩家明确结束重投时结算，也可以在没有合法改骰响应后自动结算；
+ * 两条路径必须共用同一份规则，避免改骰后的骰面被另一套旧逻辑忽略。
+ */
+export function buildBonusDiceSettlementEvents({
+    state,
+    settlement,
+    random,
+    timestamp,
+    sourceCommandType,
+}: {
+    state: DiceThroneCore;
+    settlement: NonNullable<DiceThroneCore['pendingBonusDiceSettlement']>;
+    random: RandomFn;
+    timestamp: number;
+    sourceCommandType: string;
+}): DiceThroneEvent[] {
+    const events: DiceThroneEvent[] = [];
+    const settlementDice = getPendingBonusSettlementDice(settlement);
+    const defaultTotalDamage = settlementDice.reduce((sum, d) => sum + d.value, 0);
+    const settlementHandler = settlement.customResolutionId
+        ? getBonusDiceSettlementHandler(settlement.customResolutionId)
+        : undefined;
+    const settlementResult = settlementHandler?.({ state, settlement, timestamp, random });
+    const rollDieFollowupEvents = settlement.rollDieResolution
+        ? resolveRollDieSettlement({ state, settlement, random, timestamp })
+        : [];
+    const totalDamage = settlementResult?.totalDamage ?? defaultTotalDamage;
+    const thresholdTriggered = settlementResult?.thresholdTriggered
+        ?? (settlement.threshold ? totalDamage >= settlement.threshold : false);
+    const followupEvents = [
+        ...(settlementResult?.followupEvents ?? []),
+        ...rollDieFollowupEvents,
+    ];
+
+    events.push({
+        type: 'BONUS_DICE_SETTLED',
+        payload: {
+            finalDice: settlementDice,
+            totalDamage,
+            thresholdTriggered,
+            attackerId: settlement.attackerId,
+            targetId: settlement.targetId,
+            sourceAbilityId: settlement.sourceAbilityId,
+            ...(settlement.displayOnly ? { displayOnly: true } : {}),
+            ...(settlement.allowDiceModification ? { allowDiceModification: true } : {}),
+        },
+        sourceCommandType,
+        timestamp,
+    } as import('./types').BonusDiceSettledEvent);
+
+    const shouldResolveDisplayOnlyByCurrentDice =
+        settlement.displayOnly === true
+        && settlement.allowDiceModification === true
+        && !settlement.customResolutionId
+        && settlement.resolutionMode !== 'none';
+    if (settlement.displayOnly && !shouldResolveDisplayOnlyByCurrentDice) {
+        events.push(...followupEvents);
+        return events;
+    }
+
+    if (settlement.resolutionMode === 'attackBonus') {
+        const attackBonus = settlement.attackBonusScale === 'halfUp'
+            ? Math.ceil(totalDamage / 2)
+            : totalDamage;
+        events.push({
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: settlement.attackerId,
+                amount: attackBonus,
+                sourceCardId: settlement.attackBonusSourceCardId,
+            },
+            sourceCommandType,
+            timestamp,
+        } as DiceThroneEvent);
+
+        if (settlement.postSettleBonusDamageAdds?.length) {
+            for (const [idx, add] of settlement.postSettleBonusDamageAdds.entries()) {
+                events.push({
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        amount: add.amount,
+                        sourceCardId: add.sourceCardId,
+                    },
+                    sourceCommandType,
+                    timestamp: timestamp + 1 + idx,
+                } as DiceThroneEvent);
+            }
+        }
+        events.push(...followupEvents);
+        return events;
+    }
+
+    if (settlement.resolutionMode === 'none') {
+        events.push(...followupEvents);
+        return events;
+    }
+
+    const target = state.players[settlement.targetId];
+    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+    const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
+    const damageEvent: DamageDealtEvent = {
+        type: 'DAMAGE_DEALT',
+        payload: {
+            targetId: settlement.targetId,
+            amount: totalDamage,
+            actualDamage,
+            sourceAbilityId: settlement.sourceAbilityId,
+            sourcePlayerId: settlement.attackerId,
+            damageScope: state.pendingAttack ? 'attack' : 'direct',
+        },
+        sourceCommandType,
+        timestamp,
+    };
+    const tokenResponseEvent = maybeCreateDamageResponseEvent({
+        state,
+        damageEvent,
+        attackerId: settlement.attackerId,
+        sourceAbilityId: settlement.sourceAbilityId,
+        timestamp,
+        allowAttackerBoost: damageEvent.payload.damageScope === 'attack',
+    });
+    events.push(tokenResponseEvent ?? damageEvent);
+
+    if (thresholdTriggered && settlement.thresholdEffect === 'knockdown') {
+        const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
+        const maxStacks = def?.stackLimit || 99;
+        const newTotal = Math.min(currentStacks + 1, maxStacks);
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: {
+                targetId: settlement.targetId,
+                statusId: STATUS_IDS.KNOCKDOWN,
+                stacks: 1,
+                newTotal,
+                sourceAbilityId: settlement.sourceAbilityId,
+            },
+            sourceCommandType,
+            timestamp,
+        } as StatusAppliedEvent);
+    }
+    events.push(...followupEvents);
+    return events;
+}
+
+/**
  * 旧 token 定义未显式声明 customActionId 时的兼容兜底。
  * 新定义必须优先使用 activeUse.customActionId。
  */
@@ -516,140 +665,13 @@ export function executeTokenCommand(
                 break;
             }
             
-            // 计算最终伤害；特殊技能可覆盖“点数和即伤害”的默认收口。
-            const settlementDice = getPendingBonusSettlementDice(settlement);
-            const defaultTotalDamage = settlementDice.reduce((sum, d) => sum + d.value, 0);
-            const settlementHandler = settlement.customResolutionId
-                ? getBonusDiceSettlementHandler(settlement.customResolutionId)
-                : undefined;
-            const settlementResult = settlementHandler?.({ state, settlement, timestamp });
-            const rollDieFollowupEvents = settlement.rollDieResolution
-                ? resolveRollDieSettlement({ state, settlement, random, timestamp })
-                : [];
-            const totalDamage = settlementResult?.totalDamage ?? defaultTotalDamage;
-            const thresholdTriggered = settlementResult?.thresholdTriggered
-                ?? (settlement.threshold ? totalDamage >= settlement.threshold : false);
-            const followupEvents = [
-                ...(settlementResult?.followupEvents ?? []),
-                ...rollDieFollowupEvents,
-            ];
-            
-            // 发出 BONUS_DICE_SETTLED 事件
-            // displayOnly 标记传递给 systems.ts，避免误 resolve 其他活跃交互
-            events.push({
-                type: 'BONUS_DICE_SETTLED',
-                payload: {
-                    finalDice: settlementDice,
-                    totalDamage,
-                    thresholdTriggered,
-                    attackerId: settlement.attackerId,
-                    targetId: settlement.targetId,
-                    sourceAbilityId: settlement.sourceAbilityId,
-                    ...(settlement.displayOnly ? { displayOnly: true } : {}),
-                    ...(settlement.allowDiceModification ? { allowDiceModification: true } : {}),
-                },
-                sourceCommandType: command.type,
-                timestamp,
-            } as import('./types').BonusDiceSettledEvent);
-            
-            // displayOnly 默认只负责展示；但可被改骰且没有自定义收口的奖励骰，
-            // 必须在确认后用“改后的奖励骰”继续走默认伤害/阈值结算。
-            const shouldResolveDisplayOnlyByCurrentDice =
-                settlement.displayOnly === true
-                && settlement.allowDiceModification === true
-                && !settlement.customResolutionId
-                && settlement.resolutionMode !== 'none';
-            if (settlement.displayOnly && !shouldResolveDisplayOnlyByCurrentDice) {
-                events.push(...followupEvents);
-                break;
-            }
-
-            if (settlement.resolutionMode === 'attackBonus') {
-                const attackBonus = settlement.attackBonusScale === 'halfUp'
-                    ? Math.ceil(totalDamage / 2)
-                    : totalDamage;
-                events.push({
-                    type: 'BONUS_DAMAGE_ADDED',
-                    payload: {
-                        playerId: settlement.attackerId,
-                        amount: attackBonus,
-                        sourceCardId: settlement.attackBonusSourceCardId,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as DiceThroneEvent);
-
-                // 两段式：在奖励骰确定并收口后追加 bonus damage（例如 Wild West 的“然后 +1”）
-                if (settlement.postSettleBonusDamageAdds?.length) {
-                    for (const [idx, add] of settlement.postSettleBonusDamageAdds.entries()) {
-                        events.push({
-                            type: 'BONUS_DAMAGE_ADDED',
-                            payload: {
-                                playerId: settlement.attackerId,
-                                amount: add.amount,
-                                sourceCardId: add.sourceCardId,
-                            },
-                            sourceCommandType: command.type,
-                            timestamp: timestamp + 1 + idx,
-                        } as DiceThroneEvent);
-                    }
-                }
-                events.push(...followupEvents);
-                break;
-            }
-
-            if (settlement.resolutionMode === 'none') {
-                events.push(...followupEvents);
-                break;
-            }
-
-            // 应用伤害
-            const target = state.players[settlement.targetId];
-            const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-            const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
-            const damageEvent: DamageDealtEvent = {
-                type: 'DAMAGE_DEALT',
-                payload: {
-                    targetId: settlement.targetId,
-                    amount: totalDamage,
-                    actualDamage,
-                    sourceAbilityId: settlement.sourceAbilityId,
-                    sourcePlayerId: settlement.attackerId,
-                    damageScope: state.pendingAttack ? 'attack' : 'direct',
-                },
-                sourceCommandType: command.type,
-                timestamp,
-            };
-            const tokenResponseEvent = maybeCreateDamageResponseEvent({
+            events.push(...buildBonusDiceSettlementEvents({
                 state,
-                damageEvent,
-                attackerId: settlement.attackerId,
-                sourceAbilityId: settlement.sourceAbilityId,
+                settlement,
+                random,
                 timestamp,
-                allowAttackerBoost: damageEvent.payload.damageScope === 'attack',
-            });
-            events.push(tokenResponseEvent ?? damageEvent);
-            
-            // 如果触发阈值效果（倒地）
-            if (thresholdTriggered && settlement.thresholdEffect === 'knockdown') {
-                const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-                const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
-                const maxStacks = def?.stackLimit || 99;
-                const newTotal = Math.min(currentStacks + 1, maxStacks);
-                events.push({
-                    type: 'STATUS_APPLIED',
-                    payload: {
-                        targetId: settlement.targetId,
-                        statusId: STATUS_IDS.KNOCKDOWN,
-                        stacks: 1,
-                        newTotal,
-                        sourceAbilityId: settlement.sourceAbilityId,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as StatusAppliedEvent);
-            }
-            events.push(...followupEvents);
+                sourceCommandType: command.type,
+            }));
             break;
         }
     }

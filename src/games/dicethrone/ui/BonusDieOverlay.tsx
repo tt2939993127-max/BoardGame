@@ -253,6 +253,32 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             isSingleDieRerollSpotlight,
         });
 
+        if (allowBackgroundInteraction) {
+            const compactSummaryText = summaryEffectText ?? (showTotal ? `${t('bonusDie.total')}: ${total}` : undefined);
+
+            return (
+                <div
+                    data-testid="bonus-die-overlay"
+                    className="pointer-events-none fixed left-1/2 top-[7vw] flex -translate-x-1/2 items-center gap-[0.8vw] rounded-[0.8vw] border border-amber-400/40 bg-black/70 px-[1.2vw] py-[0.65vw] shadow-lg shadow-black/30 backdrop-blur-sm"
+                    style={{ zIndex: UI_Z_INDEX.overlayRaised + 100 }}
+                >
+                    <span className="whitespace-nowrap text-[1.15vw] font-black italic tracking-wider text-white drop-shadow">
+                        {compactSummaryText ?? t('bonusDie.diceResult')}
+                    </span>
+                    {requiresExplicitSettlement && (
+                        <GameButton
+                            onClick={handleConfirmDamage}
+                            variant="primary"
+                            size="sm"
+                            className="pointer-events-auto !min-h-0 !rounded-[0.55vw] !px-[1.25vw] !py-[0.45vw] !text-[0.85vw]"
+                        >
+                            {t('bonusDie.confirmDamage')}
+                        </GameButton>
+                    )}
+                </div>
+            );
+        }
+
         return (
             <SpotlightContainer
                 id="bonus-dice-reroll"
@@ -268,7 +294,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 closeClickGuardMs={BONUS_DIE_CLOSE_CLICK_GUARD_MS}
                 usePortal={usePortal}
             >
-                <div className="relative flex flex-col items-center gap-[1.5vw]" data-testid="bonus-die-overlay">
+                <div
+                    className="relative flex flex-col items-center gap-[1.5vw]"
+                    data-testid="bonus-die-overlay"
+                >
                     <GameButton
                         type="button"
                         variant="glass"

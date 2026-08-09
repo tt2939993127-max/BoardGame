@@ -727,6 +727,7 @@ describe('InteractionSystem', () => {
         });
 
         expect(result?.halt).toBe(true);
+        expect(result && 'error' in result ? result.error : undefined).toBe('交互已过期');
         expect(result && 'events' in result ? result.events : undefined).toBeUndefined();
         expect(result && 'state' in result ? result.state : undefined).toBeUndefined();
     });

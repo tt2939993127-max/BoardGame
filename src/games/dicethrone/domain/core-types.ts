@@ -606,8 +606,8 @@ export interface PendingBonusDiceSettlement {
     /** 终极技能成功发动后的结算骰：可展示/确认，但不可再被改骰或重掷。 */
     ultimateLocked?: boolean;
     /**
-     * 当前奖励骰结果是否应打开 afterRollConfirmed 响应窗口。
-     * 仅用于“投出特定结果才触发效果”的奖励骰；像一掷千金这种任意结果都会结算数值的奖励骰不打开响应窗口。
+     * 旧存档兼容字段。奖励骰是否开放改骰响应现在只由 allowDiceModification 决定，
+     * 不再根据初始骰面决定，避免玩家无法把未命中的骰面改为有效结果。
      */
     opensAfterRollConfirmedResponseWindow?: boolean;
     /** rollDie 延后结算所需的规则输入；投掷前不执行条件效果。 */
@@ -672,13 +672,6 @@ export interface DiceThroneRollContextDisplay {
     summaryKey?: string;
 }
 
-export interface DiceThroneCoveredRollRef {
-    id: string;
-    kind: DiceThroneRollContextKind;
-    ownerPlayerId: PlayerId;
-    phase?: TurnPhase;
-}
-
 export interface DiceThroneRollContext {
     id: string;
     kind: DiceThroneRollContextKind;
@@ -693,22 +686,6 @@ export interface DiceThroneRollContext {
     policy: DiceThroneRollContextPolicy;
     settlement: DiceThroneRollContextSettlement;
     display: DiceThroneRollContextDisplay;
-    /**
-     * 仅用于审计/步骤级回退定位。它不是第二个当前骰区，
-     * 普通改骰命令不得读取这里的旧骰面。
-     */
-    coveredPreviousRollRef?: DiceThroneCoveredRollRef;
-}
-
-/**
- * 覆盖当前骰区前的单步恢复点。
- *
- * 这是 DiceThrone 骰区自己的步骤恢复，不是通用 UndoSystem 历史；
- * 只保留最近一次覆盖前的领域状态，恢复后继续使用唯一 currentRollContext。
- */
-export interface DiceThroneRollContextRecovery {
-    coveredRollRef: DiceThroneCoveredRollRef;
-    restoreState: Omit<DiceThroneCore, 'rollContextRecovery'>;
 }
 
 export interface HeroState {
@@ -815,8 +792,6 @@ export interface DiceThroneCore {
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
     /** 当前唯一可操作骰区。新投掷会覆盖旧投掷，不存在并行当前骰子。 */
     currentRollContext?: DiceThroneRollContext;
-    /** 最近一次当前骰区被覆盖前的单步恢复点。不是第二个当前骰区。 */
-    rollContextRecovery?: DiceThroneRollContextRecovery;
     /**
      * 骰面确认序号（自增）
      * 用于 afterRollConfirmed 响应窗口源头级去重，避免 CLOSED 后在同一确认源上立刻 reopen。

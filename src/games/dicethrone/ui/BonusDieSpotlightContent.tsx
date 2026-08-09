@@ -9,7 +9,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { DieFace } from '../types';
-import { Dice3D } from './Dice3D';
+import { Dice2D } from './Dice2D';
 import { resolveBonusDieText } from './bonusDieTranslation';
 import { useResultRevealAnimation } from '../../../hooks/ui/useResultRevealAnimation';
 
@@ -103,12 +103,11 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
             data-is-rolling={isRolling ? 'true' : 'false'}
         >
             <div className="relative">
-                <Dice3D
+                <Dice2D
                     value={value}
                     isRolling={isRolling}
                     size={size}
                     locale={locale}
-                    variant="default"
                     characterId={characterId}
                     definitionId={definitionId}
                 />

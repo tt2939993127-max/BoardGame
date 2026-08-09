@@ -4,7 +4,6 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { DebugProvider } from './contexts/DebugContext';
-import { TestHarness } from './engine/testing';
 import { TutorialProvider } from './contexts/TutorialContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';
@@ -17,9 +16,6 @@ import { ViewportDebugProbe } from './components/system/ViewportDebugProbe';
 import { Toaster } from 'react-hot-toast';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
-import { MobileLiveUpdateManager } from './components/system/MobileLiveUpdateManager';
-import { AndroidNativeUpdateManager } from './components/system/AndroidNativeUpdateManager';
-import { AndroidBackNavigationBridge } from './components/system/AndroidBackNavigationBridge';
 import { GamePageRescueGate } from './components/system/GamePageRescueGate';
 import { LoadingScreen } from './components/system/LoadingScreen';
 import { TextEntryAutoScrollAgent } from './components/system/TextEntryAutoScrollAgent';
@@ -34,8 +30,8 @@ import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
 import { isNativeMobileRuntime } from './lib/mobile/mobileRuntime';
 import { HOME_V2_PREVIEW_PATH } from './lib/homeV2Routing';
 import { AdminShellSkeleton } from './pages/admin/components/AdminSkeletons';
-import { HomeEntry } from './pages/HomeEntry';
 import { GlobalHUD } from './components/system/GlobalHUD';
+import { CONFIG_REVIEW_PAGE_ROUTES, ConfigReviewRoutePage } from './pages/ConfigReviewRoutes';
 
 const ENABLE_INTERNAL_DEVTOOLS = import.meta.env.DEV;
 
@@ -45,9 +41,7 @@ const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoomWithAudio'
 const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoomWithAudio'));
 const LazyNotFound = React.lazy(() => import('./pages/NotFound').then(m => ({ default: m.NotFound })));
 const LazyMaintenancePage = React.lazy(() => import('./pages/Maintenance').then(m => ({ default: m.MaintenancePage })));
-const SummonerWarsConfigReviewPage = React.lazy(() => import('./pages/SummonerWarsConfigReview'));
-const DiceThroneConfigReviewPage = React.lazy(() => import('./pages/DiceThroneConfigReview'));
-const BetrayalConfigReviewPage = React.lazy(() => import('./pages/BetrayalConfigReview'));
+const LazyHomeEntry = React.lazy(() => import('./pages/HomeEntry'));
 // 旧的测试路由已废弃，使用新的 TestHarness 框架
 const EmptyToastViewport: React.FC = () => null;
 
@@ -61,11 +55,11 @@ export const loadToastViewportModule = async (): Promise<{ default: React.Compon
 };
 
 const LazyToastViewport = React.lazy(loadToastViewportModule);
+const LazyMobileLiveUpdateManager = React.lazy(() => import('./components/system/MobileLiveUpdateManager').then((module) => ({ default: module.MobileLiveUpdateManager })));
+const LazyAndroidNativeUpdateManager = React.lazy(() => import('./components/system/AndroidNativeUpdateManager').then((module) => ({ default: module.AndroidNativeUpdateManager })));
+const LazyAndroidBackNavigationBridge = React.lazy(() => import('./components/system/AndroidBackNavigationBridge').then((module) => ({ default: module.AndroidBackNavigationBridge })));
 
 const queryClient = new QueryClient();
-
-// 初始化测试工具（仅在测试环境生效）
-TestHarness.init();
 
 /**
  * 教程路由专用包装组件。
@@ -122,7 +116,11 @@ const AppRouteChrome = ({
           <DevMobileEvidenceCaptureAgent />
         </React.Suspense>
       ) : null}
-      {isNativeAndroid ? <AndroidBackNavigationBridge /> : null}
+      {isNativeAndroid ? (
+        <React.Suspense fallback={null}>
+          <LazyAndroidBackNavigationBridge />
+        </React.Suspense>
+      ) : null}
       <TextEntryAutoScrollAgent />
       <MobileTextEntryProxyLayer />
       <ViewportDebugProbe />
@@ -132,8 +130,16 @@ const AppRouteChrome = ({
         <LazyToastViewport />
       </React.Suspense>
       <Toaster />
-      {isNativeAndroid ? <AndroidNativeUpdateManager /> : null}
-      {isNativeMobile ? <MobileLiveUpdateManager /> : null}
+      {isNativeAndroid ? (
+        <React.Suspense fallback={null}>
+          <LazyAndroidNativeUpdateManager />
+        </React.Suspense>
+      ) : null}
+      {isNativeMobile ? (
+        <React.Suspense fallback={null}>
+          <LazyMobileLiveUpdateManager />
+        </React.Suspense>
+      ) : null}
       {!isPlayRoute ? <PcWebMascot /> : null}
       <EngineNotificationListener />
       <GamePageRescueGate />
@@ -215,7 +221,11 @@ const AppContent = () => {
                   <Routes>
                     <Route
                       path="/"
-                      element={<HomeEntry />}
+                      element={(
+                        <React.Suspense fallback={<LoadingScreen description="正在加载首页" />}>
+                          <LazyHomeEntry />
+                        </React.Suspense>
+                      )}
                     />
                     <Route
                       path="/play/:gameId/match/:matchId"
@@ -296,30 +306,13 @@ const AppContent = () => {
                         </React.Suspense>
                       )}
                     />
-                    <Route
-                      path="/games/summonerwars/config"
-                      element={(
-                        <React.Suspense fallback={null}>
-                          <SummonerWarsConfigReviewPage />
-                        </React.Suspense>
-                      )}
-                    />
-                    <Route
-                      path="/games/dicethrone/config"
-                      element={(
-                        <React.Suspense fallback={null}>
-                          <DiceThroneConfigReviewPage />
-                        </React.Suspense>
-                      )}
-                    />
-                    <Route
-                      path="/games/betrayal/config"
-                      element={(
-                        <React.Suspense fallback={null}>
-                          <BetrayalConfigReviewPage />
-                        </React.Suspense>
-                      )}
-                    />
+                    {CONFIG_REVIEW_PAGE_ROUTES.map(({ gameId, path, Component }) => (
+                      <Route
+                        key={gameId}
+                        path={`${path}/*`}
+                        element={<ConfigReviewRoutePage Component={Component} />}
+                      />
+                    ))}
 
                     {/* Admin Routes */}
                     <Route path="/admin" element={

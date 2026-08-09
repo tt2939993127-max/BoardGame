@@ -88,8 +88,8 @@
     "mage-wars/apprentice-spell-atlases": {
       "variants": {
         "json": {
-          "sha256": "fcbe9e38cbcf5e1e18bd7c6b13e9825f69176e5834b97123f8f27f436f7a0106",
-          "bytes": 33682,
+          "sha256": "986321f8875beca0d13d900cd736c76c3cac449085fb27f4b76f8cbf52561f54",
+          "bytes": 34309,
           "mime": "application/json"
         }
       }

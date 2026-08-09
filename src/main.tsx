@@ -2,12 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { i18nInitPromise } from './lib/i18n';
-import App from './App.tsx';
 import { SENTRY_DSN } from './config/server';
-import { notifyMobileBundleReady } from './lib/mobile/mobileLiveUpdates';
 import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
-import { hydrateInstalledNativeGamePackages } from './features/mobile-packages/packageManagerService';
 import { isNativeMobileRuntime } from './lib/mobile/mobileRuntime';
+import { isConfigReviewPath } from './config/gameConfigReviewRoutes';
 
 const STALE_CHUNK_BOOTSTRAP_WINDOW_MS = 8000;
 const bootstrapStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -103,25 +101,48 @@ if (import.meta.env.PROD && SENTRY_DSN) {
   });
 }
 
-if (isNativeMobileRuntime()) {
+const initializeNativeMobileFeatures = async () => {
+  const [
+    { notifyMobileBundleReady },
+    { hydrateInstalledNativeGamePackages },
+  ] = await Promise.all([
+    import('./lib/mobile/mobileLiveUpdates'),
+    import('./features/mobile-packages/packageManagerService'),
+  ]);
+
   void notifyMobileBundleReady();
-  void hydrateInstalledNativeGamePackages().catch((error) => {
+  await hydrateInstalledNativeGamePackages().catch((error) => {
     console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
+  });
+};
+
+if (isNativeMobileRuntime()) {
+  void initializeNativeMobileFeatures().catch((error) => {
+    console.error('[MobilePackages] 加载原生启动模块失败', error);
   });
 }
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  createRoot(rootElement).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
+  const loadApp = isConfigReviewPath(window.location.pathname)
+    ? import('./pages/ConfigReviewApp')
+    : import('./App.tsx');
 
-  if (import.meta.env.DEV && captureScenario) {
-    document.title = `capture-rendered:${captureScenario}`;
-    reportCaptureBootstrapStatus('capture-rendered');
-  }
+  void loadApp.then(({ default: App }) => {
+    createRoot(rootElement).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+
+    if (import.meta.env.DEV && captureScenario) {
+      document.title = `capture-rendered:${captureScenario}`;
+      reportCaptureBootstrapStatus('capture-rendered');
+    }
+  }).catch((error) => {
+    console.error('[Bootstrap] 加载应用入口失败', error);
+    reportCaptureBootstrapStatus('capture-app-load-failed', error instanceof Error ? error.message : String(error));
+  });
 
   void i18nInitPromise.catch(() => {
     console.warn('[i18n] 初始化失败，将使用 fallback key 显示文本');

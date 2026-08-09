@@ -259,7 +259,7 @@ test.describe('大杀四方大厅 E2E', () => {
     await hostContext.close();
   });
 
-  test('派系选择页应显示 10 周年三派系且不再显示实施中横幅', async ({ browser }, testInfo) => {
+  test('派系选择页的已审计派系不再显示实施中横幅', async ({ browser }, testInfo) => {
     test.setTimeout(360000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     const hostContext = await browser.newContext({ baseURL });
@@ -308,37 +308,29 @@ test.describe('大杀四方大厅 E2E', () => {
 
     await expect(hostPage.locator('h1').filter({ hasText: /选择你的派系|Draft Your Factions/i })).toBeVisible({ timeout: 300000 });
 
-    await expect(hostPage.getByText(/美人鱼|Mermaids/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(hostPage.getByText(/骷髅|Skeletons/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(hostPage.getByText(/世界冠军|World Champs/i).first()).toBeVisible({ timeout: 15000 });
+    const auditedFactions = [
+      { name: /美人鱼|Mermaids/i, bannerId: 'mermaids' },
+      { name: /骷髅|Skeletons/i, bannerId: 'skeletons' },
+      { name: /世界冠军|World Champs/i, bannerId: 'world_champs' },
+      { name: /功夫斗士|Kung Fu Fighters/i, bannerId: 'kung_fu_fighters' },
+      { name: /侠义义警|Vigilantes/i, bannerId: 'vigilantes' },
+      { name: /卡车车神|Truckers/i, bannerId: 'truckers' },
+      { name: /迪厅舞王|Disco Dancers/i, bannerId: 'disco_dancers' },
+    ];
 
-    const mermaidsName = hostPage.getByText(/美人鱼|Mermaids/i).first();
-    const skeletonsName = hostPage.getByText(/骷髅|Skeletons/i).first();
-    const worldChampsName = hostPage.getByText(/世界冠军|World Champs/i).first();
-
-    const mermaidsBanner = hostPage.getByTestId('faction-implementation-banner-mermaids');
-    const skeletonsBanner = hostPage.getByTestId('faction-implementation-banner-skeletons');
-    const worldChampsBanner = hostPage.getByTestId('faction-implementation-banner-world_champs');
-
-    await expect(mermaidsBanner).toHaveCount(0);
-    await expect(skeletonsBanner).toHaveCount(0);
-    await expect(worldChampsBanner).toHaveCount(0);
+    for (const faction of auditedFactions) {
+      await expect(hostPage.getByText(faction.name).first()).toBeVisible({ timeout: 15000 });
+      await expect(hostPage.getByTestId(`faction-implementation-banner-${faction.bannerId}`)).toHaveCount(0);
+    }
     await expect(hostPage.getByText(/分批实施|持续完善|being delivered in batches|continue to improve/i)).toHaveCount(0);
 
     const sharedDir = join(process.cwd(), 'test-results', 'evidence-screenshots', '_shared');
     mkdirSync(sharedDir, { recursive: true });
-    await mermaidsName.scrollIntoViewIfNeeded();
-    await mermaidsName.screenshot({ path: join(sharedDir, 'smashup-10th-factions-mermaids-name.png') });
-
-    await skeletonsName.scrollIntoViewIfNeeded();
-    await skeletonsName.screenshot({ path: join(sharedDir, 'smashup-10th-factions-skeletons-name.png') });
-
-    await worldChampsName.scrollIntoViewIfNeeded();
-    await worldChampsName.screenshot({ path: join(sharedDir, 'smashup-10th-factions-world-champs-name.png') });
-
-    const sharedShot = join(sharedDir, 'smashup-10th-factions-selection.png');
+    const zhongguoName = hostPage.getByText(/功夫斗士|Kung Fu Fighters/i).first();
+    await zhongguoName.scrollIntoViewIfNeeded();
+    const sharedShot = join(sharedDir, 'smashup-audited-factions-selection.png');
     await hostPage.screenshot({ path: sharedShot, fullPage: false });
-    await hostPage.screenshot({ path: testInfo.outputPath('smashup-10th-factions-selection.png'), fullPage: false });
+    await hostPage.screenshot({ path: testInfo.outputPath('smashup-audited-factions-selection.png'), fullPage: false });
 
     await guestContext.close();
     await hostContext.close();

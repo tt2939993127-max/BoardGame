@@ -227,37 +227,6 @@ function upsertIndexedDie<T extends { index?: number }>(dice: T[], nextDie: T): 
     return nextDice;
 }
 
-function resolveSuppressedCardBonusSummary(
-    eventType: string,
-    value: number,
-    effectKey?: string,
-    effectParams?: Record<string, string | number>,
-): CardSpotlightItem['summaryText'] | undefined {
-    if (eventType !== 'BONUS_DIE_ROLLED' || !effectKey) {
-        return undefined;
-    }
-
-    if (effectKey === 'bonusDie.effect.gainCp') {
-        const cp = typeof effectParams?.cp === 'number' ? effectParams.cp : Math.ceil(value / 2);
-        return {
-            effectKey: 'bonusDie.spotlight.initialGainCp',
-            effectParams: {
-                ...effectParams,
-                value,
-                cp,
-            },
-        };
-    }
-
-    return {
-        effectKey,
-        effectParams: {
-            ...effectParams,
-            value,
-        },
-    };
-}
-
 /**
  * 绠＄悊鍗＄墝鍜岄澶栭瀛愮壒鍐欓槦鍒楋紙EventStream 椹卞姩锛?
  */
@@ -386,23 +355,18 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             if (CARD_EVENT_TYPES.has(type)) {
                 const p = payload as CardEventPayload;
                 const cardPlayerId = normalizePlayerId(p.playerId);
-                const selfCardHasRelatedBonusDice = !isSpectator
-                    && cardPlayerId === selfId
-                    && countRelatedBonusDiceEvents(newEntries, cardPlayerId, eventTimestamp) > 0;
                 const skipSelfCardSpotlight = !isSpectator
-                    && cardPlayerId === selfId
-                    && !selfCardHasRelatedBonusDice;
+                    && cardPlayerId === selfId;
 
                 spotlightLogger.info('card-event', {
                     eventType: type,
                     cardId: p.cardId,
                     cardPlayerId,
                     selfId,
-                    selfCardHasRelatedBonusDice,
                     skipSelfCardSpotlight,
                 });
 
-                // 自己打出的普通卡牌默认不显示特写；但会触发奖励骰的自方卡牌仍需要保留卡牌特写承接结果说明。
+                // 自己打出的卡牌不再用中央特写承接奖励骰；真实投掷统一进入右侧投盘。
                 if (skipSelfCardSpotlight) continue;
 
                 const existingIndex = findExistingCardSpotlightIndex(
@@ -546,25 +510,11 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 if (cardCandidateIndex >= 0) {
                     const cardCandidate = nextCardSpotlightQueue[cardCandidateIndex];
                     if (suppressBonusDiceInCardSpotlight && hasBonusDiceSettlement) {
-                        const summaryText = resolveSuppressedCardBonusSummary(
-                            type,
-                            bonusValue,
-                            bonusEffectKey,
-                            bonusEffectParams,
-                        );
                         spotlightLogger.info('bonus-bound-to-card-suppressed', {
                             cardId: cardCandidate.id,
                             eventType: type,
                             reason: 'bonus-dice-routed-to-tray',
-                            summaryEffectKey: summaryText?.effectKey,
                         });
-                        if (summaryText) {
-                            nextCardSpotlightQueue[cardCandidateIndex] = {
-                                ...cardCandidate,
-                                summaryText,
-                            };
-                            didUpdateCardSpotlightQueue = true;
-                        }
                         continue;
                     }
                     if (isSummaryEvent) {

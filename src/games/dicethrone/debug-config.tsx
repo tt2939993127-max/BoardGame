@@ -3,7 +3,7 @@
  * 定义游戏专属的作弊指令 UI
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { resolveCardDisplayName } from '../../components/game/framework/debug/cardNameResolver';
 import { HEROES_DATA } from './heroes';
@@ -57,6 +57,13 @@ interface DiceThroneDebugConfigProps {
     playerNames?: Record<string, string>;
 }
 
+const getCurrentDiceValues = (gameState: any): string[] => {
+    const dice = gameState?.core?.currentRollContext?.dice ?? gameState?.core?.dice ?? [];
+    return dice.length > 0
+        ? dice.map((die: { value: number }) => String(die.value))
+        : ['1', '1', '1', '1', '1'];
+};
+
 export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G, dispatch, playerNames = {} }) => {
     const { t } = useTranslation('game-dicethrone');
     const seatOptions = useMemo(() => {
@@ -79,9 +86,12 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
     const [cheatValue, setCheatValue] = useState<string>('1');
 
     // ========== 骰子作弊 ==========
-    const [diceValues, setDiceValues] = useState<string[]>(
-        G?.core?.dice?.map((die: any) => String(die.value)) ?? ['1', '1', '1', '1', '1']
-    );
+    const currentDiceValues = useMemo(() => getCurrentDiceValues(G), [G]);
+    const [diceValues, setDiceValues] = useState<string[]>(currentDiceValues);
+
+    useEffect(() => {
+        setDiceValues(currentDiceValues);
+    }, [currentDiceValues]);
 
     // ========== Token 作弊 ==========
     const [tokenPlayer, setTokenPlayer] = useState<string>('0');

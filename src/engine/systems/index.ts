@@ -58,7 +58,7 @@ import { createCompareRollChoiceSystem } from './CompareRollChoiceSystem';
 import { createEventStreamSystem } from './EventStreamSystem';
 import { createRematchSystem } from './RematchSystem';
 import { createActionLogSystem } from './ActionLogSystem';
-import { createResponseWindowSystem } from './ResponseWindowSystem';
+import { createResponseWindowSystem, type ResponseWindowSystemConfig } from './ResponseWindowSystem';
 import { createTutorialSystem } from './TutorialSystem';
 import type { EngineSystem } from './types';
 import type { ActionLogSystemConfig } from './ActionLogSystem';
@@ -67,13 +67,14 @@ import type { UndoSystemConfig } from './UndoSystem';
 export interface BaseSystemsConfig {
     actionLog?: ActionLogSystemConfig;
     undo?: UndoSystemConfig;
+    responseWindow?: ResponseWindowSystemConfig;
 }
 
 /**
  * 创建基础系统集合
  */
 export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): EngineSystem<TCore>[] {
-    const { actionLog, undo } = config;
+    const { actionLog, undo, responseWindow } = config;
     return [
         createActionLogSystem(actionLog),
         createUndoSystem(undo),
@@ -81,7 +82,7 @@ export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): Engine
         createSimpleChoiceSystem(),
         createCompareRollChoiceSystem(),
         createRematchSystem(),
-        createResponseWindowSystem(),
+        createResponseWindowSystem(responseWindow),
         createTutorialSystem(),
         createEventStreamSystem(),
     ];

@@ -643,21 +643,6 @@ const validateConfirmCompareRoll = (
     return ok();
 };
 
-const validateRestoreCoveredRoll = (
-    state: DiceThroneCore,
-    playerId: PlayerId,
-): ValidationResult => {
-    const context = state.currentRollContext;
-    const recovery = state.rollContextRecovery;
-    if (!context || !recovery || context.coveredPreviousRollRef?.id !== recovery.coveredRollRef.id) {
-        return fail('no_covered_roll_to_restore');
-    }
-    if (context.ownerPlayerId !== playerId && recovery.coveredRollRef.ownerPlayerId !== playerId) {
-        return fail('not_your_roll');
-    }
-    return ok();
-};
-
 /**
  * 验证选择技能命令
  */
@@ -1692,7 +1677,6 @@ export const validateCommand = (
     if (isCommandType(command, 'TOGGLE_DIE_LOCK')) return validateToggleDieLock(state, command, playerId, phase);
     if (isCommandType(command, 'CONFIRM_ROLL')) return validateConfirmRoll(state, command, playerId, phase);
     if (isCommandType(command, 'CONFIRM_COMPARE_ROLL')) return validateConfirmCompareRoll(state, playerId);
-    if (isCommandType(command, 'RESTORE_COVERED_ROLL')) return validateRestoreCoveredRoll(state, playerId);
     if (isCommandType(command, 'SELECT_ABILITY')) return validateSelectAbility(state, command, playerId, phase);
     if (isCommandType(command, 'DRAW_CARD')) return validateDrawCard(state, command, playerId);
     if (isCommandType(command, 'DISCARD_CARD')) return validateDiscardCard(state, command, playerId);

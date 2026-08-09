@@ -1,9 +1,9 @@
 {
   "title": "Mage Wars",
-  "description": "A 2-player spell tactics game. This foundation locks the apprentice arena, mage state, spellbook zones, and event-driven spell FX contract.",
+  "description": "A 2-player spell tactics game. This foundation locks the formal arena, mage state, spellbook zones, and event-driven spell FX contract.",
   "players": "2 players",
   "arena": {
-    "mode": "Apprentice Arena",
+    "mode": "Formal Arena",
     "actionStage": "Action phase",
     "selectTarget": "Select target",
     "standardArenaAlt": "Mage Wars standard arena",
@@ -50,11 +50,17 @@
   },
   "zones": {
     "a1": "Left Front",
-    "b1": "Right Front",
+    "b1": "Center-Left Front",
+    "c1": "Center-Right Front",
+    "d1": "Right Front",
     "a2": "Left Middle",
-    "b2": "Right Middle",
+    "b2": "Center-Left Middle",
+    "c2": "Center-Right Middle",
+    "d2": "Right Middle",
     "a3": "Left Rear",
-    "b3": "Right Rear"
+    "b3": "Center-Left Rear",
+    "c3": "Center-Right Rear",
+    "d3": "Right Rear"
   },
   "status": {
     "title": "Current State",
@@ -77,7 +83,12 @@
     "quickcastSpent": "Quickcast spent",
     "guard": "Guard",
     "damage": "Damage",
-    "burn": "Burn"
+    "burn": "Burn",
+    "daze": "Daze",
+    "weak": "Weak",
+    "cripple": "Cripple",
+    "rot": "Rot",
+    "stun": "Stun"
   },
   "privateZones": {
     "selfPlans": "Your prepared spells / spellbook",
@@ -114,9 +125,41 @@
   },
   "actions": {
     "move": "Move mage",
+    "moveCreature": "Move creature",
     "guard": "Guard",
+    "guardCreature": "Creature guard",
     "attack": "Basic attack",
+    "attackCreature": "Creature attack",
     "endTurn": "End Turn"
+  },
+  "interaction": {
+    "counterstrike": {
+      "title": "{{defenderObjectId}} may counterstrike {{attackerObjectId}}",
+      "options": {
+        "counterstrike": "Counterstrike",
+        "pass": "Pass"
+      }
+    },
+    "defense": {
+      "title": "{{defenderObjectId}} may defend against {{attackerObjectId}}",
+      "options": {
+        "defend": "Defend",
+        "pass": "Do not defend"
+      }
+    },
+    "upkeep": {
+      "title": "{{targetObjectId}} requires {{amount}} mana for upkeep",
+      "options": {
+        "pay": "Pay upkeep",
+        "destroy": "Destroy enchantment"
+      }
+    },
+    "enchantmentResponse": {
+      "title": "Reveal response enchantment {{responseObjectId}}",
+      "options": {
+        "reveal": "Reveal and resolve"
+      }
+    }
   },
   "error": {
     "unsupportedCommand": "This command is not in the foundation implementation scope yet."
@@ -125,6 +168,7 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "pageSummary": "{{page}} / {{total}}",
+    "planSelected": "Prepare {{count}}",
     "categories": {
       "all": "All",
       "attack": "Attack",
@@ -132,5 +176,58 @@
       "creature": "Creature",
       "equipment": "Gear"
     }
+  },
+  "actionLog": {
+    "separator": {
+      "card": ", "
+    },
+    "phaseChanged": "Enter {{phase}}",
+    "spellsPlanned": "Prepared {{count}} spells: ",
+    "spellCast": "Cast",
+    "spellCastCost": ", spent {{manaCost}} mana",
+    "mageAbilityResolved": "Used {{abilityName}}, spent {{manaCost}} mana",
+    "arenaObjectAbilityResolved": "{{objectId}} used {{abilityName}}, spent {{manaCost}} mana",
+    "arenaObjectTemporaryTraitsCleared": "{{objectId}}'s temporary ability ended",
+    "spellAttackRolled": "Spell attack",
+    "spellAttackDice": ", target {{targetId}}, dice {{dice}}, base damage {{damage}}",
+    "spellDirectDamageRolled": "Direct damage spell",
+    "spellDirectDamageDice": ", target {{targetId}}, dice {{dice}}, direct damage {{damage}}",
+    "spellHealingRolled": "Healing spell",
+    "spellHealingDice": ", target {{targetId}}, dice {{dice}}, actual healing {{healing}}",
+    "targetPlayer": ", target {{targetPlayerId}}",
+    "targetObject": ", target {{targetObjectId}}",
+    "targetZone": ", target {{zone}}",
+    "arenaObjectSummoned": "Summoned {{objectName}} to {{zone}}",
+    "manaChanneled": "Channeled +{{amount}} mana",
+    "manaDrained": "{{targetId}} lost {{amount}} mana (up to {{requestedAmount}})",
+    "mageMoved": "Moved {{from}} → {{to}}",
+    "arenaObjectMoved": "{{objectId}} moved {{from}} → {{to}}",
+    "guardGained": "Started guarding",
+    "guardGainedObject": "{{objectId}} started guarding",
+    "guardRemoved": "{{objectId}} stopped guarding",
+    "counterstrikeAvailable": "{{defenderObjectId}} can counterstrike {{attackerObjectId}}",
+    "defenseAvailable": "{{defenderObjectId}} may defend against {{attackerObjectId}}",
+    "attackDeclared": "Basic attack on {{defenderId}}, dice {{dice}}, base damage {{damage}}",
+    "arenaObjectAttackDeclared": "{{attackerObjectId}} attacked {{targetId}}, dice {{dice}}, base damage {{damage}}",
+    "attackMissedByDaze": "Daze check {{effectDie}}; attack missed {{targetId}}",
+    "attackMissedByDefense": "Defense {{defenseProfileId}} rolled {{effectDie}}; attack missed {{targetId}}",
+    "attackMissedByImmunity": "{{targetId}} is immune to {{damageTypes}}; attack had no effect",
+    "arenaObjectDefenseRolled": "{{defenderObjectId}} defense roll {{rawEffectDie}}{{modifier}}={{modifiedEffectDie}}, needs {{minRoll}}+, {{result}}",
+    "defenseResult": {
+      "success": "success",
+      "fail": "fail"
+    },
+    "damageDealt": "Took {{amount}} damage",
+    "statusTokenPlaced": "Gained {{amount}} {{status}}",
+    "statusTokenRemoved": "Removed {{amount}} {{status}}",
+    "arenaObjectDefeated": "{{objectId}} was destroyed",
+    "mageDefeated": "Defeated; winner {{winnerId}}",
+    "turnAdvanced": "Turn passes to {{toPlayerId}} (turn {{turnNumber}})",
+    "readinessReset": "Action and quickcast readied",
+    "spellPushResolved": "Spell push",
+    "spellPushTarget": ", target {{targetId}}, {{from}} → {{to}}",
+    "spellTeleportResolved": "Spell teleport",
+    "spellTeleportTarget": ", target {{targetId}}, {{from}} → {{to}}, distance {{distance}}",
+    "arenaObjectRegenerated": "{{objectId}} regenerated {{healing}} damage"
   }
 }

@@ -175,6 +175,12 @@ async function clickBonusConfirm(page: Page, playerId: string): Promise<void> {
     await page.waitForTimeout(500);
 }
 
+async function assertRuleSourcedBonusConfirmation(page: Page, playerId: string): Promise<void> {
+    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-testid="bonus-dice-confirm-button"]`).first();
+    await expect(confirmButton).toHaveText(/^(确认奖励骰|Confirm Bonus Die)$/);
+    await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
+}
+
 async function setupTwoPageDicethrone(
     browser: Browser,
     baseURL: string | undefined,
@@ -513,6 +519,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             });
             await expect(dieButton(hostPage, volleyChoice.dieIndex))
                 .toHaveAttribute('data-display-value', String(volleyChoice.afterValue), { timeout: 5000 });
+            await assertRuleSourcedBonusConfirmation(hostPage, '0');
             await screenshotStep(hostPage, testInfo, '06-万箭齐发-改后奖励骰等待攻击方确认');
 
             await clickBonusConfirm(hostPage, '0');
@@ -645,6 +652,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 windowType: null,
                 diceValues: thunderAfterValues,
             });
+            await assertRuleSourcedBonusConfirmation(hostPage, '0');
             await screenshotStep(hostPage, testInfo, '06-雷霆万钧-改后奖励骰等待攻击方确认');
 
             await clickBonusConfirm(hostPage, '0');

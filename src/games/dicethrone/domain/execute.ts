@@ -635,26 +635,6 @@ export function execute(
             break;
         }
 
-        case 'RESTORE_COVERED_ROLL': {
-            const recovery = state.rollContextRecovery;
-            const currentContext = state.currentRollContext;
-            if (
-                recovery
-                && currentContext?.coveredPreviousRollRef?.id === recovery.coveredRollRef.id
-            ) {
-                events.push({
-                    type: 'ROLL_CONTEXT_RESTORED',
-                    payload: {
-                        coveredRollId: recovery.coveredRollRef.id,
-                        restoreState: recovery.restoreState,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as DiceThroneEvent);
-            }
-            break;
-        }
-
         case 'DRAW_CARD':
         case 'DISCARD_CARD':
         case 'SELL_CARD':

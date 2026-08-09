@@ -56,7 +56,7 @@ test.describe('DiceThrone Volley 5 Dice Display', () => {
         const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(overlay).toBeVisible({ timeout: 5000 });
 
-        const bonusDice = overlay.locator('.dice3d-perspective');
+        const bonusDice = overlay.getByTestId('dice-2d');
         await expect(bonusDice).toHaveCount(5, { timeout: 5000 });
         await expect(
             page.getByRole('button', { name: /Confirm Damage|Continue|确认伤害|继续/i }),

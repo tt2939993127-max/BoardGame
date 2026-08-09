@@ -4,7 +4,7 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
-import type { DiceThroneCore, HeroState, AbilityCard, DiceThroneRollContextRecovery } from './types';
+import type { DiceThroneCore, HeroState, AbilityCard } from './types';
 import { areTeammates } from './rules';
 
 /**
@@ -49,28 +49,6 @@ const filterPlayerView = (
     };
 };
 
-const filterRollContextRecovery = (
-    recovery: DiceThroneRollContextRecovery | undefined,
-    viewingPlayerId: PlayerId,
-    state: DiceThroneCore,
-): DiceThroneRollContextRecovery | undefined => {
-    if (!recovery) return undefined;
-    const restoreState = recovery.restoreState;
-    const filteredPlayers: Record<PlayerId, HeroState> = {};
-    for (const [playerId, player] of Object.entries(restoreState.players)) {
-        const isVisibleToViewer = playerId === viewingPlayerId
-            || areTeammates(state, playerId, viewingPlayerId);
-        filteredPlayers[playerId] = filterPlayerView(player, isVisibleToViewer);
-    }
-    return {
-        ...recovery,
-        restoreState: {
-            ...restoreState,
-            players: filteredPlayers,
-        },
-    };
-};
-
 /**
  * 生成玩家视图
  * 隐藏对手的手牌和牌库内容
@@ -89,6 +67,5 @@ export const playerView = (
 
     return {
         players: filteredPlayers,
-        rollContextRecovery: filterRollContextRecovery(state.rollContextRecovery, viewingPlayerId, state),
     };
 };

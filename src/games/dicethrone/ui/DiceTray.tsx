@@ -142,6 +142,23 @@ export const DiceTray = ({
         : (modifyResult?.modCount ?? 0);
     const canSelectMore = currentSelectCount < maxSelectCount;
     const canToggleDieLock = canInteract && rollCount > 0;
+    const diceTrayStyle = isInteractionMode
+        ? {
+            border: '2px solid #fcd34d',
+            backgroundColor: '#131820',
+            boxShadow: '0 0.26vw 0 #05070b, 0 0.62vw 0 #5c3f0b, 0 0.9vw 1.25vw rgba(0,0,0,0.5)',
+        }
+        : isPassiveRerollMode
+            ? {
+                border: '2px solid #6ee7b7',
+                backgroundColor: '#131820',
+                boxShadow: '0 0.26vw 0 #05070b, 0 0.62vw 0 #0b4d38, 0 0.9vw 1.25vw rgba(0,0,0,0.5)',
+            }
+            : {
+                border: '2px solid #c8d3df',
+                backgroundColor: '#131820',
+                boxShadow: 'inset 0 0 0 0.1vw #53616f, inset 0 -0.38vw 0 #07090d, 0 0.26vw 0 #05070b, 0 0.72vw 0 #080b10, 0 0.95vw 1.3vw rgba(0,0,0,0.48)',
+            };
 
     const handleRailDieClick = (dieId: number) => {
         if (isRolling && !isInteractionMode && rollCount === 0) return;
@@ -191,6 +208,7 @@ export const DiceTray = ({
             `}
             data-tutorial-id="dice-tray"
             data-testid="dicethrone-2d-dice-tray"
+            style={diceTrayStyle}
         >
             <div className={glossClassName} />
             <div className={`${rimClassName} ${isInteractionMode ? 'border-amber-100/80' : 'border-slate-50/60'} `} />

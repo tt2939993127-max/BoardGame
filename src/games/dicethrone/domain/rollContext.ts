@@ -69,15 +69,6 @@ const defaultPolicy = (
     blocksPhaseFlow: true,
 });
 
-const toCoveredRollRef = (
-    context: DiceThroneRollContext,
-): NonNullable<DiceThroneRollContext['coveredPreviousRollRef']> => ({
-    id: context.id,
-    kind: context.kind,
-    ownerPlayerId: context.ownerPlayerId,
-    phase: context.phase,
-});
-
 export const createMainRollContext = (
     state: DiceThroneCore,
     options: {
@@ -89,7 +80,6 @@ export const createMainRollContext = (
     const phase = options.phase;
     const kind = getRollContextKindFromPhase(phase);
     const ownerPlayerId = options.ownerPlayerId ?? inferRollOwnerId(state, phase);
-    const existing = state.currentRollContext;
     const id = `roll:${kind}:${ownerPlayerId}:${state.rollCount}`;
 
     return {
@@ -107,7 +97,6 @@ export const createMainRollContext = (
             surface: 'diceTray',
             replayOnly: false,
         },
-        coveredPreviousRollRef: existing?.id === id ? existing.coveredPreviousRollRef : undefined,
     };
 };
 
@@ -139,7 +128,6 @@ export const createBonusRollContextFromSettlement = (
     state: DiceThroneCore,
     settlement: PendingBonusDiceSettlement,
 ): DiceThroneRollContext => {
-    const existing = state.currentRollContext;
     const id = `bonus:${settlement.id}`;
     const isReplayOnly = settlement.displayOnly === true && settlement.allowDiceModification !== true;
     const isUltimateLocked = settlement.ultimateLocked === true;
@@ -178,17 +166,17 @@ export const createBonusRollContextFromSettlement = (
             },
         },
         display: {
-            surface: 'bonusOverlay',
+            surface: 'diceTray',
             replayOnly: isReplayOnly,
             summaryKey: settlement.summaryEffectKey,
         },
-        coveredPreviousRollRef: existing?.id === id ? existing.coveredPreviousRollRef : undefined,
     };
 };
 
 export const createEvasionRollContext = (
     options: {
         ownerPlayerId: PlayerId;
+        diceDefinitionId: string;
         targetPlayerId?: PlayerId;
         sourceTokenId: string;
         value: number;
@@ -206,7 +194,7 @@ export const createEvasionRollContext = (
         sourceTokenId: options.sourceTokenId,
         dice: [{
             id: 0,
-            definitionId: 'evasion-dice',
+            definitionId: options.diceDefinitionId,
             value: options.value,
             symbol: null,
             symbols: [],
@@ -271,10 +259,6 @@ export const createCompareRollContext = (
         surface: 'compactOverlay',
         replayOnly: false,
     },
-    coveredPreviousRollRef: state.currentRollContext?.kind === 'compare'
-        && state.currentRollContext.id === options.id
-        ? state.currentRollContext.coveredPreviousRollRef
-        : undefined,
 });
 
 const getCompareMetadata = (context: DiceThroneRollContext): CompareRollMetadata => (
@@ -421,25 +405,9 @@ export const replaceCurrentRollContext = (
     state: DiceThroneCore,
     context: DiceThroneRollContext,
 ): DiceThroneCore => {
-    const previous = state.currentRollContext;
-    const coveredPreviousRollRef = previous && previous.id !== context.id
-        ? toCoveredRollRef(previous)
-        : context.coveredPreviousRollRef ?? previous?.coveredPreviousRollRef;
-    const { rollContextRecovery: _previousRecovery, ...restoreState } = state;
     return {
         ...state,
-        currentRollContext: {
-            ...context,
-            coveredPreviousRollRef,
-        },
-        ...(previous && previous.id !== context.id
-            ? {
-                rollContextRecovery: {
-                    coveredRollRef: toCoveredRollRef(previous),
-                    restoreState,
-                },
-            }
-            : { rollContextRecovery: undefined }),
+        currentRollContext: context,
     };
 };
 
@@ -449,11 +417,7 @@ export const clearCurrentRollContext = (
 ): DiceThroneCore => {
     if (!state.currentRollContext) return state;
     if (contextId && state.currentRollContext.id !== contextId) return state;
-    const {
-        currentRollContext: _currentRollContext,
-        rollContextRecovery: _rollContextRecovery,
-        ...rest
-    } = state;
+    const { currentRollContext: _currentRollContext, ...rest } = state;
     return rest as DiceThroneCore;
 };
 

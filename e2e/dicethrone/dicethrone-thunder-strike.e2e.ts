@@ -72,15 +72,14 @@ test.describe('DiceThrone - 雷霆万钧', () => {
         );
         mkdirSync(evidenceDir, { recursive: true });
 
-        const bonusDice = overlay.locator('.dice3d-perspective');
+        const bonusDice = overlay.getByTestId('dice-2d');
         const bonusContents = overlay.locator('[data-testid="bonus-die-spotlight-content"]');
         await expect(bonusDice).toHaveCount(3, { timeout: 5000 });
         await expect(bonusContents).toHaveCount(3, { timeout: 5000 });
         await overlay.screenshot({ path: join(evidenceDir, '01-before-reroll.png') });
-        await expect.poll(async () => bonusDice.evaluateAll((nodes) => nodes.map((node) => {
-            const cube = node.firstElementChild as HTMLElement | null;
-            return cube?.className.includes('animate-dice3d-bonus-tumble') ?? false;
-        })), { timeout: 2000 }).toEqual([false, false, false]);
+        await expect.poll(async () => bonusDice.evaluateAll((nodes) => nodes.map((node) => (
+            node.className.includes('animate-pulse')
+        ))), { timeout: 2000 }).toEqual([false, false, false]);
         await expect.poll(async () => bonusContents.evaluateAll((nodes) => nodes.map((node) =>
             (node as HTMLElement).dataset.rollAnimationKey ?? ''
         ))).toEqual(['', '', '']);

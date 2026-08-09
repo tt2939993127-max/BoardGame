@@ -22,6 +22,7 @@ export function useMageWarsGameEvents({ G, fxBus }: UseMageWarsGameEventsParams)
         entries,
         strategy: 'requiredSequence',
     });
+    const latestEntryId = entries.at(-1)?.id ?? 0;
 
     useLayoutEffect(() => {
         const { entries: newEntries } = consumeNew();
@@ -32,5 +33,5 @@ export function useMageWarsGameEvents({ G, fxBus }: UseMageWarsGameEventsParams)
             if (!instruction) continue;
             fxBusRef.current.push(instruction.cue, instruction.ctx, instruction.params);
         }
-    }, [G.core, consumeNew]);
+    }, [G.core, entries.length, latestEntryId, consumeNew]);
 }

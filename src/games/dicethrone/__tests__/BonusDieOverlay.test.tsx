@@ -970,7 +970,7 @@ describe('BonusDieOverlay', () => {
         });
     });
 
-    it('自己打出的 Volley 多骰事件应由卡牌特写携带多骰结果', async () => {
+    it('自己打出的 Volley 多骰事件不应创建卡牌特写', async () => {
         const entries: EventStreamEntry[] = [
             {
                 id: 1,
@@ -1054,19 +1054,8 @@ describe('BonusDieOverlay', () => {
 
         await waitFor(() => {
             const state = JSON.parse(screen.getByTestId('self-volley-state').textContent ?? '{}');
-            expect(state.cardSpotlightQueue).toHaveLength(1);
-            expect(state.cardSpotlightQueue[0]).toMatchObject({
-                cardId: 'volley',
-                bonusDice: [
-                    { value: 4, face: 'bow' },
-                    { value: 3, face: 'moon' },
-                ],
-                summaryText: {
-                    effectKey: 'bonusDie.effect.volley.result',
-                    effectParams: { bowCount: 1, bonusDamage: 1 },
-                },
-            });
-            expect(state.bonusDie.show).toBe(false);
+            expect(state.cardSpotlightQueue).toEqual([]);
+            expect(state.bonusDie.show).toBe(true);
         });
     });
 
@@ -1455,7 +1444,7 @@ describe('BonusDieOverlay', () => {
         });
     });
 
-    it('对手打出一掷千金且奖励骰走右侧骰盘时，卡牌特写只保留首次结果说明', async () => {
+    it('对手打出一掷千金且奖励骰走右侧骰盘时，卡牌特写不再携带骰子结果说明', async () => {
         const entries: EventStreamEntry[] = [
             {
                 id: 1,
@@ -1545,10 +1534,7 @@ describe('BonusDieOverlay', () => {
             const state = JSON.parse(screen.getByTestId('opponent-one-throw-fortune-state').textContent ?? '{}');
             expect(state.cardSpotlightQueue).toHaveLength(1);
             expect(state.cardSpotlightQueue[0].bonusDice).toBeUndefined();
-            expect(state.cardSpotlightQueue[0].summaryText).toEqual({
-                effectKey: 'bonusDie.spotlight.initialGainCp',
-                effectParams: { value: 6, cp: 3 },
-            });
+            expect(state.cardSpotlightQueue[0].summaryText).toBeUndefined();
             expect(state.bonusDie.show).toBe(false);
         });
     });
@@ -1689,7 +1675,7 @@ describe('BonusDieOverlay', () => {
         });
     });
 
-    it('自己打出的 Watch Out 单骰事件应由卡牌特写携带骰面结果', async () => {
+    it('自己打出的 Watch Out 单骰事件不应创建卡牌特写', async () => {
         const entries: EventStreamEntry[] = [
             {
                 id: 1,
@@ -1745,18 +1731,12 @@ describe('BonusDieOverlay', () => {
 
         await waitFor(() => {
             const state = JSON.parse(screen.getByTestId('watch-out-state').textContent ?? '{}');
-            expect(state.cardSpotlightQueue).toHaveLength(1);
-            expect(state.cardSpotlightQueue[0]).toMatchObject({
-                cardId: 'watch-out',
-                bonusDice: [
-                    { value: 1, face: 'bow', effectKey: 'bonusDie.effect.watchOut.bow' },
-                ],
-            });
-            expect(state.bonusDie.show).toBe(false);
+            expect(state.cardSpotlightQueue).toEqual([]);
+            expect(state.bonusDie.show).toBe(true);
         });
     });
 
-    it('自己打出的 Get Fired Up 单骰事件也应由卡牌特写携带骰面结果', async () => {
+    it('自己打出的 Get Fired Up 单骰事件不应创建卡牌特写', async () => {
         const entries: EventStreamEntry[] = [
             {
                 id: 1,
@@ -1811,14 +1791,8 @@ describe('BonusDieOverlay', () => {
 
         await waitFor(() => {
             const state = JSON.parse(screen.getByTestId('get-fired-up-state').textContent ?? '{}');
-            expect(state.cardSpotlightQueue).toHaveLength(1);
-            expect(state.cardSpotlightQueue[0]).toMatchObject({
-                cardId: 'card-get-fired-up',
-                bonusDice: [
-                    { value: 1, face: 'fire', effectKey: 'bonusDie.effect.fire' },
-                ],
-            });
-            expect(state.bonusDie.show).toBe(false);
+            expect(state.cardSpotlightQueue).toEqual([]);
+            expect(state.bonusDie.show).toBe(true);
         });
     });
 

@@ -80,6 +80,8 @@ export interface BoardOverlaysProps {
     };
     onBonusDieClose: () => void;
     suppressBonusDieOverlay?: boolean;
+    /** 当前奖励骰仍在结算时，允许背景手牌向领域层发起改骰尝试。 */
+    allowBonusDieBackgroundInteraction?: boolean;
 
     // 奖励骰重掷交互
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
@@ -284,10 +286,8 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         }
                         forceAutoCloseDelay={props.tutorialSpotlightAutoCloseDelayMs}
                         manualCloseOnly={props.bonusDieManualCloseOnly && props.bonusDie.effectKey !== 'bonusDie.effect.samuraiBackStrikeDie'}
-                        allowBackgroundInteraction={Boolean(
-                            props.pendingBonusDiceSettlement?.displayOnly
-                            && props.pendingBonusDiceSettlement.allowDiceModification
-                        )}
+                        // 当前奖励骰仍在结算时，手牌必须可以尝试出牌；是否合法由领域层当前骰区策略裁决。
+                        allowBackgroundInteraction={props.allowBonusDieBackgroundInteraction}
                     />
                 )}
 

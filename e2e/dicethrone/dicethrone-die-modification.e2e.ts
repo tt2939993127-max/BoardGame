@@ -1,15 +1,32 @@
 import { test, expect } from '../framework';
+import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../../src/games/dicethrone/heroes/zhanshujia/tokens';
+
+const randomValueForDieFace = (value: number): number => {
+    const normalized = Math.max(1, Math.min(6, Math.floor(value)));
+    return ((normalized - 1) / 6) + 0.001;
+};
 
 async function dragHandCardToPlay(page: any, cardId: string): Promise<void> {
     const handCard = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
     await expect(handCard).toBeVisible({ timeout: 10000 });
+    await expect(handCard).toHaveAttribute('data-can-drag', 'true', { timeout: 10000 });
     const cardBox = await page.evaluate((nextCardId: string) => {
         const node = document.querySelector(`[data-testid="hand-area"] [data-card-id="${nextCardId}"]`) as HTMLElement | null;
         if (!node) return null;
         const rect = node.getBoundingClientRect();
-        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        const startX = rect.x + (rect.width / 2);
+        const startY = rect.y + (rect.height * 0.78);
+        const hit = document.elementFromPoint(startX, startY) as HTMLElement | null;
+        return {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            hitCardId: hit?.closest('[data-card-id]')?.getAttribute('data-card-id') ?? null,
+        };
     }, cardId);
-    if (!cardBox || cardBox.width <= 0 || cardBox.height <= 0) {
+    if (!cardBox || cardBox.width <= 0 || cardBox.height <= 0 || cardBox.hitCardId !== cardId) {
         throw new Error(`未能获取手牌 ${cardId} 的拖拽区域`);
     }
 
@@ -20,6 +37,10 @@ async function dragHandCardToPlay(page: any, cardId: string): Promise<void> {
     await page.mouse.move(startX, startY);
     await page.mouse.down();
     await page.mouse.move(startX, endY, { steps: 12 });
+    const draggedCardBox = await handCard.boundingBox();
+    if (!draggedCardBox || cardBox.y - draggedCardBox.y < 180) {
+        throw new Error(`手牌 ${cardId} 没有真正拖到打出距离`);
+    }
     await page.mouse.up();
     await page.mouse.move(2, 2);
 }
@@ -289,6 +310,38 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                     resolutionMode: 'damage',
                     allowDiceModification: true,
                 },
+                currentRollContext: {
+                    id: 'bonus:e2e-main1-bonus-die-modification',
+                    kind: 'bonus',
+                    ownerPlayerId: '0',
+                    targetPlayerId: '1',
+                    sourceAbilityId: 'e2e-bonus-die',
+                    dice: [{
+                        id: 0,
+                        definitionId: 'bonus:e2e-bonus-die',
+                        value: 3,
+                        symbol: 'palm',
+                        symbols: ['palm'],
+                        isKept: false,
+                        ownerId: '0',
+                    }],
+                    status: 'open',
+                    policy: {
+                        modifiableBy: 'owner',
+                        rerollableBy: 'owner',
+                        allowPassiveReroll: true,
+                        allowRollCards: true,
+                        ultimateLocked: false,
+                        blocksPhaseFlow: true,
+                    },
+                    settlement: {
+                        mode: 'damage',
+                        metadata: {
+                            pendingBonusDiceSettlementId: 'e2e-main1-bonus-die-modification',
+                        },
+                    },
+                    display: { surface: 'bonusOverlay', replayOnly: false },
+                },
             },
         });
 
@@ -299,12 +352,16 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
                 bonusDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
                 allowDiceModification: state?.core?.pendingBonusDiceSettlement?.allowDiceModification ?? false,
+                currentRollKind: state?.core?.currentRollContext?.kind ?? null,
+                allowRollCards: state?.core?.currentRollContext?.policy?.allowRollCards ?? false,
             };
         }, { timeout: 10000 }).toMatchObject({
             phase: 'main1',
             hasCard: true,
             bonusDieValue: 3,
             allowDiceModification: true,
+            currentRollKind: 'bonus',
+            allowRollCards: true,
         });
 
         await game.screenshot('main1-bonus-die-before-red-card', testInfo);
@@ -472,5 +529,183 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         });
 
         await game.screenshot('终极结算骰-改骰牌锁定', testInfo);
+    });
+
+    test('闪避骰进入当前骰区后，战术优势可重掷并重新计算免伤', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone', { playerID: '1', seat1: 'human' });
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 2, HP: 50 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'main2',
+            extra: {
+                selectedCharacters: { '0': 'barbarian', '1': 'monk' },
+                hostStarted: true,
+            },
+        });
+        await game.waitForPhase('main2', 5000);
+
+        await page.evaluate((scenario) => {
+            const harness = (window as Window & {
+                __BG_TEST_HARNESS__?: {
+                    dice?: { setValues?: (values: number[]) => void };
+                    state?: {
+                        get?: () => any;
+                        set?: (state: any) => void | Promise<void>;
+                    };
+                };
+            }).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            if (!state || !harness?.state?.set) {
+                throw new Error('TestHarness state 不可用');
+            }
+
+            harness.dice?.setValues?.([1, 6]);
+            const nextState = structuredClone(state);
+            nextState.sys = {
+                ...(nextState.sys ?? {}),
+                phase: 'defensiveRoll',
+                interaction: {
+                    current: {
+                        id: 'dt-token-response-evasion-current-roll',
+                        kind: 'dt:token-response',
+                        playerId: '1',
+                        data: { pendingDamageId: 'e2e-evasion-current-roll' },
+                    },
+                    queue: [],
+                },
+            };
+            nextState.core = {
+                ...(nextState.core ?? {}),
+                activePlayerId: '0',
+                hostStarted: true,
+                rollCount: 1,
+                rollLimit: 1,
+                rollConfirmed: true,
+                selectedCharacters: {
+                    ...(nextState.core?.selectedCharacters ?? {}),
+                    '0': 'barbarian',
+                    '1': 'monk',
+                },
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    sourceAbilityId: 'e2e-evasion-current-roll-attack',
+                    isDefendable: true,
+                    damage: 5,
+                    bonusDamage: 0,
+                    attackModifierBonusDamage: 0,
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    preDefenseResolved: false,
+                    offensiveRollEndTokenResolved: false,
+                },
+                pendingDamage: {
+                    id: 'e2e-evasion-current-roll',
+                    sourcePlayerId: '0',
+                    targetPlayerId: '1',
+                    originalDamage: 5,
+                    currentDamage: 5,
+                    sourceAbilityId: 'e2e-evasion-current-roll-attack',
+                    responseType: 'beforeDamageReceived',
+                    responderId: '1',
+                    isFullyEvaded: false,
+                },
+                players: {
+                    ...(nextState.core?.players ?? {}),
+                    '1': {
+                        ...(nextState.core?.players?.['1'] ?? {}),
+                        passiveAbilities: scenario.passiveAbilities,
+                        tokens: {
+                            ...(nextState.core?.players?.['1']?.tokens ?? {}),
+                            [scenario.evasiveTokenId]: 1,
+                            [scenario.tacticalAdvantageTokenId]: 1,
+                        },
+                    },
+                },
+            };
+            return harness.state.set(nextState);
+        }, {
+            passiveAbilities: ZHANSHUJIA_PASSIVE_ABILITIES,
+            evasiveTokenId: TOKEN_IDS.EVASIVE,
+            tacticalAdvantageTokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+        });
+
+        const injectedState = await game.getState();
+        expect({
+            activePlayerId: injectedState?.core?.activePlayerId ?? null,
+            pendingDamageId: injectedState?.core?.pendingDamage?.id ?? null,
+            interactionKind: injectedState?.sys?.interaction?.current?.kind ?? null,
+            interactionPlayerId: injectedState?.sys?.interaction?.current?.playerId ?? null,
+            evasiveTokens: injectedState?.core?.players?.['1']?.tokens?.[TOKEN_IDS.EVASIVE] ?? null,
+            hasEvasiveDefinition: injectedState?.core?.tokenDefinitions?.some((token: { id?: string }) => token.id === TOKEN_IDS.EVASIVE) ?? false,
+        }).toMatchObject({
+            activePlayerId: '0',
+            pendingDamageId: 'e2e-evasion-current-roll',
+            interactionKind: 'dt:token-response',
+            interactionPlayerId: '1',
+            evasiveTokens: 1,
+            hasEvasiveDefinition: true,
+        });
+
+        const tokenResponse = page.getByTestId('token-response-modal');
+        await expect(tokenResponse).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId(`token-response-use-${TOKEN_IDS.EVASIVE}`)).toBeVisible();
+        await page.getByTestId(`token-response-use-${TOKEN_IDS.EVASIVE}`).click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                rollKind: state?.core?.currentRollContext?.kind ?? null,
+                dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
+                currentDamage: state?.core?.pendingDamage?.currentDamage ?? null,
+                isFullyEvaded: state?.core?.pendingDamage?.isFullyEvaded ?? null,
+                tacticalAdvantage: state?.core?.players?.['1']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+            };
+        }, { timeout: 5000 }).toMatchObject({
+            rollKind: 'evasion',
+            dieValue: 1,
+            currentDamage: 0,
+            isFullyEvaded: true,
+            tacticalAdvantage: 1,
+        });
+        await expect(tokenResponse).toBeVisible();
+        await game.screenshot('闪避骰-成功后可干预', testInfo);
+
+        const tacticalReroll = page.getByTestId('passive-action-zhanshujia-tactical-advantage-1');
+        await expect(tacticalReroll).toBeVisible({ timeout: 5000 });
+        await tacticalReroll.click();
+
+        const evasionDie = page.locator('[data-testid="die-button-0"]').first();
+        await expect(evasionDie).toBeVisible({ timeout: 5000 });
+        await expect(evasionDie).toHaveAttribute('data-clickable', 'true');
+        await expect(evasionDie.getByTestId('dice-2d')).toHaveAttribute(
+            'data-sprite-url',
+            /\/dicethrone\/images\/monk\/(?:compressed\/)?dice\.(?:webp|png)(?:[?#].*)?$/,
+        );
+        await evasionDie.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                rollKind: state?.core?.currentRollContext?.kind ?? null,
+                dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
+                currentDamage: state?.core?.pendingDamage?.currentDamage ?? null,
+                isFullyEvaded: state?.core?.pendingDamage?.isFullyEvaded ?? null,
+                tacticalAdvantage: state?.core?.players?.['1']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+            };
+        }, { timeout: 5000 }).toMatchObject({
+            rollKind: 'evasion',
+            dieValue: 6,
+            currentDamage: 5,
+            isFullyEvaded: false,
+            tacticalAdvantage: 0,
+        });
+        await game.screenshot('闪避骰-战术优势重掷后', testInfo);
     });
 });

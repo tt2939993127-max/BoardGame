@@ -482,7 +482,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
                     >
                         {supplyBadges.length > 0 && (
                             <div
-                                className="pointer-events-none absolute inset-x-0 -top-7 z-20 flex justify-center gap-2"
+                                className="smashup-special-supply-row pointer-events-none absolute inset-x-0 -top-7 z-20 flex justify-center gap-2"
                                 data-testid="su-special-supply-row"
                             >
                                 {supplyBadges.map((badge) => (
@@ -492,7 +492,10 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                         data-testid={badge.testId}
                                         title={badge.title}
                                     >
-                                        <div className={`${badge.cardClassName} overflow-hidden rounded-[3px]`}>
+                                        <div
+                                            className={`${badge.cardClassName} overflow-hidden rounded-[3px]`}
+                                            data-testid={`${badge.testId}-card`}
+                                        >
                                             <CardPreview
                                                 previewRef={badge.previewRef}
                                                 className="h-full w-full"

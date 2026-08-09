@@ -148,6 +148,10 @@ const resolveDerivedSummaryText = (
             parts.push(t('bonusDie.summary.inflictConcussion'));
             return joinSummaryParts(parts, language);
         }
+        case 'bonusDie.effect.damage': {
+            const damage = getNumericParam(params, 'damage', 'value', 'amount');
+            return damage > 0 ? t('bonusDie.summary.damage', { amount: damage }) : undefined;
+        }
         case 'bonusDie.effect.gunslingerEatMyLead.result':
         case 'bonusDie.effect.gunslingerEatMyLead.resultKnockdown': {
             const bonusDamage = getNumericParam(params, 'bonusDamage');

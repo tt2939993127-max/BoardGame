@@ -34,8 +34,6 @@ export interface GameHintsProps {
 
     /** 是否为当前响应者 */
     isResponder: boolean;
-    /** 响应窗口偏移类名 */
-    thinkingOffsetClass?: string;
     /** 响应跳过回调 */
     onResponsePass: () => void;
 
@@ -160,40 +158,72 @@ const OpponentThinkingHint: React.FC<{ opponentName: string }> = ({ opponentName
  */
 const ResponseWindowHint: React.FC<{
     onResponsePass: () => void;
-    offsetClass?: string;
-}> = ({ onResponsePass, offsetClass = 'bottom-[12vw]' }) => {
+}> = ({ onResponsePass }) => {
     const { t } = useTranslation('game-dicethrone');
+    const pointerPassHandledRef = React.useRef(false);
+    const handlePointerDown = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+        if (event.button !== 0) return;
+        pointerPassHandledRef.current = true;
+        event.stopPropagation();
+        onResponsePass();
+    }, [onResponsePass]);
+    const handleClick = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (pointerPassHandledRef.current) {
+            pointerPassHandledRef.current = false;
+            return;
+        }
+        onResponsePass();
+    }, [onResponsePass]);
 
     return (
         <div
             data-testid="dicethrone-response-window-hint"
-            className={`absolute ${offsetClass} left-1/2 -translate-x-1/2`}
-            style={{ zIndex: UI_Z_INDEX.hint }}
+            className="fixed left-1/2 -translate-x-1/2"
+            style={{
+                zIndex: UI_Z_INDEX.hint,
+                position: 'fixed',
+                bottom: '26vw',
+                left: '50%',
+                transform: 'translateX(-50%)',
+            }}
         >
             <div
                 data-testid="dicethrone-response-window-hint-panel"
-                className="flex items-center gap-[0.8vw] rounded-full border-2 border-[#f6d477] bg-[#21182a] px-[1vw] py-[0.55vw] shadow-[0_0.25vw_0_rgba(0,0,0,0.95),0_0.58vw_0_#5b4212,0_0.8vw_1.2vw_rgba(0,0,0,0.48)]"
+                className="relative flex items-center gap-[0.9vw] overflow-hidden rounded-full border-4 border-[#ffe16d] bg-[#2b1837] px-[1.15vw] py-[0.62vw] shadow-[0_0.3vw_0_rgba(0,0,0,0.95),0_0.68vw_0_#5b4212,0_0_1.05vw_rgba(255,225,109,0.72),0_0.95vw_1.45vw_rgba(0,0,0,0.52)]"
                 style={{
-                    border: '2px solid #f6d477',
+                    border: '4px solid #ffe16d',
                     borderRadius: '9999px',
-                    backgroundColor: '#21182a',
-                    boxShadow: '0 0.25vw 0 rgba(0,0,0,0.95), 0 0.58vw 0 #5b4212, 0 0.8vw 1.2vw rgba(0,0,0,0.48)',
+                    backgroundColor: '#2b1837',
+                    boxShadow: '0 0.3vw 0 rgba(0,0,0,0.95), 0 0.68vw 0 #5b4212, 0 0 0 2px rgba(255,255,255,0.18), 0 0 1.05vw rgba(255,225,109,0.72), 0 0.95vw 1.45vw rgba(0,0,0,0.52)',
                 }}
             >
-                <span className="text-[#ffe8a6] text-[0.86vw] font-black tracking-wider">
+                <style>{`@keyframes dicethrone-response-shimmer { 0% { transform: translateX(-145%); } 58% { transform: translateX(145%); } 100% { transform: translateX(145%); } }`}</style>
+                <div
+                    aria-hidden="true"
+                    data-testid="dicethrone-response-shimmer"
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                        background: 'linear-gradient(108deg, transparent 28%, rgba(255,248,189,0.88) 50%, transparent 72%)',
+                        animation: 'dicethrone-response-shimmer 2.2s ease-in-out infinite',
+                    }}
+                />
+                <span className="relative z-10 text-[#fff3bd] text-[0.95vw] font-black tracking-wider">
                     {t('response.yourTurn')}
                 </span>
                 <button
                     type="button"
                     data-testid="dicethrone-response-pass-button"
-                    onClick={onResponsePass}
-                    className="min-h-[44px] rounded-lg border-2 border-[#fff0ae] bg-[#9b7118] px-[1vw] text-[0.78vw] font-black tracking-wider text-white shadow-[0_0.2vw_0_rgba(0,0,0,0.9),0_0.34vw_0_#4a3207] transition-[transform,box-shadow,background-color] duration-150 hover:-translate-y-px hover:bg-[#b88720] hover:shadow-[0_0.24vw_0_rgba(0,0,0,0.9),0_0.42vw_0_#4a3207] active:translate-y-[0.18vw] active:shadow-[0_0.12vw_0_rgba(0,0,0,0.9),0_0.16vw_0_#4a3207]"
+                    onPointerDown={handlePointerDown}
+                    onClick={handleClick}
+                    className="relative z-10 min-h-[44px] rounded-lg border-2 border-[#fff0ae] bg-[#9b7118] px-[1vw] text-[0.78vw] font-black tracking-wider text-white shadow-[0_0.2vw_0_rgba(0,0,0,0.9),0_0.34vw_0_#4a3207] transition-[box-shadow,background-color] duration-150 hover:bg-[#b88720] hover:shadow-[0_0.24vw_0_rgba(0,0,0,0.9),0_0.42vw_0_#4a3207] active:bg-[#865f14]"
                     style={{
                         minHeight: 44,
                         border: '2px solid #fff0ae',
                         borderRadius: '0.5rem',
                         backgroundColor: '#9b7118',
                         boxShadow: '0 0.2vw 0 rgba(0,0,0,0.9), 0 0.34vw 0 #4a3207',
+                        pointerEvents: 'auto',
                     }}
                 >
                     {t('response.pass')}
@@ -235,7 +265,6 @@ export const GameHints: React.FC<GameHintsProps> = ({
     isWaitingOpponent,
     opponentName,
     isResponder,
-    thinkingOffsetClass,
     onResponsePass,
     isPassiveRerollSelecting,
 }) => {
@@ -265,7 +294,6 @@ export const GameHints: React.FC<GameHintsProps> = ({
             {isResponder && (
                 <ResponseWindowHint
                     onResponsePass={onResponsePass}
-                    offsetClass={thinkingOffsetClass}
                 />
             )}
         </HudPortal>

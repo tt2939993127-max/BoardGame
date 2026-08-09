@@ -1,9 +1,9 @@
 {
   "title": "法师战争",
-  "description": "2 人法术战棋。首轮 foundation 锁定学徒竞技场、法师状态、法术书与事件驱动特效合同。",
+  "description": "2 人法术战棋。首轮 foundation 锁定正式竞技场、法师状态、法术书与事件驱动特效合同。",
   "players": "2 人",
   "arena": {
-    "mode": "学徒竞技场",
+    "mode": "正式竞技场",
     "actionStage": "行动环节",
     "selectTarget": "选择目标",
     "standardArenaAlt": "法师战争标准竞技场",
@@ -50,11 +50,17 @@
   },
   "zones": {
     "a1": "左前区",
-    "b1": "右前区",
+    "b1": "中左前区",
+    "c1": "中右前区",
+    "d1": "右前区",
     "a2": "左中区",
-    "b2": "右中区",
+    "b2": "中左区",
+    "c2": "中右区",
+    "d2": "右中区",
     "a3": "左后区",
-    "b3": "右后区"
+    "b3": "中左后区",
+    "c3": "中右后区",
+    "d3": "右后区"
   },
   "status": {
     "title": "当前状态",
@@ -77,7 +83,12 @@
     "quickcastSpent": "快速施法已用",
     "guard": "守卫",
     "damage": "伤害",
-    "burn": "燃烧"
+    "burn": "燃烧",
+    "daze": "眩晕",
+    "weak": "虚弱",
+    "cripple": "残废",
+    "rot": "腐化",
+    "stun": "昏迷"
   },
   "privateZones": {
     "selfPlans": "己方计划 / 法术书",
@@ -114,9 +125,41 @@
   },
   "actions": {
     "move": "移动法师",
+    "moveCreature": "移动生物",
     "guard": "守卫",
+    "guardCreature": "生物守卫",
     "attack": "基础攻击",
+    "attackCreature": "生物攻击",
     "endTurn": "回合结束"
+  },
+  "interaction": {
+    "counterstrike": {
+      "title": "{{defenderObjectId}} 可以反击 {{attackerObjectId}}",
+      "options": {
+        "counterstrike": "反击",
+        "pass": "放弃反击"
+      }
+    },
+    "defense": {
+      "title": "{{defenderObjectId}} 可以防御 {{attackerObjectId}}",
+      "options": {
+        "defend": "防御",
+        "pass": "不防御"
+      }
+    },
+    "upkeep": {
+      "title": "{{targetObjectId}} 需要支付 {{amount}} 点维持法力",
+      "options": {
+        "pay": "支付维持费用",
+        "destroy": "摧毁结界"
+      }
+    },
+    "enchantmentResponse": {
+      "title": "必须展示响应结界 {{responseObjectId}}",
+      "options": {
+        "reveal": "展示并结算"
+      }
+    }
   },
   "error": {
     "unsupportedCommand": "当前命令尚未进入 foundation 实现范围。"
@@ -125,6 +168,7 @@
     "previousPage": "上一页",
     "nextPage": "下一页",
     "pageSummary": "{{page}} / {{total}}",
+    "planSelected": "计划 {{count}} 张",
     "categories": {
       "all": "全部",
       "attack": "攻击",
@@ -132,5 +176,58 @@
       "creature": "生物",
       "equipment": "装备"
     }
+  },
+  "actionLog": {
+    "separator": {
+      "card": "、"
+    },
+    "phaseChanged": "进入{{phase}}",
+    "spellsPlanned": "计划 {{count}} 张法术：",
+    "spellCast": "施放",
+    "spellCastCost": "，消耗 {{manaCost}} 法力",
+    "mageAbilityResolved": "使用{{abilityName}}，消耗 {{manaCost}} 法力",
+    "arenaObjectAbilityResolved": "{{objectId}} 使用{{abilityName}}，消耗 {{manaCost}} 法力",
+    "arenaObjectTemporaryTraitsCleared": "{{objectId}} 的临时能力结束",
+    "spellAttackRolled": "法术攻击",
+    "spellAttackDice": "，目标 {{targetId}}，骰子 {{dice}}，基础伤害 {{damage}}",
+    "spellDirectDamageRolled": "直接伤害法术",
+    "spellDirectDamageDice": "，目标 {{targetId}}，骰子 {{dice}}，直接伤害 {{damage}}",
+    "spellHealingRolled": "治疗法术",
+    "spellHealingDice": "，目标 {{targetId}}，骰子 {{dice}}，实际治疗 {{healing}}",
+    "targetPlayer": "，目标 {{targetPlayerId}}",
+    "targetObject": "，目标 {{targetObjectId}}",
+    "targetZone": "，目标 {{zone}}",
+    "arenaObjectSummoned": "召唤 {{objectName}} 到 {{zone}}",
+    "manaChanneled": "聚魔 +{{amount}}",
+    "manaDrained": "{{targetId}} 法力流失 {{amount}}（上限 {{requestedAmount}}）",
+    "mageMoved": "移动 {{from}} → {{to}}",
+    "arenaObjectMoved": "{{objectId}} 移动 {{from}} → {{to}}",
+    "guardGained": "进入守卫",
+    "guardGainedObject": "{{objectId}} 进入守卫",
+    "guardRemoved": "{{objectId}} 失去守卫",
+    "counterstrikeAvailable": "{{defenderObjectId}} 可对 {{attackerObjectId}} 反击",
+    "defenseAvailable": "{{defenderObjectId}} 可防御 {{attackerObjectId}} 的攻击",
+    "attackDeclared": "基础攻击 {{defenderId}}，骰子 {{dice}}，基础伤害 {{damage}}",
+    "arenaObjectAttackDeclared": "{{attackerObjectId}} 攻击 {{targetId}}，骰子 {{dice}}，基础伤害 {{damage}}",
+    "attackMissedByDaze": "眩晕检定 {{effectDie}}，攻击 {{targetId}} 失手",
+    "attackMissedByDefense": "防御 {{defenseProfileId}} 掷骰 {{effectDie}}，攻击 {{targetId}} 被回避",
+    "attackMissedByImmunity": "{{targetId}} 对 {{damageTypes}} 免疫，攻击无效",
+    "arenaObjectDefenseRolled": "{{defenderObjectId}} 防御掷骰 {{rawEffectDie}}{{modifier}}={{modifiedEffectDie}}，需 {{minRoll}}+，{{result}}",
+    "defenseResult": {
+      "success": "成功",
+      "fail": "失败"
+    },
+    "damageDealt": "受到 {{amount}} 点伤害",
+    "statusTokenPlaced": "获得{{amount}}个{{status}}",
+    "statusTokenRemoved": "移除{{amount}}个{{status}}",
+    "arenaObjectDefeated": "{{objectId}} 被摧毁",
+    "mageDefeated": "被击败，胜者 {{winnerId}}",
+    "turnAdvanced": "回合交给 {{toPlayerId}}（第 {{turnNumber}} 回合）",
+    "readinessReset": "行动与快速施法重置",
+    "spellPushResolved": "法术推斥",
+    "spellPushTarget": "，目标 {{targetId}}，{{from}} → {{to}}",
+    "spellTeleportResolved": "法术传送",
+    "spellTeleportTarget": "，目标 {{targetId}}，{{from}} → {{to}}，距离 {{distance}}",
+    "arenaObjectRegenerated": "{{objectId}} 重生治疗 {{healing}} 点伤害"
   }
 }

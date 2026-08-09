@@ -29,6 +29,7 @@ export type OnlineAiSeatResyncRequest = {
     client: Pick<GameTransportClient, 'resync' | 'latestState' | 'isConnected'>;
     reason: string;
     meta?: Record<string, unknown>;
+    force?: boolean;
 };
 
 export type OnlineAiSeatRecoveryFailureNoticeRequest = {
@@ -98,8 +99,7 @@ export function useOnlineAiSeatTransportRuntime(args: {
             if (!client?.isConnected) {
                 return false;
             }
-            client.sendCommand(type, payload);
-            return true;
+            return client.sendCommand(type, payload);
         };
 
         onManualSetupDispatchReady(dispatchManualSetupCommand);
@@ -250,7 +250,7 @@ export function useOnlineAiSeatTransportRuntime(args: {
     }, []);
 
     const requestSeatResync = useCallback((request: OnlineAiSeatResyncRequest) => {
-        const { playerId, client, reason, meta } = request;
+        const { playerId, client, reason, meta, force } = request;
         pendingSeatResyncRef.current[playerId] = {
             requestedAt: Date.now(),
             reason,
@@ -271,7 +271,11 @@ export function useOnlineAiSeatTransportRuntime(args: {
         };
         onlineAiTransportLogger.warn('resync-requested', payload);
         emitOnlineAiTransport('resync-requested', payload);
-        client.resync();
+        if (force) {
+            client.resync({ force: true });
+        } else {
+            client.resync();
+        }
     }, [engineConfig.gameId, getEffectiveSeatState, matchId]);
 
     const scheduleRecoveryFailureNotice = useCallback((request: OnlineAiSeatRecoveryFailureNoticeRequest) => {
@@ -440,6 +444,7 @@ export function useOnlineAiSeatTransportRuntime(args: {
                     playerId,
                     client,
                     reason: 'app-visible',
+                    force: true,
                 });
             }
             scheduleAiRetry();

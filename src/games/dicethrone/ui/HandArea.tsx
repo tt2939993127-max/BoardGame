@@ -198,7 +198,7 @@ export const HandArea = ({
     locale?: string;
     currentPhase?: TurnPhase;
     playerCp?: number;
-    onPlayCard?: (card: AbilityCard) => void;
+    onPlayCard?: (card: AbilityCard) => boolean | void;
     onSellCard?: (cardId: string) => void;
     onError?: (message: string) => void;
     canInteract?: boolean;
@@ -660,8 +660,12 @@ export const HandArea = ({
                     resetDragValues(entry.key, 'drag');
                     clearPendingPlay();
                 }, PENDING_PLAY_TIMEOUT);
-                onPlayCard(card);
-                actionTaken = true;
+                const playAccepted = onPlayCard(card);
+                if (playAccepted === false) {
+                    clearPendingPlay();
+                } else {
+                    actionTaken = true;
+                }
             }
         }
 

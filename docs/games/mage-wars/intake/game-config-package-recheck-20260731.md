@@ -1,6 +1,402 @@
 # 法师战争数据与配置录入按 GameConfigPackage 新规范复查
 
-> 状态：`post-main-merge-recheck / config-included-in-data-recheck / config-package-deferred / no-runtime-migration-this-round`。本文件记录 2026-07-31 合入 main 后，按 `docs/ai-rules/game-config-package.md` 与 `.codex/skill/create-new-game/references/mechanics-data-design.md` 对法师战争现有数据与配置录入做的复查。本次只补裁定与缺口，不重录图片、不迁移运行时数据源。
+> 当前快照（2026-08-04，`1825 / 1901 / 1904` 响应链完成后）：配置包共 91 张学徒法术，其中 90 张 implemented、1 张 needsCode；分类为攻击 10/10、生物 24/24、魔物 1/1、咒语 18/18、装备 14/14、结界 23/24。后文带日期的切片段落保留当时统计，当前状态以本快照和最新切片为准。
+
+## 2026-08-04 群兽法杖配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `3710` 配置 | `data.combatProfiles.attacks` 保存蛮力一击的快速近战 4 骰；`data.combatTraits.beastStaff` 保存稳定能力 ID、限定兽王、2 点能力费用、快速行动、0-1 格范围、近战 +2 和 2 颗治疗骰，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | 复用竞技场对象能力命令，以 `mode=melee-bonus / heal` 区分效果；只有附着在当前兽王法师身上的配置装备可用，目标必须是己方活体动物生物且距离不超过 1 格。 |
+| 回合 / 行动 | 能力在快速施法窗口或生物行动阶段消耗对应法师行动轨道，同一装备每回合一次；强化临时近战 +2 跨越生物行动阶段，在下一回合统一清理，治疗按 2 颗攻击骰并限制实际治疗量。 |
+| 验证 | 独立 OpenSpec `refactor-mage-wars-structured-beast-staff`；Mage Wars 7 files / 233 tests、TypeScript、定向 ESLint 和 OpenSpec 严格校验通过。 |
+
+## 2026-08-04 结构化元素魔杖法术绑定切片补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `3716` 配置 | `requiresCodeSupport=false`；能力使用稳定 ID `mw.equipment.3716.elemental-staff-bind`。法术卡原始标签进入配置解析，绑定资格由结构化攻击类型、法术书成员关系和史诗标签判断。 |
+| 首次绑定 | 施放元素魔杖时可在 `CAST_SPELL` 提供一张合法绑定牌；绑定牌写入新建装备对象的 `boundSpellCardId`，不写入 `preparedSpellCardIds` 或 `discardSpellCardIds`。未提供时装备合法进入场上且保持未绑定。 |
+| 替换绑定 | 复用 `USE_ARENA_OBJECT_ABILITY`；只有附着在当前法师身上的元素魔杖可在快速施法阶段支付固定 3 点法力替换已绑定牌，并由 `ARENA_OBJECT_ABILITY_RESOLVED` 携带新绑定牌 ID。 |
+| 规则边界 | 非攻击、史诗、非法师术书、相同绑定牌、非法来源、非快速施法阶段和法力不足均拒绝；`1825` 厄运、`1901` 法力失效和 `1904` 攻击逆转由响应窗口处理，`1804` 法师祸咒仍等待非玩家生物施法者来源建模；当前配置仅保留 `1804` 为 `needsCode`。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts`：207 tests passed；TypeScript 通过；提案 `add-mage-wars-elemental-staff-binding` 严格校验通过。 |
+
+## 2026-08-04 结构化偏移护腕配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `3715` 配置 | `data.combatProfiles.defenses` 声明 `defense-0 / minRoll=7 / usesPerRound=1`，并以 `requiresCodeSupport=false` 标为 implemented；`attackOrTraitLine` 仅保留卡面展示。 |
+| 运行时消费 | 附着在法师身上的配置装备提供防御来源；法师基础攻击、竞技场对象攻击和攻击类法术统一进入现有防御交互，成功防御中断伤害，失败后只恢复原攻击效果。 |
+| 跨回合 / 移除 | 玩家状态记录来源 profile 的回合使用次数；行动准备清除记录；装备被移除后不再提供 profile。攻击法术防御恢复不重复发出施法支付。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts`、TypeScript、定向 ESLint 和 OpenSpec 严格校验覆盖配置放行、三类攻击入口、成功 / 失败和回合重置。 |
+
+## 2026-08-04 结构化抑制斗篷配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `3705` 配置 | `data.combatTraits.meleeAttackManaTax` 声明 `amount=2`、`oncePerAttackerPerRound=true`、`excludeCounterstrike=true`，并以 `requiresCodeSupport=false` 标为 implemented；卡面中文只保留展示职责。 |
+| 运行时消费 | 目标法师的附着装备提供来袭攻击费用；只有生物对法师进行近战攻击时触发，费用在既有防御窗口前支付，法力不足时整次攻击取消。 |
+| 原子支付 | 与 `1912` 心灵安抚同时触发时合计判断攻击者控制方的法力；不足时不产生任何 `MANA_SPENT`，但两类来源都记录本回合已触发并消耗攻击行动。 |
+| 回合 / 来源 | 每个装备来源独立记录攻击生物和回合；同回合不重复，新回合恢复，移除装备后不再提供来源，防御响应恢复攻击不重复收费。 |
+| 验证 | 独立 OpenSpec `refactor-mage-wars-structured-suppression-cloak`；完整 Mage Wars 测试 7 files / 222 tests、TypeScript、定向 ESLint、OpenSpec 严格校验和 diff 检查通过。 |
+
+## 2026-08-04 结构化恶魔胸甲配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `3700` 配置 | `data.combatTraits.damageBarrier` 声明 1 颗 `aether` 骰、无法回避、致命伤害和每回合每个攻击者一次，并以 `requiresCodeSupport=false` 标为 implemented；中文卡面只保留展示职责。 |
+| 运行时消费 | 目标法师的附着装备提供屏障来源；法师基础近战和场上对象近战在全部打击完成且目标法师存活时触发一次独立屏障攻击。远程、攻击类法术、直接伤害、完全失手和重复攻击不触发。 |
+| 伤害与响应 | 屏障伤害沿用 `DamageCalculation`，致命伤害忽略目标护甲；事件顺序为 `DAMAGE_BARRIER_TRIGGERED` 后接 `DAMAGE_DEALT`，不创建防御、反击或屏障递归，攻击者可被屏障击败。 |
+| 回合 / 来源 | 装备来源记录攻击者和回合；同回合不重复，新回合恢复，装备移除后不再提供来源。 |
+| 验证 | 独立 OpenSpec `refactor-mage-wars-structured-damage-barrier`；配置、能力目录、类型、定向来源查询和领域流程回归通过。 |
+
+## 2026-08-04 结构化心灵安抚配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1912` 配置 | `data.semantics` 声明可见对象附属结界、对象锚点和 `grants: mental-calm=2`，并以 `requiresCodeSupport=false` 标为 implemented；loader 要求该特性携带正整数值。 |
+| 运行时消费 | 对象攻击宣告阶段收集尚未在当前回合触发的来源；足够法力时发出明确 `MANA_SPENT`，随后在现有 `DEFENSE_AVAILABLE` 前发出 `MENTAL_CALM_TRIGGERED`；不足时不投攻击骰、不进入防御，仍通过空骰攻击宣告和 `ATTACK_MISSED` 消耗攻击行动。 |
+| 跨命令与反击 | 触发来源在防御窗口前落入对象状态，防御选择后的二次攻击解析不会重复收费；每个来源独立收费，新回合按回合号恢复；反击调用显式排除心灵安抚。 |
+| 文本边界 | 改写或移除附属结界 / 生物展示规则文本不会关闭心灵安抚；攻击类型、支付和取消均由配置语义与领域事件驱动。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts`、TypeScript 与 OpenSpec 严格校验覆盖配置放行、攻击时序、法力不足、双来源、远程、跨回合和反击边界。 |
+
+## 2026-08-04 结构化尸鬼腐化配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1820` 配置 | `data.semantics` 声明可见附属结界、对象锚点和 `upkeepEffects: direct-damage / amount=2 / damageType=毒素`，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | 维持阶段从锚定来源读取效果；目标毒素免疫时跳过伤害，否则复用直接伤害和对象击败事件；结界离场后来源查询为空，不再造成后续维持伤害。 |
+| 文本与 deferred | 玩家可见规则文案仅用于展示；法师绑定+2 尚未接入支付 / 维持系统，`1804`、`1904`、`1912` 和其它结界响应边界保持 deferred。 |
+| 验证 | `domain-flow.test.ts` 150/150、`src/games/mage-wars` 全套和 `gameConfigPackage.test.ts` 定向回归通过；OpenSpec change 已严格校验。 |
+
+## 2026-08-04 结构化原力之握配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1908` 配置 | `data.semantics` 声明可见附属结界、对象锚点和 `restrained` 授予特性，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | 施法执行器从授予特性发出现有束缚来源事件；目标校验拒绝不羁生物；普通移动、推斥、传送和结界离场清理均复用现有 owner。 |
+| 文本边界 | 玩家可见规则文案仅用于展示，移除或改写文案不会关闭 `1908` 的束缚规则；不新增第二份规则文本解析入口。 |
+| 验证 | `domain-flow.test.ts` 148/148、`src/games/mage-wars` 190/190、`gameConfigPackage.test.ts` 6/6；OpenSpec change 已严格校验。 |
+| 未覆盖 | `1904`、`1912`、隐藏结界、展示 / 反制、庇护、区域结界、法师附属结界和完整结界 UI 仍保持 deferred。 |
+
+## 2026-08-04 结构化庇护配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1813` / `1911` / `1913` 配置 | `1813` / `1911` 声明可见对象附属、`grants: aegis=1`；`1913` 声明可见区域结界、区域锚点和相同授予特性，三张均以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | `spellRules.ts` 从目标生物的对象附属与当前区域可见结界来源取最高庇护值；场上对象攻击、普通攻击法术和连锁闪电在投攻击骰前消费减骰，复用最低 1 骰与伤害类型免疫 owner。区域来源只接受同控制者的活体生物。 |
+| 文本边界 | 改写或移除附属结界的玩家可见规则文案不会关闭庇护；不新增从中文卡面文本猜测庇护的入口。 |
+| 当前攻击边界 | `DECLARE_ATTACK` 当前只接受法师目标，没有法师攻击生物入口；本切片不新增命令，只覆盖已有对象攻击和攻击法术路径。 |
+| 验证 | `ability-catalog.test.ts` 80/11、结界 18/24；`config-package.test.ts`、`domain-flow.test.ts` 定向回归通过，覆盖区域锚点、友方 / 敌方 / 区域外边界、攻击法术、双来源取最高、文案移除、最低 1 骰、连锁闪电和免疫分支。 |
+
+## 2026-08-04 结构化区域庇护配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1913` 配置 | `data.semantics` 声明 `visible-area-enchantment`、公开 `zone` 锚点和 `grants: aegis=1`，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 施放与关系 | 合法区域目标使用 `targetZoneId`，生成公开区域锚定结界对象；不伪装成对象附属，也不增加新的区域模型。 |
+| 规则消费 | 目标生物当前所在区域存在由同一玩家控制的 `1913` 时获得庇护 1；离开区域失效；与 `1813` / `1911` 对象来源统一取最高而非叠加。 |
+| 验证 | 配置、能力目录、类型、ESLint 与领域流程回归均已通过；领域流程覆盖对象攻击和攻击法术、敌方与区域外对象、展示文案移除。 |
+| 保留缺口 | 法师、墙体 / 标准 12 区、隐藏结界、展示 / 反制、法师绑定和完整区域结界 UI 仍保持 deferred。 |
+
+> 状态：`post-main-merge-recheck / config-included-in-data-recheck / config-package-runtime-source-partial / starting-deployment-config-backed / arena-zone-layout-config-backed / arena-object-domain-slice-started / object-armor-damage-pipeline-covered / object-attack-profile-explicit / object-attack-effect-die-status-covered / daze-stun-conjuration-immunity-covered / daze-attack-miss-covered / daze-defense-penalty-covered / stun-defense-disabled-covered / restrained-defense-penalty-covered / daze-action-end-removal-covered / stun-basic-action-lock-covered / stun-attack-spell-lock-covered / stun-quick-nonattack-cast-exception-covered / stun-action-end-removal-covered / spell-action-speed-config-covered / spell-action-speed-all-apprentice-covered / stun-guard-removal-covered / guard-interception-covered / guard-melee-removal-covered / guard-object-command-covered / guard-counterstrike-choice-covered / object-defense-window-covered / object-defense-cooldown-covered / object-attack-pierce-armor-covered / object-triple-strike-covered / object-regeneration-covered / rot-status-token-covered / rot-upkeep-direct-damage-covered / burn-upkeep-tick-covered / sleep-damage-daze-replacement-covered / weak-cripple-status-token-covered / weak-attack-dice-effect-covered / cripple-move-lock-covered / cripple-escape-check-covered / status-removal-cost-covered / priestess-restoration-covered / healing-spell-slice-covered / life-drain-direct-damage-covered / generic-attack-spell-slice-covered / intermittent-jet-burn-removal-covered / nonliving-bonus-damage-covered / dazzling-flash-area-attack-covered / force-push-incantation-covered / sleep-incantation-covered / config-creature-rot-attack-covered / flying-bonus-damage-covered / mana-drain-attack-covered / asyran-cleric-healing-light-covered / grey-angel-redemption-sacrifice-covered / charge-trait-covered / highland-unicorn-regeneration-charge-covered / deepwood-shadow-elusive-legendary-covered`。本文件记录 2026-07-31 合入 main 后，按 `docs/ai-rules/game-config-package.md` 与 `.codex/skill/create-new-game/references/mechanics-data-design.md` 对法师战争现有数据与配置录入做的复查。2026-08-01 已开始独立 `add-mage-wars-config-package`，新增第一版严格 JSON 配置包和并行校验；setup 法师属性、法术书数量、法术书合法性、Board 法术书预览、卡牌预览、攻击法术类型级执行器、生物/魔物基础对象生成、场上对象基础行动、显式攻击 profile、对象攻击效果骰状态 token（燃烧 / 眩晕 / 昏迷 / 腐化 / 虚弱 / 残废）、毒素状态免疫过滤、眩晕 / 昏迷魔物免疫、眩晕攻击失手、眩晕防御骰 -2、昏迷防御禁用、束缚防御骰 -2、眩晕行动阶段结束清理、残废行动阶段结束 7+ 逃逸检定、昏迷行动阶段结束清理、昏迷基础行动锁、昏迷法师攻击法术禁令、昏迷法师非攻击快速法术例外、快速施法阶段标准法术拒绝、昏迷清除守卫、同区敌方守卫拦截生物近战目标选择、守卫被近战攻击后移除、场上生物守卫命令、守卫反击机会 / 放弃 / 选择反击结算、对象防御窗口 / 防御成功回避 / 防御失败继续 / 防御用后冷却 / 重置恢复 / 无法回避跳过防御、虚弱非法术攻击减骰、残废阻止生物普通移动、状态 token 移除费用、女祭司快速 / 标准复原术、对象护甲减伤、对象攻击穿刺抵消护甲、对象三连击、维持阶段重生、腐化维持阶段直接伤害、燃烧维持阶段攻击骰 tick、沉睡受伤替换眩晕、`次级治疗`、`群体治疗`、`单体治疗`、`生命汲取`、`烈焰爆弹`、`雷导术`、`闪电箭矢`、`间歇喷泉`、`圣光之柱`、`眩目闪光`、`气流` 与 `原力推斥` 已改为消费配置包/对象状态字段。配置包 `startingDeployment` 已按规则 p4/p7 修为 2 人座位 A1/B3 对角起始，学徒六区已按 `apprentice-zone-layout-contract.md` 修为 A/B 列、1/2/3 行，并由 runtime setup 消费；91 张学徒法术的 `spellActionSpeed` 已按规则页行动图标与卡图核读进入配置包。
+
+> 2026-08-02 补充状态：`damage-type-adjustment-covered / damage-type-immunity-covered / mana-drain-attack-covered / asyran-cleric-healing-light-covered / grey-angel-redemption-sacrifice-covered / charge-trait-covered / highland-unicorn-regeneration-charge-covered / charge-on-incantation-covered / thunderift-falcon-flying-swift-covered / darkfenne-bat-flying-rot-covered / call-of-the-wild-melee-animal-covered / bloodstrike-vampiric-pierce-covered / deepwood-shadow-elusive-legendary-covered / tanglevine-conjuration-restraint-covered / basic-armor-equipment-covered`，详见下方“伤害类型 +/- 修正配置执行补充”“伤害类型免疫配置执行补充”“法力流失攻击配置执行补充”“阿希拉牧师治疗之光配置执行补充”“灰衣天使救赎献祭配置执行补充”“冲锋特性配置执行补充”“高地独角兽重生 / 冲锋组合配置执行补充”“冲锋陷阵律令咒语配置执行补充”“雷隙猎鹰飞行 / 迅捷配置执行补充”、“暗沼蝙蝠飞行 / 腐化攻击配置执行补充”“荒野呼唤配置执行补充”“汲血之击配置执行补充”、“深林幽影切维尔配置执行补充”与“缠绕藤蔓配置执行补充”。
+
+> 2026-08-03 最新补充状态：`steal-enchantment-covered / dispel-visible-enchantment-covered / explode-equipment-covered / dissolve-alternate-covered / passive-armor-equipment-covered / weapon-equipment-attack-covered / visible-object-enchantment-traits-covered`。当前配置包准确统计为 91 张学徒法术中 68 张 implemented、23 张 needsCode；分类为攻击 10/10、生物 24/24、魔物 1/1、咒语 18/18、装备 8/14、结界 7/24。新增放行 `1808` 公牛耐力、`1816` 身心俱疲、`1914` 巨熊力量、`1916` 体肤重生与 `1917` 犀牛兽皮：五张牌作为已展示附属结界施放到合法对象，并持续影响有效生命、迟缓、近战骰、重生与护甲。此前 `3704` 奥秘法杖、`3706` 阿希拉法杖、`3409` 结界窃取、`3419` / `3606` 驱散、`3401` 炎爆、`3406` / `3605` 瓦解、`3703` 龙鳞锁甲、`3708` 风龙皮甲、`3709` 元素斗篷与 `3711` 巨熊皮甲已放行。当前不代表 `1813` / `1911` 神力加护、`1913` 圣佑领地、强制防御结界、隐藏结界施放、展示/反制、庇护、区域结界、法师附属结界、完整视线/墙体、完整结界 UI、`3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力、防御护腕、法术绑定、反伤屏障、装备栏或职业限制已经闭合。上方 2026-08-02 流水保留当时切片状态，最新统计以本段和下方“显性附属持续结界配置执行补充”“武器装备攻击配置执行补充”“结界窃取配置执行补充”“驱散显性结界配置执行补充”“炎爆配置执行补充”“瓦解同名候选配置执行补充”“被动护甲 / 元素抗性装备配置执行补充”为准。
+
+> 2026-08-04 阶段性历史状态（`1910` / `1913` 前）：`structured-combat-traits-covered / structured-enchantment-defense-covered / structured-reach-attack-covered / structured-counterstrike-enchantment-covered`。当时配置包统计为 91 张学徒法术中 72 张 implemented、19 张 needsCode；该段记录保留当时的装备、结界和区域缺口，不代表当前快照。
+
+> 2026-08-04 `1910` 鲜血贪噬配置执行补充：当前统计为 91 张学徒法术中 73 张 implemented、18 张 needsCode，结界 11/24。`1910` 通过可见附属结界语义授予近战吸血，治疗按实际伤害累计，多段攻击只产生一个治疗事件，远程攻击不生效，展示文案移除后仍能结算，持续附属不清除；`3404` 汲血之击的一次性临时吸血 / 穿刺回归保持不变。
+
+## 2026-08-04 结构化精华汲取配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1815` 配置 | `data.semantics` 声明可见对象附属和 `upkeepEffects: mana-cost / amount=2`，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | 维持阶段从附属来源发出 `UPKEEP_COST_AVAILABLE`；目标生物控制者有足够法力时可支付 2 点或摧毁来源，法力不足时仅保留摧毁选项。 |
+| 事件边界 | 支付使用 `MANA_SPENT`，不混用攻击法力流失 `MANA_DRAINED`；摧毁复用 `ARENA_OBJECT_DEFEATED` 和现有附属清理。来源移除后陈旧响应不再产生事件。 |
+| 保留缺口 | 完整维持阶段效果排序、法师绑定、`1804` 生物施法、隐藏结界、展示 / 反制和完整结界 UI 仍保持 deferred。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts` 定向回归通过；当前统计为 91 张学徒法术 `82 implemented / 9 needsCode`，结界 `20/24`。 |
+
+## 2026-08-04 结构化死亡印记配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1826` 配置 | `data.semantics` 声明可见附属结界、对象锚点和 `grants: death-mark=1`，并以 `requiresCodeSupport=false` 标为 implemented。 |
+| 运行时消费 | 对象生物攻击附着目标时，按每个来源结界、攻击者和当前回合提供首攻 +1 攻击骰；三连击的每段攻击都继承该攻击修正，但 reducer 只记录一次该来源对该攻击者的回合消费。法师攻击、攻击法术和非生物攻击不适用。 |
+| 文本与 deferred | 玩家可见规则文案仅用于展示，移除或改写文案不会关闭 `1826` 的首攻加骰；法师绑定+2、响应窗口、隐藏结界和完整结界 UI 保持 deferred。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts`；覆盖不同生物首攻、同一生物后续攻击、移除展示文案、三连击每段加骰和来源单次消费。OpenSpec change 已严格校验。 |
+
+## 2026-08-04 结构化格挡配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| `1806` 配置 | `combatProfiles.defenses` 声明 `automatic-evade` 与 `consumesSource=true`，并以 `requiresCodeSupport=false` 标为 implemented；该 profile 不掷防御骰。 |
+| 运行时消费 | 可回避对象攻击命中格挡目标时，防御窗口只暴露格挡且不能跳过；选择后生成攻击回避事件并移除格挡来源。不可回避攻击不创建防御窗口，但仍移除格挡并继续攻击结算。 |
+| 文本与 deferred | 玩家可见规则文案仅用于展示，移除或改写文案不会关闭格挡；`1904`、`1912`、`3715`、法师防御、隐藏结界和完整响应优先级保持 deferred。 |
+| 验证 | `config-package.test.ts`、`ability-catalog.test.ts`、`domain-flow.test.ts`；覆盖强制无跳过选项、无防御骰、来源移除、展示文案移除和不可回避攻击继续结算。OpenSpec change 已严格校验。 |
+
+## 2026-08-02 伤害类型 +/- 修正配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 伤害类型事实边界 | 当前运行时消费目标特性文本中的 `火焰-2`、`闪电+2` 等伤害类型 +/- 修正事实；它只修正符合伤害类型攻击的攻击骰数量和效果骰结果，免疫由下方独立切片消费。 |
+| 规则消费范围 | 当前消费 `page_026.md` / `page_028.md` / `page_044.md`：匹配伤害类型时累计修正攻击骰和效果骰；攻击骰最低 1 颗，除非目标免疫该伤害类型。 |
+| 已覆盖 | 法术攻击、`连锁闪电` 每跳攻击和场上对象攻击都会解析攻击 profile 的伤害类型，并把目标特性中的匹配修正应用到攻击骰数量与效果骰结果；攻击事件保留原始效果骰和修正后效果骰，便于 UI / 日志展示真实骰面与规则修正。 |
+| 未覆盖 | UI 骰盘对 raw / modified 的展示仍是后续规则切片；伤害类型免疫本身已由下方独立切片覆盖。 |
+
+## 2026-08-02 伤害类型免疫配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 伤害类型免疫边界 | 当前运行时消费对象特性文本中的 `火焰免疫`、`闪电免疫` 等伤害类型免疫事实；它是攻击结算取消规则，不是把攻击骰修正为 0。 |
+| 规则消费范围 | 当前消费 `page_026.md` / `page_028.md` / `page_044.md`：目标免疫匹配伤害类型时，不投攻击骰或效果骰，不受到攻击影响；特定类型攻击法术不能把免疫对象作为目标。 |
+| 已覆盖 | 目标型攻击法术校验拒绝匹配免疫对象；区域攻击法术对免疫对象跳过攻击骰、效果骰、伤害和状态，但继续结算其它目标；场上对象攻击对免疫目标记录免疫导致的攻击无效并消耗攻击者行动，不误用眩晕失手或防御回避分支。 |
+| 未覆盖 | 直接伤害免疫、非攻击型特定伤害类型法术目标免疫、装备 / 结界动态赋予免疫和 UI 骰盘 / 行动日志更细展示仍是后续规则切片。 |
+
+## 2026-08-03 被动护甲 / 元素抗性装备配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 装备事实边界 | 本切片只消费 `3703` 龙鳞锁甲、`3708` 风龙皮甲、`3709` 元素斗篷与 `3711` 巨熊皮甲的被动护甲和伤害类型修正文本；不消费装备栏、职业限定、武器攻击、防御、反伤屏障或法术绑定。 |
+| 规则消费范围 | 复用规则书 `page_022.md` 的装备附属与公开可检视事实，并复用已实现的伤害类型 +/- 修正规则：匹配伤害类型时修正攻击骰数量和效果骰结果；装备护甲随后作为伤害明细中的减伤项结算。 |
+| 已覆盖 | 四张装备已由配置包标为 implemented；施放后生成 `kind=equipment` 的附属对象并保留 trait 文本；法师移动时装备跟随；攻击法术和场上对象攻击会读取法师身上附属装备文本，先应用 `火焰-2` / `闪电-2` 等元素修正，再应用装备护甲。 |
+| 未覆盖 | 本切片完成时 `3704` 奥秘法杖、`3706` 阿希拉法杖等武器装备仍未放行；后续已由“武器装备攻击配置执行补充”覆盖 `3704` / `3706`。当前仍未覆盖 `3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力、`3715` 偏移护腕、`3716` 元素魔杖、装备栏限制、职业限定、防御、反伤屏障、法术绑定和完整装备 UI。 |
+
+## 2026-08-03 武器装备攻击配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 武器装备事实边界 | 当前只消费 `3704` 奥秘法杖与 `3706` 阿希拉法杖的附属装备、武器攻击条、目标距离、伤害类型 / 非活体加伤、法力流失和状态骰事实；不消费装备栏、职业限制、完整装备 UI 或其它武器装备特殊规则。 |
+| 规则消费范围 | 复用装备附属对象 owner、法师行动轨 owner、对象攻击 owner、法力流失 owner 和非活体加伤 / 眩晕 / 昏迷状态 owner：已附属到法师的支持武器可由该法师在生物行动阶段声明装备攻击，攻击消耗法师行动标记而不是装备对象行动标记。 |
+| 已覆盖 | `3704` 与 `3706` 已由 `requiresCodeSupport=false` 标为 implemented；`3704` 奥秘法杖支持近战 profile 与 1 格远程 profile，命中敌方生物造成实际伤害后触发 `法力流失+1`；`3706` 阿希拉法杖对非活体目标加 2 骰，并按效果骰 5-10 放置眩晕、11+ 放置昏迷。校验层拒绝未附属装备、非己方装备、非武器 / 被动护甲装备、未实现武器、超距目标、已花费行动的法师和非法师附属来源。 |
+| 未覆盖 | `3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力、防御护腕、法术绑定、反伤屏障、装备栏、职业限制、完整装备 UI、法力传输和攻击方获得法力事件仍是后续切片。 |
+
+## 2026-08-03 显性附属持续结界配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 结界事实边界 | 当前只消费 `1808` 公牛耐力、`1816` 身心俱疲、`1914` 巨熊力量、`1916` 体肤重生与 `1917` 犀牛兽皮的公开附属、对象目标和配置包 `data.semantics` 持续语义；不消费隐藏、展示时机、响应、防御、庇护、区域结界或法师附属结界。 |
+| 规则消费范围 | 复用公开附属对象 owner 与配置包目标规则：五张结界按施法费用 + 展示费用一次性付费后生成 `kind=enchantment` 对象，锚定目标对象；持续效果由有效生命、有效护甲、近战骰修正、维持阶段重生和迟缓移动 owner 读取来源卡的结构化语义，不从玩家可见规则文本解析。 |
+| 已覆盖 | `1808` / `1816` / `1903` / `1914` / `1916` / `1917` 已由 `requiresCodeSupport=false` 标为 implemented，并分别配置生命+4、迟缓、反击、近战+2、重生2、护甲+2 的机器可读语义；校验层拒绝非法目标、缺目标、费用不匹配和法力不足；执行层生成公开附属结界对象，并让目标对象获得对应有效属性或反击机会；`1903` 首次执行反击后销毁来源，放弃保留。 |
+| 未覆盖 | `1804` 法师祸咒、`1806` 格挡、`1813` / `1911` 神力加护、`1913` 圣佑领地等仍因响应、防御、庇护、区域光环、法师附属或展示时机未闭合保持 needsCode；完整结界 UI 仍是后续切片。 |
+
+## 2026-08-03 炎爆配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 炎爆事实边界 | 当前只消费 `3401` 炎爆的装备目标、X 费用和后续火焰攻击事实；不消费驱散、结界窃取、结界、装备栏、武器攻击、防御、反伤屏障或 UI。 |
+| 规则消费范围 | 复用装备附属对象 owner、装备离场 owner 和普通攻击法术 owner：X 等于目标装备来源卡费用 + 6；合法施放先移除装备，再按炎爆配置的 4 骰火焰攻击命中该装备附属的法师。 |
+| 已覆盖 | `3401` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝费用不匹配、未附属装备、非装备对象、法力不足和距离外装备；执行层记录 `ARENA_OBJECT_DEFEATED`、移除目标装备、再发出炎爆火焰攻击 / 伤害 / 燃烧事件。 |
+| 未覆盖 | 炎爆不会放行驱散、结界窃取、其它咒语、结界系统、装备栏、装备武器或完整装备 UI。 |
+
+## 2026-08-03 驱散显性结界配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 驱散事实边界 | 当前只消费 `3419` / `3606` 驱散的显性结界目标、X 费用和目标离场事实；不消费隐藏结界施放、展示/反制、结界持续效果、结界窃取或 UI。 |
+| 规则消费范围 | 复用公开场上对象 owner：目标必须是已展示且已附属到法师或场上对象的 `kind=enchantment` 对象；X 等于该结界来源卡的施法费用 + 展示费用。 |
+| 已覆盖 | `3419` 与 `3606` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝费用不匹配、隐性结界、非结界对象、未附属结界、法力不足和距离外目标；执行层记录 `ARENA_OBJECT_DEFEATED` 并移除目标结界。 |
+| 未覆盖 | 驱散不会放行隐藏结界系统、展示时机、反制窗口、结界持续效果、结界窃取、其它咒语或完整结界 UI。 |
+
+## 2026-08-03 结界窃取配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 结界窃取事实边界 | 当前只消费 `3409` 结界窃取的显性附属结界、单一新合法目标、X 费用、结界移动与控制权转移事实；不消费隐藏结界施放、展示/反制、持续结界效果、完整视线/墙体或 UI。 |
+| 规则消费范围 | 复用公开场上对象 owner 和结界来源卡目标规则：目标必须是已展示且已附属到对象或区域的 `kind=enchantment` 对象；新目标必须符合被窃取结界的目标规则且不能是同一锚点；X 按“旧附属总费用 + 新附属总费用”校验。 |
+| 已覆盖 | `3409` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝缺新目标、多个新目标、同一目标、非法新目标、费用不匹配、隐性结界、非结界对象、未附属结界、法力不足、旧目标超距和新目标超距；执行层记录 `ENCHANTMENT_STOLEN`，移动目标结界、更新锚点和区域，并将结界 owner 改为施法者。 |
+| 未覆盖 | 结界窃取不会放行隐藏结界系统、展示时机、反制窗口、结界持续效果、完整视线/墙体、其它结界或完整结界 UI。 |
+
+## 2026-08-02 法力流失攻击配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 法力流失边界 | 当前运行时消费对象攻击条中的 `法力流失+X`，已覆盖 `2807` 汲法水蛭和 `3704` 奥秘法杖；法力传输仍不是本切片。 |
+| 规则消费范围 | 当前消费 `page_042.md` 的法力流失事实：攻击对敌方生物造成实际伤害后扣目标控制方 X 点法力，目标法力不足时失去全部，多段攻击只在首次攻击触发。`page_043.md` 的法力传输额外给攻击方获得法力，仍未实现。 |
+| 已覆盖 | 场上对象攻击和支持的武器装备攻击造成实际伤害后会解析攻击 profile 的 `法力流失+X`，生成 `MANA_DRAINED` 事件并扣目标控制方法力；扣除量按目标控制方当前法力封顶，多段攻击只在 `strikeIndex=0` 结算一次。 |
+| 未覆盖 | 法力传输、其它法力流失牌、攻击方获得法力事件、`3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力、UI 骰盘 / 行动日志更细展示仍是后续规则切片。 |
+
+## 2026-08-02 阿希拉牧师治疗之光配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 对象治疗能力边界 | 当前运行时只消费 `2811` 阿希拉牧师卡图中的治疗之光对象能力：完整行动、距离 `0-1`、1 颗治疗骰、目标活体生物。 |
+| 规则消费范围 | 该能力通过 `USE_ARENA_OBJECT_ABILITY` 进入领域层，要求来源对象为本方 ready 阿希拉牧师，目标必须是 0-1 距离内的活体生物；执行后生成对象能力事件和治疗骰事件，并消耗牧师行动。 |
+| 已覆盖 | `2811` 已由 `requiresCodeSupport=false` 标为 implemented；治疗结果复用现有 `SPELL_HEALING_ROLLED` 与 reducer，不新增第二套治疗状态。 |
+| 未覆盖 | 其它对象治疗能力、治疗 UI 骰盘和响应窗口联动仍是后续规则切片。 |
+
+## 2026-08-02 灰衣天使救赎献祭配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 对象治疗能力边界 | 当前运行时消费 `2907` 灰衣天使卡图中的救赎献祭对象能力：完整行动、6 颗治疗骰、目标为竞技场中任一活体生物，治疗后摧毁灰衣天使。 |
+| 规则消费范围 | 该能力通过 `USE_ARENA_OBJECT_ABILITY` 进入领域层，要求来源对象为本方 ready 灰衣天使，目标必须是任一活体生物；执行后生成对象能力事件、治疗骰事件和灰衣天使被摧毁事件。 |
+| 已覆盖 | `2907` 已由 `requiresCodeSupport=false` 标为 implemented；治疗结果复用现有 `SPELL_HEALING_ROLLED` 与 reducer，来源摧毁复用现有 `ARENA_OBJECT_DEFEATED` 与对象移除逻辑，不新增第二套治疗 / 删除状态。 |
+| 未覆盖 | 飞行移动含义、其它对象治疗能力、治疗 UI 骰盘和响应窗口联动仍是后续规则切片。 |
+
+## 2026-08-02 冲锋特性配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 冲锋边界 | 当前运行时消费对象攻击 / 特性文本中的印刷 `冲锋+X`，并对 `2906` 野性山猫等已完成对象放行；`3407` 冲锋陷阵的临时赋予冲锋已由下方独立切片覆盖，飞行 / 遁逸 / 阻碍 / 墙体联动仍不自动放行。 |
+| 规则消费范围 | 当前消费 `page_042.md` 与 FAQ `page_009.md`：生物普通移动至少 1 格后立即近战攻击时，下一次近战攻击获得 +X 颗攻击骰；该修正不影响效果骰。 |
+| 已覆盖 | `2906` 已由 `requiresCodeSupport=false` 标为 implemented；普通相邻移动会记录移动后快速行动窗口，后续快速近战按 `冲锋+2` 增加攻击骰，攻击后或阶段结束清理窗口；传送式移动不触发冲锋。 |
+| 未覆盖 | 飞行、遁逸、阻碍、墙体与 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 高地独角兽重生 / 冲锋组合配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 高地独角兽边界 | 当前运行时只放行 `2814` 高地独角兽的当前印刷字段：自身 `重生2`、同区友方活体生物 `重生1` 光环和 `冲锋+2`。 |
+| 规则消费范围 | 重生复用维持阶段最高值 owner，冲锋复用普通移动后快速近战 owner；不新增高地独角兽专属执行器。 |
+| 已覆盖 | `2814` 已由 `requiresCodeSupport=false` 标为 implemented；维持阶段高地独角兽按自身 `重生2` 恢复，同区友方活体按光环获得 `重生1`，若目标已有更高重生值则取最高值；普通移动后立即快速近战按 `冲锋+2` 增加攻击骰，效果骰不被修正。 |
+| 未覆盖 | 飞行、遁逸、阻碍、墙体、其它光环、结界赋予重生和 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 冲锋陷阵律令咒语配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 冲锋陷阵边界 | 当前运行时只放行 `3407` 冲锋陷阵的卡面事实：快速咒语，费用 4，射程 `0-2`，目标实体生物，赋予临时迅捷与冲锋+1。 |
+| 规则消费范围 | 该咒语通过现有施法链进入执行器，不新增移动系统；它复用临时迅捷 owner 和通用冲锋 owner，只补“咒语临时赋予的 +1 攻击骰”事实。 |
+| 已覆盖 | `3407` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝非法目标，执行层写入 `temporaryTraits.swift=true` 与 `chargeDiceModifier=1`，普通移动后快速近战按 +1 攻击骰结算，离开行动阶段时清理临时事实。 |
+| 未覆盖 | 飞行、遁逸、阻碍、墙体、其它律令咒语、临时特性的 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 荒野呼唤配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 荒野呼唤边界 | 当前运行时只放行 `3417` 荒野呼唤的卡面事实：快速咒语，费用 4，目标竞技场，让所有友方动物生物获得本回合近战+1。 |
+| 规则消费范围 | 该咒语通过现有施法链进入执行器，不新增选择 UI 或独立战斗系统；它复用场上对象类型文本、临时特性和对象攻击骰 owner，只补“友方动物临时近战 +1”事实。 |
+| 已覆盖 | `3417` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝携带单体 / 区域 / 推斥目标的错误施放，执行层只给友方动物对象写入 `temporaryTraits.meleeDiceModifier=1`，近战攻击按 +1 攻击骰结算，远程攻击不受影响，离开生物行动阶段时清理临时事实。 |
+| 未覆盖 | 其它临时战斗咒语、结界 / 装备赋予近战、阻碍、墙体和 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 汲血之击配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 汲血之击边界 | 当前运行时只放行 `3404` 汲血之击的卡面事实：快速咒语，费用 3，射程 `0-2`，目标活体生物，目标下一次近战攻击获得吸血和穿刺+1。 |
+| 规则消费范围 | 该咒语通过现有施法链进入执行器，不新增第二套攻击系统；它复用临时特性、对象攻击穿刺护甲修正、实际伤害统计、治疗事件和阶段结束清理 owner。 |
+| 已覆盖 | `3404` 已由 `requiresCodeSupport=false` 标为 implemented；校验层拒绝非法目标，执行层写入 `temporaryTraits.vampiricNextMelee=true` 与 `nextMeleePierceModifier=1`，近战攻击按穿刺+1 抵消对象护甲，并按实际伤害治疗攻击者控制方法师；近战后清理，远程攻击不触发且阶段结束清理。 |
+| 未覆盖 | 其它吸血来源、装备武器、结界赋予攻击特性、响应窗口和 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 狼人宠物戈伦嗜血配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 戈伦边界 | 当前运行时只放行 `2804` 狼人宠物戈伦的可执行战斗事实：费用 15、生命 12、护甲 3、快速近战 4 骰、完整行动近战 3 骰两连击、基础 `嗜血+1`，以及与控制方法师同区时额外 `嗜血+1`。 |
+| 规则消费范围 | 该生物复用现有配置生物召唤、对象攻击、伤害计算和多段攻击 owner；新增通用嗜血加骰解析，不新增第二套攻击系统。 |
+| 已覆盖 | `2804` 已由 `requiresCodeSupport=false` 标为 implemented；近战攻击已受伤活体目标时获得基础 `嗜血+1`，与控制方法师同区时再获得额外 `嗜血+1`；未受伤目标、非活体目标不获得嗜血加骰；`两连击` 按两段攻击结算且只有第一段获得嗜血奖励。 |
+| 未覆盖 | 嗜血强制攻击目标选择、嘲讽冲突、抑制斗篷等装备额外费用、遁逸、墙体、阻碍和 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 深林幽影切维尔配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 切维尔边界 | 当前运行时只放行 `2824` 深林幽影切维尔的当前印刷事实：费用 14、生命 11、护甲 2、快速近战 4 骰、防御 `8+ / 1x`、迅捷、遁逸和传奇。 |
+| 规则消费范围 | 该生物复用现有配置生物召唤、对象防御、守卫拦截、守卫反击和印刷迅捷 owner；新增通用传奇同名在场校验、遁逸忽略同区守卫拦截，以及遁逸忽略起始区敌方生物阻碍对迅捷免费移动的取消。 |
+| 已覆盖 | `2824` 已由 `requiresCodeSupport=false` 标为 implemented；召唤后保留生命、护甲、防御 profile、迅捷、遁逸、传奇和攻击条；同名传奇对象仍在场时再次召唤会被拒绝，离场后可再次召唤；遁逸攻击敌方法师或非守卫对象时可忽略同区守卫，主动攻击守卫时仍保留守卫反击机会；起始区有敌方生物时，遁逸迅捷仍可首次免费移动，非遁逸迅捷在同样阻碍下会消耗行动。 |
+| 未覆盖 | 目标区阻碍后的完整“不能第二次移动但仍可快速行动”节奏、墙体、飞行阻碍、完整 12 区移动和 UI 骰盘更细展示仍是后续规则切片。 |
+
+## 2026-08-02 缠绕藤蔓配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 缠绕藤蔓边界 | 当前运行时只放行 `2224` 缠绕藤蔓的当前印刷事实：费用 5，魔物 / 植物、藤蔓，射程 `0-2`，目标实体生物，生命 8，护甲 0；目标被束缚并获得稳固，飞行 / 不羁目标无效，远程攻击不能以缠绕藤蔓为目标。 |
+| 规则消费范围 | 该牌复用现有施法校验、配置魔物召唤、场上对象位置、对象移除、移动 / 传送清理和对象攻击目标校验 owner；新增的是 `restrainedByObjectId` 作为“由哪一个魔物提供束缚”的运行时事实，不把它伪装成残废 token，也不新增第二套束缚状态容器。 |
+| 已覆盖 | `2224` 已由 `requiresCodeSupport=false` 标为 implemented；施放成功会召唤锚定目标生物的魔物对象，并保留生命、护甲、特性和规则文本；合法目标记录 `restrainedByObjectId`，普通移动被拒绝，因稳固 / 不可移动不能被 `原力推斥` 推走；飞行、不羁、法师、非生物和魔物目标被拒绝；同一目标同名魔物重复附着被拒绝；远程对象攻击不能攻击缠绕藤蔓，近战攻击仍保留；目标或藤蔓离场、目标移动 / 传送时清理附着和束缚关系。 |
+| 未覆盖 | 结界版束缚、其它魔物、墙体通行伤害、完整 12 区推斥方向随机、飞行完整移动、UI 骰盘和行动日志更细展示仍是后续规则切片。 |
+
+## 2026-08-02 守卫反击机会配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 守卫 / 反击边界 | 守卫仍是行动生成标记；反击机会来自规则状态与攻击条事实，不新增可付费状态，不自动替玩家执行自愿反击。 |
+| 规则消费范围 | 当前运行时消费 `page_029.md` / `page_030.md` / `page_031.md` / `page_045.md` 的反击事实：守卫被近战对象攻击选中后，若守卫未瘫痪、仍存活并具备快速近战攻击，则暴露自愿反击机会；防御方可放弃，也可选择反击；眩晕失手仍可反击；远程攻击不触发。 |
+| 已覆盖 | `MW_COUNTERSTRIKE_AVAILABLE` 事件进入事件流和动作记录；事件排在 `MW_GUARD_REMOVED` 前；该事件进入防御方 `sys.interaction` 简单选择；放弃会关闭交互且不生成防御方攻击；选择反击会按守卫快速近战攻击结算，不消耗守卫对象行动标记，且不递归暴露反击机会。 |
+| 未覆盖 | 强制防御结界、反伤屏障、多个响应同时出现的优先级、飞行 / 遁逸 / 横扫等更细攻击特例仍是后续规则切片。 |
+
+## 2026-08-02 对象防御响应窗口配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 防御窗口边界 | 防御是被攻击时由防御方选择的回避能力；当前覆盖场上对象自身防御 profile、`1x` 使用冷却和重置恢复，不把强制防御结界、装备附加来源和反伤屏障混进本切片。 |
+| 规则消费范围 | 当前运行时消费 `page_026.md` / `page_027.md` / `page_043.md` / `page_045.md`：防御选择发生在攻击骰前，成功则攻击被回避且不投攻击骰，失败则继续攻击；`1x` 防御每回合仅能使用一次，重置阶段恢复；无法回避攻击不能使用防御；瘫痪禁用防御、眩晕和束缚修正防御骰沿用既有配置事实。 |
+| 已覆盖 | `MW_DEFENSE_AVAILABLE` 事件进入事件流和动作记录；事件进入防御方 `sys.interaction` 简单选择；放弃会关闭交互并继续原攻击；选择防御会掷效果骰，成功产生 `ATTACK_MISSED` 且不造成伤害，失败继续原攻击；防御使用后写入对象本回合使用记录，后续攻击不再暴露已冷却防御，直接防御命令也拒绝已冷却 profile；防御方进入下一次重置阶段后清空对象防御使用记录；无法回避对象攻击不暴露防御选择。 |
+| 未覆盖 | 多个防御来源排序、强制防御结界、反伤屏障、反击与防御同时出现的优先级、横扫 / 飞行 / 遁逸等特例仍是后续规则切片。 |
+
+## 2026-08-02 燃烧维持 tick 配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | `burn-token` 已在配置包登记 `upkeepRule: roll-one-attack-die-per-token-and-remove-token-on-blank`；燃烧仍作为火焰状态 token 进入玩家 / 对象状态容器，不新增散落布尔字段。 |
+| 规则消费范围 | 维持阶段进入 hook 已消费燃烧 token 事实：每枚燃烧投 1 颗攻击骰，非空白结果汇总为直接伤害，空白结果移除对应燃烧 token；攻击结算状态过滤已消费“无法燃烧 / 虚体不能获得燃烧状态”的规则事实。 |
+| 已覆盖 | 燃烧维持伤害走现有直接伤害计算管线；法师和场上对象均可结算燃烧；未投空白的燃烧 token 保留；无法燃烧 / 虚体对象仍会受到攻击伤害但不会获得燃烧 token；行动日志记录直接伤害与状态移除事件。 |
+| 未覆盖 | 燃烧维持直接伤害与火焰免疫的完整联动、燃烧 UI 骰面展示仍是后续规则切片；攻击结算中的火焰免疫已由伤害类型免疫切片覆盖。 |
+
+## 2026-08-02 腐化维持伤害配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | `rot-token` 已在配置包登记 `upkeepRule: deal-1-direct-damage`；腐化仍作为毒素状态 token 进入玩家 / 对象状态容器，不新增散落布尔字段。 |
+| 规则消费范围 | 维持阶段进入 hook 已消费腐化 token 事实：法师和活体场上对象每层腐化受到 1 点直接伤害，非活体对象不受影响，腐化 token 保留。 |
+| 已覆盖 | 腐化维持伤害走现有直接伤害计算管线；法师被击败和场上对象被击败仍走既有击败事件；行动日志记录直接伤害事件。 |
+| 未覆盖 | 毒素净化类能力和对应 UI 提示仍是后续规则切片。 |
+
+## 2026-08-02 沉睡受伤替换配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | `sleep-token` 已在配置包登记 `automaticReplacementRule: replace-with-daze-when-damaged`；沉睡仍作为精神状态 token 进入状态容器。 |
+| 规则消费范围 | 运行时已通过领域事件替代效果消费沉睡事实：目标受到实际伤害时移除沉睡并放置同层眩晕；0 伤害不触发替换。 |
+| 已覆盖 | 对象攻击伤害路径已验证沉睡翻面；替换事件进入行动日志；护甲完全抵消伤害时沉睡保留。 |
+| 未覆盖 | 沉睡 UI 提示仍是后续规则切片。 |
+
+## 2026-08-02 昏睡咒语配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 法术配置 | `spell-3411` 已由配置包标为 implemented；它仍是快速咒语，费用为卡面 `X`，运行时不信任前端任意费用。 |
+| 规则消费范围 | 当前运行时消费 `apprentice-card-field-contract.md` 中 `3411` 昏睡事实：目标必须是非法师活体生物，精神免疫生物无效，X 费用按目标生物等级计算。 |
+| 已覆盖 | 校验层拒绝法师目标、非活体生物、精神免疫生物、目标等级费用不匹配和范围外目标；执行层复用 `STATUS_TOKEN_PLACED` 放置 1 枚沉睡 token，并消费快速施法标记、法力和已计划法术。 |
+| 未覆盖 | 沉睡 UI 提示、精神免疫由后续装备 / 结界临时获得的叠加来源和其它精神类咒语仍是后续规则切片。 |
+
+## 2026-08-02 状态 token 移除费用配置补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | 燃烧、眩晕、腐化、虚弱、残废、沉睡和昏迷已在 `mage-wars.config.json` 中登记 `statusTokenId`、移除费用规则、同名状态整批支付规则和必要的自动 / 逃逸事实；守卫标记明确不是可付费移除状态。 |
+| 规则消费范围 | 配置包继续禁止“直接支付法力移除状态”的通用命令；当前由女祭司快速复原术消费单类同名整批移除事实，由女祭司标准复原术消费多类状态移除和沉睡等级费用事实，其它法术 / 能力仍需单独接入。 |
+| 已覆盖 | 固定移除费用：燃烧 / 眩晕 / 腐化 / 虚弱为 2，残废 / 昏迷为 4；沉睡按目标生物等级计算；燃烧维持阶段攻击骰 tick、腐化维持阶段每层 1 点直接伤害、残废 7+ 逃逸和沉睡受伤替换眩晕已作为配置事实登记并进入对应运行时切片；女祭司快速复原术可在快速施法窗口支付目标生物同名固定费用并整批移除该类状态；女祭司标准复原术可在生物行动阶段支付多类状态移除费用，并按目标生物配置等级支付沉睡费用；两者都不进入准备牌或弃牌堆。 |
+| 未覆盖 | 毒素净化类法术仍是后续规则切片。 |
+
+## 2026-08-01 残废 / 束缚配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | `cripple-token` 已进入配置包与运行时资源面；残废仍作为毒素状态进入对象状态容器，不单独散落布尔字段。 |
+| 规则消费范围 | 当前运行时已消费卡牌攻击条 / 状态 token / 对象特性文本来判断残废落点、普通移动限制、不羁免疫、飞行失效和行动阶段结束 7+ 逃逸检定。 |
+| 已覆盖 | 残废阻止生物普通移动；魔物、非活体和不羁生物不会获得残废；残废飞行生物不再触发 `气流` 对飞行 +2；推斥 / 传送仍通过各自事件链路结算；残废生物视为被束缚，防御掷骰额外 -2，该修正只在存在残废时应用一次，不按 token 层数叠加；当前行动方携带残废的生物在行动阶段结束时掷效果骰，7+ 移除残废，6 或更低保留残废，对手生物不被当前阶段误清。 |
+| 未覆盖 | 残废移除费用能力消费、束缚对象不阻碍移动、飞行 / 遁逸 / 横扫等反击特例仍是后续规则切片。 |
+
+## 2026-08-02 守卫拦截、近战移除与生物守卫行动配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 守卫标记边界 | 守卫仍是行动生成的标记，不作为可付费移除状态 token；目标选择校验直接消费对象 `guarding`、位置、阵营、状态 token 和特性文本。 |
+| 规则消费范围 | 当前运行时已消费规则页 `page_031.md` 的生物守卫、基础保护区域规则和近战移除规则：己方 ready 生物可花费自身行动进行守卫；同区存在可保护区域的敌方守卫生物时，生物近战攻击必须先指向守卫；法术和远程攻击忽略该限制；守卫被近战攻击选为目标后，即使攻击失败也会移除守卫标记。 |
+| 已覆盖 | 己方 ready 场上生物可通过 `GUARD` 进入守卫，消耗该生物行动标记，不要求也不消耗法师行动标记；生物近战打法师或非守卫对象时会被 `guardInterceptionRequired` 拒绝；目标指向敌方守卫时通过；残废/束缚、昏迷和小型守卫不提供区域保护。守卫被近战对象攻击选为目标后会产生 `GUARD_REMOVED`，reducer 移除目标对象守卫标记；眩晕失手仍移除；目标对象行动标记不被改动。 |
+| 未覆盖 | 守卫反击与防御窗口 / 防御冷却的联动、飞行 / 遁逸 / 横扫等更细例外仍是后续攻击流程切片。 |
+
+## 2026-08-01 眩晕 / 昏迷配置执行补充
+
+| 配置 / 执行面 | 当前裁决 |
+| --- | --- |
+| 状态 token 配置 | `daze-token` 与 `stun-token` 已进入配置包与运行时资源面；眩晕 / 昏迷仍作为状态 token 进入对象状态容器，不新增散落布尔字段。 |
+| 规则消费范围 | 当前运行时已消费状态 token、对象 `kind`、玩家 / 对象行动命令、攻击 / 防御命令上下文、配置包 `spellType`、配置包 `defenseDiePenaltyPerToken`、配置包 `paralyzeRule` 和已核图法术的 `spellActionSpeed` 来判断魔物免疫眩晕 / 昏迷、眩晕攻击前效果骰失手、眩晕防御骰修正、昏迷防御禁用、眩晕行动阶段结束清理、昏迷行动阶段结束清理、昏迷基础行动锁、昏迷法师攻击法术禁令、昏迷法师非攻击快速法术例外、快速施法阶段标准法术拒绝和昏迷落点清守卫。 |
+| 已覆盖 | 魔物不会获得眩晕 / 昏迷；携带眩晕的法师基础近战和生物对象攻击在效果骰 6 或更低时产生 `ATTACK_MISSED`，不投攻击骰、不造成伤害、不落攻击附带状态，并写入行动日志；携带眩晕的场上对象防御掷骰按每枚眩晕 -2 修正，且防御方可作为非当前行动玩家执行反应防御命令；携带昏迷的场上对象不能使用防御 profile，裁定来自配置包瘫痪规则；昏迷法师不能普通移动、守卫、基础近战攻击或施放攻击类法术；配置包已为 91 张学徒法术记录卡面行动图标速度，昏迷法师可以用行动施放 `次级治疗` 这类非攻击快速法术，不能施放 `群体治疗` 这类标准法术；标准法术不能在快速施法阶段施放；昏迷生物不能普通移动或攻击；目标获得昏迷时自动移除守卫；行动阶段结束时移除当前行动方法师和己方生物的全部眩晕与昏迷。 |
+| 未覆盖 | 强制防御结界、反伤屏障、响应优先级、结界、装备、其它咒语和其它逐卡特殊效果仍需继续补执行器。 |
 
 ## 复查真相源
 
@@ -11,8 +407,10 @@
 | `openspec/changes/add-mage-wars-foundation/design.md` | 已新增 `GameConfigPackage 裁定（2026-07-31 合 main 后复查）`，明确配置属于数据驱动录入复查范围，但本 change 暂不迁移配置包。 |
 | `docs/games/mage-wars/rule/apprentice-card-field-contract.md` | 91 张学徒法术牌 S0 字段合同已完成，覆盖费用、类型、学派、等级、射程、目标、攻击条、正文、底部编号和锁定状态。 |
 | `docs/games/mage-wars/rule/apprentice-card-atlas-contract.md` | 91 张学徒法术牌正式 atlas/frame 已锁定并接入运行时；临时完整单卡裁图只作为核对证据。 |
-| `src/games/mage-wars/domain/data/apprenticeSpellbooks.ts` | 当前运行时静态事实仍是 TypeScript 数据：四名学徒法师初始属性、法术书数量、卡牌 CardID / deck ID 和候选裁定。 |
-| `public/assets/atlas-configs/mage-wars/*.json` + `src/games/mage-wars/ui/cardAtlas.ts` | 当前素材配置面是 JSON atlas config + runtime 注册器：10 个学徒法术 atlas、91 个法术 frame、法师牌 / 头像 frame。 |
+| `src/games/mage-wars/domain/data/apprenticeSpellbooks.ts` | 迁移期对照源：四名学徒法师初始属性、法术书数量、卡牌 CardID / deck ID 和候选裁定仍用于配置包一致性测试，不再作为 setup / validate / Board 的正式读取入口。 |
+| `src/games/mage-wars/data/mage-wars.config.json` | 2026-08-01 新增第一版严格 JSON 配置包：四名学徒法师、91 张学徒法术、四套预设法术书、学徒 2x3 区域、骰子、token 和正式 atlas frame 引用；91 张学徒法术均已登记 `spellActionSpeed`；2026-08-02 已登记七类状态 token 移除费用 / 规则事实，并由运行时消费燃烧维持阶段攻击骰 tick、腐化维持直接伤害、沉睡受伤替换、女祭司快速复原术固定费用移除和女祭司标准复原术多状态 / 沉睡等级费用移除事实。 |
+| `src/games/mage-wars/data/configPackage.ts` + `src/games/mage-wars/__tests__/config-package.test.ts` | 复用共享 `src/game-config` loader / materializer / review table；测试证明 JSON 可加载、审查表同源、法师属性 / 法术书数量与 TypeScript 对照源一致、91 张法术均有正式 atlas frame 和卡面行动图标速度，并暴露运行时安全查询函数；状态 token 只读查询覆盖移除费用规则且守卫不作为付费移除状态；法师能力读取入口已暴露女祭司快速 / 标准复原术配置。 |
+| `public/assets/atlas-configs/mage-wars/*.json` + `src/games/mage-wars/ui/cardAtlas.ts` | atlas config 仍负责 frame 几何；`cardAtlas.ts` 已从配置包读取 91 张学徒法术的名称、atlasId 和 slot，再注册卡牌预览。 |
 | `src/games/mage-wars/manifest.ts` + generated manifest / orientation map | 当前运行配置面包含玩家数、移动端能力、方向、资源包和实施中状态；这些配置仍未进入 `GameConfigPackage`。 |
 
 ## 新规范逐项复查
@@ -21,10 +419,10 @@
 | --- | --- | --- |
 | 配置是否纳入数据录入复查 | 新规范已明确配置包是数据驱动录入的正式真相层之一；本文件已补配置面复查 | 已补口径 |
 | 是否说明使用 `GameConfigPackage` | 合 main 前未命中 `GameConfigPackage`；已在 OpenSpec design 补裁定 | 已补裁定 |
-| 严格 JSON 官方真相源 | 当前无 `GameConfigPackage` 严格 JSON；静态事实在 TypeScript、规则合同和 atlas config 中 | deferred |
-| schema 范围和表格审查范围 | 当前没有配置包 schema 或表格物化范围 | deferred |
-| 暂不使用时的原因、影响范围、后续任务 | 已在 OpenSpec design 写明：不在本轮迁移，影响是缺少 JSON/schema/表格/字段级修正，后续建独立配置包 change | 已补 |
-| `abilityId + params` 边界 | 当前代表性能力仍在游戏层代码和事件/FX 映射中，未形成逐卡配置能力绑定 | deferred；后续配置包必须把未实现能力标 `requires-code-support` |
+| 严格 JSON 官方真相源 | 已新增 `src/games/mage-wars/data/mage-wars.config.json`，并由共享 loader 严格 JSON 加载 | initial package started |
+| schema 范围和表格审查范围 | 复用共享 `GameConfigPackage` schema；表格审查由 `buildMageWarsConfigReviewTable()` 从物化配置包生成 | 已接入同源审查视图 |
+| 暂不使用时的原因、影响范围、后续任务 | 原 foundation 已补跳过裁定；当前已建立独立 `add-mage-wars-config-package` 开始补齐 | 已转实施 |
+| `abilityId + params` 边界 | 第一版配置把逐卡能力缺口保留在 `data.requiresCodeSupport`；`domain/abilityCatalog.ts` 已从配置包派生 91 个 `mw.spell.<CardID>` 能力 ID；当前配置包标记 90 张已实现，其中攻击法术 10/10、生物 24/24、魔物 1/1、咒语 18/18、装备 14/14、结界 23/24。已实现链路包含攻击法术、普通 / 特殊生物、魔物、治疗、推斥、传送、昏睡、连锁闪电、瓦解、炎爆、驱散、结界窃取、基础护甲装备、被动元素抗性装备、狱火长鞭 / 奥秘法杖 / 阿希拉法杖武器攻击、卡牌级嗜血、附属结界防御、`1825` 厄运法师 / 生物锚点与快速法术返还、`1901` 法力失效反制、`1904` 攻击逆转、`1903` 反戈一击附属授予反击及首次反击消费、显性附属持续结界、`1813` / `1911` 对象庇护与 `1913` 区域庇护、`3700` 恶魔胸甲反伤屏障、`3716` 元素魔杖首次绑定与快速替换。剩余 `1804` 法师祸咒的非玩家生物施法者来源、多响应优先级、墙体通行伤害额外费用、毒素净化类法术和逐卡特殊效果仍需补执行器 | partial；咒语 18/18 已覆盖，装备 14/14 已覆盖，结界 23/24 已覆盖 |
 | 玩家字段级修正提案 | 当前未开放配置审查表和修正入口 | deferred；后续走结构化反馈提案 |
 | 法师战争真实牌区命名 | 运行时字段使用 `spellbookCount`、`preparedSpellSlots`、`preparedSpellCardIds`；OpenSpec design 已把旧“手牌/法术书”改为法术书、已计划法术、弃牌堆 | 已补当前正式口径 |
 
@@ -32,18 +430,61 @@
 
 | 配置面 | 当前真相源 | 当前裁决 |
 | --- | --- | --- |
-| 法师与法术书配置 | `src/games/mage-wars/domain/data/apprenticeSpellbooks.ts` | 已登记四名学徒法师初始属性、102 个法术书唯一条目、按数量展开 123 张牌；仍是 TypeScript 临时真相源 |
-| 稳定 ID 与区域配置 | `src/games/mage-wars/domain/ids.ts` | 已登记四名学徒法师 ID 与 6 个学徒竞技场区域 ID；区域拓扑、墙体和完整地图仍待配置包化 |
-| 法术 atlas / frame 配置 | `public/assets/atlas-configs/mage-wars/apprentice-spell-atlases.json` | 已登记 10 个法术 atlas 和 91 个法术 frame，并由 `src/games/mage-wars/ui/cardAtlas.ts` 注册消费；这是 JSON 配置面，但还不是统一配置包 schema |
-| 法师牌 / 头像 atlas 配置 | `public/assets/atlas-configs/mage-wars/mages-core-atlas.json` | 已登记法师牌和头像 frame，并由 `cardAtlas.ts` 消费；仍未进入 `GameConfigPackage` |
+| 法师与法术书配置 | `src/games/mage-wars/data/mage-wars.config.json` + `src/games/mage-wars/data/configPackage.ts` | 配置包已登记四名学徒法师初始属性、四套预设法术书和 2 人学徒 A1/B3 对角起始部署；domain setup、validate 和 Board 已改读配置包 helper；TypeScript 仍作为迁移期对照源，测试验证展开数量一致 |
+| 稳定 ID 与区域配置 | `src/games/mage-wars/domain/ids.ts` + `mage-wars.config.json` | 配置包已登记四名学徒法师 ID 与 6 个学徒竞技场区域对象；学徒区域已按 A/B 列、1/2/3 行输出为 runtime 0-based 坐标；标准源图左 / 右半场、墙体和完整 12 区域仍待后续扩展 |
+| 法术 atlas / frame 配置 | `public/assets/atlas-configs/mage-wars/apprentice-spell-atlases.json` + `mage-wars.config.json` | 配置包已为 91 张学徒法术建立 `spell-card-<CardID>-frame` 资产引用，路径回指正式 atlas config；运行时卡牌名与预览 frame 已由 `cardAtlas.ts` 通过配置包消费 |
+| 法术行动速度配置 | `mage-wars.config.json` + `src/games/mage-wars/data/configPackage.ts` + `src/games/mage-wars/domain/validate.ts` | 已按规则页行动图标和 91 张学徒卡图核读完成：61 张快速法术、30 张标准法术；快速施法阶段和瘫痪法师施法限制已消费该字段。 |
+| 状态 token 移除费用配置 | `page_029.md`、`page_034.md`、`page_042.md`、`page_043.md`、`page_044.md`、`page_045.md` + `mage-wars.config.json` + `configPackage.ts` | 已录入燃烧、眩晕、腐化、虚弱、残废、沉睡、昏迷的移除费用规则和守卫非付费状态边界；燃烧维持阶段攻击骰 tick 与腐化维持阶段每层 1 点直接伤害已被阶段进入 hook 消费，残废 7+ 逃逸检定已被阶段退出 hook 消费，沉睡受伤替换眩晕已被伤害事件替代效果消费；女祭司快速复原术已消费固定费用同名状态移除事实；女祭司标准复原术已消费多状态选择和沉睡等级费用事实；直接支付法力移除状态的通用命令仍不实现。 |
+| 法师牌 / 头像 atlas 配置 | `public/assets/atlas-configs/mage-wars/mages-core-atlas.json` + `mage-wars.config.json` | 配置包已登记四名法师牌与肖像 frame 资产；运行时仍由 `cardAtlas.ts` 消费 |
 | 游戏运行 manifest | `src/games/mage-wars/manifest.ts`、`src/games/manifest*.generated.ts*`、`android/app/src/main/assets/game-orientation-map.json` | 已登记玩家数、分类、实施中状态、移动端方向、资源包等运行配置；仍是 manifest 配置面，不是配置包官方真相源 |
 | 文案配置 | `public/locales/zh-CN/game-mage-wars.json`、`public/locales/en/game-mage-wars.json` | 已有游戏文案配置；不替代规则字段或配置包字段 |
-| 能力 / FX 绑定 | `src/games/mage-wars/ui/eventFxMapper.ts`、`src/games/mage-wars/ui/fxCues.ts`、`src/games/mage-wars/domain/events.ts` | 已有代表性事件到特效的运行时映射；逐卡能力仍未形成 `abilityId + params` 配置 |
-| token / 骰子 / 墙体 / 完整区域 | 当前无统一配置包条目 | deferred；后续配置包 change 必须补齐或明确基础版范围外 |
+| 能力 / FX 绑定 | `src/games/mage-wars/domain/abilityCatalog.ts`、`src/games/mage-wars/domain/spellAbilityExecutors.ts`、`src/games/mage-wars/domain/damageRules.ts`、`src/games/mage-wars/domain/spellRules.ts`、`src/games/mage-wars/ui/eventFxMapper.ts`、`src/games/mage-wars/domain/events.ts` | 已有代表性事件到特效的运行时映射；当前 87 张学徒法术由配置包标为 implemented，咒语 18/18、装备 14/14、结界 20/24 已覆盖。`结界窃取` 已进入执行链；`3701` / `3704` / `3706` 已进入武器装备攻击链，其中 `3701` 的远触仍按近战路径结算；`1808` / `1813` / `1816` / `1911` / `1914` / `1916` / `1917` 已进入持续附属语义汇总链；`1809` / `1818` 已进入附属防御 profile 和对象防御响应链；`2804` 的卡牌级嗜血已从配置包消费；对象庇护与区域庇护已进入对象攻击、普通攻击法术和连锁闪电；`3700` 恶魔胸甲已进入法师基础近战和场上对象近战后的反伤屏障事件链；`3716` 元素魔杖已进入首次绑定与快速替换事件链；剩余结界、法师附属结界、展示 / 反制、强制防御结界、多响应优先级、墙体通行伤害额外费用、毒素净化类法术和逐卡特殊效果仍未闭合 |
+| token / 骰子 / 墙体 / 完整区域 | `mage-wars.config.json` + 现有素材目录 | 基础骰子和 20 个 token 已进入配置包；弱 / 残废正式状态 token 资源、压缩产物、manifest、Board 显示和对象攻击落 token 测试已覆盖；墙体和完整区域仍属于后续扩展 |
 
 ## 录入结论
 
 - 当前 91 张学徒法术牌的字段录入、正式 atlas/frame 接线和已存在运行配置面，仍可作为 foundation 的 S0 数据与配置录入证据。
-- 当前缺口不是“只差文档措辞”，而是新规范要求的新游戏静态事实默认配置包化；法师战争 foundation 因合 main 后才出现该规范，本轮只补裁定、配置面复查和后续任务，不把运行时迁移混入合并。
-- 因配置也属于数据驱动录入，本 change 不能宣称“数据驱动录入完整闭合”；准确状态是“字段 / 素材 / 当前运行配置可追溯，`GameConfigPackage` 官方真相源、schema、表格审查和字段级修正入口 deferred”。
-- 本轮后续若继续推进数据源，应先建独立 `GameConfigPackage` change，再迁移法师、学徒法术书、学徒法术牌、atlas 引用、token、骰子和区域配置；迁移前不得让玩家审查表和运行时 TypeScript 数据各自维护一份事实。
+- 2026-08-01 已新增第一版 `GameConfigPackage`：严格 JSON 可加载，123 个配置对象、125 个素材引用、20 个 token、4 套法术书和同源审查表已通过定向测试；2026-08-02 已补七类状态 token 的移除费用规则、燃烧维持阶段攻击骰 tick、腐化维持阶段直接伤害规则、沉睡受伤替换眩晕规则、女祭司快速 / 标准复原术费用消费与守卫非付费状态边界。
+- 当前不能再说“没有严格 JSON 配置包”或“运行时仍完全依赖 TypeScript 法术书源”；准确状态是“配置包已覆盖基础学徒静态事实，并已成为 setup、法术书合法性、Board 法术书预览、卡牌预览、已实现法术速度判断和逐卡能力缺口目录的读取入口”。
+- 2026-08-03 结界窃取配置执行补充：`3409` 结界窃取已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 59 张，咒语类提升到 18/18；运行时已覆盖显性附属结界目标、新合法目标、X 双重总费用校验、控制权转移、锚点 / 区域迁移，以及缺新目标、多个新目标、同一目标、非法新目标、费用不匹配、隐性结界、非结界、未附属结界、法力不足和距离外目标拒绝。该切片不代表隐藏结界施放、展示/反制、持续结界效果、完整视线/墙体、结界 UI 或其它结界牌已经闭合。
+- 当前也不能再说“91 张法术完全没有执行器”；准确状态是“配置包中 79 张学徒法术已标为 implemented，攻击法术 10/10、生物 24/24、魔物 1/1、咒语 18/18、装备 9/14、结界 17/24 已有运行链；`结界窃取` 已覆盖显性附属结界目标、新合法目标、X 双重总费用校验、控制权转移、锚点 / 区域迁移和边界拒绝；`3701` / `3704` / `3706` 已覆盖武器装备攻击，其中 `3701` 的远触保持近战属性且可攻击同区飞行生物；`1808` / `1813` / `1816` / `1911` / `1914` / `1916` / `1917` 已覆盖公开附属结界和持续属性汇总；庇护已覆盖对象攻击、普通攻击法术和连锁闪电；其它逐卡特殊效果、剩余 7 张结界、剩余 5 张装备、区域庇护、法师附属结界、反伤屏障 / 响应优先级、墙体通行伤害额外费用、毒素净化类法术等子规则仍未闭合”。
+- 2026-08-02 蓝色精怪切片补充：`2822` 蓝色精怪已由 `requiresCodeSupport=false` 标为 implemented，蓝色精怪切片完成时 implemented 计数为 23 张；后续被动生物配置放行已将当前 implemented 计数提升到 25 张；运行时已覆盖激活时支付 1 法力、获得本行动内迅捷 / 传送式移动、首次相邻移动不消耗行动、后续移动仍消耗行动、行动阶段结束清理临时能力。该切片不代表迟缓抵消、墙体穿越、飞行、其它生物特殊行动或完整移动系统已经闭合。
+- 2026-08-02 被动生物配置放行切片补充：`2800` 暗契屠魔与 `2909` 西锁骑士已由 `requiresCodeSupport=false` 标为 implemented，被动生物切片完成时 implemented 计数为 25 张；后续迟缓移动切片已将当前 implemented 计数提升到 28 张；运行时通过现有生物召唤、攻击条、防御 profile、护甲、穿刺和伤害类型修正管线消费二者配置字段。该切片不代表飞行、迅捷、迟缓、治疗行动、装备法力流失、法力传输、重生、嗜血、遁逸、传奇或其它生物特殊规则已经闭合。
+- 2026-08-02 迟缓移动切片补充：`2809` 石目蛇蜥、`2810` 戈尔贡箭手与 `2901` 暗沼九头蛇已由 `requiresCodeSupport=false` 标为 implemented，迟缓移动切片完成时 implemented 计数为 28 张；运行时已覆盖迟缓抵消迅捷免费移动，同时保留同一效果授予的传送式移动事件事实。该切片不代表阻碍、飞行、遁逸、墙体、移动后快速行动或标准 12 区完整移动节奏已经闭合。
+- 2026-08-02 元素 / 战斗字段生物配置放行切片补充：`2801` 火烙魔婴、`2802` 钢爪灰熊、`2803` 烈焰狱鬼与 `2813` 布洛根·血石已由 `requiresCodeSupport=false` 标为 implemented，元素 / 战斗字段生物切片完成时 implemented 计数为 32 张；后续印刷迅捷移动切片已将 implemented 计数提升到 33 张；运行时通过现有召唤、攻击条、护甲、穿刺、无法回避、伤害类型修正 / 免疫和攻击附带燃烧管线消费四张牌的当前字段。`除霜` 当前只作为火焰攻击关键词保留，不代表霜冻扩展规则已经闭合。
+- 2026-08-02 印刷迅捷移动切片补充：`2812` 苦木林狐已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 33 张；运行时已覆盖卡面印刷 `迅捷` 的首次普通相邻移动不消耗行动、第二次移动消耗行动、行动阶段结束清理免费移动标记。`2820` 雷隙猎鹰的飞行 + 迅捷已由独立切片覆盖；`2824` 深林幽影切维尔的迅捷 + 遁逸 + 传奇和起始区阻碍边界已由独立切片覆盖，但目标区阻碍后的完整第二次移动节奏、墙体和飞行阻碍仍未闭合。
+- 2026-08-02 法力流失攻击切片补充：`2807` 汲法水蛭已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 34 张；后续武器装备攻击切片已让 `3704` 奥秘法杖也复用法力流失 owner。当前运行时已覆盖对象攻击 / 支持的装备攻击造成实际伤害后的 `法力流失+X`、目标控制方法力不足时按现有法力封顶、多段攻击只在首次攻击扣法力。该切片不代表法力传输、其它法力流失牌、法力获得事件、`3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力或更细 UI / 日志展示已经闭合。
+- 2026-08-02 阿希拉牧师治疗之光切片补充：`2811` 阿希拉牧师已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 35 张；运行时已覆盖完整行动治疗之光、0-1 活体目标校验、1 骰治疗、对象行动消耗和行动日志。该切片不代表其它对象治疗能力或治疗 UI 骰盘已经闭合。
+- 2026-08-02 灰衣天使救赎献祭切片补充：`2907` 灰衣天使已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 36 张；运行时已覆盖完整行动救赎献祭、竞技场中任一活体目标校验、6 骰治疗、按目标已有伤害封顶、治疗后摧毁灰衣天使和行动日志。该切片不代表飞行移动、其它对象治疗能力或治疗 UI 骰盘已经闭合。
+- 2026-08-02 冲锋特性切片补充：`2906` 野性山猫已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 37 张；后续高地独角兽、冲锋陷阵、雷隙猎鹰、暗沼蝙蝠与荒野呼唤切片已将当前 implemented 计数提升到 42 张；运行时已覆盖普通移动后立即快速近战攻击的 `冲锋+2` 攻击骰修正、效果骰不修正、传送式移动不触发冲锋，以及攻击后 / 阶段结束清理移动后快速行动窗口。该切片本身不代表 `3407` 冲锋陷阵；该咒语已由独立切片覆盖，飞行、遁逸、阻碍、墙体或 UI 骰盘展示仍未闭合。
+- 2026-08-02 高地独角兽重生 / 冲锋组合切片补充：`2814` 高地独角兽已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 38 张；后续冲锋陷阵、雷隙猎鹰、暗沼蝙蝠与荒野呼唤切片已将当前 implemented 计数提升到 42 张；运行时已覆盖自身 `重生2`、同区友方活体生物 `重生1` 光环、多个重生来源取最高值和普通移动后快速近战 `冲锋+2`。该切片本身不代表 `3407` 冲锋陷阵；该咒语已由独立切片覆盖，飞行、遁逸、阻碍、墙体、其它光环、结界赋予重生或 UI 骰盘展示仍未闭合。
+- 2026-08-02 冲锋陷阵律令咒语切片补充：`3407` 冲锋陷阵已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 39 张；后续雷隙猎鹰、暗沼蝙蝠与荒野呼唤切片已将当前 implemented 计数提升到 42 张；运行时已覆盖快速咒语施放、实体生物目标校验、临时迅捷、冲锋+1、普通移动后快速近战 +1 攻击骰、效果骰不修正和阶段结束清理。该切片不代表飞行、遁逸、阻碍、墙体、其它律令咒语或 UI 骰盘展示已经闭合。
+- 2026-08-02 雷隙猎鹰飞行 / 迅捷切片补充：`2820` 雷隙猎鹰已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 40 张；后续暗沼蝙蝠与荒野呼唤切片已将当前 implemented 计数提升到 42 张；运行时已覆盖配置召唤、生命 5 / 护甲 0 / 攻击特性保留、印刷迅捷首次普通相邻移动不消耗行动，以及被 `气流` 识别为飞行目标获得对飞行 +2 伤害。该切片不代表飞行移动、阻碍、墙体、完整 12 区、遁逸、其它飞行生物或 UI 骰盘展示已经闭合。
+- 2026-08-02 暗沼蝙蝠飞行 / 腐化攻击切片补充：`2825` 暗沼蝙蝠已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 41 张；后续荒野呼唤切片已将当前 implemented 计数提升到 42 张；运行时已覆盖配置召唤、生命 4 / 护甲 0 / 攻击特性保留、致病噬咬 9+ 放置腐化，以及被 `气流` 识别为飞行目标获得对飞行 +2 伤害。该切片不代表飞行移动、阻碍、墙体、完整 12 区、遁逸、其它飞行生物或 UI 骰盘展示已经闭合。
+- 2026-08-02 荒野呼唤切片补充：`3417` 荒野呼唤已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 42 张；运行时已覆盖竞技场中所有友方动物生物临时近战+1、友方非动物和敌方动物不受影响、远程攻击不受影响，以及生物行动阶段结束清理。该切片不代表其它临时战斗咒语、结界 / 装备赋予近战、阻碍 / 墙体或 UI 骰盘展示已经闭合。
+- 2026-08-02 汲血之击切片补充：`3404` 汲血之击已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 43 张；运行时已覆盖活体生物目标校验、下一次近战吸血与穿刺+1、按实际伤害治疗攻击者控制方法师、近战后清理、远程不触发，以及生物行动阶段结束清理。该切片不代表其它吸血来源、装备武器、结界赋予攻击特性、响应窗口或 UI 骰盘展示已经闭合。
+- 2026-08-02 已将 `mage-wars.config.json` 的 `setup.startingDeployment` 修正为 2 人学徒座位部署：seat-0 在 A1、seat-1 在 B3；同时将六个学徒区域 row / col 修正为 `2列 x 3行` 合同口径。domain setup 已通过配置 helper 消费起始部署和逻辑区域坐标。四人模式、自由选择法师、标准源图左 / 右半场与完整 12 区域部署仍是 deferred，不得把本切片解释为完整部署系统完成。
+- 后续推进必须继续在 `add-mage-wars-config-package` 下补逐卡能力执行器、字段级玩家修正入口和剩余运行配置面；不得让玩家审查表和运行时数据各自维护一份事实。
+
+- 2026-08-02 狼人宠物戈伦嗜血切片补充：`2804` 狼人宠物戈伦已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 44 张；运行时已覆盖已受伤活体近战目标的嗜血加骰、同区控制方法师额外嗜血+1、未受伤 / 非活体不加骰，以及两连击只在第一段获得嗜血奖励。该切片不代表嗜血强制攻击目标选择、嘲讽冲突、装备额外费用、遁逸、墙体、阻碍或 UI 骰盘已经闭合。
+
+- 2026-08-02 深林幽影切维尔切片补充：`2824` 深林幽影切维尔已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 45 张，生物类提升到 24/24；运行时已覆盖召唤保留生命 / 护甲 / 防御 profile / 迅捷 / 遁逸 / 传奇、同名传奇在场拒绝再次召唤、离场后允许再次召唤、遁逸忽略守卫拦截、主动攻击守卫仍保留反击机会，以及起始区阻碍不取消遁逸迅捷免费移动。该切片不代表目标区阻碍后的完整第二次移动节奏、墙体、飞行阻碍、完整 12 区移动或 UI 骰盘已经闭合。
+- 2026-08-02 缠绕藤蔓切片补充：`2224` 缠绕藤蔓已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 46 张，魔物类提升到 1/1；运行时已覆盖魔物附着、目标束缚来源、稳固 / 不可推斥、飞行 / 不羁 / 法师 / 非生物 / 魔物目标拒绝、同名重复附着拒绝、远程攻击禁令和附着生命周期清理。该切片不代表结界版束缚、其它魔物、墙体、完整推斥方向随机、飞行完整移动或 UI 骰盘已经闭合。
+- 2026-08-02 兽性觉醒切片补充：`3403` 兽性觉醒已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 47 张，咒语类提升到 12/18；运行时已覆盖本回合召唤活体生物目标校验、目标来源卡等级 X 费用、行动标记恢复、同回合重复目标拒绝、法力不足拒绝和新回合觉醒标记清理。该切片不代表结界、装备、非召唤当回合行动恢复、完整 UI 骰盘、行动日志细节或其它临时行动恢复效果已经闭合。
+- 2026-08-02 瓦解切片补充：`3605` 瓦解已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 48 张，咒语类提升到 13/18；运行时已覆盖附属在法师上的装备对象目标校验、装备来源卡费用作为 X 费用、费用不匹配 / 法力不足 / 非装备 / 未附属装备 / 距离外拒绝，以及合法施放后装备对象离场。该切片不代表装备施放、装备属性加成、装备栏限制、炎爆、驱散、结界窃取或完整装备 UI 已经闭合。
+- 2026-08-02 基础护甲装备切片补充：`3702` 皮革手套与 `3721` 皮革长靴已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 50 张，装备类提升到 2/14；运行时已覆盖自施放到法师、生成公开附属装备对象、法师移动时装备跟随，以及从装备文本派生护甲+1 减伤。该切片不代表装备栏限制、职业限定、武器攻击、防御、反伤屏障、法术绑定、完整装备 UI 或其它装备已经闭合。
+- 2026-08-03 被动护甲 / 元素抗性装备切片补充：`3703` 龙鳞锁甲、`3708` 风龙皮甲、`3709` 元素斗篷与 `3711` 巨熊皮甲已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 54 张、装备类提升到 6/14；后续武器装备攻击切片已将当前 implemented 计数提升到 63 张、装备类提升到 8/14。运行时已覆盖自施放到法师、生成公开附属装备对象、法师移动时装备跟随、从装备文本派生护甲减伤，并让攻击法术和场上对象攻击读取法师附属装备文本中的 `火焰-2` / `闪电-2` 等伤害类型修正。该切片不代表装备栏限制、职业限定、防御、反伤屏障、法术绑定、完整装备 UI 或其它装备已经闭合；`3704` / `3706` 已由独立武器装备攻击切片放行。
+- 2026-08-03 瓦解同名候选配置执行补充：`3406` 瓦解已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 55 张，咒语类提升到 14/18；运行时将 `3406` 与 `3605` 均识别为瓦解，复用附属装备摧毁链，并保留各自 `mw.spell.<CardID>` 来源能力。该切片不代表炎爆、驱散、结界窃取、其它咒语、其它装备或完整装备 UI 已经闭合。
+- 2026-08-03 炎爆配置执行补充：`3401` 炎爆已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 56 张，咒语类提升到 15/18；运行时按目标装备来源卡费用 + 6 校验 X，合法施放先摧毁附属装备，再对该装备附属法师进行 4 骰火焰攻击并按效果骰放置燃烧；被摧毁装备不参与本次后续攻击减伤。该切片不代表驱散、结界窃取、结界、装备栏、武器攻击、完整装备系统或 UI 已经闭合。
+- 2026-08-03 武器装备攻击切片补充：`3704` 奥秘法杖与 `3706` 阿希拉法杖已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 63 张，装备类提升到 8/14，结界基础效果切片已让结界类提升到 2/24；后续显性附属持续结界切片已将当前 implemented 计数提升到 68 张、结界类提升到 7/24。运行时已覆盖已附属武器装备由法师声明攻击、消耗法师行动、奥秘法杖近战 / 远程 profile 与法力流失、阿希拉法杖对非活体 +2 和眩晕 / 昏迷效果骰，并保留 `3701` 狱火长鞭远触、`3710` 群兽法杖特殊能力、防御护腕、法术绑定、反伤屏障、装备栏、职业限制和完整装备 UI 为后续缺口。
+- 2026-08-03 显性附属持续结界切片补充：`1808` 公牛耐力、`1816` 身心俱疲、`1914` 巨熊力量、`1916` 体肤重生与 `1917` 犀牛兽皮已由 `requiresCodeSupport=false` 标为 implemented，该切片完成时 implemented 计数提升到 68 张，结界类提升到 7/24；运行时已覆盖公开附属结界施放、合法对象目标校验、费用校验，并从配置包 `data.semantics` 消费有效生命+4、迟缓、近战+2、重生2和护甲+2，不再从这五张结界的玩家可见规则文本解析执行效果；并保留隐藏结界、展示/反制、强制防御、庇护、区域结界、法师附属结界和完整结界 UI 为后续缺口。
+- 2026-08-04 结构化战斗 profile 切片补充：已在独立 `refactor-mage-wars-structured-combat-profiles` change 中为 24 张生物与 `3704` 奥秘法杖、`3706` 阿希拉法杖录入 `data.combatProfiles`，覆盖攻击行动速度、近战 / 远程、范围、骰数、穿刺、连击、基础伤害类型和 4 张防御图标；`configPackage.ts` 已严格校验 profile ID、字段完整性和远程 / 近战范围约束，已实现战斗卡缺 profile 时加载失败。正式召唤对象以 `combatProfilesSource=config` 标记，攻击 / 防御 / 守卫反击入口从配置读取；合成测试夹具保留旧文本解析对照路径。逐卡等价测试和“移除展示文本仍可解析基础 profile”测试已覆盖。法力流失、状态骰阈值、冲锋、重生、飞行、遁逸、治疗行动、装备栏、职业限制等特殊效果仍保持独立 deferred，不因基础 profile 结构化而宣称完成。
+- 2026-08-04 对象攻击状态效果切片补充：已在独立 `refactor-mage-wars-structured-attack-status-effects` change 中为 `2801`、`2803`、`2808`、`2809`、`2810`、`2825`、`3706` 的攻击 profile 录入燃烧、腐化、残废、虚弱、眩晕和昏迷效果骰区间；配置 loader 已校验状态 token、d12 区间和层数，正式配置对象的攻击状态放置从 `statusEffects` 消费，未标记配置来源的合成夹具仍走旧文本对照解析。单阈值、多阈值、多状态和移除展示文本测试已覆盖。推斥、法力流失、冲锋、重生、飞行、治疗行动、以太 / 非活体加伤、装备栏和职业限制仍保持 deferred。
+- 2026-08-04 对象攻击法力流失切片补充：已在独立 `refactor-mage-wars-structured-attack-mana-drain` change 中为 `2807` 汲法水蛭两条攻击录入法力流失 `1/2`，为 `3704` 奥秘法杖近战 / 远程攻击录入 `1/1`；正式配置对象从攻击 profile 消费法力流失，仍保持“只有首段、造成实际伤害后结算、按目标当前法力封顶”的规则，未配置夹具继续走旧文本对照解析。法力传输、攻击方获得法力、`3701` 狱火长鞭、`3710` 群兽法杖和 UI / 日志展示仍保持 deferred。
+- 2026-08-04 卡牌级嗜血特性切片补充：已在独立 `refactor-mage-wars-structured-combat-traits` change 中为 `2804` 狼人宠物戈伦录入 `data.combatTraits.bloodthirst`，基础嗜血 `1`、与控制方法师同区额外 `1`；配置 loader 对两项执行严格正整数校验，正式配置对象按来源 CardID 消费结构化特性，保留近战、第一段、已受伤活体目标和同区条件，未标记配置来源的合成夹具继续使用旧文本解析。测试覆盖隐藏攻击 / 规则展示文本、误导展示文本不抢规则 owner、同区 / 异区、连击第二段和旧合同对照。冲锋、迅捷、重生、遁逸、传奇、法力传输及其它卡牌级能力仍保持 deferred。
+- 2026-08-04 远触攻击切片补充：已在独立 `refactor-mage-wars-structured-reach-attack` change 中为 `3701` 狱火长鞭增加结构化攻击 `reach=true`，并录入火焰伤害、4 骰、7-10 燃烧和 11+ 燃烧x2。配置对象即使移除展示攻击文本仍可解析远触与燃烧效果；普通近战攻击不能攻击飞行生物，远触近战只允许同区飞行目标，不扩大到相邻区域，也不改成远程攻击。`domain-flow.test.ts` 已覆盖装备施放、同区飞行目标攻击、攻击伤害和燃烧x2；除霜、法力传输、装备栏、职业限制、反伤屏障、`3710` 特殊能力和其它装备仍保持 deferred。
+
+- 2026-08-04 结界反制与攻击逆转响应窗口切片补充：当前配置包准确统计为 91 张学徒法术中 `87 implemented / 4 needsCodeSupport`，四张保留牌为 `1804` 法师祸咒、`1825` 厄运、`1901` 法力失效和 `1904` 攻击逆转。运行时已新增通用强制响应窗口语义、结构化 `resolutionFrame` 续链，以及 `1901` 对手咒语 / 结界目标反制和 `1904` 可回避攻击逆转 / 不可回避只销毁分支；展示交互完成后窗口自动关闭，不能用 `RESPONSE_PASS` 或取消绕过强制展示。`1825` 不因“目标生物附着了厄运”就误触发，待独立的生物施法者来源建模后再补快速法术取消、法术书返还和法力返还。`1804` 同属该来源建模缺口。上述响应切片不代表四张牌可以提前从 `needsCodeSupport` 改为最终 implemented，也不代表完整隐藏结界实例化、响应优先级或 UI 已闭合。
+- 2026-08-04 厄运法师施法响应补充：`1825` 已采用 `creature` 锚点，既可附着竞技场生物，也可附着玩家所代表的法师；快速法术通过验证后先记录扣费 / 移除准备牌，再打开强制展示窗口。展示后法术返回拥有者准备列表并返还本次法力，厄运进入其拥有者弃牌堆；标准法术、仅被目标生物附着但未由其施法的情况不会触发。`1825 / 1901 / 1904` 均已由 `requiresCodeSupport=true` 改为 `false`，配置统计更新为 `90 implemented / 1 needsCodeSupport`，仅保留 `1804` 法师祸咒。证据：`src/games/mage-wars/__tests__/enchantment-response.test.ts` 7 项、完整 Mage Wars 测试 `245 passed`、TypeScript 通过。
+- 2026-08-04 非玩家生物施法者来源切片补充：新增结构化 `MageWarsSpellCasterRef`，施法事件 / 响应 frame 不再只携带控制玩家；配置卡可声明 `spellcastingSource.abilityId`，召唤对象保留该来源。规则书第 13、18 页确认魔宠与再生点是合法施法来源，但当前 91 张学徒配置没有对应来源卡；Workshop 仅作为候选真相源命中巢穴 `2218`、乌鸦魔宠胡金 `2908`、花仙魔宠菲蕾拉 `2905`、灵婴魔宠瑟希利克斯 `3017`。`1804` 仅在带合法生物施法者引用的 `SPELL_CAST_RESOLVED` 后生成 1 点直接伤害，法师来源、无施法能力生物、错误控制者和离场对象均不触发。由于对象独立计划、对象法力优先支付和真实魔宠 / 再生点施法入口尚未接入，`1804` 继续保持 `needsCodeSupport`；事件层反制 / 取消不触发和完整生物施法入口分别按边界测试与后续提案处理，双 `1804` 来源叠加已由领域测试覆盖。证据：`spell-caster-source.test.ts` 6 项、完整 Mage Wars 定向测试、TypeScript、全目录 ESLint 与 OpenSpec 校验通过。
+- 2026-08-04 魔宠与再生点独立施法接入补充：首批仅将 `2908 乌鸦魔宠胡金` 与 `2218 巢穴` 的 `spellcastingSource` 接入 `mage-wars.config.json` 和运行时对象链；`2905`、`3017` 保持 source-field-locked / deferred。对象计划使用独立单卡状态，对象法力先支付、法师法力补足；魔宠入口限定生物行动阶段，再生点入口限定部署阶段，范围从来源对象区域计算。成功、反制 / 取消、来源摧毁、回合结束返还和对手隐藏计划身份均有领域测试覆盖；`1804` 仅在真实对象成功施法后触发。`2218` / `2908` 复用 deck `22/29` 已有 `4096x3294` 正式图集和 WebP，新增 frame、配置包 assetRefs、CardPreview 注册和 atlas manifest 更新。证据：`familiar-spellcasting.test.ts` 4 项，相关定向测试共 26 项，Mage Wars 全量 10 files / 257 tests、TypeScript、Mage Wars 定向 ESLint、atlas manifest 增量校验和 OpenSpec 严格校验通过。完整 `--full` 镜像校验因共享 manifest 的远端保留键不适用；`2905` / `3017` 的正式 frame 仍随其 deferred 状态保持未接入。

@@ -7,7 +7,6 @@ import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from '
 import type { AudioRegistryEntry } from './commonRegistry';
 import { notifyAudioRuntimeToast } from './audioRuntimeNotifications';
 import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady, resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
-import { readInstalledGamePackageAssetBlobUrl } from '../../features/mobile-packages/nativeGamePackagePlugin';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -358,6 +357,7 @@ class AudioManagerClass {
         }
 
         const promise = (async () => {
+            const { readInstalledGamePackageAssetBlobUrl } = await import('../../features/mobile-packages/nativeGamePackagePlugin');
             const result = await readInstalledGamePackageAssetBlobUrl(location.gameId, location.relativePath);
             const blobUrl = result?.blobUrl?.trim();
             if (!blobUrl) {

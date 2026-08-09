@@ -8,16 +8,16 @@
 
 1. **跨项目可复用的通用能力**  
    例如通用 TDD、通用 UI/UX、通用 PR 审查。  
-   这类优先放到系统 / 用户级 skill；项目目录只保留 BoardGame 的增量约束。
+   当 BoardGame 没有同主题项目 skill 时，才读取系统 skill；一旦本目录存在同主题项目 skill，项目 skill 是唯一入口。
 
 2. **BoardGame 专属 workflow**  
    只要内容依赖本仓库目录、脚本、游戏模型、验收门禁、evidence、服务器素材主源、manifest、E2E 口径，就应放在本目录。
 
-3. **BoardGame 对通用 skill 的补充层（overlay）**  
-   如果只是“在通用 skill 之上再加本项目约束”，本目录里只保留增量规则：
-   - 先说明“先用哪个系统 skill”
-   - 再写本项目补充
-   - 不要把通用 skill 正文整份复制进来
+3. **BoardGame 对同主题能力的覆盖 skill**
+   项目已提供的 workflow 必须自包含：
+   - 只读、只执行本目录对应 skill，不再读取同主题系统 skill
+   - 把实际需要的通用规则、命令模板和辅助脚本副本随项目保存
+   - 项目 skill 是本项目的唯一真相源；系统版本只能在项目没有对应 skill 时作为候选
    - 不要把本项目事故、项目口径、项目补丁反写回 `D:\\codex-home\\skills\\**`
 
 ## 目录硬规则
@@ -58,6 +58,7 @@
 - `game-ai-adaptation`
 - `game-audit-workflow`
 - `generated-design-implementation`
+- `git-operations`
 - `merge-decision-package`
 - `merge-pr-workflow`
 - `rule-bug-fix-workflow`
@@ -65,10 +66,9 @@
 - `smashup-faction-addition`
 - `sticker-imagegen`
 
-### 项目 overlay
+### 系统 skill 备选（项目没有同主题 skill 时才读取）
 
 - `audio-integration`
-- `git-operations`
 - `github-pr-review-merge`
 - `tdd`
 - `ui-ux-pro-max`

@@ -302,7 +302,7 @@ test.describe('DiceThrone E2E', () => {
             const rerollPrompt = monkPage.getByText(/Click a die to spend|点击.*重掷|消耗.*重掷/i).first();
             await expect(rerollPrompt).toBeVisible({ timeout: 15000 });
             const rerollRoot = rerollPrompt.locator('..');
-            const rerollDice = rerollRoot.locator('.dice3d-perspective');
+            const rerollDice = rerollRoot.getByTestId('dice-2d');
             await expect(rerollDice.first()).toBeVisible({ timeout: 5000 });
             await rerollDice.first().click();
 

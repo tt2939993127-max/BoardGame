@@ -32,11 +32,6 @@ export interface ConfirmCompareRollCommand extends Command<'CONFIRM_COMPARE_ROLL
     payload: Record<string, never>;
 }
 
-/** 恢复最近一次被新投掷覆盖的骰区步骤 */
-export interface RestoreCoveredRollCommand extends Command<'RESTORE_COVERED_ROLL'> {
-    payload: Record<string, never>;
-}
-
 /** 选择技能命令 */
 export interface SelectAbilityCommand extends Command<'SELECT_ABILITY'> {
     payload: {
@@ -297,7 +292,6 @@ export type DiceThroneCommand =
     | ToggleDieLockCommand
     | ConfirmRollCommand
     | ConfirmCompareRollCommand
-    | RestoreCoveredRollCommand
     | SelectAbilityCommand
     | DrawCardCommand
     | DiscardCardCommand

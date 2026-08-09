@@ -1,4 +1,9 @@
-@import "tailwindcss/index.css";
+/*
+ * Tailwind 默认自动检测会从工作区扩散扫描，开发环境会把 evidence、temp 等非运行时目录也纳入，
+ * 导致首次 CSS 转换长期阻塞。运行时所有 utility 类都在 src 内，因此改为明确登记唯一源码根。
+ */
+@import "tailwindcss" source(none);
+@source ".";
 @import "./fonts.css";
 
 /*
@@ -941,6 +946,13 @@ html[data-game-id="betrayal"][data-betrayal-cinematic-stage="true"] [data-testid
         left: 0.75rem;
         right: auto;
         top: 6.25rem;
+        justify-content: flex-start;
+    }
+
+    .smashup-special-supply-row {
+        left: 0;
+        right: auto;
+        width: max-content;
         justify-content: flex-start;
     }
 

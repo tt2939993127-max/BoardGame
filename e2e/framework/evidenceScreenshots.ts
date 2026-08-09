@@ -2,7 +2,7 @@ import { readdir, rm, unlink } from 'node:fs/promises';
 import { join, parse } from 'node:path';
 import type { TestInfo } from '@playwright/test';
 
-const EVIDENCE_GAME_IDS = new Set(['betrayal', 'smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia', 'the-gang', '_shared']);
+const EVIDENCE_GAME_IDS = new Set(['betrayal', 'smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia', 'the-gang', 'mage-wars', '_shared']);
 export const EVIDENCE_SCREENSHOT_EXTENSION = '.jpg';
 export const EVIDENCE_SCREENSHOT_TYPE = 'jpeg';
 export const EVIDENCE_SCREENSHOT_QUALITY = 90;

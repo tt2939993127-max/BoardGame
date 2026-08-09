@@ -109,7 +109,7 @@ describe('MobileOrientationGuard native orientation behavior', () => {
         expect(screen.queryByText('正在切换横屏…')).toBeNull();
     });
 
-    it('纸牌帮路由必须通过已打包的原生插件请求横屏', () => {
+    it('纸牌帮路由必须通过已打包的原生插件请求横屏', async () => {
         vi.useFakeTimers();
         setViewport(390, 844);
         setNativeAppShell(true);
@@ -118,6 +118,7 @@ describe('MobileOrientationGuard native orientation behavior', () => {
         act(() => {
             vi.runOnlyPendingTimers();
         });
+        await vi.dynamicImportSettled();
 
         expect(lockOrientationMock).toHaveBeenCalledWith({ orientation: 'landscape' });
         expect(screen.getByTestId('game-content')).toBeTruthy();

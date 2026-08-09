@@ -8000,6 +8000,166 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('移动端-直线跑路药水-计分收口后', testInfo);
     });
 
+    test('麻痹药水移动端横屏可手动选择计分前响应并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinParalysisPotionScene());
+
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-card-uid="paralysis-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="paralysis-hero"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-麻痹药水-计分前', testInfo);
+
+        await game.advancePhase();
+        await game.waitForPhase('scoreBases', 10000);
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases'
+                    && state?.sys?.responseWindow?.current?.windowType === 'meFirst'
+                    && state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        await expect.poll(async () => {
+            const options = await game.getInteractionOptions() as InteractionOption[];
+            return options.some((option) =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'paralysis-1'
+                && option.value?.targetBaseIndex === 0
+            );
+        }, { timeout: 10000 }).toBe(true);
+
+        const responsePromptLayout = await page.evaluate(() => {
+            const prompt = document.querySelector<HTMLElement>('[data-testid="smashup-docked-prompt"]');
+            const turnTracker = document.querySelector<HTMLElement>('[data-testid="su-turn-tracker"]');
+            const promptRect = prompt?.getBoundingClientRect();
+            const baseRects = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index]'))
+                .map(element => element.getBoundingClientRect());
+            const overlapsBase = promptRect
+                ? baseRects.some(rect => (
+                    promptRect.left < rect.right
+                    && promptRect.right > rect.left
+                    && promptRect.top < rect.bottom
+                    && promptRect.bottom > rect.top
+                ))
+                : true;
+            const turnRect = turnTracker?.getBoundingClientRect();
+            const overlapsTurnTracker = promptRect && turnRect
+                ? promptRect.left < turnRect.right
+                    && promptRect.right > turnRect.left
+                    && promptRect.top < turnRect.bottom
+                    && promptRect.bottom > turnRect.top
+                : true;
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                promptVisible: Boolean(promptRect && promptRect.width > 24 && promptRect.height > 24),
+                noBaseOverlap: !overlapsBase,
+                noTurnTrackerOverlap: !overlapsTurnTracker,
+            };
+        });
+        expect(responsePromptLayout, '移动端麻痹药水 beforeScoring 短提示必须可见，且不能压住基地牌或回合/阶段牌').toEqual({
+            noUnexpectedOverflow: true,
+            promptVisible: true,
+            noBaseOverlap: true,
+            noTurnTrackerOverlap: true,
+        });
+        await game.screenshot('移动端-麻痹药水-beforeScoring响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'paralysis-1'
+                && option.value?.targetBaseIndex === 0,
+            '移动端 beforeScoring 手动选择麻痹药水',
+        );
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as ParalysisCoreState;
+            const suppressionEvent = [...(state.sys?.eventStream?.entries ?? [])]
+                .map(entry => entry.event)
+                .find(event => event?.type === 'su:cards_suppressed_until_turn_end'
+                    && event?.payload?.reason === 'munchkin_treasure_potion_of_paralysis');
+            const suppressedCardUids = suppressionEvent?.payload?.cardUids ?? [];
+            const player0DiscardDefIds = core.players?.['0']?.discard?.map(card => card.defId) ?? [];
+            return {
+                suppressionBaseIndex: suppressionEvent?.payload?.baseIndex ?? null,
+                suppressedCardUids,
+                suppressedAwayAction: suppressedCardUids.includes('paralysis-away-action'),
+                suppressedAwayMinion: suppressedCardUids.includes('paralysis-away-minion'),
+                player0DiscardHasPotion: player0DiscardDefIds.includes('munchkin_treasure_potion_of_paralysis'),
+                suppressionStillActiveAfterTurnAdvance: (core.suppressedCardUidsUntilTurnEnd ?? []).length > 0,
+                turnNumber: core.turnNumber,
+                triggerQueueLength: core.triggerQueue?.length ?? 0,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            suppressionBaseIndex: 0,
+            suppressedCardUids: [
+                'paralysis-base-action',
+                'paralysis-hero',
+                'paralysis-rocket-boots',
+                'paralysis-ally',
+            ],
+            suppressedAwayAction: false,
+            suppressedAwayMinion: false,
+            player0DiscardHasPotion: true,
+            suppressionStillActiveAfterTurnAdvance: false,
+            turnNumber: 12,
+            triggerQueueLength: 0,
+            responseWindowType: null,
+            interactionSourceId: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                monsterSupplyCardVisible: inViewport('[data-testid="su-munchkin-monster-supply-card"]'),
+                monsterSupplyCountVisible: inViewport('[data-testid="su-munchkin-monster-supply-count"]'),
+                treasureSupplyCardVisible: inViewport('[data-testid="su-munchkin-treasure-supply-card"]'),
+                treasureSupplyCountVisible: inViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端麻痹药水收口后基地、手牌、两张公共小牌及其数量和回合信息应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            monsterSupplyCardVisible: true,
+            monsterSupplyCountVisible: true,
+            treasureSupplyCardVisible: true,
+            treasureSupplyCountVisible: true,
+            turnTrackerVisible: true,
+        });
+        await game.screenshot('移动端-麻痹药水-计分收口后', testInfo);
+    });
+
     test('兽人剑王真实入口显示同基地己方力量加成并排除自身、对手和其他基地', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -13807,12 +13967,14 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         }, { timeout: 10000 }).toEqual({ hasParalysisOption: true });
         await game.screenshot('21-麻痹药水beforeScoring响应入口', testInfo);
 
-        await game.selectInteractionOptionBy(
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
             (option: InteractionOption) =>
                 option.value?.kind === 'play_action'
                 && option.value?.cardUid === 'paralysis-1'
                 && option.value?.targetBaseIndex === 0,
-            'beforeScoring 选择麻痹药水',
+            '桌面 beforeScoring 手动选择麻痹药水',
         );
 
         await expect.poll(async () => {

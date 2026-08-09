@@ -1,8 +1,6 @@
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
-import { ScreenOrientation } from '@capacitor/screen-orientation';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import type { GameManifestEntry } from '../../games/manifest';
 import {
@@ -32,20 +30,35 @@ type GameMobileEntry = Pick<
 
 const hasNativeMobileRuntime = () => detectNativeMobileRuntime();
 
-const isNativeAppShell = async () => {
-    if (hasNativeMobileRuntime()) {
-        return true;
+type ScreenOrientationPlugin = {
+    ScreenOrientation: {
+        lock(options: { orientation: 'landscape' | 'portrait' }): Promise<void>;
+    };
+};
+
+let screenOrientationPluginLoader: Promise<ScreenOrientationPlugin | null> | null = null;
+
+const loadNativeScreenOrientationPlugin = async () => {
+    if (!screenOrientationPluginLoader) {
+        screenOrientationPluginLoader = import('@capacitor/screen-orientation')
+            .then((module) => module as ScreenOrientationPlugin)
+            .catch(() => null);
     }
 
-    return Capacitor.isNativePlatform();
+    return screenOrientationPluginLoader;
 };
 
 const lockScreenByRoute = async (targetOrientation: 'landscape' | 'portrait'): Promise<boolean> => {
-    try {
-        await ScreenOrientation.lock({ orientation: targetOrientation });
-        return true;
-    } catch {
-        // ignore and fallback below
+    if (hasNativeMobileRuntime()) {
+        const plugin = await loadNativeScreenOrientationPlugin();
+        try {
+            await plugin?.ScreenOrientation.lock({ orientation: targetOrientation });
+            if (plugin) {
+                return true;
+            }
+        } catch {
+            // ignore and fallback below
+        }
     }
 
     return tryLockScreenOrientation(targetOrientation);
@@ -200,11 +213,10 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
 
         let disposed = false;
 
-        void isNativeAppShell().then((value) => {
-            if (!disposed && nativeAppShellRef.current !== value) {
-                setNativeAppShell(value);
-            }
-        });
+        const value = hasNativeMobileRuntime();
+        if (!disposed && nativeAppShellRef.current !== value) {
+            setNativeAppShell(value);
+        }
 
         return () => {
             disposed = true;

@@ -1,9 +1,11 @@
+import type { RandomFn } from '../../../engine/types';
 import type { DiceThroneCore, DiceThroneEvent, PendingBonusDiceSettlement } from './types';
 
 export interface BonusDiceSettlementHandlerContext {
     state: DiceThroneCore;
     settlement: PendingBonusDiceSettlement;
     timestamp: number;
+    random?: RandomFn;
 }
 
 export interface BonusDiceSettlementHandlerResult {

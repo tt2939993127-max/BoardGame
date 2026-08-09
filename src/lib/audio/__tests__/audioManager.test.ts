@@ -76,6 +76,15 @@ vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
 import { AudioManager } from '../AudioManager';
 import type { GameAudioConfig } from '../types';
 
+const waitForInstalledAssetRead = async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (readInstalledGamePackageAssetBlobUrl.mock.calls.length > 0) {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+};
+
 describe('AudioManager', () => {
     beforeEach(() => {
         vi.useRealTimers();
@@ -157,7 +166,7 @@ describe('AudioManager', () => {
         const firstLoadError = howlInstances[0].options.onloaderror as ((id: number, error: unknown) => void);
         firstLoadError(1, 'Decoding audio data failed.');
 
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await waitForInstalledAssetRead();
 
         expect(readInstalledGamePackageAssetBlobUrl).toHaveBeenCalledWith(
             'common-audio',
@@ -233,7 +242,7 @@ describe('AudioManager', () => {
         const firstLoadError = howlInstances[0].options.onloaderror as ((id: number, error: unknown) => void);
         firstLoadError(1, 'Decoding audio data failed.');
 
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await waitForInstalledAssetRead();
 
         expect(readInstalledGamePackageAssetBlobUrl).toHaveBeenCalledWith(
             'common-audio',

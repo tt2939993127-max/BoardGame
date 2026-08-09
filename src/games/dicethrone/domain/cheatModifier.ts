@@ -5,8 +5,9 @@
 
 import type { CheatResourceModifier } from '../../../engine';
 import { HEROES_DATA } from '../heroes';
-import type { AbilityCard, DiceThroneCore } from './types';
+import type { AbilityCard, DiceThroneCore, Die } from './types';
 import { getDieFaceByDefinition } from './rules';
+import { setCurrentRollContextDice } from './rollContext';
 
 const getCardSourceAtlasIndex = (card: { sourceAtlasIndex?: number; previewRef?: { type: string; index?: number } }) => (
     typeof card.sourceAtlasIndex === 'number'
@@ -17,6 +18,19 @@ const getCardSourceAtlasIndex = (card: { sourceAtlasIndex?: number; previewRef?:
 );
 
 const cloneAbilityCard = (card: AbilityCard): AbilityCard => ({ ...card });
+
+const applyDiceValues = (dice: Die[], values: number[]): Die[] => (
+    dice.map((die, index) => {
+        const value = values[index] ?? die.value;
+        const face = getDieFaceByDefinition(die.definitionId, value) ?? die.symbol ?? null;
+        return {
+            ...die,
+            value,
+            symbol: face,
+            symbols: face ? [face] : [],
+        };
+    })
+);
 
 const getHeroCardPool = (characterId: string | null | undefined): AbilityCard[] => {
     if (!characterId) return [];
@@ -86,22 +100,40 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         return core;
     },
     setDice: (core, values) => {
-        const newDice = core.dice.map((die, i) => {
-            const value = values[i] ?? die.value;
-            const face = getDieFaceByDefinition(die.definitionId, value);
-            return {
-                ...die,
-                value,
-                symbol: face,
-                symbols: face ? [face] : [],
-            };
-        });
-        return {
+        let nextCore: DiceThroneCore = {
             ...core,
-            dice: newDice,
+            dice: applyDiceValues(core.dice, values),
             rollCount: core.rollCount || 1, // 确保至少有一次 roll
             rollConfirmed: false, // 允许用户重新确认
         };
+
+        if (core.currentRollContext) {
+            nextCore = setCurrentRollContextDice(
+                nextCore,
+                applyDiceValues(core.currentRollContext.dice, values),
+            );
+        }
+
+        const isCurrentBonusRoll = core.currentRollContext?.kind === 'bonus'
+            || (!core.currentRollContext && core.pendingBonusDiceSettlement?.allowDiceModification === true);
+        if (isCurrentBonusRoll && core.pendingBonusDiceSettlement) {
+            nextCore = {
+                ...nextCore,
+                pendingBonusDiceSettlement: {
+                    ...core.pendingBonusDiceSettlement,
+                    dice: core.pendingBonusDiceSettlement.dice.map((die, index) => ({
+                        ...die,
+                        value: values[index] ?? die.value,
+                        effectParams: {
+                            ...die.effectParams,
+                            value: values[index] ?? die.value,
+                        },
+                    })),
+                },
+            };
+        }
+
+        return nextCore;
     },
     setToken: (core, playerId, tokenId, amount) => {
         const player = core.players[playerId];

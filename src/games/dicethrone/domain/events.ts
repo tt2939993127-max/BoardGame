@@ -700,14 +700,6 @@ export interface CompareRollSettledEvent extends GameEvent<'COMPARE_ROLL_SETTLED
     };
 }
 
-/** 恢复覆盖前骰区步骤事件；payload 中的状态来自当前领域状态，不接受客户端输入。 */
-export interface RollContextRestoredEvent extends GameEvent<'ROLL_CONTEXT_RESTORED'> {
-    payload: {
-        coveredRollId: string;
-        restoreState: Omit<DiceThroneCore, 'rollContextRecovery'>;
-    };
-}
-
 export interface DefenderSelectionRequestedEvent extends GameEvent<'DEFENDER_SELECTION_REQUESTED'> {
     payload: PendingDefenderChoice;
 }
@@ -1024,7 +1016,6 @@ export type DiceThroneEvent =
     | ChoiceResolvedEvent
     | CompareRollRequestedEvent
     | CompareRollSettledEvent
-    | RollContextRestoredEvent
     | DefenderSelectionRequestedEvent
     | DefenderSelectionResolvedEvent
     | TurnChangedEvent

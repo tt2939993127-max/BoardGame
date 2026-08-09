@@ -19,14 +19,18 @@ describe('DiceThrone portrait atlas contract', () => {
             expect(style.backgroundImage).not.toContain('characterhead2');
         }
 
-        for (const characterId of ['treant', 'ninja', 'zhanshujia', 'cursed_pirate', 'artificer', 'huntress'] as const) {
+        for (const characterId of ['treant', 'ninja', 'zhanshujia', 'cursed_pirate', 'artificer', 'tianshi', 'huntress'] as const) {
             const style = getPortraitStyle(characterId, 'zh-CN');
             expect(style.backgroundImage).toContain('characterhead2');
             expect(style.backgroundImage).not.toContain('character-portraits');
         }
 
         expect(getPortraitStyle('artificer', 'zh-CN').backgroundPosition)
+            .toBe('40.0000% 16.6634%');
+        expect(getPortraitStyle('tianshi', 'zh-CN').backgroundPosition)
             .toBe('20.0000% 16.6634%');
+        expect(getPortraitStyle('artificer', 'zh-CN').backgroundPosition)
+            .not.toBe(getPortraitStyle('tianshi', 'zh-CN').backgroundPosition);
         expect(getPortraitStyle('huntress', 'zh-CN').backgroundPosition)
             .toBe('80.0000% 16.6634%');
     });

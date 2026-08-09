@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flame } from 'lucide-react';
 import type { GameConfig } from '../../config/games.config';
-import { ImplementationStatusRibbon } from '../game/framework';
+import { ImplementationStatusRibbon } from '../game/framework/ImplementationStatusRibbon';
 import { resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { assetsPath } from '../../core/AssetLoader';
 

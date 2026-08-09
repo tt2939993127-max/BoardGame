@@ -7,10 +7,10 @@ import { getLazyRegistration } from '../../../components/common/media/cardAtlasR
 import { mageWarsCriticalImageResolver } from '../criticalImageResolver';
 import { MageWarsDomain } from '../domain';
 import {
-    APPRENTICE_MAGE_ORDER,
-    getApprenticeSpellbook,
-    getApprenticeSpellbookCount,
-} from '../domain/data/apprenticeSpellbooks';
+    getApprenticeMageOrderFromConfig,
+    getApprenticeSpellbookCountFromConfig,
+    getApprenticeSpellbookEntriesFromConfig,
+} from '../data/configPackage';
 import { MAGE_IDS } from '../domain/ids';
 import {
     MAGE_WARS_MAGES_ATLAS_ID,
@@ -63,13 +63,15 @@ describe('mage-wars foundation', () => {
         });
     });
 
-    test('setup creates two apprentice mages and a 2x3 arena contract', () => {
+    test('setup creates two apprentice mages on the formal 4x3 arena contract', () => {
         const core = MageWarsDomain.setup(['0', '1'], makeRandom());
 
         expect(core.playerOrder).toEqual(['0', '1']);
         expect(core.currentPlayerId).toBe('0');
-        expect(core.arenaMode).toBe('apprentice-2x3');
-        expect(core.arena).toHaveLength(6);
+        expect(core.arenaMode).toBe('formal-4x3');
+        expect(core.arena).toHaveLength(12);
+        expect(core.objects).toEqual({});
+        expect(core.arena.every((zone) => Array.isArray(zone.objectIds))).toBe(true);
         expect(core.players['0'].life).toBe(24);
         expect(core.players['0'].baseMeleeDice).toBe(3);
         expect(core.players['1'].mana).toBe(10);
@@ -103,21 +105,23 @@ describe('mage-wars foundation', () => {
         }
     });
 
-    test('apprentice spellbook data is sourced for all four page-5 mages', () => {
-        expect(APPRENTICE_MAGE_ORDER).toEqual([
+    test('apprentice spellbook data is sourced from the config package for all four page-5 mages', () => {
+        const apprenticeMageOrder = getApprenticeMageOrderFromConfig();
+
+        expect(apprenticeMageOrder).toEqual([
             MAGE_IDS.BEASTMASTER_APPRENTICE,
             MAGE_IDS.PRIESTESS_APPRENTICE,
             MAGE_IDS.WARLOCK_APPRENTICE,
             MAGE_IDS.WIZARD_APPRENTICE,
         ]);
 
-        expect(getApprenticeSpellbookCount(MAGE_IDS.BEASTMASTER_APPRENTICE)).toBe(33);
-        expect(getApprenticeSpellbookCount(MAGE_IDS.PRIESTESS_APPRENTICE)).toBe(30);
-        expect(getApprenticeSpellbookCount(MAGE_IDS.WARLOCK_APPRENTICE)).toBe(30);
-        expect(getApprenticeSpellbookCount(MAGE_IDS.WIZARD_APPRENTICE)).toBe(30);
+        expect(getApprenticeSpellbookCountFromConfig(MAGE_IDS.BEASTMASTER_APPRENTICE)).toBe(33);
+        expect(getApprenticeSpellbookCountFromConfig(MAGE_IDS.PRIESTESS_APPRENTICE)).toBe(30);
+        expect(getApprenticeSpellbookCountFromConfig(MAGE_IDS.WARLOCK_APPRENTICE)).toBe(30);
+        expect(getApprenticeSpellbookCountFromConfig(MAGE_IDS.WIZARD_APPRENTICE)).toBe(30);
 
-        for (const mageId of APPRENTICE_MAGE_ORDER) {
-            expect(getApprenticeSpellbook(mageId).every((entry) => entry.workshopCardIds.length > 0)).toBe(true);
+        for (const mageId of apprenticeMageOrder) {
+            expect(getApprenticeSpellbookEntriesFromConfig(mageId).every((entry) => entry.spellCardId > 0)).toBe(true);
         }
     });
 
@@ -126,7 +130,7 @@ describe('mage-wars foundation', () => {
         expect(previewGetter).toBeDefined();
 
         const registeredSpellCardIds = getMageWarsRegisteredSpellCardIds();
-        expect(registeredSpellCardIds).toHaveLength(91);
+        expect(registeredSpellCardIds).toHaveLength(93);
         expect(getMageWarsSpellCardName(1700)).toBe('火球术');
         expect(getMageWarsSpellCardPreviewRef(1700)).toEqual({
             type: 'atlas',
@@ -138,11 +142,23 @@ describe('mage-wars foundation', () => {
             atlasId: 'mage-wars:spell-equipment-core-atlas',
             index: 0,
         });
+        expect(getMageWarsSpellCardName(2218)).toBe('巢穴');
+        expect(getMageWarsSpellCardPreviewRef(2218)).toEqual({
+            type: 'atlas',
+            atlasId: 'mage-wars:spell-conjuration-core-atlas',
+            index: 18,
+        });
+        expect(getMageWarsSpellCardName(2908)).toBe('乌鸦魔宠胡金');
+        expect(getMageWarsSpellCardPreviewRef(2908)).toEqual({
+            type: 'atlas',
+            atlasId: 'mage-wars:spell-creature-core-b-atlas',
+            index: 8,
+        });
 
         const spellbookCardIds = new Set<string>();
-        for (const mageId of APPRENTICE_MAGE_ORDER) {
-            for (const entry of getApprenticeSpellbook(mageId)) {
-                entry.workshopCardIds.forEach((cardId) => spellbookCardIds.add(String(cardId)));
+        for (const mageId of getApprenticeMageOrderFromConfig()) {
+            for (const entry of getApprenticeSpellbookEntriesFromConfig(mageId)) {
+                spellbookCardIds.add(String(entry.spellCardId));
             }
         }
 

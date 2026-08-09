@@ -853,7 +853,6 @@
     "rerollSelected": "Selected",
     "confirm": "Confirm",
     "confirmed": "Confirmed",
-    "restoreCoveredRoll": "Restore previous roll",
     "bonusRoll": "Bonus Roll",
     "bonusRolled": "Bonus roll: {{value}} ({{face}})",
     "face": {

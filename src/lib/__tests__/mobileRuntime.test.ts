@@ -38,4 +38,21 @@ describe('mobile runtime detection', () => {
         expect(diagnostics.nativeAndroid).toBe(true);
         expect(diagnostics.platform).toBe('android');
     });
+
+    it('recognizes the iOS bridge without importing the Capacitor desktop module', () => {
+        const diagnostics = getNativeMobileRuntimeDiagnostics({
+            windowObject: {
+                webkit: {
+                    messageHandlers: {
+                        bridge: {},
+                    },
+                },
+            },
+        });
+
+        expect(diagnostics.nativeMobile).toBe(true);
+        expect(diagnostics.nativeAndroid).toBe(false);
+        expect(diagnostics.nativeIos).toBe(true);
+        expect(diagnostics.platform).toBe('ios');
+    });
 });

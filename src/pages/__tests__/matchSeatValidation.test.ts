@@ -3935,6 +3935,36 @@ describe('submitOnlineAiResolution', () => {
         expect(unsubscribeError).toHaveBeenCalledTimes(1);
     });
 
+    it('单命令未送达时应立即释放 attempt，不等待确认超时', () => {
+        const retry = vi.fn();
+        const onRejected = vi.fn();
+        const unsubscribe = vi.fn();
+        const lastAiAttemptKeyRef = { current: null as string | null };
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch: vi.fn(),
+                sendCommand: vi.fn(() => false),
+                subscribeStateUpdate: vi.fn(() => unsubscribe),
+                latestState: buildOnlineAiSeatState({ nextId: 16 }),
+                updateLatestState: vi.fn(),
+                resync: vi.fn(),
+            },
+            resolution: buildResolution({
+                attemptKey: 'attempt-not-sent',
+                commands: [{ type: 'PLAYER_READY', payload: {} }],
+            }),
+            lastAiAttemptKeyRef,
+            scheduleRetry: retry,
+            onRejected,
+        });
+
+        expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(onRejected).toHaveBeenCalledWith('command_not_sent');
+        expect(retry).not.toHaveBeenCalled();
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
     it('单命令收到 stale_state 后应立即结束当前尝试，避免把重同步误认成命令确认', () => {
         const retry = vi.fn();
         const onWillResync = vi.fn();
@@ -5093,6 +5123,70 @@ describe('online-ai confirmed attempt release', () => {
         })).not.toThrow();
 
         expect(clearActiveAiAttemptIfMatches).toHaveBeenCalledWith('attempt-release-1');
+        expect(activeAiAttemptRef.current).toBeNull();
+        expect(aiSeatDecisionDebugRef.current['1']?.stage).toBe('shared-faction-select-confirmed');
+    });
+
+    it('游戏自定义的角色选择确认规则已命中时，应释放对应 AI attempt', () => {
+        const sharedState = {
+            core: {
+                draftSetupSelections: {
+                    '0': 'cleric',
+                    '1': 'ranger',
+                },
+            },
+            sys: {
+                phase: 'setup',
+            },
+        } as MatchState<unknown>;
+        const activeAiAttemptRef = {
+            current: {
+                attemptKey: 'attempt-custom-character-release',
+                playerId: '1',
+                reservedAt: Date.now(),
+                sharedMarker: 'shared-marker',
+                seatMarker: null,
+                actionKind: 'setup-select-character',
+                pendingSelectionId: 'ranger',
+            },
+        };
+        const aiSeatDecisionDebugRef = { current: {} as Record<string, Record<string, unknown>> };
+        const clearActiveAiAttemptIfMatches = vi.fn((attemptKey: string) => {
+            if (activeAiAttemptRef.current?.attemptKey === attemptKey) {
+                activeAiAttemptRef.current = null;
+            }
+        });
+
+        releaseConfirmedOnlineAiAttempt({
+            engineConfig: {
+                gameId: 'custom-manual-setup-game',
+                onlineAiRecovery: {
+                    shouldReleaseManualSetupAttemptFromSharedState: ({
+                        sharedState: candidateState,
+                        playerId,
+                        actionKind,
+                        selectionId,
+                    }) => {
+                        if (actionKind !== 'setup-select-character') {
+                            return undefined;
+                        }
+                        const selectedByPlayer = (candidateState.core as {
+                            draftSetupSelections?: Record<string, unknown>;
+                        } | undefined)?.draftSetupSelections;
+                        return selectedByPlayer?.[playerId] === selectionId;
+                    },
+                },
+            },
+            sharedState,
+            activeAiAttemptRef,
+            aiSeatDecisionDebugRef,
+            getEffectiveSeatState: () => null,
+            getSeatClient: () => null,
+            requestSeatResync: vi.fn(),
+            clearActiveAiAttemptIfMatches,
+        });
+
+        expect(clearActiveAiAttemptIfMatches).toHaveBeenCalledWith('attempt-custom-character-release');
         expect(activeAiAttemptRef.current).toBeNull();
         expect(aiSeatDecisionDebugRef.current['1']?.stage).toBe('shared-faction-select-confirmed');
     });

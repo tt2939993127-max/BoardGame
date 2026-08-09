@@ -295,7 +295,10 @@ export interface BonusDiceRollConfig {
     customResolutionId?: string;
     /** 允许普通改骰牌修改这组奖励骰，并在确认结算时读取改后的结果 */
     allowDiceModification?: boolean;
-    /** 当前奖励骰结果是否应打开 afterRollConfirmed 响应窗口 */
+    /**
+     * 旧定义兼容字段；允许通用改骰的奖励骰一律开放对应响应窗口，
+     * 不能按初始骰面缩小改骰机会。
+     */
     opensAfterRollConfirmedResponseWindow?: boolean | ((dice: BonusDieInfo[]) => boolean);
     /** 可选：构建每颗奖励骰的 effectParams（用于文案插值/日志展示） */
     effectParamsBuilder?: (params: { value: number; index: number; face: DieFace }) => Record<string, string | number>;

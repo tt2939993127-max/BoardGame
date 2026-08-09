@@ -91,7 +91,6 @@ export const COMMAND_CATEGORIES: Record<string, CommandCategory> = {
     'MODIFY_DIE': CommandCategory.STATE_MANAGEMENT,
     'REROLL_DIE': CommandCategory.STATE_MANAGEMENT,
     'CONFIRM_COMPARE_ROLL': CommandCategory.STATE_MANAGEMENT,
-    'RESTORE_COVERED_ROLL': CommandCategory.STATE_MANAGEMENT,
     'REROLL_BONUS_DIE': CommandCategory.STATE_MANAGEMENT,
     'SKIP_BONUS_DICE_REROLL': CommandCategory.STATE_MANAGEMENT,
     'REMOVE_STATUS': CommandCategory.STATE_MANAGEMENT,

@@ -16,10 +16,10 @@ DiceThrone SHALL expose at most one current roll context as a single current rol
 - **AND** the previous roll MUST stop being a legal target for normal dice modification commands
 - **AND** any previous roll value needed by later settlement MUST have been committed as settlement input before overwrite
 
-#### Scenario: Overwritten dice require step-level rewind
+#### Scenario: Overwritten dice do not create an unruled recovery action
 - **GIVEN** a previous roll has been overwritten by a later roll
-- **WHEN** a player needs to modify that previous roll
-- **THEN** the game MUST return to the corresponding pre-overwrite step before allowing modification
+- **WHEN** the UI, command registry, or internal state handles the overwritten roll
+- **THEN** it MUST NOT expose a player recovery button, command, or new settlement action without an independent rule source
 - **AND** MUST NOT keep both the previous roll and later roll as simultaneous current dice
 
 ### Requirement: DiceThrone SHALL Model Every Rules-Modifiable Roll Through the Current Roll Context

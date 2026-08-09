@@ -4863,7 +4863,7 @@ test.describe('DiceThrone Simple Start', () => {
 
         const bonusDieOverlay = hostPage.locator('[data-testid="bonus-die-overlay"]').first();
         await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
-        await expect(bonusDieOverlay.locator('.dice3d-perspective')).toHaveCount(5, { timeout: 10000 });
+        await expect(bonusDieOverlay.getByTestId('dice-2d')).toHaveCount(5, { timeout: 10000 });
 
         await expect.poll(async () => {
             const state = await readHarnessState<any>(hostPage);

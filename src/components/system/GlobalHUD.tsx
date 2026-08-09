@@ -17,13 +17,7 @@ import {
     subscribeHomeEntryStyleChange,
     type HomeEntryStyle,
 } from '../../lib/homeV2Routing';
-import {
-    readAndroidLiveUpdateActivityState,
-    readAndroidLiveUpdateConfig,
-    requestAndroidLiveUpdateCheck,
-    subscribeAndroidLiveUpdateActivityState,
-} from '../../lib/mobile/androidLiveUpdates';
-import { resolveAndroidWebAppDownload } from '../../lib/mobile/androidNativeUpdates';
+import type { AndroidLiveUpdateActivityState } from '../../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { shouldShowAndroidOtaToastOncePerDay } from '../../lib/mobile/otaToastGate';
 import { toggleDocumentFullscreen } from '../../lib/webFullscreen';
@@ -36,6 +30,10 @@ const LazyAboutModal = lazy(() => import('./AboutModal').then(m => ({ default: m
 const LazyFeedbackModal = lazy(() => import('./FeedbackModal').then(m => ({ default: m.FeedbackModal })));
 
 const HOME_STYLE_QUERY_PARAM = 'homeStyle';
+const IDLE_OTA_ACTIVITY_STATE: AndroidLiveUpdateActivityState = {
+    active: false,
+    phase: 'idle',
+};
 const shouldHideOnRoute = (pathname: string) => (
     pathname === '/games/summonerwars/config'
     || pathname.startsWith('/games/summonerwars/config/')
@@ -55,8 +53,8 @@ const openExternalUrlInNewTab = (url: string) => {
 
 export const GlobalHUD = () => {
     const isNativeAndroid = isNativeAndroidRuntime();
-    const otaConfig = readAndroidLiveUpdateConfig(import.meta.env);
-    const otaEnabledForCurrentShell = isNativeAndroid && otaConfig.enabled;
+    const [otaEnabled, setOtaEnabled] = useState(false);
+    const otaEnabledForCurrentShell = isNativeAndroid && otaEnabled;
     const { t } = useTranslation('game');
     const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();
@@ -83,7 +81,7 @@ export const GlobalHUD = () => {
     const [showFeedback, setShowFeedback] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
     const [socialModalId, setSocialModalId] = useState<string | null>(null);
-    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
+    const [otaActivityState, setOtaActivityState] = useState<AndroidLiveUpdateActivityState>(IDLE_OTA_ACTIVITY_STATE);
 
     const applyHomeEntryStyle = (nextStyle: HomeEntryStyle, closePanel?: () => void) => {
         persistHomeEntryStyle(nextStyle);
@@ -122,6 +120,7 @@ export const GlobalHUD = () => {
     };
 
     const handleOpenAppDownload = async () => {
+        const { resolveAndroidWebAppDownload } = await import('../../lib/mobile/androidNativeUpdates');
         const resolvedDownload = await resolveAndroidWebAppDownload();
         if (!resolvedDownload.url) {
             if (resolvedDownload.reason === 'manifest-unavailable') {
@@ -146,11 +145,17 @@ export const GlobalHUD = () => {
         if (otaActivityState.active) {
             return;
         }
-        requestAndroidLiveUpdateCheck({
-            interactive: true,
-            applyMode: 'immediate',
-            initialImmediatePhase: 'checking',
-        });
+        void import('../../lib/mobile/androidLiveUpdates')
+            .then(({ requestAndroidLiveUpdateCheck }) => {
+                requestAndroidLiveUpdateCheck({
+                    interactive: true,
+                    applyMode: 'immediate',
+                    initialImmediatePhase: 'checking',
+                });
+            })
+            .catch((error) => {
+                console.warn('[GlobalHUD] 加载 OTA 更新模块失败', error);
+            });
     };
 
     useEffect(() => {
@@ -166,12 +171,36 @@ export const GlobalHUD = () => {
 
     useEffect(() => {
         if (!isNativeAndroid) {
-            return;
+            setOtaEnabled(false);
+            setOtaActivityState(IDLE_OTA_ACTIVITY_STATE);
+            return undefined;
         }
 
-        return subscribeAndroidLiveUpdateActivityState((state) => {
-            setOtaActivityState(state);
-        });
+        let cancelled = false;
+        let unsubscribe: (() => void) | undefined;
+
+        void import('../../lib/mobile/androidLiveUpdates')
+            .then((module) => {
+                if (cancelled) {
+                    return;
+                }
+
+                setOtaEnabled(module.readAndroidLiveUpdateConfig(import.meta.env).enabled);
+                setOtaActivityState(module.readAndroidLiveUpdateActivityState());
+                unsubscribe = module.subscribeAndroidLiveUpdateActivityState((state) => {
+                    if (!cancelled) {
+                        setOtaActivityState(state);
+                    }
+                });
+            })
+            .catch((error) => {
+                console.warn('[GlobalHUD] 初始化 OTA 更新模块失败', error);
+            });
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
     }, [isNativeAndroid]);
 
     useEffect(() => {

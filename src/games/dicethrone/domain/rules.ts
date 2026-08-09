@@ -153,7 +153,6 @@ export const shouldOpenAfterRollConfirmedForBonusSettlement = (
     settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
 ): boolean => (
     settlement?.allowDiceModification === true
-    && settlement.opensAfterRollConfirmedResponseWindow === true
     && getPendingBonusSettlementDice(settlement).length > 0
 );
 
@@ -860,8 +859,21 @@ const canPlayRollCardOutsideRollPhaseWithDiceResult = (
     if (
         (card.timing !== 'roll' && card.timing !== 'instant')
         || !hasAnyDiceEffect(card)
-        || (phase !== 'upkeep' && phase !== 'income' && phase !== 'main1' && phase !== 'main2')
     ) {
+        return false;
+    }
+
+    const currentRollContext = resolveCurrentRollContext(state, phase);
+    if (
+        currentRollContext
+        && currentRollContext.policy.allowRollCards === true
+        && currentRollContext.display.replayOnly !== true
+        && currentRollContext.dice.length > 0
+    ) {
+        return true;
+    }
+
+    if (phase !== 'upkeep' && phase !== 'income' && phase !== 'main1' && phase !== 'main2') {
         return false;
     }
 
@@ -1215,6 +1227,14 @@ const checkResponseWindowCardPlay = (
             }
             if (!hasAnyDiceEffect(card)) {
                 return failResponseWindow();
+            }
+            const currentRollContext = resolveCurrentRollContext(state, phase);
+            const isOwnOpenBonusRoll = playerId === getRollerId(state, phase)
+                && currentRollContext?.kind === 'bonus'
+                && currentRollContext.policy.allowRollCards === true
+                && currentRollContext.display.replayOnly !== true;
+            if (isOwnOpenBonusRoll) {
+                return { ok: true };
             }
             const diceEffectTarget = getDiceEffectTarget(card);
             if (diceEffectTarget !== 'opponent' && diceEffectTarget !== 'any') {

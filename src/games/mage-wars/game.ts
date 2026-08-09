@@ -7,18 +7,21 @@ import { mageWarsCriticalImageResolver } from './criticalImageResolver';
 import { MAGE_WARS_AUDIO_CONFIG } from './audio.config';
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getMageWarsCardPreviewRef } from './ui/cardAtlas';
+import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatMageWarsActionEntry } from './actionLog';
+import { createMageWarsInteractionSystem } from './domain/systems';
 
 const systems = [
     createFlowSystem<MageWarsCore>({ hooks: mageWarsFlowHooks }),
     ...createBaseSystems<MageWarsCore>({
         actionLog: {
-            commandAllowlist: [],
-            formatEntry: () => null,
+            commandAllowlist: ACTION_ALLOWLIST,
+            formatEntry: formatMageWarsActionEntry,
         },
         undo: {
-            snapshotCommandAllowlist: [],
+            snapshotCommandAllowlist: UNDO_ALLOWLIST,
         },
     }),
+    createMageWarsInteractionSystem(),
 ];
 
 export const engineConfig = createGameEngine<MageWarsCore, MageWarsCommand, MageWarsEvent>({

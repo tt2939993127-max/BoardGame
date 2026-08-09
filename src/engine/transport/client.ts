@@ -372,14 +372,14 @@ export class GameTransportClient {
         commandType: string,
         payload: unknown,
         dispatchContext?: Pick<CommandDispatchMeta, 'onlineAiAttemptKey'>,
-    ): void {
-        if (!this.socket || this._destroyed) return;
+    ): boolean {
+        if (!this.socket || this._destroyed) return false;
         if (this._syncInFlight) {
             console.warn('[GameTransportClient] 全量同步进行中，命令被延后丢弃', {
                 commandType,
                 matchID: this.config.matchID,
             });
-            return;
+            return false;
         }
         // 检查连接状态：只有在完成 sync 握手后才能发送命令
         if (this._connectionState !== 'connected') {
@@ -389,7 +389,7 @@ export class GameTransportClient {
                 matchID: this.config.matchID,
             });
             this.config.onError?.('not_connected');
-            return;
+            return false;
         }
         const commandMeta: CommandDispatchMeta = {
             expectedStateID: this._lastReceivedStateID ?? undefined,
@@ -408,6 +408,7 @@ export class GameTransportClient {
             this.config.credentials,
             commandMeta,
         );
+        return true;
     }
 
     /** 发送临时 UI 事件；不进入权威游戏状态。 */
@@ -534,14 +535,14 @@ export class GameTransportClient {
      * 导致 state:update 消息虽到达 WebSocket 缓冲区但回调未执行，
      * 或心跳超时导致静默断线。重新 sync 确保状态最新。
      */
-    resync(): void {
+    resync(options?: { force?: boolean }): void {
         if (this._destroyed || this._terminalError || !this.socket) return;
         if (this.socket.connected) {
             // 连接正常：直接发送 sync 获取最新状态
             // 命令拒绝已经触发同步时，合并上层 recovery 的重复 resync；
             // 初始同步尚未建立 stateID 基线时仍允许手动重发。
-            if (this._syncInFlight && this._lastReceivedStateID !== null) return;
-            this.sendSync('manual-resync');
+            if (this._syncInFlight && this._lastReceivedStateID !== null && !options?.force) return;
+            this.sendSync(options?.force ? 'forced-manual-resync' : 'manual-resync');
         } else {
             // 连接已断：强制重连（socket.io 可能因后台节流未及时重连）
             this.config.onDebugEvent?.({

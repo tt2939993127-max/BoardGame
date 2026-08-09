@@ -231,7 +231,6 @@ export const FACTION_METADATA: FactionMeta[] = [
         icon: Sword,
         color: '#b45309',
         descriptionKey: 'factions.kung_fu_fighters.description',
-        implementationStatus: 'in_progress',
         locales: ['zh-CN'],
     },
     {
@@ -240,7 +239,6 @@ export const FACTION_METADATA: FactionMeta[] = [
         icon: Eye,
         color: '#334155',
         descriptionKey: 'factions.vigilantes.description',
-        implementationStatus: 'in_progress',
         locales: ['zh-CN'],
     },
     { id: SMASHUP_FACTION_IDS.VIGILANTES_POD, nameKey: 'factions.vigilantes_pod.name', icon: Eye, color: '#334155', descriptionKey: 'factions.vigilantes_pod.description' },
@@ -250,7 +248,6 @@ export const FACTION_METADATA: FactionMeta[] = [
         icon: Cog,
         color: '#ea580c',
         descriptionKey: 'factions.truckers.description',
-        implementationStatus: 'in_progress',
         locales: ['zh-CN'],
     },
     {
@@ -259,7 +256,6 @@ export const FACTION_METADATA: FactionMeta[] = [
         icon: Theater,
         color: '#0d9488',
         descriptionKey: 'factions.disco_dancers.description',
-        implementationStatus: 'in_progress',
         locales: ['zh-CN'],
     },
     { id: SMASHUP_FACTION_IDS.DRAGONS, nameKey: 'factions.dragons.name', icon: Bone, color: '#b91c1c', descriptionKey: 'factions.dragons.description', locales: ['zh-CN'] },

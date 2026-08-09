@@ -13,10 +13,14 @@ function HookProbe({
         '1': 'gunslinger',
     },
     cacheScope,
+    suppressStandaloneBonusDie = false,
+    suppressBonusDiceInCardSpotlight = false,
 }: {
     streamEntries: EventStreamEntry[];
     selectedCharacters?: Record<string, any>;
     cacheScope?: string;
+    suppressStandaloneBonusDie?: boolean;
+    suppressBonusDiceInCardSpotlight?: boolean;
 }) {
     const state = useCardSpotlight({
         eventStreamEntries: streamEntries,
@@ -24,6 +28,8 @@ function HookProbe({
         opponentName: '对手',
         selectedCharacters,
         cacheScope,
+        suppressStandaloneBonusDie,
+        suppressBonusDiceInCardSpotlight,
     });
 
     return (
@@ -449,6 +455,82 @@ describe('useCardSpotlight rollback consumer', () => {
                 playerId: '1',
             });
             expect(state.cardSpotlightQueue[0].bonusDice).toHaveLength(2);
+            expect(state.bonusDie.show).toBe(false);
+        });
+    });
+
+    it('自己打出会投奖励骰的卡时，只保留右侧骰盘，不再创建中央卡牌或奖励骰特写', async () => {
+        const wrapper = ({ children }: { children: React.ReactNode }) => (
+            <EventStreamRollbackContext.Provider value={{ watermark: null, seq: 0, reconcileSeq: 0 }}>
+                {children}
+            </EventStreamRollbackContext.Provider>
+        );
+        const cardEntry: EventStreamEntry = {
+            id: 50,
+            event: {
+                type: 'CARD_PLAYED',
+                payload: { playerId: '0', cardId: 'card-tianshi-supreme-holiness' },
+                timestamp: 6000,
+            },
+        };
+        const bonusEntry: EventStreamEntry = {
+            id: 51,
+            event: {
+                type: 'BONUS_DIE_ROLLED',
+                payload: {
+                    playerId: '0',
+                    targetPlayerId: '1',
+                    value: 1,
+                    face: 'blade',
+                    effectKey: 'bonusDie.effect.tianshi.supremeHoliness',
+                    effectParams: { value: 1, index: 0 },
+                },
+                timestamp: 6001,
+            },
+        };
+        const settlementEntry: EventStreamEntry = {
+            id: 52,
+            event: {
+                type: 'BONUS_DICE_REROLL_REQUESTED',
+                payload: {
+                    settlement: {
+                        id: 'tianshi-supreme-holiness-6000',
+                        sourceAbilityId: 'card-tianshi-supreme-holiness',
+                        attackerId: '0',
+                        targetId: '1',
+                        dice: [{ index: 0, value: 1, face: 'blade' }],
+                        rerollCostTokenId: '__tianshi_no_reroll__',
+                        rerollCostAmount: 1,
+                        rerollCount: 0,
+                        maxRerollCount: 0,
+                        readyToSettle: false,
+                        displayOnly: true,
+                        allowDiceModification: true,
+                    },
+                },
+                timestamp: 6001,
+            },
+        };
+
+        const view = render(
+            <HookProbe
+                streamEntries={[]}
+                suppressStandaloneBonusDie
+                suppressBonusDiceInCardSpotlight
+            />,
+            { wrapper },
+        );
+        view.rerender(
+            <HookProbe
+                streamEntries={[cardEntry, bonusEntry, settlementEntry]}
+                suppressStandaloneBonusDie
+                suppressBonusDiceInCardSpotlight
+            />,
+        );
+
+        await waitFor(() => {
+            const state = JSON.parse(screen.getByTestId('rollback-card-spotlight-state').textContent ?? '{}');
+            expect(state.cardSpotlightQueue).toEqual([]);
             expect(state.bonusDie.show).toBe(false);
         });
     });

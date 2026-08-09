@@ -187,6 +187,7 @@ function buildResponseWindowDecisionSignature(window: ResponseWindowState['curre
         ...(Array.isArray(window.responderQueue) ? window.responderQueue : []),
         window.currentResponderIndex ?? '',
         window.pendingInteractionId ?? '',
+        window.requiredInteractionId ?? '',
     ].join('|');
 }
 
@@ -215,7 +216,11 @@ export function createResponseWindow(
     id: string,
     responderQueue: PlayerId[],
     windowType: ResponseWindowType,
-    sourceId?: string
+    sourceId?: string,
+    options?: {
+        resolutionFrameId?: string;
+        requiredInteractionId?: string;
+    },
 ): ResponseWindowState['current'] {
     if (responderQueue.length === 0) return undefined;
     
@@ -226,6 +231,8 @@ export function createResponseWindow(
         responderQueue,
         currentResponderIndex: 0,
         passedPlayers: [],
+        ...(options?.resolutionFrameId ? { resolutionFrameId: options.resolutionFrameId } : {}),
+        ...(options?.requiredInteractionId ? { requiredInteractionId: options.requiredInteractionId } : {}),
     };
 }
 
@@ -561,7 +568,7 @@ export function createResponseWindowSystem<TCore>(
 
             // 处理 RESPONSE_PASS 命令
             if (command.type === RESPONSE_WINDOW_COMMANDS.PASS) {
-                if (currentWindow.pendingInteractionId) {
+                if (currentWindow.pendingInteractionId || currentWindow.requiredInteractionId) {
                     return { halt: true, error: '交互处理中，无法跳过响应' };
                 }
                 // 支持代替离线玩家 pass（仅本地/教程允许）
@@ -622,6 +629,12 @@ export function createResponseWindowSystem<TCore>(
 
             // SYS_ 前缀系统命令始终放行
             if (isSysCommand(command.type)) {
+                if (
+                    currentWindow.requiredInteractionId
+                    && command.type === INTERACTION_COMMANDS.CANCEL
+                ) {
+                    return { halt: true, error: '强制展示交互不可取消' };
+                }
                 return;
             }
 
@@ -702,13 +715,19 @@ export function createResponseWindowSystem<TCore>(
                         responderQueue: PlayerId[];
                         windowType: ResponseWindowType;
                         sourceId?: string;
+                        resolutionFrameId?: string;
+                        requiredInteractionId?: string;
                     };
                     
                     const window = createResponseWindow(
                         payload.windowId,
                         payload.responderQueue,
                         payload.windowType,
-                        payload.sourceId
+                        payload.sourceId,
+                        {
+                            resolutionFrameId: payload.resolutionFrameId,
+                            requiredInteractionId: payload.requiredInteractionId,
+                        },
                     );
                     
                     if (window) {
@@ -745,6 +764,28 @@ export function createResponseWindowSystem<TCore>(
                                 timestamp: eventTimestamp,
                             });
                         }
+                    }
+                }
+
+                if (event.type === INTERACTION_EVENTS.RESOLVED) {
+                    const interactionId = (event.payload as { interactionId?: unknown }).interactionId;
+                    const currentWindow = newState.sys.responseWindow?.current;
+                    if (
+                        currentWindow
+                        && typeof interactionId === 'string'
+                        && currentWindow.requiredInteractionId === interactionId
+                    ) {
+                        const closedWindowId = currentWindow.id;
+                        newState = closeResponseWindow(newState);
+                        additionalEvents.push({
+                            type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                            payload: {
+                                windowId: closedWindowId,
+                                allPassed: false,
+                                requiredInteractionResolved: true,
+                            },
+                            timestamp: eventTimestamp,
+                        });
                     }
                 }
                 

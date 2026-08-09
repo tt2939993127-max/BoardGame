@@ -8,6 +8,7 @@ import type { DiceThroneCore, Die } from './domain';
 import { getUsableTokenAmountForTiming, getUsableTokensForTiming } from './domain/tokenResponse';
 import {
     ATTACK_SNAPSHOT_DIE_ID_OFFSET,
+    checkPlayCard,
     getPlayableCardsInResponseWindow,
     getAvailableAbilityIds,
     getPendingBonusSettlementDice,
@@ -256,6 +257,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const currentPendingBonusDiceSettlement = isCurrentBonusRollSettlement(G)
         ? G.pendingBonusDiceSettlement
         : undefined;
+    const allowBonusDieBackgroundInteraction = G.currentRollContext?.kind === 'bonus'
+        && currentPendingBonusDiceSettlement !== undefined;
     const isDirectDiceActor = React.useMemo(
         () => isDirectDiceInterferenceActor(G, currentResponseWindow, rootPid),
         [G, currentResponseWindow, rootPid],
@@ -443,14 +446,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 .map(([pid, characterId]) => `${pid}:${characterId}`)
                 .sort()
                 .join('|') || 'unselected'}`,
-        suppressStandaloneBonusDie: Boolean(
-            currentPendingBonusDiceSettlement
-            && (
-                shouldUseRightTrayForPendingBonusDice(currentPendingBonusDiceSettlement)
-                || !currentPendingBonusDiceSettlement.displayOnly
-            )
-            && currentPendingBonusDiceSettlement.attackerId === rootPid
-        ),
+        suppressStandaloneBonusDie: Boolean(currentPendingBonusDiceSettlement),
         suppressBonusDiceInCardSpotlight: shouldUseRightTrayForPendingBonusDice(currentPendingBonusDiceSettlement),
     });
 
@@ -790,13 +786,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             ? (isViewRolling ? G.pendingAttack?.sourceAbilityId : undefined)
             : undefined;
     const canOperateView = isSelfView && !isSpectator;
-    const canRestoreCoveredRoll = canOperateView
-        && !isAttackShowcaseVisible
-        && !!G.rollContextRecovery
-        && (
-            G.currentRollContext?.ownerPlayerId === rootPid
-            || G.rollContextRecovery.coveredRollRef.ownerPlayerId === rootPid
-        );
     const hasRolled = G.rollCount > 0;
     const [rerollSelectingAction, setRerollSelectingAction] = React.useState<{ passiveId: string; actionIndex: number } | null>(null);
 
@@ -971,7 +960,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 等待对方思考（isFocusPlayer 已在上方定义）
     // 响应窗口期间不显示"对手思考中"提示，避免暴露对方有响应牌
     const isWaitingOpponent = !isFocusPlayer && !isResponseWindowOpen;
-    const thinkingOffsetClass = 'bottom-[18vw]';
 
     // 可被净化移除的负面状态：由定义驱动（支持扩展）
     const purifiableStatusIds = (G.tokenDefinitions ?? [])
@@ -1178,7 +1166,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const pendingBonusDiceRoutedToRightTray = shouldUseRightTrayForPendingBonusDice(currentPendingBonusDiceSettlement);
     const bonusDiceTrayDice = React.useMemo(() => {
         const settlement = currentPendingBonusDiceSettlement;
-        if (!settlement?.allowDiceModification) {
+        if (!settlement) {
             return null;
         }
 
@@ -1230,12 +1218,27 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const rightTrayBonusDiceSettlement = pendingBonusDiceRoutedToRightTray
         ? currentPendingBonusDiceSettlement
         : undefined;
-    const canConfirmBonusDiceFromRightTray = Boolean(
+    const canUseRightTrayBonusDiceActions = Boolean(
         rightTrayBonusDiceSettlement
         && !isSpectator
         && String(rightTrayBonusDiceSettlement.attackerId) === String(rootPid)
         && !rawG.sys.responseWindow?.current
-        && !rawG.sys.interaction?.current
+        && (
+            !rawG.sys.interaction?.current
+            || rawG.sys.interaction.current.kind === 'dt:bonus-dice'
+        )
+    );
+    const canConfirmBonusDiceFromRightTray = Boolean(
+        canUseRightTrayBonusDiceActions
+    );
+    const requiresManualBonusDiceSettlement = Boolean(
+        rightTrayBonusDiceSettlement
+        && !(
+            rightTrayBonusDiceSettlement.allowDiceModification === true
+            && rightTrayBonusDiceSettlement.maxRerollCount === 0
+            && rightTrayBonusDiceSettlement.rerollCount === 0
+            && rightTrayBonusDiceSettlement.ultimateLocked !== true
+        )
     );
     const handleConfirmBonusDiceFromRightTray = React.useCallback(() => {
         if (!canConfirmBonusDiceFromRightTray || !rightTrayBonusDiceSettlement) {
@@ -1367,6 +1370,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         },
         closeOnBackdrop: false,
         closeOnEsc: false,
+        allowPointerThrough: G.currentRollContext?.kind === 'evasion',
         onClose: () => undefined,
         render: () => (
             <TokenResponseModal
@@ -1380,9 +1384,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 locale={locale}
                 lastEvasionRoll={pendingDamage!.lastEvasionRoll}
                 statusIconAtlas={statusIconAtlas}
+                allowBackgroundInteraction={G.currentRollContext?.kind === 'evasion'}
             />
         ),
-    }), [G.players, activeResolutionFrameId, currentResponseWindow?.id, currentResponseWindow?.resolutionFrameId, currentResponseWindow?.windowType, engineMoves, locale, pendingDamage, statusIconAtlas, sysInteraction?.id, sysInteraction?.kind, sysInteraction?.resolutionFrameId, tokenResponsePhase, tokenUsableOverrides, usableTokens]);
+    }), [G.currentRollContext?.kind, G.players, activeResolutionFrameId, currentResponseWindow?.id, currentResponseWindow?.resolutionFrameId, currentResponseWindow?.windowType, engineMoves, locale, pendingDamage, statusIconAtlas, sysInteraction?.id, sysInteraction?.kind, sysInteraction?.resolutionFrameId, tokenResponsePhase, tokenUsableOverrides, usableTokens]);
 
     const statusInteractionModalEntry = React.useMemo(() => ({
         owner: statusInteraction ? {
@@ -1547,7 +1552,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         } : undefined,
         closeOnBackdrop: false,
         closeOnEsc: false,
-        allowPointerThrough: Boolean(interactiveBonusDiceSettlement?.allowDiceModification),
+        allowPointerThrough: allowBonusDieBackgroundInteraction,
         onClose: () => undefined,
         render: () => (
             <BonusDieOverlay
@@ -1600,11 +1605,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 characterId={interactiveBonusDiceSettlement ? G.selectedCharacters[interactiveBonusDiceSettlement.attackerId] : undefined}
                 forceAutoCloseDelay={isTutorialMode ? 3000 : undefined}
                 manualCloseOnly={!isTutorialMode}
-                allowBackgroundInteraction={Boolean(interactiveBonusDiceSettlement?.allowDiceModification)}
+                allowBackgroundInteraction={allowBonusDieBackgroundInteraction}
                 usePortal={false}
             />
         ),
-    }), [G.selectedCharacters, activeResolutionFrameId, engineMoves, handlePendingBonusSettlementClose, interactiveBonusDiceSettlement, isTutorialMode, locale, player.tokens, sysInteraction]);
+    }), [G.selectedCharacters, activeResolutionFrameId, allowBonusDieBackgroundInteraction, engineMoves, handlePendingBonusSettlementClose, interactiveBonusDiceSettlement, isTutorialMode, locale, player.tokens, sysInteraction]);
 
     useSyncedModalStackEntry({
         enabled: Boolean(
@@ -1637,7 +1642,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     });
 
     useSyncedModalStackEntry({
-        enabled: Boolean(interactiveBonusDiceSettlement),
+        enabled: Boolean(
+            interactiveBonusDiceSettlement
+            && !shouldUseRightTrayForPendingBonusDice(interactiveBonusDiceSettlement)
+        ),
         entryId: 'dicethrone_bonus_dice',
         entry: bonusDiceModalEntry,
     });
@@ -2166,8 +2174,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             engineMoves.confirmRoll();
                             advanceTutorialIfNeeded('dice-confirm-button');
                         }}
-                        canRestoreCoveredRoll={canRestoreCoveredRoll}
-                        onRestoreCoveredRoll={() => engineMoves.restoreCoveredRoll()}
                         showAdvancePhaseButton={showAdvancePhaseButton}
                         advanceLabel={advanceLabel}
                         isAdvanceButtonEnabled={canAdvancePhase}
@@ -2186,10 +2192,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         multistepInteraction={diceMultistepState}
                         showDiceTray={showRailDiceTray || Boolean(bonusDiceTrayDice)}
                         showDiceActions={!rightTrayBonusDiceSettlement || Boolean(diceMultistepInteraction)}
-                        showBonusDiceConfirm={Boolean(
-                            rightTrayBonusDiceSettlement
-                            && String(rightTrayBonusDiceSettlement.attackerId) === String(rootPid)
-                        )}
+                        showBonusDiceConfirm={requiresManualBonusDiceSettlement
+                            && String(rightTrayBonusDiceSettlement?.attackerId) === String(rootPid)}
                         canConfirmBonusDice={canConfirmBonusDiceFromRightTray}
                         onConfirmBonusDice={handleConfirmBonusDiceFromRightTray}
                         activeModifiers={activeModifiers}
@@ -2219,8 +2223,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 isWaitingOpponent={isWaitingOpponent}
                                 opponentName={opponentName}
                                 isResponder={isResponder}
-                                thinkingOffsetClass={thinkingOffsetClass}
-                                onResponsePass={() => engineMoves.responsePass()}
+                                onResponsePass={() => engineMoves.responsePass(currentResponderId)}
                                 currentPhase={currentPhase}
                                 isPassiveRerollSelecting={!!rerollSelectingAction}
                             />
@@ -2235,9 +2238,26 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                         : null;
                                     if (targetAbilityId) {
                                         dispatch('PLAY_UPGRADE_CARD', { cardId: card.id, targetAbilityId });
-                                        return;
+                                        return true;
                                     }
+
+                                    const cardCheck = checkPlayCard(
+                                        G,
+                                        rootPid,
+                                        card,
+                                        currentPhase,
+                                        currentResponseWindow?.windowType,
+                                    );
+                                    if (!cardCheck.ok) {
+                                        playDeniedSound();
+                                        toast.warning(t(`error.${cardCheck.reason}`), undefined, {
+                                            dedupeKey: `dicethrone.play-card.${cardCheck.reason}`,
+                                        });
+                                        return false;
+                                    }
+
                                     engineMoves.playCard(card.id);
+                                    return true;
                                 }}
                                 onSellCard={(cardId) => {
                                     const blocked = shouldBlockTutorialAction('discard-pile');
@@ -2316,6 +2336,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
                     // 奖励骰展示态只留在 overlay，阻塞式重投交互改走 modal stack
                     pendingBonusDiceSettlement={displayOnlyBonusDiceSettlement}
+                    allowBonusDieBackgroundInteraction={allowBonusDieBackgroundInteraction}
                     canRerollBonusDie={false}
                     onRerollBonusDie={undefined}
                     onSkipBonusDiceReroll={

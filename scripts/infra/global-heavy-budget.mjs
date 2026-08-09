@@ -214,12 +214,12 @@ function parseOptionalEnvNumber(name) {
 }
 
 function resolveAdaptiveMemoryMinFreeGb() {
-    return 1.5;
+    return 1;
 }
 
 function resolveDefaultMemoryMinFreeGb(group) {
     if (normalizeName(group, 'default') === 'e2e') {
-        return 1.5;
+        return 1;
     }
 
     return resolveAdaptiveMemoryMinFreeGb();
@@ -252,8 +252,8 @@ function readBudgetConfig(group) {
         waitForBudget: process.env.BG_HEAVY_WAIT_FOR_BUDGET === '1',
         waitTimeoutMs: parseEnvNumber('BG_HEAVY_WAIT_TIMEOUT_MS', 120000),
         waitPollMs: parseEnvNumber('BG_HEAVY_WAIT_POLL_MS', 2000),
-        cpuSoftLimit: parseEnvNumber('BG_HEAVY_CPU_SOFT_LIMIT', 70),
-        cpuHardLimit: parseEnvNumber('BG_HEAVY_CPU_HARD_LIMIT', 85),
+        cpuSoftLimit: parseEnvNumber('BG_HEAVY_CPU_SOFT_LIMIT', 90),
+        cpuHardLimit: parseEnvNumber('BG_HEAVY_CPU_HARD_LIMIT', 90),
         cpuSampleCount: parseEnvNumber('BG_HEAVY_CPU_SAMPLE_COUNT', 3),
         cpuSampleIntervalMs: parseEnvNumber('BG_HEAVY_CPU_SAMPLE_INTERVAL_MS', 250),
         memoryMinFreeGb: resolveMemoryMinFreeGb(normalizedGroup),

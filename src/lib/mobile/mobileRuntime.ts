@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 type CapacitorRuntimeLike = {
     getPlatform?: () => string;
     isNativePlatform?: () => boolean;
@@ -8,6 +6,11 @@ type CapacitorRuntimeLike = {
 type MobileRuntimeWindowLike = {
     Capacitor?: CapacitorRuntimeLike;
     androidBridge?: unknown;
+    webkit?: {
+        messageHandlers?: {
+            bridge?: unknown;
+        };
+    };
     __BG_E2E_NATIVE_ANDROID_RUNTIME__?: boolean;
     __BG_E2E_NATIVE_IOS_RUNTIME__?: boolean;
 };
@@ -46,18 +49,19 @@ export const getNativeMobileRuntimeDiagnostics = (options?: {
     capacitor?: CapacitorRuntimeLike;
     windowObject?: MobileRuntimeWindowLike | undefined;
 }): NativeMobileRuntimeDiagnostics => {
-    const capacitorRuntime = options?.capacitor ?? Capacitor;
     const runtimeWindow = options?.windowObject ?? (
         typeof window !== 'undefined'
             ? window as typeof window & MobileRuntimeWindowLike
             : undefined
     );
+    const capacitorRuntime = options?.capacitor ?? runtimeWindow?.Capacitor;
 
     const importCapacitorPlatform = safeInvoke(() => capacitorRuntime.getPlatform?.());
     const importCapacitorNative = safeInvoke(() => capacitorRuntime.isNativePlatform?.());
     const windowCapacitorPlatform = safeInvoke(() => runtimeWindow?.Capacitor?.getPlatform?.());
     const windowCapacitorNative = safeInvoke(() => runtimeWindow?.Capacitor?.isNativePlatform?.());
     const hasAndroidBridge = Boolean(runtimeWindow?.androidBridge);
+    const hasIosBridge = Boolean(runtimeWindow?.webkit?.messageHandlers?.bridge);
     const hasE2ENativeAndroidOverride = import.meta.env.DEV
         && runtimeWindow?.__BG_E2E_NATIVE_ANDROID_RUNTIME__ === true;
     const hasE2ENativeIosOverride = import.meta.env.DEV
@@ -73,7 +77,9 @@ export const getNativeMobileRuntimeDiagnostics = (options?: {
             ? 'ios'
             : hasAndroidBridge
                 ? 'android'
-                : nativeWindowPlatform ?? nativeImportPlatform;
+                : hasIosBridge
+                    ? 'ios'
+                    : nativeWindowPlatform ?? nativeImportPlatform;
     const nativeAndroid = platform === 'android';
     const nativeIos = platform === 'ios';
     const nativeMobile = nativeAndroid || nativeIos;

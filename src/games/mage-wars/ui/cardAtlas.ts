@@ -2,6 +2,7 @@ import type { CardPreviewRef } from '../../../core';
 import { registerLazyCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 import apprenticeSpellAtlases from '../../../../public/assets/atlas-configs/mage-wars/apprentice-spell-atlases.json';
 import magesCoreAtlas from '../../../../public/assets/atlas-configs/mage-wars/mages-core-atlas.json';
+import { materializeMageWarsConfigPackage } from '../data/configPackage';
 import { MAGE_IDS, type MageId } from '../domain/ids';
 
 type GridAtlasDefinition = {
@@ -12,12 +13,6 @@ type GridAtlasDefinition = {
 
 type ApprenticeSpellAtlasConfig = {
     atlases: Record<string, GridAtlasDefinition>;
-    cards: Record<string, {
-        atlas: string;
-        cardId: number;
-        name: string;
-        slot: number;
-    }>;
 };
 
 type MageFrameKey =
@@ -80,6 +75,42 @@ const MAGE_FRAME_KEYS: Record<MageId, Record<MageWarsMagePreviewKind, MageFrameK
     },
 };
 
+type ConfigSpellCardRef = {
+    cardId: number;
+    name: string;
+    atlasId: string;
+    slot: number;
+};
+
+let cachedSpellCardRefs: Map<string, ConfigSpellCardRef> | undefined;
+
+function getSpellCardRefs(): Map<string, ConfigSpellCardRef> {
+    if (cachedSpellCardRefs) {
+        return cachedSpellCardRefs;
+    }
+
+    const refs = new Map<string, ConfigSpellCardRef>();
+    for (const object of materializeMageWarsConfigPackage().package.objects) {
+        const isPreviewableSpell = object.tags?.includes('apprentice-spell')
+            || object.tags?.includes('source-card');
+        if (!isPreviewableSpell) continue;
+        const data = object.data ?? {};
+        const cardId = typeof data.cardId === 'number' ? data.cardId : undefined;
+        const atlasId = typeof data.atlasId === 'string' ? data.atlasId : undefined;
+        const slot = typeof data.slot === 'number' ? data.slot : undefined;
+        if (cardId == null || atlasId == null || slot == null) continue;
+        refs.set(String(cardId), {
+            cardId,
+            name: object.name,
+            atlasId,
+            slot,
+        });
+    }
+
+    cachedSpellCardRefs = refs;
+    return refs;
+}
+
 function registerMageWarsCardAtlases(): void {
     registerLazyCardAtlasSource(MAGE_WARS_MAGES_ATLAS_ID, {
         image: MAGE_WARS_MAGES_ATLAS_IMAGE_PATH,
@@ -103,13 +134,21 @@ function registerMageWarsCardAtlases(): void {
 registerMageWarsCardAtlases();
 
 export function getMageWarsSpellCardPreviewRef(cardId: string | number): CardPreviewRef | null {
-    const card = spellAtlasConfig.cards[String(cardId)];
+    const card = getSpellCardRefs().get(String(cardId));
     if (!card) return null;
     return {
         type: 'atlas',
-        atlasId: toAtlasId(card.atlas),
+        atlasId: toAtlasId(card.atlasId),
         index: card.slot,
     };
+}
+
+export function getMageWarsSpellCardAspectRatio(cardId: string | number): number | null {
+    const card = getSpellCardRefs().get(String(cardId));
+    if (!card) return null;
+    const atlas = spellAtlasConfig.atlases[card.atlasId];
+    if (!atlas || atlas.cols <= 0 || atlas.rows <= 0 || atlas.height <= 0) return null;
+    return (atlas.width / atlas.cols) / (atlas.height / atlas.rows);
 }
 
 export function getMageWarsCardPreviewRef(cardId: string): CardPreviewRef | null {
@@ -117,7 +156,7 @@ export function getMageWarsCardPreviewRef(cardId: string): CardPreviewRef | null
 }
 
 export function getMageWarsSpellCardName(cardId: string | number): string | null {
-    return spellAtlasConfig.cards[String(cardId)]?.name ?? null;
+    return getSpellCardRefs().get(String(cardId))?.name ?? null;
 }
 
 export function getMageWarsMagePreviewRef(
@@ -133,5 +172,5 @@ export function getMageWarsMagePreviewRef(
 }
 
 export function getMageWarsRegisteredSpellCardIds(): string[] {
-    return Object.keys(spellAtlasConfig.cards).sort((left, right) => Number(left) - Number(right));
+    return [...getSpellCardRefs().keys()].sort((left, right) => Number(left) - Number(right));
 }

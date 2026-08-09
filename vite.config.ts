@@ -35,6 +35,23 @@ const MANUAL_CHUNK_PATTERNS: Array<[string, string[]]> = [
   ['vendor-query', ['/node_modules/@tanstack/react-query/']],
   ['vendor-howler', ['/node_modules/howler/']],
 ]
+const STABLE_OPTIMIZE_DEPS = [
+  'react',
+  'react/jsx-runtime',
+  'react/jsx-dev-runtime',
+  'react-dom',
+  'react-dom/client',
+  'react-i18next',
+  'react-easy-crop',
+  'framer-motion',
+  'fast-json-patch',
+  'cookie',
+  'set-cookie-parser',
+  'debug',
+  'howler',
+  'normalize-wheel',
+  'socket.io-msgpack-parser',
+] as const
 const QIDAHEN_REGION_MASK_SAVE_ROUTE = '/devtools/qidahen-region-mask/save'
 const QIDAHEN_REGION_MASK_LOAD_ROUTE = '/devtools/qidahen-region-mask/load'
 const CONFIG_REVIEW_SPA_ROUTES = [
@@ -585,14 +602,14 @@ export default defineConfig(({ mode }) => {
     || env.VITE_DISABLE_WATCH === 'true'
     || process.env.BG_DEV_DISABLE_HOT_RELOAD === '1'
     || env.BG_DEV_DISABLE_HOT_RELOAD === '1'
+    || process.env.BG_DEV_DISABLE_HMR === '1'
+    || env.BG_DEV_DISABLE_HMR === '1'
     || /^(off|false|0)$/i.test(
       process.env.BG_DEV_HOT_RELOAD?.trim()
         || env.BG_DEV_HOT_RELOAD?.trim()
         || '',
     )
   const disableViteHmr = disableViteWatch
-    || process.env.BG_DEV_DISABLE_HMR === '1'
-    || env.BG_DEV_DISABLE_HMR === '1'
   const cliPort = Number(readCliFlag('port'))
   const cliHost = readCliFlag('host')
   const devPort = Number.isFinite(cliPort) && cliPort > 0
@@ -604,6 +621,7 @@ export default defineConfig(({ mode }) => {
   const apiServerPort = Number(env.API_SERVER_PORT) || 18001
   const suppressE2EProxyNoise = env.E2E_PROXY_QUIET === 'true'
   const useStableE2EOptimizeDeps = forceInlineVite || suppressE2EProxyNoise
+  const useStableOptimizeDeps = mode === 'development' || useStableE2EOptimizeDeps
   const devApiDisabled = isTruthyFlag(env.VITE_DEV_SKIP_API || process.env.VITE_DEV_SKIP_API)
   const backendUrl = env.VITE_BACKEND_URL || ''
   const viteCacheDir = resolveViteCacheDir(devPort)
@@ -706,28 +724,14 @@ export default defineConfig(({ mode }) => {
       ],
     },
     optimizeDeps: {
-      ...(useStableE2EOptimizeDeps
+      ...(useStableOptimizeDeps
         ? {
-            // E2E 托管前端只会命中固定入口；关闭依赖自动扫描，避免冷启动时在扫描/预构建阶段把
-            // esbuild service 先打死。显式保留关键 CJS-heavy 依赖，避免浏览器直接吃裸 CJS。
+            // 入口模块图过宽时，自动发现会在空缓存首次访问中扫描整个 src。
+            // 开发与 E2E 共用同一份关键 CJS 依赖清单，避免两种运行模式各自漂移。
             noDiscovery: true,
-            include: [
-              'react',
-              'react/jsx-runtime',
-              'react/jsx-dev-runtime',
-              'react-dom',
-              'react-dom/client',
-              'react-i18next',
-              'react-easy-crop',
-              'framer-motion',
-              'fast-json-patch',
-              'cookie',
-              'set-cookie-parser',
-              'debug',
-              'howler',
-              'normalize-wheel',
-              'socket.io-msgpack-parser',
-            ],
+            include: STABLE_OPTIMIZE_DEPS,
+            // 依赖已完全显式列出，无需等静态导入爬取结束才返回首批优化结果。
+            holdUntilCrawlEnd: false,
             entries: undefined,
           }
         : {

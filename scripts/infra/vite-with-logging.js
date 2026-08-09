@@ -50,8 +50,8 @@ function teeProcessWrite(stream, prefix) {
   };
 }
 
-function isDisabledFlag(value) {
-  return /^(0|false|off|no)$/i.test((value || '').trim());
+function isEnabledFlag(value) {
+  return /^(1|true|on|yes)$/i.test((value || '').trim());
 }
 
 function sanitizeCacheSegment(value) {
@@ -89,8 +89,8 @@ function resolveViteCacheDir() {
 }
 
 function cleanViteOptimizedDepsOnStart() {
-  if (isDisabledFlag(process.env.BG_VITE_CLEAN_DEPS_ON_START)) {
-    log('[CACHE] 已跳过 Vite 预构建依赖缓存清理：BG_VITE_CLEAN_DEPS_ON_START 禁用');
+  if (!isEnabledFlag(process.env.BG_VITE_CLEAN_DEPS_ON_START)) {
+    log('[CACHE] 保留 Vite 预构建依赖缓存；设置 BG_VITE_CLEAN_DEPS_ON_START=1 可显式清理');
     return;
   }
 

@@ -789,10 +789,15 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
     if (effectType === 'evasionAttempt' && evasionRoll && state.pendingDamage) {
         const tokenDef = state.tokenDefinitions?.find(def => def.id === tokenId);
         const successRange = tokenDef?.activeUse?.effect?.rollSuccess?.range ?? [1, 2] as [number, number];
+        const evasionCharacterId = state.players[playerId]?.characterId;
+        if (!evasionCharacterId || evasionCharacterId === 'unselected') {
+            throw new Error(`闪避骰缺少角色骰子定义：playerId=${playerId}`);
+        }
         return replaceCurrentRollContext(
             nextState,
             createEvasionRollContext({
                 ownerPlayerId: playerId,
+                diceDefinitionId: `${evasionCharacterId}-dice`,
                 targetPlayerId: state.pendingDamage.targetPlayerId,
                 sourceTokenId: tokenId,
                 value: evasionRoll.value,

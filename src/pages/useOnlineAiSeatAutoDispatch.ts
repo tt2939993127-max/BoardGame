@@ -1132,6 +1132,7 @@ export function useOnlineAiSeatAutoDispatch(args: OnlineAiSeatAutoDispatchArgs):
 
         const runAiTurn = async () => {
             releaseConfirmedOnlineAiAttempt({
+                engineConfig,
                 sharedState,
                 activeAiAttemptRef,
                 aiSeatDecisionDebugRef,

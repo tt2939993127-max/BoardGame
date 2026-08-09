@@ -246,14 +246,14 @@ const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
     ninja: 10,
     samurai: 7,
     barbarian: 13,
-    seraph: 14,
 };
 
 const NEW_CHARACTER_PORTRAIT_INDEX: Partial<Record<HeroState['characterId'], number>> = {
     ninja: 2,
     zhanshujia: 5,
     cursed_pirate: 6,
-    artificer: 7,
+    artificer: 8,
+    tianshi: 7,
     huntress: 10,
     treant: 13,
 };

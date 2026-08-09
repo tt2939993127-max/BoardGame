@@ -23,6 +23,11 @@ export function resolvePlayerCell(core: MageWarsCore, playerId?: PlayerId): FxCe
     return resolveZoneCell(core, core.players[playerId]?.mageZoneId);
 }
 
+function resolveObjectCell(core: MageWarsCore, objectId?: string): FxCellCoord | null {
+    if (!objectId) return null;
+    return resolveZoneCell(core, core.objects[objectId]?.zoneId);
+}
+
 function resolveIntensity(amount: number | undefined): FxContext['intensity'] {
     return amount !== undefined && amount >= 6 ? 'strong' : 'normal';
 }
@@ -38,6 +43,7 @@ export function mapMageWarsEventToFx(
         const source = resolvePlayerCell(core, payload.playerId);
         const target = resolveZoneCell(core, payload.targetZoneId)
             ?? resolvePlayerCell(core, payload.targetPlayerId)
+            ?? resolveObjectCell(core, payload.targetObjectId)
             ?? source;
         if (!target) return null;
 
@@ -54,6 +60,7 @@ export function mapMageWarsEventToFx(
                 castMode: payload.castMode,
                 playerId: payload.playerId,
                 targetPlayerId: payload.targetPlayerId,
+                targetObjectId: payload.targetObjectId,
                 targetZoneId: payload.targetZoneId,
             },
         };
@@ -82,9 +89,116 @@ export function mapMageWarsEventToFx(
         };
     }
 
+    if (event.type === MAGE_WARS_EVENTS.ARENA_OBJECT_ATTACK_DECLARED) {
+        const payload = event.payload;
+        const source = resolveObjectCell(core, payload.attackerObjectId);
+        const target = resolveZoneCell(core, payload.targetZoneId)
+            ?? resolvePlayerCell(core, payload.targetPlayerId)
+            ?? resolveObjectCell(core, payload.targetObjectId);
+        if (!target) return null;
+
+        return {
+            sourceEventId: entry.id,
+            cue: MW_FX.ATTACK_IMPACT,
+            ctx: {
+                cell: target,
+                intensity: resolveIntensity(payload.baseDamage),
+            },
+            params: {
+                source,
+                attackerId: payload.attackerObjectId,
+                defenderId: payload.targetPlayerId ?? payload.targetObjectId,
+                attackProfileId: payload.attackProfileId,
+                targetZoneId: payload.targetZoneId,
+                diceResults: payload.diceResults,
+                effectDieResult: payload.effectDieResult,
+                damageAmount: payload.baseDamage,
+            },
+        };
+    }
+
+    if (event.type === MAGE_WARS_EVENTS.SPELL_ATTACK_ROLLED) {
+        const payload = event.payload;
+        const source = resolveZoneCell(core, payload.chainSourceZoneId)
+            ?? resolvePlayerCell(core, payload.playerId);
+        const target = resolvePlayerCell(core, payload.targetPlayerId)
+            ?? resolveObjectCell(core, payload.targetObjectId);
+        if (!target) return null;
+
+        return {
+            sourceEventId: entry.id,
+            cue: MW_FX.ATTACK_IMPACT,
+            ctx: {
+                cell: target,
+                intensity: resolveIntensity(payload.baseDamage),
+            },
+            params: {
+                source,
+                attackerId: payload.playerId,
+                defenderId: payload.targetPlayerId ?? payload.targetObjectId,
+                spellCardId: payload.spellCardId,
+                sourceAbilityId: payload.sourceAbilityId,
+                diceResults: payload.diceResults,
+                damageAmount: payload.baseDamage,
+            },
+        };
+    }
+
+    if (event.type === MAGE_WARS_EVENTS.SPELL_PUSH_RESOLVED) {
+        const payload = event.payload;
+        const source = resolveZoneCell(core, payload.fromZoneId);
+        const target = resolveZoneCell(core, payload.toZoneId);
+        if (!target) return null;
+
+        return {
+            sourceEventId: entry.id,
+            cue: MW_FX.SPELL_PUSH,
+            ctx: {
+                cell: target,
+                intensity: 'normal',
+            },
+            params: {
+                source,
+                playerId: payload.playerId,
+                spellCardId: payload.spellCardId,
+                sourceAbilityId: payload.sourceAbilityId,
+                targetPlayerId: payload.targetPlayerId,
+                targetObjectId: payload.targetObjectId,
+                fromZoneId: payload.fromZoneId,
+                toZoneId: payload.toZoneId,
+            },
+        };
+    }
+    if (event.type === MAGE_WARS_EVENTS.SPELL_TELEPORT_RESOLVED) {
+        const payload = event.payload;
+        const source = resolveZoneCell(core, payload.fromZoneId);
+        const target = resolveZoneCell(core, payload.toZoneId);
+        if (!target) return null;
+
+        return {
+            sourceEventId: entry.id,
+            cue: MW_FX.SPELL_TELEPORT,
+            ctx: {
+                cell: target,
+                intensity: payload.distance > 1 ? 'strong' : 'normal',
+            },
+            params: {
+                source,
+                playerId: payload.playerId,
+                spellCardId: payload.spellCardId,
+                sourceAbilityId: payload.sourceAbilityId,
+                targetObjectId: payload.targetObjectId,
+                fromZoneId: payload.fromZoneId,
+                toZoneId: payload.toZoneId,
+                distance: payload.distance,
+            },
+        };
+    }
+
     if (event.type === 'DAMAGE_DEALT') {
         const payload = event.payload;
-        const target = resolvePlayerCell(core, payload.targetId);
+        const target = resolvePlayerCell(core, payload.targetId)
+            ?? resolveObjectCell(core, payload.targetId);
         if (!target) return null;
 
         const damageAmount = payload.actualDamage ?? payload.amount;

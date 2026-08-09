@@ -68,7 +68,7 @@
 | Atlas | 计划配置 | 阻塞点 |
 | --- | --- | --- |
 | `mages-core-atlas` | 已建 `public/assets/atlas-configs/mage-wars/mages-core-atlas.json`，记录四名学徒法师牌和肖像 frame，并由 `src/games/mage-wars/ui/cardAtlas.ts` 注册为 `CardPreview` 图集 | runtime-preview-wired |
-| `spell-apprentice-*` | 已建 `public/assets/atlas-configs/mage-wars/apprentice-spell-atlases.json`，按 91 张学徒法术字段合同建立 frame，并由 `src/games/mage-wars/ui/cardAtlas.ts` 注册为 `CardPreview` 图集 | runtime-preview-wired |
+| `spell-apprentice-*` | 已建 `public/assets/atlas-configs/mage-wars/apprentice-spell-atlases.json`，按 91 张学徒法术字段合同建立 frame，并追加首批来源卡 `2218` / `2908` frame；由 `src/games/mage-wars/ui/cardAtlas.ts` 注册为 `CardPreview` 图集 | runtime-preview-wired / first-batch-source-card-frames |
 | `status-tokens` | 小图已直接落盘并压缩；暂不强制合并 atlas | 需要确认法力指示物、效果骰等剩余对象；聚魔 token、红/蓝行动标记、快速施法标记已 local-asset-ready |
 | `board-coordinate-contract` | 已建 `docs/games/mage-wars/design/implementable/board-coordinate-contract.md`，记录标准竞技场 `4x3` 坐标、状态板三轨道、红 / 黑状态方块、效果骰内置来源和当前 Board 的玩家可见 `2x3` 舞台映射 | 标准竞技场源图左 / 右半场仍不反向锁定；独立法力指示物仍不进入完成态主 UI |
 

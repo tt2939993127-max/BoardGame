@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MousePointerClick, Undo2 } from 'lucide-react';
+import { MousePointerClick } from 'lucide-react';
 import type { AbilityCard, Die, PlayerId, TurnPhase } from '../types';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { MultistepInteractionState } from '../../../engine/systems/useMultistepInteraction';
@@ -48,8 +48,6 @@ export const RightSidebar = ({
     onToggleLock,
     onRoll,
     onConfirm,
-    canRestoreCoveredRoll = false,
-    onRestoreCoveredRoll,
     showAdvancePhaseButton,
     advanceLabel,
     isAdvanceButtonEnabled,
@@ -89,8 +87,6 @@ export const RightSidebar = ({
     onToggleLock: (id: number) => void;
     onRoll: () => void;
     onConfirm: () => void;
-    canRestoreCoveredRoll?: boolean;
-    onRestoreCoveredRoll?: () => void;
     showAdvancePhaseButton: boolean;
     advanceLabel: string;
     isAdvanceButtonEnabled: boolean;
@@ -265,24 +261,6 @@ export const RightSidebar = ({
                         interaction={isDiceMultistep ? interaction : undefined}
                         multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
                     />
-                )}
-                {canRestoreCoveredRoll && onRestoreCoveredRoll && (
-                    <div className={`${actionRailWidthClassName} flex justify-center`}>
-                        <GameButton
-                            onClick={onRestoreCoveredRoll}
-                            disabled={!canInteractDice}
-                            variant="secondary"
-                            clickSoundKey={null}
-                            className={`${advanceButtonSizeClassName} w-full`}
-                            size="sm"
-                            icon={<Undo2 className="h-[0.9em] w-[0.9em] shrink-0" />}
-                            title={t('dice.restoreCoveredRoll')}
-                            aria-label={t('dice.restoreCoveredRoll')}
-                            data-testid="restore-covered-roll-button"
-                        >
-                            {t('dice.restoreCoveredRoll')}
-                        </GameButton>
-                    </div>
                 )}
                 <div className={`w-full flex justify-center ${showAdvancePhaseButton ? '' : 'invisible pointer-events-none'}`}>
                     <GameButton

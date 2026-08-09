@@ -10659,14 +10659,9 @@ test.describe('DiceThrone 战术家 / 咒缚海盗新增英雄 intake', () => {
             const spotlightContent = match.hostPage.getByTestId('bonus-die-spotlight-content').first();
             await expect(spotlightContent).toHaveAttribute('data-is-rolling', 'false', { timeout: 10000 });
 
-            const die = spotlightContent.getByTestId('dice-3d').first();
+            const die = spotlightContent.getByTestId('dice-2d').first();
             await expect(die).toBeVisible({ timeout: 10000 });
-
-            const dieTransform = await die.evaluate((node) => {
-                const inner = node.firstElementChild as HTMLElement | null;
-                return inner?.style.transform ?? '';
-            });
-            expect(dieTransform).toBe('rotateX(0deg) rotateY(0deg)');
+            await expect(die).toHaveAttribute('data-sprite-ready', 'true', { timeout: 10000 });
 
             await saveEvidenceScreenshot(match.hostPage, testInfo, '223-host-powder-keg-upkeep-roll-1-bonus-die');
             await saveEvidenceScreenshot(match.guestPage, testInfo, '223b-guest-powder-keg-upkeep-roll-1-bonus-die');

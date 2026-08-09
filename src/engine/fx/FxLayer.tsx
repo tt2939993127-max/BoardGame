@@ -32,6 +32,8 @@ export interface FxLayerProps {
   onEffectImpact?: (id: string, cue: string) => void;
   /** 额外 className */
   className?: string;
+  /** 测试语义标记，不参与视觉布局 */
+  'data-testid'?: string;
 }
 
 // ============================================================================
@@ -44,6 +46,7 @@ export const FxLayer: React.FC<FxLayerProps> = ({
   onEffectComplete,
   onEffectImpact,
   className = '',
+  'data-testid': testId,
 }) => {
   const { activeEffects, removeEffect, registry, fireImpact } = bus;
 
@@ -66,6 +69,7 @@ export const FxLayer: React.FC<FxLayerProps> = ({
   return (
     <div
       className={`absolute inset-0 pointer-events-none z-20 ${className}`}
+      data-testid={testId}
       style={{ overflow: 'visible' }}
     >
       <AnimatePresence>

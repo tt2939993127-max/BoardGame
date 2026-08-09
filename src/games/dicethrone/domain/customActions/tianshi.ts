@@ -297,6 +297,7 @@ function makeNoRerollBonusDice(
         resolutionMode: 'none',
         customResolutionId: settlementId,
         showTotal: false,
+        allowDiceModification: true,
     }, resolve);
 }
 
@@ -789,6 +790,65 @@ export function registerTianshiCustomActions(): void {
         const event = grantTokenEvent(state, targetId, TOKEN_IDS.PURIFY, 1, sourceAbilityId ?? 'card-tianshi-divine-arbitration', timestamp);
         return event ? [event] : [];
     });
+
+    const createBonusSettlementContext = ({ state, settlement, timestamp, random }: {
+        state: DiceThroneCore;
+        settlement: { attackerId: PlayerId; targetId: PlayerId; sourceAbilityId: string };
+        timestamp: number;
+        random?: CustomActionContext['random'];
+    }): CustomActionContext => ({
+        ctx: {
+            attackerId: settlement.attackerId,
+            defenderId: settlement.targetId,
+            sourceAbilityId: settlement.sourceAbilityId,
+            state,
+            damageDealt: 0,
+            timestamp,
+        },
+        targetId: settlement.attackerId,
+        attackerId: settlement.attackerId,
+        sourceAbilityId: settlement.sourceAbilityId,
+        state,
+        timestamp,
+        random,
+        action: { type: 'custom', target: 'self', customActionId: settlement.sourceAbilityId },
+    });
+
+    registerBonusDiceSettlementHandler(DIVINE_PUNISHMENT_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => ({
+        totalDamage: 0,
+        followupEvents: resolveDivinePunishmentBonus(
+            createBonusSettlementContext({ state, settlement, timestamp, random }),
+            getPendingDice(settlement),
+        ),
+    }));
+    registerBonusDiceSettlementHandler(TRIUMPHANT_RETURN_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => ({
+        totalDamage: 0,
+        followupEvents: resolveTriumphantReturnBonus(
+            createBonusSettlementContext({ state, settlement, timestamp, random }),
+            getPendingDice(settlement),
+        ),
+    }));
+    registerBonusDiceSettlementHandler(HOLY_STRIKE_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => ({
+        totalDamage: 0,
+        followupEvents: resolveHolyStrikeBonus(
+            createBonusSettlementContext({ state, settlement, timestamp, random }),
+            getPendingDice(settlement),
+        ),
+    }));
+    registerBonusDiceSettlementHandler(ANGELIC_TACTICS_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => ({
+        totalDamage: 0,
+        followupEvents: resolveAngelicTacticsBonus(
+            createBonusSettlementContext({ state, settlement, timestamp, random }),
+            getPendingDice(settlement),
+        ),
+    }));
+    registerBonusDiceSettlementHandler(SUPREME_HOLINESS_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => ({
+        totalDamage: 0,
+        followupEvents: resolveSupremeHoliness(
+            createBonusSettlementContext({ state, settlement, timestamp, random }),
+            getPendingDice(settlement),
+        ),
+    }));
 
     registerBonusDiceSettlementHandler(ANGELIC_CLOAK_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
         const player = state.players[settlement.attackerId];

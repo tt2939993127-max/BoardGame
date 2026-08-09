@@ -40,6 +40,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import type { InteractionDescriptor } from '../domain/core-types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { diceThroneCheatModifier } from '../domain/cheatModifier';
+import { createMainRollContext, getCurrentRollDice } from '../domain/rollContext';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -4174,6 +4175,25 @@ describe('作弊发牌 atlas 索引保护', () => {
             type: 'drawCard',
             drawCount: 3,
         });
+    });
+});
+
+describe('调试改骰与当前骰区一致', () => {
+    it('当前骰区存在时，调试改骰必须同步玩家实际看到的骰面', () => {
+        const core = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom).core;
+        const currentRollContext = createMainRollContext(core, {
+            phase: 'offensiveRoll',
+            ownerPlayerId: '0',
+            dice: core.dice,
+        });
+
+        const nextCore = diceThroneCheatModifier.setDice!({
+            ...core,
+            currentRollContext,
+        }, [6, 5, 4, 3, 2]);
+
+        expect(nextCore.dice.map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
+        expect(getCurrentRollDice(nextCore, 'offensiveRoll').map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
     });
 });
 

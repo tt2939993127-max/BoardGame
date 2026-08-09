@@ -255,7 +255,11 @@ const dragHandCardToPlay = async (page: Page, cardId: string): Promise<void> => 
     const startY = box.y + box.height * 0.78;
     await page.mouse.move(startX, startY);
     await page.mouse.down();
-    await page.mouse.move(startX, Math.max(24, startY - 240), { steps: 12 });
+    // Framer Motion 需要至少一个渲染节拍写入 drag offset；连续同步事件会偶发
+    // 在 offset 还是 0 时触发全局 pointerup，使手牌回弹而不是打出。
+    await page.waitForTimeout(50);
+    await page.mouse.move(startX, Math.max(24, startY - 280), { steps: 18 });
+    await page.waitForTimeout(50);
     await page.mouse.up();
     await page.mouse.move(2, 2);
 }
@@ -515,11 +519,11 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await game.screenshot('tianshi-heavenly-severing-after-closeout', testInfo);
     });
 
-    test('凯旋归来应从真实槽位进入奖励骰浮层并在关闭后回到无临时结算', async ({ page, game }, testInfo) => {
+    test('凯旋归来奖励骰掷出 6 时应使攻击不可防御并直接结算', async ({ page, game }, testInfo) => {
         await setupTianshiScene(game, {
             phase: 'offensiveRoll',
             dice: [1, 2, 3, 4, 5],
-            randomQueue: [randomValueForDieFace(4)],
+            randomQueue: [randomValueForDieFace(6)],
             opponentHp: 50,
         });
 
@@ -553,6 +557,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
                 pendingAttack: state.core?.pendingAttack ?? null,
                 opponentHp: state.core?.players?.['1']?.resources?.[RESOURCE_IDS.HP] ?? null,
                 attackResolvedDamage: attackResolved?.payload?.totalDamage ?? null,
+                madeUndefendable: events.some((event: JsonRecord) => event?.type === 'ATTACK_MADE_UNDEFENDABLE'),
                 taijiReductions: events.filter((event: JsonRecord) => (
                     event?.type === 'TOKEN_USED' &&
                     event?.payload?.tokenId === TOKEN_IDS.TAIJI &&
@@ -562,9 +567,10 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         }, { timeout: 10000 }).toMatchObject({
             pendingSettlement: null,
             pendingAttack: null,
-            opponentHp: 47,
-            attackResolvedDamage: 3,
-            taijiReductions: 5,
+            opponentHp: 44,
+            attackResolvedDamage: 6,
+            madeUndefendable: true,
+            taijiReductions: 0,
         });
         await game.screenshot('tianshi-triumphant-return-after-closeout', testInfo);
     });
@@ -957,28 +963,75 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await game.screenshot('tianshi-divine-arbitration-card-after-choices', testInfo);
     });
 
-    test('至高圣洁应从真实手牌投出奖励骰并在圣洁吊坠分支获得两种 Token', async ({ page, game }, testInfo) => {
+    test('至高圣洁应只在右侧骰盘显示，并可从真实手牌改为圣洁吊坠后自动结算', async ({ page, game }, testInfo) => {
         const cardId = 'card-tianshi-supreme-holiness';
+        const playSixCardId = 'card-play-six';
         await setupTianshiScene(game, {
             phase: 'main1',
-            hand: [cardId],
+            hand: [cardId, playSixCardId],
             cp: 10,
-            randomQueue: [6].map(randomValueForDieFace),
+            randomQueue: [1].map(randomValueForDieFace),
         });
 
+        const bonusDiceResponseToggle = page.getByTestId('bonus-dice-response-toggle');
+        await expect(bonusDiceResponseToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 10000 });
+        await bonusDiceResponseToggle.click();
+        await expect(bonusDiceResponseToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+
         await dragHandCardToPlay(page, cardId);
-        await expect.poll(async () => (await readState(game)).core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null, { timeout: 10000 })
-            .toBe(cardId);
-        await settleBonusOverlay(page);
-        await expectCardConsumed(game, cardId, 10);
+        await expect.poll(async () => {
+            const state = await readState(game);
+            return {
+                sourceAbilityId: state.core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null,
+                diceValues: state.core?.pendingBonusDiceSettlement?.dice?.map((die: JsonRecord) => die.value) ?? [],
+                responseWindow: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            sourceAbilityId: cardId,
+            diceValues: [1],
+            responseWindow: 'afterRollConfirmed',
+        });
+
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        await expect(diceTray).toBeVisible({ timeout: 10000 });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(1);
+        await expect(diceTray.getByTestId('dice-2d')).toHaveAttribute('data-face-value', '1');
+        await expect(page.getByTestId('bonus-die-overlay')).toBeHidden();
+        await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden();
+        await expect(page.getByTestId('bonus-dice-confirm-button')).toBeHidden();
+        await expect(page.getByTestId('dicethrone-response-window-hint')).toBeVisible();
+        await game.screenshot('tianshi-supreme-holiness-right-tray-before-modification', testInfo);
+
+        await dragHandCardToPlay(page, playSixCardId);
+        await expect.poll(async () => {
+            const interaction = (await readState(game)).sys?.interaction?.current;
+            return {
+                type: interaction?.data?.meta?.dtType ?? null,
+                targetValue: interaction?.data?.meta?.dieModifyConfig?.targetValue ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({ type: 'modifyDie', targetValue: 6 });
+        const dieButton = page.getByTestId('die-button-0').first();
+        await expect(dieButton).toBeVisible({ timeout: 10000 });
+        await dieButton.click();
+
+        await expectCardConsumed(game, cardId, 9, [cardId, playSixCardId]);
         await expect.poll(async () => {
             const state = await readState(game);
             const player = state.core?.players?.['0'];
             return {
+                pendingSettlement: state.core?.pendingBonusDiceSettlement ?? null,
                 flight: player?.tokens?.[TOKEN_IDS.FLIGHT] ?? 0,
                 purify: player?.tokens?.[TOKEN_IDS.PURIFY] ?? 0,
             };
-        }, { timeout: 10000 }).toEqual({ flight: 2, purify: 2 });
+        }, { timeout: 10000 }).toEqual({ pendingSettlement: null, flight: 2, purify: 2 });
+        await expect(diceTray).toBeVisible({ timeout: 10000 });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(1);
+        await expect(diceTray.getByTestId('dice-2d')).toHaveAttribute('data-face-value', '6');
+        await expect(diceTray.getByTestId('die-button-0')).toHaveAttribute('data-display-only', 'true');
+        await expect(page.getByTestId('bonus-die-overlay')).toBeHidden();
+        await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden();
+        // 等待骰面翻转结束，确保截图交付的是最终 6，而不是转面中的相邻骰面。
+        await page.waitForTimeout(1100);
         await game.screenshot('tianshi-supreme-holiness-card-after-closeout', testInfo);
     });
 

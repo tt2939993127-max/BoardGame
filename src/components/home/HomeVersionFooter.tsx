@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import packageJson from '../../../package.json';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-    readAndroidLiveUpdateActivityState,
-    readAndroidLiveUpdateConfig,
-    readAndroidLiveUpdateSnapshot,
-    requestAndroidLiveUpdateCheck,
-    subscribeAndroidLiveUpdateActivityState,
-    type AndroidLiveUpdateSnapshot,
+import type {
+    AndroidLiveUpdateActivityState,
+    AndroidLiveUpdateSnapshot,
 } from '../../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 const toShortVersionLabel = (version: string) => version.replace(/^v/i, '').split('-')[0] || version.replace(/^v/i, '');
+const IDLE_OTA_ACTIVITY_STATE: AndroidLiveUpdateActivityState = {
+    active: false,
+    phase: 'idle',
+};
 
 type HomeVersionFooterTheme = 'classic' | 'book';
 type HomeVersionFooterAlign = 'left' | 'right';
@@ -77,20 +77,38 @@ export function HomeVersionFooter({
 }: HomeVersionFooterProps) {
     const { t } = useTranslation('lobby');
     const isNativeAndroid = isNativeAndroidRuntime();
-    const otaConfig = readAndroidLiveUpdateConfig(import.meta.env);
-    const otaEnabledForCurrentShell = isNativeAndroid && otaConfig.enabled;
+    const [otaEnabled, setOtaEnabled] = useState(false);
     const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
     const [isVersionExpanded, setIsVersionExpanded] = useState(false);
-    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
+    const [otaActivityState, setOtaActivityState] = useState<AndroidLiveUpdateActivityState>(IDLE_OTA_ACTIVITY_STATE);
+    const otaEnabledForCurrentShell = isNativeAndroid && otaEnabled;
 
-    const refreshOtaSnapshot = useCallback(() => {
+    useEffect(() => {
         if (!isNativeAndroid) {
-            return;
+            setOtaEnabled(false);
+            setOtaSnapshot(null);
+            setOtaActivityState(IDLE_OTA_ACTIVITY_STATE);
+            return undefined;
         }
 
         let cancelled = false;
-        void readAndroidLiveUpdateSnapshot({ includeManifest: true })
-            .then((snapshot) => {
+        let unsubscribe: (() => void) | undefined;
+
+        void import('../../lib/mobile/androidLiveUpdates')
+            .then(async (module) => {
+                if (cancelled) {
+                    return;
+                }
+
+                setOtaEnabled(module.readAndroidLiveUpdateConfig(import.meta.env).enabled);
+                setOtaActivityState(module.readAndroidLiveUpdateActivityState());
+                unsubscribe = module.subscribeAndroidLiveUpdateActivityState((state) => {
+                    if (!cancelled) {
+                        setOtaActivityState(state);
+                    }
+                });
+
+                const snapshot = await module.readAndroidLiveUpdateSnapshot({ includeManifest: true });
                 if (!cancelled) {
                     setOtaSnapshot(snapshot);
                 }
@@ -110,25 +128,8 @@ export function HomeVersionFooter({
 
         return () => {
             cancelled = true;
+            unsubscribe?.();
         };
-    }, [isNativeAndroid]);
-
-    useEffect(() => {
-        if (!isNativeAndroid) {
-            return;
-        }
-
-        return refreshOtaSnapshot();
-    }, [isNativeAndroid, refreshOtaSnapshot]);
-
-    useEffect(() => {
-        if (!isNativeAndroid) {
-            return;
-        }
-
-        return subscribeAndroidLiveUpdateActivityState((state) => {
-            setOtaActivityState(state);
-        });
     }, [isNativeAndroid]);
 
     const currentInternalBundleVersion = otaSnapshot?.currentBundleVersion?.trim() || null;
@@ -169,11 +170,17 @@ export function HomeVersionFooter({
             if (otaActivityState.active) {
                 return;
             }
-            requestAndroidLiveUpdateCheck({
-                interactive: true,
-                applyMode: 'immediate',
-                initialImmediatePhase: otaVersionMismatch ? 'downloading' : 'checking',
-            });
+            void import('../../lib/mobile/androidLiveUpdates')
+                .then(({ requestAndroidLiveUpdateCheck }) => {
+                    requestAndroidLiveUpdateCheck({
+                        interactive: true,
+                        applyMode: 'immediate',
+                        initialImmediatePhase: otaVersionMismatch ? 'downloading' : 'checking',
+                    });
+                })
+                .catch((error) => {
+                    console.warn('[HomeVersionFooter] 加载 OTA 更新模块失败', error);
+                });
             return;
         }
 

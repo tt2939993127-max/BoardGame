@@ -12,6 +12,8 @@ interface GameModalProps {
     width?: 'sm' | 'md' | 'lg' | 'xl';
     className?: string;
     closeOnBackdrop?: boolean;
+    /** 保留弹窗内容交互，但让背景操作当前仍可干预的游戏对象。 */
+    allowBackgroundInteraction?: boolean;
 }
 
 export const GameModal = ({
@@ -23,6 +25,7 @@ export const GameModal = ({
     width = 'md',
     className,
     closeOnBackdrop = true,
+    allowBackgroundInteraction = false,
 }: GameModalProps) => {
 
     const widthClass = {
@@ -38,7 +41,10 @@ export const GameModal = ({
                 <ModalBase
                     onClose={onClose}
                     closeOnBackdrop={closeOnBackdrop}
-                    overlayClassName="!bg-black/85"
+                    overlayClassName={allowBackgroundInteraction
+                        ? "!bg-black/35 !backdrop-blur-none pointer-events-none"
+                        : "!bg-black/85"}
+                    contentWrapperClassName={allowBackgroundInteraction ? 'pointer-events-none' : undefined}
                 >
                     <div
                         className={clsx(

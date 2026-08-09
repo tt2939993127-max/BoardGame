@@ -1,14 +1,17 @@
 import type { DomainCore, PlayerId, RandomFn } from '../../../engine/types';
+import { MAGE_WARS_EVENTS } from './events';
 import {
-    ARENA_ZONE_IDS,
     MAGE_WARS_GAME_ID,
+    STATUS_TOKEN_IDS,
     type ArenaZoneId,
 } from './ids';
 import {
-    APPRENTICE_MAGE_ORDER,
-    getApprenticeMageSetup,
-    getApprenticeSpellbookCount,
-} from './data/apprenticeSpellbooks';
+    getFormalArenaZonesFromConfig,
+    getFormalStartingZoneIdFromConfig,
+    getApprenticeMageOrderFromConfig,
+    getApprenticeMageSetupFromConfig,
+    getApprenticeSpellbookCountFromConfig,
+} from '../data/configPackage';
 import { executeCommand } from './execute';
 import { reduceEvent } from './reducer';
 import { validateCommand } from './validate';
@@ -19,8 +22,9 @@ function normalizePlayerIds(playerIds: PlayerId[]): PlayerId[] {
 }
 
 function createPlayerState(playerId: PlayerId, seatIndex: number, mageZoneId: ArenaZoneId): MageWarsPlayerState {
-    const mageId = APPRENTICE_MAGE_ORDER[seatIndex] ?? APPRENTICE_MAGE_ORDER[0];
-    const setup = getApprenticeMageSetup(mageId);
+    const mageOrder = getApprenticeMageOrderFromConfig();
+    const mageId = mageOrder[seatIndex] ?? mageOrder[0];
+    const setup = getApprenticeMageSetupFromConfig(mageId);
 
     return {
         id: playerId,
@@ -33,38 +37,84 @@ function createPlayerState(playerId: PlayerId, seatIndex: number, mageZoneId: Ar
         actionReady: true,
         quickcastReady: true,
         guarding: false,
+        statusTokens: {},
         mageZoneId,
-        spellbookCount: getApprenticeSpellbookCount(mageId),
+        spellbookCount: getApprenticeSpellbookCountFromConfig(mageId),
         preparedSpellSlots: 0,
         preparedSpellCardIds: [],
         discardSpellCardIds: [],
     };
 }
 
-function createApprenticeArena(playerIds: PlayerId[]) {
-    const zoneCoords: Array<{ id: ArenaZoneId; row: number; col: number }> = [
-        { id: ARENA_ZONE_IDS.A1, row: 0, col: 0 },
-        { id: ARENA_ZONE_IDS.B1, row: 0, col: 1 },
-        { id: ARENA_ZONE_IDS.A2, row: 1, col: 0 },
-        { id: ARENA_ZONE_IDS.B2, row: 1, col: 1 },
-        { id: ARENA_ZONE_IDS.A3, row: 2, col: 0 },
-        { id: ARENA_ZONE_IDS.B3, row: 2, col: 1 },
-    ];
+function createFormalArena(playerIds: PlayerId[]) {
+    const startingZoneByPlayerId = new Map(
+        playerIds.map((playerId, index) => [playerId, getFormalStartingZoneIdFromConfig(index)] as const),
+    );
 
-    return zoneCoords.map(({ id, row, col }) => ({
-        id,
-        row,
-        col,
-        occupantIds: [
-            ...(id === ARENA_ZONE_IDS.A1 && playerIds[0] ? [playerIds[0]] : []),
-            ...(id === ARENA_ZONE_IDS.B3 && playerIds[1] ? [playerIds[1]] : []),
-        ],
+    return getFormalArenaZonesFromConfig().map(({ zoneId, rowIndex, colIndex }) => ({
+        id: zoneId,
+        row: rowIndex,
+        col: colIndex,
+        occupantIds: playerIds.filter((playerId) => startingZoneByPlayerId.get(playerId) === zoneId),
+        objectIds: [],
         conjurationIds: [],
     }));
 }
 
 function resolveStartingZoneId(seatIndex: number): ArenaZoneId {
-    return seatIndex === 0 ? ARENA_ZONE_IDS.A1 : ARENA_ZONE_IDS.B3;
+    return getFormalStartingZoneIdFromConfig(seatIndex);
+}
+
+function createMageWarsPlayerView(core: MageWarsCore, playerId: PlayerId): Partial<MageWarsCore> {
+    return {
+        objects: Object.fromEntries(Object.entries(core.objects).map(([objectId, object]) => {
+            if (object.ownerId === playerId || object.preparedSpellCardId === undefined) {
+                return [objectId, object];
+            }
+            const { preparedSpellCardId: _hiddenPreparedSpellCardId, ...visibleObject } = object;
+            return [objectId, { ...visibleObject, preparedSpellCount: object.preparedSpellCount ?? 1 }];
+        })),
+    };
+}
+
+function createSleepDamageReplacementEvents(core: MageWarsCore, event: MageWarsEvent): MageWarsEvent[] | undefined {
+    if (event.type !== 'DAMAGE_DEALT') return undefined;
+    const damage = event.payload.actualDamage ?? event.payload.amount;
+    if (damage <= 0) return undefined;
+
+    const targetPlayer = core.players[event.payload.targetId];
+    const targetObject = core.objects[event.payload.targetId];
+    if (!targetPlayer && !targetObject) return undefined;
+
+    const sleepAmount = (targetPlayer ?? targetObject)?.statusTokens[STATUS_TOKEN_IDS.SLEEP] ?? 0;
+    if (sleepAmount <= 0) return undefined;
+
+    const targetRef = targetPlayer
+        ? { targetPlayerId: targetPlayer.id }
+        : { targetObjectId: targetObject!.id };
+    const sourceAbilityId = 'mw.status.sleep.damage-replacement';
+
+    return [event, {
+        type: MAGE_WARS_EVENTS.STATUS_TOKEN_REMOVED,
+        payload: {
+            ...targetRef,
+            statusTokenId: STATUS_TOKEN_IDS.SLEEP,
+            amount: sleepAmount,
+            sourceAbilityId,
+        },
+        sourceCommandType: event.sourceCommandType,
+        timestamp: event.timestamp,
+    }, {
+        type: MAGE_WARS_EVENTS.STATUS_TOKEN_PLACED,
+        payload: {
+            ...targetRef,
+            statusTokenId: STATUS_TOKEN_IDS.DAZE,
+            amount: sleepAmount,
+            sourceAbilityId,
+        },
+        sourceCommandType: event.sourceCommandType,
+        timestamp: event.timestamp,
+    }];
 }
 
 export const MageWarsDomain: DomainCore<MageWarsCore, MageWarsCommand, MageWarsEvent> = {
@@ -82,10 +132,12 @@ export const MageWarsDomain: DomainCore<MageWarsCore, MageWarsCommand, MageWarsE
         return {
             playerOrder: normalizedPlayerIds,
             currentPlayerId: normalizedPlayerIds[0],
+            phaseReadyPlayerIds: [],
             turnNumber: 1,
-            arenaMode: 'apprentice-2x3',
+            arenaMode: 'formal-4x3',
             players,
-            arena: createApprenticeArena(normalizedPlayerIds),
+            objects: {},
+            arena: createFormalArena(normalizedPlayerIds),
             foundationStatus: {
                 intakeComplete: true,
                 openDesignArtifact: true,
@@ -99,6 +151,8 @@ export const MageWarsDomain: DomainCore<MageWarsCore, MageWarsCommand, MageWarsE
     validate: validateCommand,
     execute: executeCommand,
     reduce: reduceEvent,
+    interceptEvent: (core, event) => createSleepDamageReplacementEvents(core, event) ?? event,
+    playerView: createMageWarsPlayerView,
     isGameOver: (core) => {
         if (core.gameResult) return core.gameResult;
         const defeated = core.playerOrder.filter((playerId) => {

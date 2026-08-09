@@ -247,9 +247,17 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
             onRejected?.('command_timeout');
         }, SINGLE_COMMAND_CONFIRM_TIMEOUT_MS);
 
-        client.sendCommand(command.type, command.payload, {
+        const sent = client.sendCommand(command.type, command.payload, {
             onlineAiAttemptKey: resolution.attemptKey,
         });
+        if (sent === false) {
+            settled = true;
+            cleanup();
+            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+                lastAiAttemptKeyRef.current = null;
+            }
+            onRejected?.('command_not_sent');
+        }
         return;
     }
 

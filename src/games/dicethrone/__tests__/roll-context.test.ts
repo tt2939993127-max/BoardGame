@@ -118,17 +118,14 @@ describe('DiceThrone 单槽当前骰区', () => {
             phase: 'offensiveRoll',
         });
         expect(firstContext?.dice.map((die) => die.value)).toEqual([1, 2, 3, 4, 5]);
-        expect(firstContext?.coveredPreviousRollRef).toBeUndefined();
+        expect(firstContext).not.toHaveProperty('coveredPreviousRollRef');
 
         const second = roll(first, [6, 5, 4, 3, 2]);
 
         expect(second.currentRollContext?.id).not.toBe(firstContext?.id);
         expect(second.currentRollContext?.dice.map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
-        expect(second.currentRollContext?.coveredPreviousRollRef).toMatchObject({
-            id: firstContext?.id,
-            kind: 'offensive',
-            ownerPlayerId: '0',
-        });
+        expect(second.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
+        expect(second).not.toHaveProperty('rollContextRecovery');
     });
 
     it('修改主骰会同步更新当前骰区', () => {
@@ -165,11 +162,9 @@ describe('DiceThrone 单槽当前骰区', () => {
             kind: 'bonus',
             ownerPlayerId: '0',
             targetPlayerId: '1',
-            coveredPreviousRollRef: {
-                id: rolledContextId,
-                kind: 'offensive',
-            },
         });
+        expect(bonusOpened.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
+        expect(bonusOpened).not.toHaveProperty('rollContextRecovery');
         expect(bonusOpened.currentRollContext?.dice.map((die) => die.value)).toEqual([3]);
 
         const modified = reduce(bonusOpened, {
@@ -190,6 +185,48 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.dice[0].value).toBe(1);
     });
 
+    it('奖励骰结算后保留最终骰面为右侧骰盘的只读回看，直到下一次投掷覆盖它', () => {
+        const settlement: PendingBonusDiceSettlement = {
+            ...createBonusSettlement(),
+            dice: [
+                ...createBonusSettlement().dice,
+                { index: 1, value: 4, face: 'sabre', effectParams: { value: 4 } },
+            ],
+        };
+        const opened = reduce(createCore(), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const modified = reduce(opened, {
+            type: 'DIE_MODIFIED',
+            payload: {
+                dieId: 0,
+                oldValue: 3,
+                newValue: 6,
+                playerId: '0',
+                ownerId: '0',
+                target: 'pendingBonusDie',
+            },
+            timestamp: 4,
+        } as DiceThroneEvent);
+
+        const settled = reduce(modified, {
+            type: 'BONUS_DICE_SETTLED',
+            payload: { displayOnly: true },
+            timestamp: 5,
+        } as DiceThroneEvent);
+
+        expect(settled.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.currentRollContext).toMatchObject({
+            id: 'bonus:bonus-test-1',
+            kind: 'bonus',
+            status: 'settled',
+            display: { replayOnly: true },
+            dice: [{ value: 6 }, { value: 4 }],
+        });
+    });
+
     it('奖励骰被新投掷覆盖后，旧奖励骰字段不再是可操作当前骰', () => {
         const rolled = roll(createCore(), [1, 2, 3, 4, 5]);
         const bonusOpened = reduce(rolled, {
@@ -204,11 +241,9 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(covered.currentRollContext).toMatchObject({
             kind: 'offensive',
             dice: [{ value: 6 }, { value: 5 }, { value: 4 }, { value: 3 }, { value: 2 }],
-            coveredPreviousRollRef: {
-                id: 'bonus:bonus-test-1',
-                kind: 'bonus',
-            },
         });
+        expect(covered.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
+        expect(covered).not.toHaveProperty('rollContextRecovery');
         expect(validateCommand(covered, {
             type: 'SKIP_BONUS_DICE_REROLL',
             playerId: '0',
@@ -238,48 +273,31 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.currentRollContext?.dice[0]?.value).toBe(6);
     });
 
-    it('新投掷覆盖后可恢复到覆盖前步骤，再继续使用唯一当前骰区', () => {
-        const first = roll(createCore(), [1, 2, 3, 4, 5]);
-        const covered = roll(first, [6, 5, 4, 3, 2]);
-        const recovery = covered.rollContextRecovery;
+    it('当前可改奖励骰允许在主要阶段打出改骰牌', () => {
+        const opened = reduce(createCore(), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const playSix = COMMON_CARDS.find((card) => card.id === 'card-play-six');
 
-        expect(recovery?.coveredRollRef.id).toBe(first.currentRollContext?.id);
-        expect(recovery?.restoreState.currentRollContext?.id).toBe(first.currentRollContext?.id);
+        expect(playSix).toBeDefined();
+        if (!playSix) return;
 
-        const restoreCommand = {
-            type: 'RESTORE_COVERED_ROLL',
-            playerId: '0',
-            payload: {},
-        } as const;
-        expect(validateCommand(covered, restoreCommand as any, 'offensiveRoll')).toEqual({ valid: true });
-
-        const events = execute(
-            { core: covered, sys: { phase: 'offensiveRoll' } },
-            restoreCommand as any,
-            queuedRandom([6]),
-        );
-        expect(events).toHaveLength(1);
-        expect(events[0]).toMatchObject({
-            type: 'ROLL_CONTEXT_RESTORED',
-            payload: { coveredRollId: first.currentRollContext?.id },
+        expect(opened.currentRollContext).toMatchObject({
+            kind: 'bonus',
+            policy: { allowRollCards: true },
         });
-
-        const restored = reduce(covered, events[0] as DiceThroneEvent);
-        expect(restored.currentRollContext?.id).toBe(first.currentRollContext?.id);
-        expect(restored.currentRollContext?.dice.map((die) => die.value)).toEqual([1, 2, 3, 4, 5]);
-        expect(restored.rollContextRecovery).toBeUndefined();
+        expect(checkPlayCard(opened, '0', playSix, 'main1')).toEqual({ ok: true });
     });
 
-    it('没有被覆盖的旧骰区时不能伪造步骤恢复', () => {
-        const state = roll(createCore(), [1, 2, 3, 4, 5]);
-        expect(validateCommand(state, {
-            type: 'RESTORE_COVERED_ROLL',
-            playerId: '0',
-            payload: {},
-        } as any, 'offensiveRoll')).toMatchObject({
-            valid: false,
-            error: 'no_covered_roll_to_restore',
-        });
+    it('新投掷覆盖后不产生无规则来源的玩家恢复步骤', () => {
+        const first = roll(createCore(), [1, 2, 3, 4, 5]);
+        const covered = roll(first, [6, 5, 4, 3, 2]);
+        expect(covered.currentRollContext?.id).not.toBe(first.currentRollContext?.id);
+        expect(covered.currentRollContext?.dice.map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
+        expect(covered.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
+        expect(covered).not.toHaveProperty('rollContextRecovery');
     });
 
     it('终极成功发动后的结算骰会进入当前骰区但禁止改骰和重掷', () => {
@@ -422,7 +440,7 @@ describe('DiceThrone 单槽当前骰区', () => {
             ownerPlayerId: '1',
             targetPlayerId: '1',
             sourceTokenId: TOKEN_IDS.EVASIVE,
-            dice: [{ id: 0, value: 1 }],
+            dice: [{ id: 0, definitionId: 'monk-dice', value: 1 }],
         });
         expect(state.pendingDamage?.isFullyEvaded).toBe(true);
         expect(state.pendingDamage?.currentDamage).toBe(0);
@@ -494,11 +512,9 @@ describe('DiceThrone 单槽当前骰区', () => {
             ownerPlayerId: '0',
             sourceAbilityId: 'roll-context-test',
             dice: [{ id: 0, value: 2 }],
-            coveredPreviousRollRef: {
-                id: targetingRolled.currentRollContext?.id,
-                kind: 'targeting',
-            },
         });
+        expect(rollDieOpened.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
+        expect(rollDieOpened).not.toHaveProperty('rollContextRecovery');
     });
 
     it('策略声明任意人可改的闪避骰允许响应方修改', () => {
@@ -506,6 +522,7 @@ describe('DiceThrone 单槽当前骰区', () => {
             ...createCore(),
             currentRollContext: createEvasionRollContext({
                 ownerPlayerId: '1',
+                diceDefinitionId: 'monk-dice',
                 targetPlayerId: '1',
                 sourceTokenId: TOKEN_IDS.EVASIVE,
                 value: 1,
@@ -535,6 +552,7 @@ describe('DiceThrone 单槽当前骰区', () => {
     it('2v2 当前骰区的队友与对手被动重掷权限都由同一策略裁决', () => {
         const context = createEvasionRollContext({
             ownerPlayerId: '0',
+            diceDefinitionId: 'zhanshujia-dice',
             targetPlayerId: '1',
             sourceTokenId: TOKEN_IDS.EVASIVE,
             value: 1,
