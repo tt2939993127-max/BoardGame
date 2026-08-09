@@ -1,3 +1,4 @@
+// @asset-pipeline-allow: sprite cropping and fallback background are mutually exclusive.
 import React from 'react';
 import {
     DICE_BG_SIZE,
