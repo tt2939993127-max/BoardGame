@@ -128,8 +128,8 @@ jobs:
         shell: bash
         env:
           ANDROID_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || vars.ANDROID_VITE_BACKEND_URL || secrets.VITE_BACKEND_URL || secrets.ANDROID_VITE_BACKEND_URL }}
-          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL }}
-          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
+          BOARDGAME_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.BOARDGAME_DEPLOY_SSH_PRIVATE_KEY }}
+          BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS }}
           DRY_RUN: ${{ steps.params.outputs.dry_run }}
         run: |
           missing=()
@@ -139,8 +139,8 @@ jobs:
           fi
 
           if [[ "${DRY_RUN}" != "true" ]]; then
-            [[ -n "${ASSET_SERVER_UPLOAD_URL}" ]] || missing+=("ASSET_SERVER_UPLOAD_URL")
-            [[ -n "${ASSET_SERVER_UPLOAD_TOKEN}" ]] || missing+=("ASSET_SERVER_UPLOAD_TOKEN")
+            [[ -n "${BOARDGAME_DEPLOY_SSH_PRIVATE_KEY}" ]] || missing+=("BOARDGAME_DEPLOY_SSH_PRIVATE_KEY")
+            [[ -n "${BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS}" ]] || missing+=("BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS")
           fi
 
           if [[ ${#missing[@]} -eq 0 ]]; then
@@ -248,11 +248,25 @@ jobs:
         if: steps.prereq.outputs.ready == 'true'
         run: npm run mobile:android:sync
 
+      - name: Prepare asset publish SSH
+        if: steps.prereq.outputs.ready == 'true' && steps.params.outputs.dry_run != 'true'
+        env:
+          BOARDGAME_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.BOARDGAME_DEPLOY_SSH_PRIVATE_KEY }}
+          BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${BOARDGAME_DEPLOY_SSH_PRIVATE_KEY}" > "${RUNNER_TEMP}/boardgame-asset-publish"
+          chmod 600 "${RUNNER_TEMP}/boardgame-asset-publish"
+          printf '%s\n' "${BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS}" > "${RUNNER_TEMP}/boardgame-known-hosts"
+
       - name: Publish Android OTA bundle
         if: steps.prereq.outputs.ready == 'true'
         env:
-          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL }}
-          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
+          ASSET_SERVER_UPLOAD_URL: ''
+          ASSET_SERVER_UPLOAD_TOKEN: ''
+          ASSET_SERVER_SSH_TARGET: admin@8.148.71.102
+          ASSET_SERVER_SSH_KEY_PATH: ${{ runner.temp }}/boardgame-asset-publish
+          ASSET_SERVER_SSH_KNOWN_HOSTS_PATH: ${{ runner.temp }}/boardgame-known-hosts
         shell: bash
         run: |
           args=(
