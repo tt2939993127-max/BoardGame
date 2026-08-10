@@ -140,7 +140,7 @@ git mergetool path/to/file
 - 如果某个冲突块最终只能保留单边内容，必须能明确说明：
   - 为什么另一边内容已过时、重复、错误或与当前实现冲突
   - 为什么单边保留不会把已上线/已验证的小功能、断言、文案、类型字段静默裁掉
-- 对共享骨架、通用 UI、规则/校验、测试断言、i18n key、类型定义，以及 **规则/规范文档（AGENTS.md、docs/ai-rules/**、.codex/rules/**、.codex/workflows/**、.codex/skill/**、docs/git-merge-checklist.md）** 等高风险区域，默认按“**双方内容都可能有效**”处理，优先做块级合并而不是整份覆盖。
+- 对共享骨架、通用 UI、规则/校验、测试断言、i18n key、类型定义，以及 **规则/规范文档（AGENTS.md、docs/ai-rules/**、.codex/rules/**、.codex/workflows/**、.spec/skills/**、docs/git-merge-checklist.md）** 等高风险区域，默认按“**双方内容都可能有效**”处理，优先做块级合并而不是整份覆盖。
 - `npm run merge:audit -- HEAD` 只能帮助发现“整份吃成单边”的风险，**不能替代逐冲突点的语义裁决**；审计通过不等于冲突解决正确。
 
 #### 业务规则真相源优先（强制）

@@ -156,7 +156,6 @@ export function EndgameOverlay({
     const [shouldShow, setShouldShow] = useState(false);
     const [frozenResult, setFrozenResult] = useState<GameOverResult | undefined>(undefined);
     const contentReady = useDeferredRender(shouldShow);
-    // 移除未使用的 blurEnabled，遮罩效果已移除
     const prevGameOverRef = useRef(false);
     const matchRoomExit = useMatchRoomExit();
     const gameMode = useGameMode();
@@ -209,14 +208,11 @@ export function EndgameOverlay({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: OVERLAY_FADE_MS / 1000 }}
-                    className="fixed inset-0 flex items-center justify-center pointer-events-none"
+                    className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto"
                     style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                 >
-                    {/* 彻底移除背景遮罩 */}
-
                     <VictoryParticles active={showVictoryParticles} className="z-0" />
 
-                    {/* 内容容器 - 仅作为布局容器，无背景 */}
                     <motion.div
                         data-testid="endgame-overlay-content"
                         initial={{ scale: 0.9, y: 20, opacity: 0 }}

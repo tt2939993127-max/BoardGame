@@ -161,30 +161,51 @@ const ResponseWindowHint: React.FC<{
 }> = ({ onResponsePass }) => {
     const { t } = useTranslation('game-dicethrone');
     const pointerPassHandledRef = React.useRef(false);
-    const [isHandCardHovered, setIsHandCardHovered] = React.useState(false);
+    const [responseBottom, setResponseBottom] = React.useState<number | null>(null);
 
     React.useEffect(() => {
-        let animationFrame: number | null = null;
-        const syncHandCardHover = () => {
-            if (animationFrame !== null) {
-                window.cancelAnimationFrame(animationFrame);
-            }
-            animationFrame = window.requestAnimationFrame(() => {
-                animationFrame = null;
-                setIsHandCardHovered(Boolean(
-                    document.querySelector('[data-testid="hand-area"] [data-card-id]:hover'),
-                ));
-            });
+        let anchorTrackingFrame: number | null = null;
+
+        const getCardVisualTop = (card: HTMLElement): number => {
+            const visual = card.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? card;
+            return visual.getBoundingClientRect().top;
         };
 
-        document.addEventListener('pointerover', syncHandCardHover, true);
-        document.addEventListener('pointerout', syncHandCardHover, true);
-        syncHandCardHover();
+        const getVisibleHandAnchorTop = (handArea: HTMLElement): number | null => {
+            const hoveredCard = handArea.querySelector<HTMLElement>('[data-card-id]:hover');
+            if (hoveredCard) {
+                return getCardVisualTop(hoveredCard);
+            }
+
+            const visibleCardTops = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'))
+                .map((card) => card.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? card)
+                .map((card) => card.getBoundingClientRect())
+                .filter((rect) => rect.width > 0 && rect.height > 0)
+                .map((rect) => rect.top);
+            return visibleCardTops.length > 0 ? Math.min(...visibleCardTops) : null;
+        };
+
+        const updateResponseBottom = () => {
+            const handArea = document.querySelector<HTMLElement>('[data-testid="hand-area"]');
+            if (!handArea) return;
+
+            // 只锚定实际可见的卡面；悬浮牌会临时抬高并成为新的锚点。
+            const anchorTop = getVisibleHandAnchorTop(handArea)
+                ?? handArea.getBoundingClientRect().bottom;
+            const gap = 16;
+            const nextBottom = Math.max(16, window.innerHeight - anchorTop + gap);
+            setResponseBottom((currentBottom) => currentBottom === nextBottom ? currentBottom : nextBottom);
+        };
+
+        const trackHandAnchor = () => {
+            updateResponseBottom();
+            anchorTrackingFrame = window.requestAnimationFrame(trackHandAnchor);
+        };
+
+        anchorTrackingFrame = window.requestAnimationFrame(trackHandAnchor);
         return () => {
-            document.removeEventListener('pointerover', syncHandCardHover, true);
-            document.removeEventListener('pointerout', syncHandCardHover, true);
-            if (animationFrame !== null) {
-                window.cancelAnimationFrame(animationFrame);
+            if (anchorTrackingFrame !== null) {
+                window.cancelAnimationFrame(anchorTrackingFrame);
             }
         };
     }, []);
@@ -211,11 +232,12 @@ const ResponseWindowHint: React.FC<{
             style={{
                 zIndex: UI_Z_INDEX.hint,
                 position: 'fixed',
-                // 常态贴在手牌区上沿；手牌抬起时暂时让位，避免遮住可响应牌。
-                bottom: isHandCardHovered ? 'calc(26vw + 14px)' : 'calc(18vw + 8px)',
+                // 手牌尚未挂载时暂不显示，避免以固定视口比例落到棋盘中部。
+                bottom: responseBottom === null ? '16px' : `${responseBottom}px`,
                 left: '50%',
                 transform: 'translateX(-50%)',
                 transition: 'bottom 160ms ease-out',
+                visibility: responseBottom === null ? 'hidden' : 'visible',
             }}
         >
             <div
@@ -226,13 +248,13 @@ const ResponseWindowHint: React.FC<{
                     data-testid="dicethrone-response-orbit"
                     className="pointer-events-none absolute -inset-[4px] overflow-hidden rounded-full"
                 >
-                    <div
+                <div
                         data-testid="dicethrone-response-orbit-track"
-                        className="absolute left-1/2 top-1/2 h-[260%] w-[160%]"
+                        className="absolute left-1/2 top-1/2 h-[520%] w-[520%]"
                         style={{
-                            background: 'conic-gradient(from 0deg, transparent 0deg 294deg, rgba(255,214,77,0.28) 304deg, #fffbe0 324deg, #ffd65f 342deg, rgba(255,214,77,0.22) 356deg, transparent 360deg)',
+                            background: 'conic-gradient(from 0deg, transparent 0deg 300deg, rgba(255,214,77,0.28) 306deg, #fffbe0 320deg, #ffd65f 336deg, rgba(255,214,77,0.24) 350deg, transparent 360deg)',
                             transform: 'translate(-50%, -50%)',
-                            animation: 'dicethrone-response-border-orbit 1.45s linear infinite',
+                            animation: 'dicethrone-response-border-orbit 1.2s linear infinite',
                         }}
                     />
                 </div>
@@ -240,7 +262,7 @@ const ResponseWindowHint: React.FC<{
                     data-testid="dicethrone-response-window-hint-panel"
                     className="relative z-10 flex items-center gap-[0.9vw] rounded-full border border-[#ffe16d] bg-[#2b1837] px-[1.15vw] py-[0.62vw]"
                     style={{
-                        border: '1.5px solid rgba(255,225,109,0.72)',
+                        border: '1.5px solid rgba(255,225,109,0.9)',
                         borderRadius: '9999px',
                         backgroundColor: '#2b1837',
                         boxShadow: 'none',

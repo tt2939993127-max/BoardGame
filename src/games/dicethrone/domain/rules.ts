@@ -139,21 +139,20 @@ export const getPendingBonusSettlementDice = (
 };
 
 /**
- * 奖励骰是否仍是规则上的交互阻塞。
- * displayOnly 只代表展示壳层；只要明确允许改骰，它仍然必须等待交互收口。
+ * 未结算的奖励骰始终需要掷骰者确认。
+ * 卡牌自身是否提供免费重掷，由命令校验和费用单独决定，不影响骰子能否被规则修改。
  */
 export const isInteractiveBonusDiceSettlement = (
     settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
 ): boolean => Boolean(
     settlement
-    && (settlement.displayOnly !== true || settlement.allowDiceModification === true),
+    && getPendingBonusSettlementDice(settlement).length > 0,
 );
 
 export const shouldOpenAfterRollConfirmedForBonusSettlement = (
     settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
 ): boolean => (
-    settlement?.allowDiceModification === true
-    && getPendingBonusSettlementDice(settlement).length > 0
+    getPendingBonusSettlementDice(settlement).length > 0
 );
 
 /**
@@ -296,7 +295,7 @@ export const isPlayerAllowedByRollContextPolicy = (
     playerId: PlayerId,
     action: 'modify' | 'reroll',
 ): boolean => {
-    if (!state.players[playerId] || context.policy.ultimateLocked) return false;
+    if (!state.players[playerId]) return false;
 
     const scope = action === 'modify'
         ? context.policy.modifiableBy
@@ -559,7 +558,7 @@ export const getRollerId = (state: DiceThroneCore, phase?: TurnPhase): PlayerId 
         return getCurrentRollOwnerId(state, phase);
     }
     if (
-        state.pendingBonusDiceSettlement?.allowDiceModification === true
+        state.pendingBonusDiceSettlement
         && isCurrentBonusRollSettlement(state)
         && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).length > 0
     ) {
@@ -586,6 +585,11 @@ export const getRollerId = (state: DiceThroneCore, phase?: TurnPhase): PlayerId 
  * 检查是否可以推进阶段
  */
 export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolean => {
+    // 卡牌自身允许重掷的奖励骰仍未收口时，主流程不能跳过它进入下一阶段。
+    if (isInteractiveBonusDiceSettlement(state.pendingBonusDiceSettlement)) {
+        return false;
+    }
+
     // 选角阶段门禁
     if (phase === 'setup') {
         const playerIds = Object.keys(state.players);
@@ -850,11 +854,14 @@ const getAttackModifierPlayFailureReason = (
     return null;
 };
 
-const canPlayRollCardOutsideRollPhaseWithDiceResult = (
+/**
+ * 当前骰区只回答“骰子牌能否把它作为效果目标”。
+ * 卡牌的阶段时机必须由 checkStandardCardPlay 独立裁决，不能由当前骰区越权放行。
+ */
+const hasCurrentDiceTargetForCard = (
     state: DiceThroneCore,
     card: AbilityCard,
     phase: TurnPhase,
-    responseWindowType?: DtResponseWindowType,
 ): boolean => {
     if (
         (card.timing !== 'roll' && card.timing !== 'instant')
@@ -864,33 +871,12 @@ const canPlayRollCardOutsideRollPhaseWithDiceResult = (
     }
 
     const currentRollContext = resolveCurrentRollContext(state, phase);
-    if (
+    return Boolean(
         currentRollContext
-        && currentRollContext.policy.allowRollCards === true
+        && currentRollContext.policy.allowDiceCardTargeting === true
         && currentRollContext.display.replayOnly !== true
-        && currentRollContext.dice.length > 0
-    ) {
-        return true;
-    }
-
-    if (phase !== 'upkeep' && phase !== 'income' && phase !== 'main1' && phase !== 'main2') {
-        return false;
-    }
-
-    if (
-        responseWindowType === 'afterRollConfirmed'
-        && isCurrentBonusRollSettlement(state)
-        && shouldOpenAfterRollConfirmedForBonusSettlement(state.pendingBonusDiceSettlement)
-    ) {
-        return true;
-    }
-
-    return card.playCondition?.requireIsNotRoller === true
-        && card.playCondition.requireOpponentDiceExists === true
-        && card.playCondition.requireRollConfirmed === true
-        && state.rollConfirmed === true
-        && state.rollCount > 0
-        && getDiceResultCountForCardPlay(state) > 0;
+        && currentRollContext.dice.length > 0,
+    );
 };
 
 const isDiceRollPhase = (phase: TurnPhase): boolean => (
@@ -1029,10 +1015,8 @@ const checkStandardCardPlay = (
         const isAfterAttackRollResponse =
             responseWindowType === 'afterAttackResolved'
             && card.playCondition?.requireMinDamageDealt !== undefined;
-        const isDiceResultInterference = canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType);
         if (
             !isAfterAttackRollResponse
-            && !isDiceResultInterference
             && phase !== 'offensiveRoll'
             && phase !== 'targetingRoll'
             && phase !== 'defensiveRoll'
@@ -1050,7 +1034,6 @@ const checkStandardCardPlay = (
             || (card.timing === 'instant' && hasExistingDiceToolEffect(card))
         )
         && !isDiceRollPhase(phase)
-        && !canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)
     ) {
         return { ok: false, reason: 'wrongPhaseForRoll' };
     }
@@ -1059,7 +1042,7 @@ const checkStandardCardPlay = (
     if (
         hasExistingDiceToolEffect(card)
         && currentRollContext
-        && currentRollContext.policy.allowRollCards !== true
+        && currentRollContext.policy.allowDiceCardTargeting !== true
     ) {
         return { ok: false, reason: 'rollContextLocked' };
     }
@@ -1124,7 +1107,7 @@ const checkStandardCardPlay = (
         }
 
         if (cond.requireHasRolled && state.rollCount === 0) {
-            if (!canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)) {
+            if (!hasCurrentDiceTargetForCard(state, card, phase)) {
                 return { ok: false, reason: 'requireHasRolled' };
             }
         }
@@ -1132,7 +1115,7 @@ const checkStandardCardPlay = (
         const diceResultCount = getDiceResultCountForCardPlay(state);
 
         if (cond.requireDiceExists && diceResultCount === 0) {
-            if (!canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)) {
+            if (!hasCurrentDiceTargetForCard(state, card, phase)) {
                 return { ok: false, reason: 'requireDiceExists' };
             }
         }
@@ -1144,13 +1127,13 @@ const checkStandardCardPlay = (
         }
 
         if (cond.requireOpponentDiceExists && diceResultCount === 0) {
-            if (!canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)) {
+            if (!hasCurrentDiceTargetForCard(state, card, phase)) {
                 return { ok: false, reason: 'requireOpponentDiceExists' };
             }
         }
 
         if (cond.requireRollConfirmed && !state.rollConfirmed) {
-            if (!canPlayRollCardOutsideRollPhaseWithDiceResult(state, card, phase, responseWindowType)) {
+            if (!hasCurrentDiceTargetForCard(state, card, phase)) {
                 return { ok: false, reason: 'requireRollConfirmed' };
             }
         }
@@ -1230,8 +1213,9 @@ const checkResponseWindowCardPlay = (
             }
             const currentRollContext = resolveCurrentRollContext(state, phase);
             const isOwnOpenBonusRoll = playerId === getRollerId(state, phase)
+                && isDiceRollPhase(phase)
                 && currentRollContext?.kind === 'bonus'
-                && currentRollContext.policy.allowRollCards === true
+                && currentRollContext.policy.allowDiceCardTargeting === true
                 && currentRollContext.display.replayOnly !== true;
             if (isOwnOpenBonusRoll) {
                 return { ok: true };

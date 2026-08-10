@@ -38,7 +38,7 @@
 | 问题对象 | Smash Up Munchkin 扩展，不是单个 UI bug | 用户素材目录与当前 `munchkin.ts`、Munchkin intake 合同 |
 | 主真相源 | `D:\gongzuo\webgame\gameasset\Smash Up! by Mervil (2833984701)-汉化图\新6扩小白` | 素材目录实测：8 个派系目录各 22 张、宝藏牌 22 张、怪物牌 20 张 |
 | 当前实施入口 | `D:\gongzuo\webgame\BoardGame` 当前 worktree | 本文只引用当前工作树文件、当前资源树和当前测试入口 |
-| 验收口径 | `.codex/skill/add-new-faction/SKILL.md` 的 S0-S6：数据录入、资源链、机制、对象级审计、真实入口 E2E、最终矩阵全 passed | 新派系 workflow、Smash Up intake / implementation workflow |
+| 验收口径 | `.spec/skills/add-new-faction/SKILL.md` 的 S0-S6：数据录入、资源链、机制、对象级审计、真实入口 E2E、最终矩阵全 passed | 新派系 workflow、Smash Up intake / implementation workflow |
 
 ## 全面审计自检表
 
@@ -909,7 +909,7 @@
 | --- | --- | --- |
 | 上位规范真相源 | `D:\codex-home\skills\game-ui-design\SKILL.md`；`docs\ai-rules\ui-ux.md` 第 109 行 | `canonical_source_confirmed`：玩家决策点不得因“只有一个候选”被系统隐式代选；当前仍需选择对象、目标、支付物、顺序、数量或模式时，即使候选只有 1 个，也必须手动点选。`docs\ai-rules\ui-ux.md` 已有等价项目 UI 规则，本轮补强全局 game-ui-design，并让新增派系 / Smash Up workflow 做薄适配 |
 | 治理规范回代 | `D:\codex-home\skills\skill-governance\SKILL.md` | `passed`：已补“不得把跨项目不变量降级为单项目特例”：当用户质疑是否只改单游戏规范时，必须先检查上位 canonical-source；已有上位规则则按未执行已有规范处理，缺规则才更新全局 skill |
-| 项目适配 | `.codex\skill\add-new-faction\SKILL.md`；`docs\games\smashup\workflows\smashup-faction-implementation.md` | `passed_adapter`：新增派系和 Smash Up 专项 workflow 已明确：命中共享选择 helper / prompt / interaction 时必须反查 `autoResolveIfSingle` 或等价隐式代选默认；L3/E2E 必须逐段证明交互真实停住、玩家手动点选、再进入下一段或结算 |
+| 项目适配 | `.spec\skills\add-new-faction\SKILL.md`；`docs\games\smashup\workflows\smashup-faction-implementation.md` | `passed_adapter`：新增派系和 Smash Up 专项 workflow 已明确：命中共享选择 helper / prompt / interaction 时必须反查 `autoResolveIfSingle` 或等价隐式代选默认；L3/E2E 必须逐段证明交互真实停住、玩家手动点选、再进入下一段或结算 |
 | 当前审计影响 | 本文盗贼记录 | `pre_fix_reclassified`：此前盗贼 166-178 的 `PASS / 93` 作废；旧 168 已明确判为 `REVISE`，对象级 L3/L4 收口结论降级为 `visual_revise / manual_choice_reaudit_pending`。2026-08-03 22:33 已完成打劫单链修复 / 重拍 / 重审，见下节；批次级手动选择重审仍未完成 |
 
 ## 2026-08-03 22:33 修复记录：打劫目标选择态重拍

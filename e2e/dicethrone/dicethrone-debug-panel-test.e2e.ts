@@ -129,7 +129,7 @@ test.describe('DiceThrone 调试面板', () => {
                             modifiableBy: 'owner',
                             rerollableBy: 'owner',
                             allowPassiveReroll: true,
-                            allowRollCards: true,
+                            allowDiceCardTargeting: true,
                             ultimateLocked: false,
                             blocksPhaseFlow: true,
                         },
@@ -174,7 +174,7 @@ test.describe('DiceThrone 调试面板', () => {
         );
     });
 
-    test('奖励骰只保留确认语义，不显示覆盖恢复或结算按钮', async ({ page, game }, testInfo) => {
+    test('奖励骰重掷复用右侧骰盘与普通确认，不显示专用结算按钮', async ({ page, game }, testInfo) => {
         await clearEvidenceScreenshotsForTest(testInfo);
         await game.openTestGame('dicethrone');
 
@@ -209,7 +209,7 @@ test.describe('DiceThrone 调试面板', () => {
                 symbols: [die.face],
                 isKept: false,
                 ownerId: '0',
-                displayOnly: true,
+                displayOnly: false,
             }));
             (window as any).__BG_TEST_HARNESS__?.state?.patch?.({
                 core: {
@@ -219,13 +219,13 @@ test.describe('DiceThrone 调试面板', () => {
                         attackerId: '0',
                         targetId: '1',
                         dice: bonusDice,
-                        rerollCostTokenId: 'tactical-advantage',
-                        rerollCostAmount: 1,
+                        rerollCostTokenId: '',
+                        rerollCostAmount: 0,
                         rerollCount: 0,
                         maxRerollCount: 1,
                         readyToSettle: false,
                         allowDiceModification: true,
-                        displayOnly: true,
+                        displayOnly: false,
                         resolutionMode: 'attackBonus',
                     },
                     currentRollContext: {
@@ -240,7 +240,7 @@ test.describe('DiceThrone 调试面板', () => {
                             modifiableBy: 'owner',
                             rerollableBy: 'owner',
                             allowPassiveReroll: true,
-                            allowRollCards: true,
+                            allowDiceCardTargeting: true,
                             ultimateLocked: false,
                             blocksPhaseFlow: true,
                         },
@@ -251,13 +251,37 @@ test.describe('DiceThrone 调试面板', () => {
             });
         });
 
-        const confirmButton = page.getByTestId('bonus-dice-confirm-button');
+        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
+        const bonusDieButton = page.locator('[data-tutorial-id="dice-tray"] [data-testid="die-button-0"]').first();
+        await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
         await expect(confirmButton).toBeVisible({ timeout: 5000 });
-        await expect(confirmButton).toHaveText('确认奖励骰');
-        await expect(page.getByText('结算奖励骰', { exact: true })).toHaveCount(0);
+        await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
+        await expect(bonusDieButton).toHaveAttribute('data-clickable', 'true');
         await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
 
-        const path = getEvidenceScreenshotPath(testInfo, '奖励骰只显示确认按钮且没有覆盖恢复按钮', { requireChineseName: true });
+        await bonusDieButton.click();
+        await expect.poll(async () => page.evaluate(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const settlement = state?.core?.pendingBonusDiceSettlement;
+            return {
+                rerollCount: settlement?.rerollCount ?? null,
+                lastRerolledDieIndex: settlement?.lastRerolledDieIndex ?? null,
+                eventTypes: (state?.sys?.eventStream?.entries ?? []).slice(-8).map((entry: any) => entry.event?.type),
+            };
+        })).toMatchObject({
+            rerollCount: 1,
+            lastRerolledDieIndex: 0,
+            eventTypes: expect.arrayContaining(['BONUS_DIE_REROLLED']),
+        });
+        await expect(bonusDieButton).toHaveAttribute('data-clickable', 'false');
+
+        await confirmButton.click();
+        await expect.poll(async () => page.evaluate(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.core?.pendingBonusDiceSettlement ?? null;
+        })).toBeNull();
+
+        const path = getEvidenceScreenshotPath(testInfo, '奖励骰重掷后复用普通确认且没有专用结算按钮', { requireChineseName: true });
         await page.getByTestId('dicethrone-board-root').screenshot(
             withJpegEvidenceScreenshotOptions({ path, timeout: 20000 }),
         );

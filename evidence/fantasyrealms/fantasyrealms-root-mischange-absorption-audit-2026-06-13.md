@@ -25,7 +25,7 @@
 除此之外，根目录当前的其余脏改不是 Fantasy Realms 实现文件：
 
 - `AGENTS.md`
-- `.codex/skill/git-operations/SKILL.md`
+- `.spec/skills/git-operations/SKILL.md`
 - `docs/ai-rules/asset-pipeline.md`
 - `docs/ai-rules/doc-index.md`
 - `docs/automated-testing.md`

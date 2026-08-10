@@ -922,6 +922,7 @@ export const HandArea = ({
                                 }}
                             >
                                 <motion.div
+                                    data-testid="hand-card-visual"
                                     className="relative w-full h-full"
                                     initial={motionInitial}
                                     animate={{

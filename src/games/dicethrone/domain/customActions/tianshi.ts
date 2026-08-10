@@ -485,6 +485,18 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
     ));
 
     if (activated) {
+        if (phase === 'defensiveRoll' && state.pendingDamage?.targetPlayerId === attackerId) {
+            events.push({
+                type: 'PREVENT_DAMAGE',
+                payload: {
+                    targetId: attackerId,
+                    amount: state.pendingDamage.currentDamage,
+                    sourceAbilityId,
+                    applyImmediately: true,
+                },
+                ...eventSource(sourceAbilityId, timestamp + 3, 'USE_TOKEN'),
+            } as DiceThroneEvent);
+        }
         events.push({
             type: 'PENDING_ATTACK_UPDATED',
             payload: {
@@ -493,7 +505,7 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
                     ? { defensiveFlightActivated: true }
                     : { isDefendable: false },
             },
-            ...eventSource(sourceAbilityId, timestamp + 3, 'USE_TOKEN'),
+            ...eventSource(sourceAbilityId, timestamp + 4, 'USE_TOKEN'),
         } as DiceThroneEvent);
     }
     return events;

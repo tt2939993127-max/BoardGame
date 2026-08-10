@@ -95,6 +95,27 @@ const buildBonusDiceAfterRollConfirmedWindowEvent = (
     };
 };
 
+/**
+ * 奖励骰的 afterRollConfirmed 窗口一旦已打开，结算权就属于该窗口。
+ * 原始 BONUS_DICE_REROLL_REQUESTED 事件会在后续系统批次再次被观察到，
+ * 不能把“已处理过同一签名”误判为“没有响应者”，否则会在响应者操作前提前结算。
+ */
+const isBonusDiceAwaitingAfterRollConfirmedResponse = (
+    state: MatchState<DiceThroneCore>,
+    settlement: DiceThroneCore['pendingBonusDiceSettlement'],
+): boolean => {
+    if (!settlement || !shouldOpenAfterRollConfirmedForBonusSettlement(settlement)) {
+        return false;
+    }
+
+    const rollSignature = buildAfterRollConfirmedSignature(state.core);
+    const currentWindow = state.sys.responseWindow?.current;
+    return (
+        currentWindow?.windowType === 'afterRollConfirmed'
+        && currentWindow.sourceId === rollSignature
+    ) || hasAfterRollConfirmedWindowBeenHandled(state.core, rollSignature);
+};
+
 function extractChoiceCustomIds(interactionData: unknown): string[] {
     const data = interactionData as { options?: Array<{ value?: { customId?: unknown } }> } | undefined;
     if (!Array.isArray(data?.options)) return [];
@@ -152,25 +173,13 @@ function isStaleOffensiveRollEndChoiceResolved(core: DiceThroneCore, event: Choi
     return (player.tokens[tokenId] ?? 0) <= 0;
 }
 
-function isModificationOnlyBonusSettlement(
-    settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
-): boolean {
-    return Boolean(
-        settlement
-        && settlement.allowDiceModification === true
-        && settlement.maxRerollCount === 0
-        && settlement.rerollCount === 0
-        && settlement.ultimateLocked !== true,
-    );
-}
-
-function isClosedBonusDiceResponseWindow(
+function shouldQueueBonusDiceAfterResponseWindow(
     state: MatchState<DiceThroneCore>,
     event: DiceThroneEvent,
 ): boolean {
     if (event.type !== 'RESPONSE_WINDOW_CLOSED') return false;
     const settlement = state.core.pendingBonusDiceSettlement;
-    return isModificationOnlyBonusSettlement(settlement)
+    return Boolean(settlement)
         && shouldOpenAfterRollConfirmedForBonusSettlement(settlement)
         && state.core.afterRollResponseWindowSignature?.includes(`|settlement:${settlement.id}`) === true;
 }
@@ -964,11 +973,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     };
                 }
 
-                // ---- BONUS_DICE_REROLL_REQUESTED → queue dt:bonus-dice ----
-                // 业务数据仅存 core.pendingBonusDiceSettlement；sys.interaction 只做阻塞标记
-                // displayOnly 模式（如正义冲击 rollDie 多骰展示）不创建交互，
-                // 仅通过事件让 UI 展示，不阻塞游戏流程。
-                // 用户点击 Continue → SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED → resolveInteraction
+                // ---- BONUS_DICE_REROLL_REQUESTED → response / reroll / auto settle ----
+                // 通用改骰牌只由响应窗口承接；只有卡牌自身还有重掷权时才需要普通确认收口。
                 if (dtEvent.type === 'BONUS_DICE_REROLL_REQUESTED') {
                     const payload = (dtEvent as BonusDiceRerollRequestedEvent).payload;
                     const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
@@ -980,15 +986,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     );
                     if (responseWindowEvent) {
                         nextEvents.push(responseWindowEvent);
-                    } else if (isModificationOnlyBonusSettlement(payload.settlement)) {
-                        // 没有任何合法改骰牌时，奖励骰立即按当前骰面收口；不把“等待介入”伪装成攻击骰确认。
-                        nextEvents.push(...buildBonusDiceSettlementEvents({
-                            state: newState.core,
-                            settlement: payload.settlement,
-                            random,
-                            timestamp: eventTimestamp,
-                            sourceCommandType: 'BONUS_DICE_AUTO_SETTLE',
-                        }));
+                    } else if (isBonusDiceAwaitingAfterRollConfirmedResponse(newState, payload.settlement)) {
+                        // 已打开的窗口会在 RESPONSE_WINDOW_CLOSED 时统一续接；这里不能抢先结算。
                     } else if (isInteractiveBonusDiceSettlement(payload.settlement)) {
                         const interaction: EngineInteractionDescriptor = {
                             id: `dt-bonus-dice-${payload.settlement.id}`,
@@ -997,30 +996,44 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             data: null,
                         };
                         newState = syncCurrentChoiceAnchorWithInteraction(queueInteraction(newState, interaction));
-                    }
-                }
-
-                if (isClosedBonusDiceResponseWindow(newState, dtEvent)) {
-                    const settlement = newState.core.pendingBonusDiceSettlement;
-                    if (settlement) {
+                    } else {
                         nextEvents.push(...buildBonusDiceSettlementEvents({
                             state: newState.core,
-                            settlement,
+                            settlement: payload.settlement,
                             random,
-                            timestamp: typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0,
+                            timestamp: eventTimestamp,
                             sourceCommandType: 'BONUS_DICE_AUTO_SETTLE',
                         }));
                     }
                 }
 
-                // ---- BONUS_DICE_SETTLED → resolve ----
-                // 纯展示 displayOnly 的 BONUS_DICE_SETTLED 不应 resolve 交互；
-                // 但 displayOnly+allowDiceModification 是刚收口的当前骰交互，必须释放。
-                if (dtEvent.type === 'BONUS_DICE_SETTLED') {
-                    const payload = (dtEvent as any).payload;
-                    if (!payload?.displayOnly || payload?.allowDiceModification === true) {
-                        newState = syncCurrentChoiceAnchorWithInteraction(resolveInteraction(newState));
+                if (shouldQueueBonusDiceAfterResponseWindow(newState, dtEvent)) {
+                    const settlement = newState.core.pendingBonusDiceSettlement;
+                    if (settlement) {
+                        if (isInteractiveBonusDiceSettlement(settlement)) {
+                            const interaction: EngineInteractionDescriptor = {
+                                id: `dt-bonus-dice-${settlement.id}`,
+                                kind: 'dt:bonus-dice',
+                                playerId: settlement.attackerId,
+                                data: null,
+                            };
+                            newState = syncCurrentChoiceAnchorWithInteraction(queueInteraction(newState, interaction));
+                        } else {
+                            nextEvents.push(...buildBonusDiceSettlementEvents({
+                                state: newState.core,
+                                settlement,
+                                random,
+                                timestamp: typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0,
+                                sourceCommandType: 'BONUS_DICE_AUTO_SETTLE',
+                            }));
+                        }
                     }
+                }
+
+                // ---- BONUS_DICE_SETTLED → resolve ----
+                // 临时骰确认后必须释放交互，再由领域层恢复挂起的父骰区。
+                if (dtEvent.type === 'BONUS_DICE_SETTLED') {
+                    newState = syncCurrentChoiceAnchorWithInteraction(resolveInteraction(newState));
                 }
 
                 // ---- SYS_INTERACTION_CANCELLED → 生成领域 INTERACTION_CANCELLED 事件（返还卡牌） ----

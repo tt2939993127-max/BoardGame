@@ -2130,12 +2130,10 @@ const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLe
     if (!settlement || settlement.attackerId !== playerId || !isCurrentBonusRollSettlement(state.core, settlement)) return actions;
 
     if (settlement.displayOnly === true) {
-        if (settlement.allowDiceModification !== true) return actions;
-
         appendAction(actions, state, playerId, {
             actionId: createAiLegalActionId('bonus-die', 'skip'),
             kind: 'skip-bonus-dice-reroll',
-            label: '确认奖励骰',
+            label: '确认',
             commands: [{ type: 'SKIP_BONUS_DICE_REROLL', payload: {} }],
             metadata: withAiActionStrategyTags({}, ['dice-setup']),
         });
@@ -2158,7 +2156,7 @@ const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLe
     appendAction(actions, state, playerId, {
         actionId: createAiLegalActionId('bonus-die', 'skip'),
         kind: 'skip-bonus-dice-reroll',
-        label: '确认奖励骰',
+        label: '确认',
         commands: [{ type: 'SKIP_BONUS_DICE_REROLL', payload: {} }],
         metadata: withAiActionStrategyTags({}, ['dice-setup']),
     });

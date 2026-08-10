@@ -233,8 +233,7 @@ const validateDieInteraction = (
     const allowedDieIds = interaction.allowedDieIds?.length
         ? interaction.allowedDieIds
         : getActiveDice(state).map(activeDie => activeDie.id);
-    const isPendingBonusDie = state.pendingBonusDiceSettlement?.allowDiceModification === true
-        && isCurrentBonusRollSettlement(state)
+    const isPendingBonusDie = isCurrentBonusRollSettlement(state)
         && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId);
     const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
     const isAttackSnapshotDie = phase === 'defensiveRoll'
@@ -253,7 +252,7 @@ const validateDieInteraction = (
         const actorScope = mode === 'modify'
             ? currentRollContext.policy.modifiableBy
             : currentRollContext.policy.rerollableBy;
-        if (currentRollContext.policy.ultimateLocked === true || actorScope === 'none') {
+        if (actorScope === 'none') {
             return fail('dice_locked');
         }
     }
@@ -1332,12 +1331,10 @@ const validateUseToken = (
     }
 
     const isRollPhase = phase === 'offensiveRoll' || phase === 'defensiveRoll';
-    const canUseDuringRoll = isRollPhase
+    const canUseDuringRoll = !pendingDamage
+        && isRollPhase
         && tokenDef.activeUse?.timing?.includes('duringRoll');
     if (canUseDuringRoll) {
-        if (pendingDamage) {
-            return fail('invalid_token_timing');
-        }
         if (getRollerId(state, phase) !== playerId) {
             return fail('player_mismatch');
         }
@@ -1496,9 +1493,6 @@ const validateRerollBonusDie = (
 ): ValidationResult => {
     if (!state.pendingBonusDiceSettlement || !isCurrentBonusRollSettlement(state)) {
         return fail('no_pending_bonus_dice');
-    }
-    if (state.pendingBonusDiceSettlement.ultimateLocked === true) {
-        return fail('dice_locked');
     }
     if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
         return fail('player_mismatch');

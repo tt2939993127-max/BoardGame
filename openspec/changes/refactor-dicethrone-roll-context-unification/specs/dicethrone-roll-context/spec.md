@@ -9,14 +9,22 @@ DiceThrone SHALL expose at most one current roll context as a single current rol
 - **THEN** they MUST read the same current roll context
 - **AND** MUST NOT independently treat `core.dice`, bonus settlement data, or display-only events as additional current dice sources
 
-#### Scenario: Later roll overwrites previous current dice
+#### Scenario: Later independent roll overwrites previous current dice
 - **GIVEN** the current roll slot contains a previous roll result
-- **WHEN** a later card, token, passive ability, status effect, or game step produces another roll
+- **WHEN** an independent later card, token, passive ability, status effect, or game step produces another roll
 - **THEN** the later roll MUST overwrite the current roll slot
 - **AND** the previous roll MUST stop being a legal target for normal dice modification commands
 - **AND** any previous roll value needed by later settlement MUST have been committed as settlement input before overwrite
 
-#### Scenario: Overwritten dice do not create an unruled recovery action
+#### Scenario: Temporary child dice restore the parent roll automatically
+- **GIVEN** an unresolved attack or effect roll is current
+- **AND** its existing flow produces a temporary bonus die or extra effect die
+- **WHEN** the player confirms the temporary die's final result
+- **THEN** the temporary die MUST settle from its final accepted face
+- **AND** the suspended parent roll MUST become the sole current roll context again
+- **AND** the phase and roller MUST continue from that restored parent context instead of advancing to another player or AI
+
+#### Scenario: Internal parent restoration does not create a player recovery action
 - **GIVEN** a previous roll has been overwritten by a later roll
 - **WHEN** the UI, command registry, or internal state handles the overwritten roll
 - **THEN** it MUST NOT expose a player recovery button, command, or new settlement action without an independent rule source
@@ -31,12 +39,18 @@ DiceThrone SHALL model main roll dice, targeting roll dice, rules-modifiable ext
 - **THEN** the result MUST be represented as the current roll context instead of a display-only recap
 - **AND** any rule-legal dice modification window MUST use that same context
 
-#### Scenario: Ability extra roll remains interactive when the rules still allow interference
+#### Scenario: Ability extra roll remains interactive regardless of source flags
 - **GIVEN** an ability, card, token, or status effect triggers an extra die roll during attack or damage resolution
-- **AND** the rules do not mark that roll as locked or unmodifiable
+- **AND** the result has not been settled
 - **WHEN** the roll result appears
 - **THEN** the system MUST keep it in the current roll context
 - **AND** MUST NOT immediately collapse it into display-only settlement
+
+#### Scenario: Temporary die always awaits confirmation before settlement
+- **GIVEN** an ability, card, token, or status effect produces a temporary die
+- **WHEN** its result is shown to the player
+- **THEN** the system MUST show a confirmation path before final settlement
+- **AND** MUST NOT auto-settle solely because the die has no legal reroll or modification
 
 #### Scenario: Evasion roll can be modified before damage is finalized
 - **GIVEN** a player spends an evasion token and rolls to negate incoming damage
@@ -63,7 +77,7 @@ DiceThrone SHALL make every generic dice modification, reroll, passive reroll, a
 - **AND** policy MUST decide legality rather than hard-coding offensive or defensive main-roll phases
 
 ### Requirement: DiceThrone SHALL Apply a Single Roll Context Policy Matrix
-DiceThrone SHALL resolve who may modify, reroll, pass, or settle a roll from a single policy source that accounts for roll kind, owner, target, teams, current phase, response window, and Ultimate lock state.
+DiceThrone SHALL resolve who may modify, reroll, pass, or settle a roll from a single policy source that accounts for roll kind, owner, target, teams, current phase, and response window. Historical presentation or Ultimate-source flags MUST NOT remove the normal modification path for an unsettled roll.
 
 #### Scenario: Multiplayer ownership is explicit
 - **GIVEN** a temporary roll occurs in a multiplayer or 2v2 context
@@ -76,6 +90,28 @@ DiceThrone SHALL resolve who may modify, reroll, pass, or settle a roll from a s
 - **WHEN** the teammate attempts a dice action during the current roll context
 - **THEN** the system MUST allow or reject the action based on the context policy
 - **AND** MUST NOT require a separate teammate-only bypass outside the policy matrix
+
+### Requirement: Dice Targeting SHALL Not Expand Card Timing
+DiceThrone SHALL use the current roll context policy only to decide whether a dice effect may target the current dice. Card timing SHALL remain independently constrained by the card's own timing and the active response window.
+
+#### Scenario: Main phase bonus die does not authorize a roll-phase card
+- **GIVEN** an unresolved bonus die is the current roll context
+- **AND** its policy allows a dice card to target that die
+- **WHEN** a player attempts to play a roll-phase dice card during `main1` or `main2`
+- **THEN** the command MUST be rejected for the invalid roll phase
+- **AND** the card, current die, and interaction state MUST remain unchanged
+
+#### Scenario: Legal roll phase can target an allowed bonus die
+- **GIVEN** an unresolved bonus die is the current roll context
+- **AND** its policy allows a dice card to target that die
+- **WHEN** a player plays a legal roll-phase dice card during `offensiveRoll`, `defensiveRoll`, or `targetingRoll`
+- **THEN** the resulting dice interaction MUST bind to that current roll context
+
+#### Scenario: Context target policy still rejects the card effect
+- **GIVEN** a legal roll phase is active
+- **AND** the current roll context disallows dice-card targeting
+- **WHEN** a player attempts to play a dice-targeting card
+- **THEN** the command MUST be rejected without creating a dice interaction
 
 ### Requirement: DiceThrone SHALL Settle Rolls From Final Accepted Dice
 DiceThrone SHALL base all follow-up damage, attack bonus, target selection, threshold effects, token negate results, compare outcomes, and status effects on the final accepted dice in the current roll context.
@@ -96,11 +132,17 @@ DiceThrone SHALL base all follow-up damage, attack bonus, target selection, thre
 ### Requirement: DiceThrone SHALL Block and Resume Flow Around Unresolved Current Roll Contexts
 DiceThrone SHALL halt phase progression and dependent follow-up effects while the current roll context remains unresolved, and SHALL resume only when that context is settled, skipped, locked, or otherwise legally closed.
 
-#### Scenario: Interactive roll halts the phase
-- **GIVEN** an attack effect creates a temporary roll that is still legally modifiable
-- **WHEN** the roll result is produced
+#### Scenario: Temporary roll confirmation halts the phase
+- **GIVEN** an attack effect creates a temporary roll whose final result has not been confirmed
+- **WHEN** the roll result is produced, whether or not that roll still permits a reroll or dice modification
 - **THEN** phase flow MUST halt before any damage, status, or follow-up that depends on the final roll result
 - **AND** the game MUST resume only after that current roll context resolves
+
+#### Scenario: Temporary roll resumes its parent before phase progression
+- **GIVEN** an attack or effect flow is halted for a temporary bonus die or extra effect die
+- **WHEN** that temporary die is confirmed and settles
+- **THEN** the system MUST restore the suspended parent roll before evaluating phase progression
+- **AND** AI MUST NOT receive a turn merely because the temporary die settlement cleared
 
 #### Scenario: Resolved recap does not halt the phase
 - **GIVEN** a roll is already fully resolved and shown only as a recap
@@ -123,17 +165,17 @@ DiceThrone SHALL reserve display-only dice presentation for outcomes that are al
 - **THEN** the system MAY use display-only presentation
 - **AND** that presentation SHALL NOT be the only carrier of unresolved game logic
 
-### Requirement: Ultimate Resolution Dice SHALL Be Explicitly Immutable When Locked
-DiceThrone SHALL explicitly lock dice that rules make immutable after a successful Ultimate activation and SHALL enforce that lock through the same current roll context policy.
+### Requirement: DiceThrone SHALL Allow Modification of Every Unsettled Current Die
+DiceThrone SHALL allow every unsettled current die to enter the normal modification, reroll, passive, and response-card checks. Presentation flags, lack of a free reroll, and Ultimate source metadata MUST NOT auto-settle or lock that die.
 
-#### Scenario: Ultimate lock removes illegal interference
-- **GIVEN** an Ultimate attack has already successfully activated
-- **WHEN** a subsequent roll belongs to an Ultimate-locked context
-- **THEN** the system MUST reject opponent, ally, passive, or card interference that the rules disallow
-- **AND** MUST only allow the remaining rule-legal actor set for that context
+#### Scenario: Legacy display and Ultimate flags do not lock a current die
+- **GIVEN** a pending temporary settlement carries `displayOnly` or historical `ultimateLocked` metadata
+- **WHEN** the settlement is converted into the current roll context
+- **THEN** the context MUST be open with the normal owner modification policy
+- **AND** tactical passive reroll and legal roll-card checks MUST target that die normally
 
-#### Scenario: Ultimate locked dice do not open modification interactions
-- **GIVEN** an Ultimate-locked roll is current
-- **WHEN** the system evaluates whether to open a dice modification or reroll interaction
-- **THEN** it MUST decline to open illegal modification interactions
-- **AND** MUST provide a command-level rejection if an illegal dice command is submitted anyway
+#### Scenario: No free reroll still requires confirmation
+- **GIVEN** an unsettled temporary roll has no remaining free reroll
+- **WHEN** its result is shown
+- **THEN** the UI and engine MUST expose confirmation
+- **AND** settlement MUST wait for that confirmation and read the final accepted die face

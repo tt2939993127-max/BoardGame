@@ -268,7 +268,7 @@
 | Open Design v64 PNG | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v64.png` | `REVISE / page-button-style-changed / human-review-blocked` |
 | Open Design v64 几何审计 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v64-geometry.json` | `PASS / pagination-corner-control / card-148x209` |
 | Open Design v64 审计 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v64-audit.md` | `AI_PASS_REVOKED / page-button-style-changed / implementation-blocked` |
-| Mage Wars UI 设计记忆 skill | `.codex/skill/mage-wars-ui-design-memory/SKILL.md` | `canonical-source / user-quote-review-gate` |
+| Mage Wars UI 设计记忆 skill | `.spec/skills/mage-wars-ui-design-memory/SKILL.md` | `canonical-source / user-quote-review-gate` |
 | Open Design v65 artifact 源 | `D:\codex-home\tools\open-design\.od\projects\mage-wars-ui-design\mage-wars-step1-annotated-saturated-v65.html` | `AI_PASS / mediaGenerate=false / human-review-allowed-in-chat` |
 | Open Design v65 元数据 | `D:\codex-home\tools\open-design\.od\projects\mage-wars-ui-design\mage-wars-step1-annotated-saturated-v65.html.artifact.json` | `AI_PASS / mediaGenerate=false / implementation-blocked` |
 | Open Design v65 PNG | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v65.png` | `AI_PASS / human-review-allowed-in-chat` |
@@ -412,7 +412,7 @@
 
 ## 继续迭代门禁
 
-- 继续改视觉稿、Open Design artifact、HTML 预览或 AI 图面核验时，必须先逐项消费 `user-correction-traceability-ledger.md`；该文件是纠正覆盖账本 / drift-check，不是独立规范来源。若账本发现新规则缺 canonical-source，先回 `.codex/skill/mage-wars-ui-design-memory/SKILL.md` 或 `D:\codex-home\skills\ui-design-pipeline\SKILL.md` 补规则，再重新审图。
+- 继续改视觉稿、Open Design artifact、HTML 预览或 AI 图面核验时，必须先逐项消费 `user-correction-traceability-ledger.md`；该文件是纠正覆盖账本 / drift-check，不是独立规范来源。若账本发现新规则缺 canonical-source，先回 `.spec/skills/mage-wars-ui-design-memory/SKILL.md` 或 `D:\codex-home\skills\ui-design-pipeline\SKILL.md` 补规则，再重新审图。
 - 继续改视觉稿、Open Design artifact、HTML 预览或 AI 图面核验时，必须先重读 `board-ui-preflight-matrix.md`、学徒法术书合同、学徒区域锚点合同和已重构 UI 设计。
 - 继续改视觉稿、Open Design artifact、HTML 预览或 AI 图面核验前，必须先消费 `external-ui-methodology-baseline.md`，并输出新的文字 UI 设计；不能直接从 v21 / v22 微调。
 - 后续多设计稿必须以 v21 作为第一张对照基线，新增候选统一落到 `docs/games/mage-wars/design/generated/skill-drafts-v2/`，并各自对应独立 Open Design artifact、独立 PNG 和独立审计；不得再用同页总览或同母版微调作为多方案。

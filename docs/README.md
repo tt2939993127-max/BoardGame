@@ -12,7 +12,7 @@
 | 前后端/API/通用框架 | docs/framework/ + docs/api/README.md + docs/architecture/ | 项目级公共技术文档放这里，不写单个游戏的临时结论。 |
 | 单个游戏的规则、设计、流程、用户故事 | docs/games/<gameId>/ | 只服务单个游戏的文档默认落在这里；不要在 docs 顶层为单游戏长期扩第二套入口。 |
 | 游戏原始规则或录入真相源 | src/games/<gameId>/rule/ 或 docs/games/<gameId>/sources/ | 改规则/机制前必须先锁定对应真相源；同一来源若有双份，先比对再决定迁移。 |
-| 项目专用 workflow / AI 技能 | .codex/skill/README.md | BoardGame 项目 skill 的唯一目录是 .codex/skill/。 |
+| 项目专用 workflow / AI 技能 | .spec/skills/README.md | BoardGame 项目 skill 的唯一目录是 .spec/skills/。 |
 | 审计证据、截图证据、修复记录 | `evidence/README.md` | 这是历史证据和审计账本，不是默认开发入口；需要按游戏/日期/主题定位。 |
 | 临时计划、临时探针、测试输出 | temp/、tmp/、test-results/、根目录 task_plan.md / progress.md / findings.md | 这些默认只能作为候选线索；接续前必须重新锁定当前目标。 |
 
@@ -54,6 +54,6 @@
 ## 本轮盘点数字
 
 - 文档总数：约 3,748 个 Markdown / 文本文档。
-- 主要分布：evidence/ 约 1,916 个，openspec/ 约 1,000 个，docs/ 约 478 个，.codex/skill/ 约 54 个。
+- 主要分布：evidence/ 约 1,916 个，openspec/ 约 1,000 个，docs/ 约 478 个，.spec/skills/ 约 54 个。
 - 本轮已清理的精确重复顶层副本：docs/features/smashup-base-restrictions-ui.md、docs/features/cardia-card-magnify.md、docs/refactor/dicethrone-hand-area-refactor.md、docs/refactor/dicethrone-auto-advance-upkeep-income.md、docs/improvements/smashup-actionlog-reason-display.md、docs/plans/2026-02-20-smashup-cursor-design.md、docs/dicethrone-new-heroes-progress.md、docs/dicethrone-audio-plan.md。
 - 最大剩余风险点：根目录历史计划/日志过大、规则真相源仍有双份、OpenSpec 已完成提案未归档；evidence 图片重复已识别为独立历史证据仓候选，本轮不处理。

@@ -9,12 +9,12 @@
 
 | 用户目标 / 明确拒绝项 | 当前 change | 设计落点 | 实现落点 | 验证落点 | 当前状态 |
 |---|---|---|---|---|---|
-| 检查 `skill` 是否要更新 | shared baseline | `.codex/skill/create-new-game/SKILL.md`、`.codex/skill/boardgame-ui-imagegen/SKILL.md` | 主工作区 shared skill | 文档 diff + 当前 skill 门禁自审 | 已完成 |
+| 检查 `skill` 是否要更新 | shared baseline | `.spec/skills/create-new-game/SKILL.md`、`.spec/skills/boardgame-ui-imagegen/SKILL.md` | 主工作区 shared skill | 文档 diff + 当前 skill 门禁自审 | 已完成 |
 | UI 设计稿不能再误做成“资源壳层 / 录入界面” | `add-betrayal-foundation` | `design-system/games/betrayal.md`、`docs/games/betrayal/design/README.md` | 暂不进入正式实现 | 文档审计 + 设计索引核对 | 已完成 |
 | 参考卡应提炼成交互按钮，而不是在运行时整张展示 | shared baseline + `add-betrayal-foundation` | shared skill 新门禁 + `design-system/games/betrayal.md` | 暂不进入正式实现 | skill 条款 + 设计索引核对 | 已完成 |
 | 当前探索者持有的 `Item / Omen` 不能在运行态被忽略 | `add-betrayal-foundation` | `design-system/games/betrayal.md` | 暂不进入正式实现 | 设计规范核对 | 已完成 |
 | 默认先从规则提炼 UI，确认必要元素和布局 | shared baseline + `add-betrayal-foundation` | shared skill 三步门禁 + `generated/betrayal-runtime-prehaunt-board-v4.png` | 暂不进入正式实现 | 设计索引 + 任务门禁核对 | 已完成产物 |
-| 第二步应在同布局上给出不同风格 UI | shared baseline | `.codex/skill/create-new-game/SKILL.md`、`.codex/skill/boardgame-ui-imagegen/SKILL.md` | 暂不进入正式实现 | skill 条款审计 | 已完成 |
+| 第二步应在同布局上给出不同风格 UI | shared baseline | `.spec/skills/create-new-game/SKILL.md`、`.spec/skills/boardgame-ui-imagegen/SKILL.md` | 暂不进入正式实现 | skill 条款审计 | 已完成 |
 | 第三步应在已选风格下生成不同界面，例如角色选择、运行时、结算 | shared baseline + `add-betrayal-foundation` | `design/README.md` + `style-b-screen-contract.md` | 暂不进入正式实现 | 设计索引 + 页面合同核对 | 已完成产物 |
 | 不要把素材目录里“看起来像图”的文件误当正式资源 | `add-betrayal-foundation` | `resource-gap-audit.md`、`resource-structure-reference.md` | `public/assets/betrayal/` 暂存层合同 | 文档审计 + 目录结构核对 | 已完成 |
 | 先理解现有游戏例如大杀四方的资源结构 | `add-betrayal-foundation` 输入证据 | `resource-gap-audit.md`、`foundation-implementation-map.md` | 对照 `smashup/qidahen` 的正式资源树 | 文档引用与路径对照 | 已完成 |

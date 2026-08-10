@@ -164,7 +164,7 @@ describe('BonusDieOverlay', () => {
         expect(screen.queryByTestId('bonus-die-overlay')).toBeNull();
     });
 
-    it('有太极时显示重掷提示与确认伤害按钮', () => {
+    it('有太极时只显示重掷提示，不复制奖励骰确认入口', () => {
         const html = renderToStaticMarkup(
             <BonusDieOverlay
                 isVisible
@@ -180,7 +180,7 @@ describe('BonusDieOverlay', () => {
         );
 
         expect(html).toContain('bonusDie.selectToReroll:cost=2,token=tokens.taiji.name');
-        expect(html).toContain('bonusDie.confirmDamage');
+        expect(html).not.toContain('bonusDie.confirmDamage');
         expect(html).toContain('bonusDie.total');
         expect(html).toContain('cursor-pointer');
         expect(html).toContain('bg-amber-600/80');
@@ -206,7 +206,7 @@ describe('BonusDieOverlay', () => {
         expect(html).not.toContain('tokens.taiji.name');
     });
 
-    it('无太极时显示无法重掷提示但仍保留确认伤害按钮', () => {
+    it('无太极时显示无法重掷提示，不复制奖励骰确认入口', () => {
         const html = renderToStaticMarkup(
             <BonusDieOverlay
                 isVisible
@@ -223,7 +223,7 @@ describe('BonusDieOverlay', () => {
 
         expect(html).toContain('bonusDie.noTokenToReroll:token=tokens.taiji.name');
         expect(html).not.toContain('bonusDie.continue');
-        expect(html).toContain('bonusDie.confirmDamage');
+        expect(html).not.toContain('bonusDie.confirmDamage');
         expect(html).not.toContain('cursor-pointer');
         expect(html).not.toContain('bg-amber-600/80');
     });
@@ -245,7 +245,7 @@ describe('BonusDieOverlay', () => {
         expect(html).not.toContain('bonusDie.confirmDamage');
     });
 
-    it('可改骰的 displayOnly 结算保留确认伤害入口', () => {
+    it('可改骰的 displayOnly 结算不复制确认入口', () => {
         const html = renderToStaticMarkup(
             <BonusDieOverlay
                 isVisible
@@ -258,7 +258,7 @@ describe('BonusDieOverlay', () => {
             />
         );
 
-        expect(html).toContain('bonusDie.confirmDamage');
+        expect(html).not.toContain('bonusDie.confirmDamage');
         expect(html).not.toContain('bonusDie.closeSpotlight');
     });
 
@@ -341,9 +341,8 @@ describe('BonusDieOverlay', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('阻塞式奖励骰结算的关闭按钮应走确认伤害收口，而不是只做本地关闭', () => {
+    it('阻塞式奖励骰结算不再渲染专用确认或关闭入口', () => {
         const onClose = vi.fn();
-        const onSkipReroll = vi.fn();
 
         render(
             <BonusDieOverlay
@@ -351,12 +350,12 @@ describe('BonusDieOverlay', () => {
                 onClose={onClose}
                 bonusDice={buildBonusDice()}
                 canReroll={false}
-                onSkipReroll={onSkipReroll}
+                onSkipReroll={vi.fn()}
             />
         );
 
-        fireEvent.click(screen.getByLabelText('bonusDie.confirmDamage'));
-        expect(onSkipReroll).toHaveBeenCalledTimes(1);
+        expect(screen.queryByLabelText('bonusDie.confirmDamage')).toBeNull();
+        expect(screen.queryByLabelText('bonusDie.closeSpotlight')).toBeNull();
         expect(onClose).not.toHaveBeenCalled();
     });
 

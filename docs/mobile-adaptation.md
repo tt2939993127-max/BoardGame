@@ -8,7 +8,7 @@
 - 移动端以 `手机横屏尽量适配` 为主，不承诺所有游戏都完整支持。
 - `WebView / App 壳 / 小程序 web-view` 只是分发容器，不是第二套 UI。
 - 移动端适配的真实验收对象，是同一套 H5 / PWA 在手机与平板视口下的真实交互。
-- 游戏移动端适配的执行单一真相源是 `.codex/skill/adapt-game-mobile/SKILL.md`；本文只保留架构背景和引用口径。
+- 游戏移动端适配的执行单一真相源是 `.spec/skills/adapt-game-mobile/SKILL.md`；本文只保留架构背景和引用口径。
 
 ## PC 优先硬规则
 

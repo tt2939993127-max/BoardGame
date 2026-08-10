@@ -265,7 +265,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         expect(finalEventTypes).toContain('DIE_MODIFIED');
     });
 
-    test('主要阶段待结算奖励骰应允许红牌打出并修改奖励骰', async ({ page, game }, testInfo) => {
+    test('主要阶段待结算奖励骰不得放行掷骰时机牌', async ({ page, game }, testInfo) => {
         await game.openTestGame('dicethrone');
 
         await game.setupScene({
@@ -330,7 +330,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                         modifiableBy: 'owner',
                         rerollableBy: 'owner',
                         allowPassiveReroll: true,
-                        allowRollCards: true,
+                        allowDiceCardTargeting: true,
                         ultimateLocked: false,
                         blocksPhaseFlow: true,
                     },
@@ -353,7 +353,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 bonusDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
                 allowDiceModification: state?.core?.pendingBonusDiceSettlement?.allowDiceModification ?? false,
                 currentRollKind: state?.core?.currentRollContext?.kind ?? null,
-                allowRollCards: state?.core?.currentRollContext?.policy?.allowRollCards ?? false,
+                allowDiceCardTargeting: state?.core?.currentRollContext?.policy?.allowDiceCardTargeting ?? false,
             };
         }, { timeout: 10000 }).toMatchObject({
             phase: 'main1',
@@ -361,70 +361,44 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             bonusDieValue: 3,
             allowDiceModification: true,
             currentRollKind: 'bonus',
-            allowRollCards: true,
+            allowDiceCardTargeting: true,
         });
 
-        await game.screenshot('main1-bonus-die-before-red-card', testInfo);
+        const eventCountBeforeAttempt = await page.evaluate(() => (
+            (window as any).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.eventStream?.entries?.length ?? 0
+        ));
 
         await dragHandCardToPlay(page, 'card-play-six');
 
         await expect.poll(async () => {
-            const interaction = (await game.getState())?.sys?.interaction?.current;
-            const meta = interaction?.data?.meta;
-            return {
-                dtType: meta?.dtType ?? null,
-                mode: meta?.dieModifyConfig?.mode ?? null,
-                targetValue: meta?.dieModifyConfig?.targetValue ?? null,
-                allowedDieIds: interaction?.data?.allowedDieIds ?? null,
-            };
-        }, { timeout: 5000 }).toMatchObject({
-            dtType: 'modifyDie',
-            mode: 'set',
-            targetValue: 6,
-            allowedDieIds: [0],
-        });
-
-        await game.screenshot('main1-bonus-die-red-card-selecting-die', testInfo);
-
-        const dieButton = page.locator('[data-testid="die-button-0"]').first();
-        await expect(dieButton).toBeVisible({ timeout: 5000 });
-        await expect(dieButton).toHaveAttribute('data-clickable', 'true');
-        await dieButton.click();
-
-        await expect.poll(async () => {
             const state = await game.getState();
-            const lastEvents = (state?.sys?.eventStream?.entries ?? []).slice(-8);
             return {
+                hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
                 bonusDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
-                bonusDieFace: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.face ?? null,
                 interactionKind: state?.sys?.interaction?.current?.kind ?? null,
-                handIds: (state?.core?.players?.['0']?.hand ?? []).map((card: any) => card.id),
-                lastEventTypes: lastEvents.map((entry: any) => entry.event?.type),
             };
-        }, { timeout: 5000 }).toMatchObject({
-            bonusDieValue: 6,
-            bonusDieFace: 'lotus',
+        }, { timeout: 5000 }).toEqual({
+            hasCard: true,
+            bonusDieValue: 3,
             interactionKind: null,
-            handIds: [],
         });
-
-        await game.screenshot('main1-bonus-die-red-card-modified', testInfo);
 
         const finalState = await game.getState();
         const finalHandIds = (finalState?.core?.players?.['0']?.hand ?? []).map((card: any) => card.id);
-        const finalEventTypes = (finalState?.sys?.eventStream?.entries ?? [])
-            .slice(-8)
+        const newEventTypes = (finalState?.sys?.eventStream?.entries ?? [])
+            .slice(eventCountBeforeAttempt)
             .map((entry: any) => entry.event?.type);
 
         expect(finalState?.sys?.phase ?? null).toBe('main1');
-        expect(finalState?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null).toBe(6);
-        expect(finalState?.core?.pendingBonusDiceSettlement?.dice?.[0]?.face ?? null).toBe('lotus');
-        expect(finalHandIds).not.toContain('card-play-six');
-        expect(finalEventTypes).toContain('CARD_PLAYED');
-        expect(finalEventTypes).toContain('DIE_MODIFIED');
+        expect(finalState?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null).toBe(3);
+        expect(finalHandIds).toContain('card-play-six');
+        expect(newEventTypes).not.toContain('CARD_PLAYED');
+        expect(newEventTypes).not.toContain('DIE_MODIFIED');
+
+        await game.screenshot('main1-bonus-die-roll-card-rejected', testInfo);
     });
 
-    test('终极结算骰锁定时改骰牌应保留在手牌并显示拒绝提示', async ({ page, game }, testInfo) => {
+    test('终极来源的未结算骰允许改骰并在确认后结算', async ({ page, game }, testInfo) => {
         await game.openTestGame('dicethrone');
 
         await game.setupScene({
@@ -464,8 +438,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                     maxRerollCount: 0,
                     readyToSettle: false,
                     resolutionMode: 'none',
-                    allowDiceModification: false,
-                    ultimateLocked: true,
+                    allowDiceModification: true,
                 },
                 currentRollContext: {
                     id: 'bonus:e2e-ultimate-locked-die',
@@ -482,13 +455,13 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                         isKept: false,
                         ownerId: '0',
                     }],
-                    status: 'locked',
+                    status: 'open',
                     policy: {
-                        modifiableBy: 'none',
-                        rerollableBy: 'none',
-                        allowPassiveReroll: false,
-                        allowRollCards: false,
-                        ultimateLocked: true,
+                        modifiableBy: 'owner',
+                        rerollableBy: 'owner',
+                        allowPassiveReroll: true,
+                        allowDiceCardTargeting: true,
+                        ultimateLocked: false,
                         blocksPhaseFlow: true,
                     },
                     settlement: { mode: 'none' },
@@ -502,17 +475,21 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             return {
                 hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
                 contextStatus: state?.core?.currentRollContext?.status ?? null,
-                allowRollCards: state?.core?.currentRollContext?.policy?.allowRollCards ?? null,
+                allowDiceCardTargeting: state?.core?.currentRollContext?.policy?.allowDiceCardTargeting ?? null,
             };
         }, { timeout: 10000 }).toMatchObject({
             hasCard: true,
-            contextStatus: 'locked',
-            allowRollCards: false,
+            contextStatus: 'open',
+            allowDiceCardTargeting: true,
         });
 
         await dragHandCardToPlay(page, 'card-play-six');
 
-        await expect(page.getByText('当前骰区不允许打出改骰牌')).toBeVisible({ timeout: 5000 });
+        const dieButton = page.locator('[data-testid="die-button-0"]').first();
+        await expect(dieButton).toBeVisible({ timeout: 5000 });
+        await expect(dieButton).toHaveAttribute('data-clickable', 'true');
+        await dieButton.click();
+
         await expect.poll(async () => {
             const state = await game.getState();
             const eventTypes = (state?.sys?.eventStream?.entries ?? [])
@@ -522,13 +499,200 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 hasCard: !!state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-play-six'),
                 interactionKind: state?.sys?.interaction?.current?.kind ?? null,
                 eventTypes,
+                bonusDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
+                contextStatus: state?.core?.currentRollContext?.status ?? null,
             };
         }, { timeout: 5000 }).toMatchObject({
-            hasCard: true,
+            hasCard: false,
             interactionKind: null,
+            bonusDieValue: 6,
+            contextStatus: 'open',
         });
 
-        await game.screenshot('终极结算骰-改骰牌锁定', testInfo);
+        await game.screenshot('终极来源骰-改骰后等待确认', testInfo);
+        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
+        await expect(confirmButton).toBeVisible({ timeout: 5000 });
+        await confirmButton.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                pendingBonusDiceSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
+                currentRollContext: state?.core?.currentRollContext ?? null,
+            };
+        }, { timeout: 5000 }).toMatchObject({
+            pendingBonusDiceSettlement: null,
+            currentRollContext: null,
+        });
+
+        await game.screenshot('终极来源骰-改骰后确认结算', testInfo);
+    });
+
+    test('野蛮人临时奖励骰确认后恢复主攻击骰，不切给僧侣或对手回合', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone');
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 0, HP: 50 },
+            },
+            player1: {
+                resources: { CP: 0, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'barbarian', '1': 'monk' },
+                hostStarted: true,
+            },
+        });
+
+        await page.evaluate(() => {
+            const attackDice = [6, 5, 4, 3, 2].map((value, index) => ({
+                id: index,
+                definitionId: 'barbarian-dice',
+                value,
+                symbol: null,
+                symbols: [],
+                isKept: false,
+                ownerId: '0',
+                displayOnly: false,
+            }));
+            const parentRollContext = {
+                id: 'roll:offensive:0:1',
+                kind: 'offensive',
+                ownerPlayerId: '0',
+                targetPlayerId: '1',
+                phase: 'offensiveRoll',
+                dice: attackDice,
+                status: 'open',
+                policy: {
+                    modifiableBy: 'owner',
+                    rerollableBy: 'owner',
+                    allowPassiveReroll: true,
+                    allowDiceCardTargeting: true,
+                    ultimateLocked: false,
+                    blocksPhaseFlow: true,
+                },
+                settlement: { mode: 'selectAttack' },
+                display: { surface: 'diceTray', replayOnly: false },
+            };
+            const temporaryBonusDice = [{
+                index: 0,
+                value: 3,
+                face: 'sabre',
+                effectParams: { value: 3 },
+            }];
+            const temporaryRollContext = {
+                id: 'bonus:e2e-temporary-barbarian-die',
+                kind: 'bonus',
+                ownerPlayerId: '0',
+                targetPlayerId: '1',
+                sourceAbilityId: 'e2e-temporary-barbarian-die',
+                dice: temporaryBonusDice.map((die) => ({
+                    id: die.index,
+                    definitionId: 'barbarian-dice',
+                    value: die.value,
+                    symbol: die.face,
+                    symbols: [die.face],
+                    isKept: false,
+                    ownerId: '0',
+                    displayOnly: false,
+                })),
+                status: 'open',
+                policy: {
+                    modifiableBy: 'owner',
+                    rerollableBy: 'owner',
+                    allowPassiveReroll: true,
+                    allowDiceCardTargeting: true,
+                    ultimateLocked: false,
+                    blocksPhaseFlow: true,
+                },
+                settlement: {
+                    mode: 'attackBonus',
+                    metadata: { pendingBonusDiceSettlementId: 'e2e-temporary-barbarian-die' },
+                },
+                display: { surface: 'diceTray', replayOnly: false },
+                suspendedParent: parentRollContext,
+            };
+            (window as any).__BG_TEST_HARNESS__?.state?.patch?.({
+                sys: {
+                    phase: 'offensiveRoll',
+                    interaction: { current: undefined, queue: [] },
+                },
+                core: {
+                    activePlayerId: '0',
+                    dice: attackDice,
+                    rollCount: 1,
+                    rollLimit: 3,
+                    rollDiceCount: 5,
+                    rollConfirmed: false,
+                    pendingBonusDiceSettlement: {
+                        id: 'e2e-temporary-barbarian-die',
+                        sourceAbilityId: 'e2e-temporary-barbarian-die',
+                        attackerId: '0',
+                        targetId: '1',
+                        dice: temporaryBonusDice,
+                        rerollCostTokenId: '',
+                        rerollCostAmount: 0,
+                        rerollCount: 0,
+                        maxRerollCount: 0,
+                        readyToSettle: false,
+                        allowDiceModification: true,
+                        displayOnly: false,
+                        resolutionMode: 'attackBonus',
+                    },
+                    currentRollContext: temporaryRollContext,
+                },
+            });
+        });
+
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        const temporaryDie = diceTray.getByTestId('die-button-0');
+        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
+        await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(1);
+        await expect(temporaryDie.getByTestId('dice-2d')).toHaveAttribute(
+            'data-sprite-url',
+            /\/dicethrone\/images\/barbarian\/(?:compressed\/)?dice\.(?:webp|png)(?:[?#].*)?$/,
+        );
+        await expect(page.locator('[data-tutorial-id="advance-phase-button"]')).toBeDisabled();
+        await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
+        await game.screenshot('01-野蛮人临时奖励骰等待确认', testInfo);
+
+        await confirmButton.click();
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state?.sys?.phase ?? null,
+                activePlayerId: state?.core?.activePlayerId ?? null,
+                pendingBonusDiceSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
+                currentRollContext: {
+                    id: state?.core?.currentRollContext?.id ?? null,
+                    kind: state?.core?.currentRollContext?.kind ?? null,
+                    ownerPlayerId: state?.core?.currentRollContext?.ownerPlayerId ?? null,
+                    dice: state?.core?.currentRollContext?.dice?.map((die: any) => die.value) ?? [],
+                    hasSuspendedParent: Boolean(state?.core?.currentRollContext?.suspendedParent),
+                },
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            phase: 'offensiveRoll',
+            activePlayerId: '0',
+            pendingBonusDiceSettlement: null,
+            currentRollContext: {
+                id: 'roll:offensive:0:1',
+                kind: 'offensive',
+                ownerPlayerId: '0',
+                dice: [6, 5, 4, 3, 2],
+                hasSuspendedParent: false,
+            },
+        });
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(5);
+        await expect(diceTray.locator('[data-sprite-url]')).toHaveCount(5);
+        await expect.poll(() => diceTray.locator('[data-sprite-url]').evaluateAll((dice) => (
+            dice.every((die) => die.getAttribute('data-sprite-url')?.includes('/dicethrone/images/barbarian/'))
+        ))).toBe(true);
+        await game.screenshot('02-确认后恢复野蛮人主攻击骰且未切换回合', testInfo);
     });
 
     test('闪避骰进入当前骰区后，战术优势可重掷并重新计算免伤', async ({ page, game }, testInfo) => {
@@ -705,6 +869,16 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             currentDamage: 5,
             isFullyEvaded: false,
             tacticalAdvantage: 0,
+        });
+        await expect.poll(async () => evasionDie.getByTestId('dice-2d').evaluate((die) => {
+            const cube = die.querySelector('[data-testid="dice-2d-cube"]');
+            return {
+                rollAnimation: die.getAttribute('data-roll-animation'),
+                animationName: cube instanceof HTMLElement ? getComputedStyle(cube).animationName : null,
+            };
+        }), { timeout: 5000 }).toMatchObject({
+            rollAnimation: 'settled',
+            animationName: 'none',
         });
         await game.screenshot('闪避骰-战术优势重掷后', testInfo);
     });

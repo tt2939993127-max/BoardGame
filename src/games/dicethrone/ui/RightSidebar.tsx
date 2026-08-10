@@ -63,9 +63,9 @@ export const RightSidebar = ({
     multistepInteraction,
     showDiceTray = true,
     showDiceActions = true,
-    showBonusDiceConfirm = false,
-    canConfirmBonusDice = false,
-    onConfirmBonusDice,
+    isBonusDiceSettlement = false,
+    canRerollBonusDice = false,
+    onRerollBonusDice,
     activeModifiers,
     attackModifierBonusDamage,
     passiveAbilityProps,
@@ -102,9 +102,9 @@ export const RightSidebar = ({
     multistepInteraction?: MultistepInteractionState<DiceModifyResult | DiceSelectResult>;
     showDiceTray?: boolean;
     showDiceActions?: boolean;
-    showBonusDiceConfirm?: boolean;
-    canConfirmBonusDice?: boolean;
-    onConfirmBonusDice?: () => void;
+    isBonusDiceSettlement?: boolean;
+    canRerollBonusDice?: boolean;
+    onRerollBonusDice?: (dieIndex: number) => void;
     activeModifiers?: ActiveModifier[];
     attackModifierBonusDamage?: number;
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
@@ -227,24 +227,12 @@ export const RightSidebar = ({
                         interaction={isDiceMultistep ? interaction : undefined}
                         multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
                         isPassiveRerollMode={!!passiveAbilityProps?.rerollSelectingAction}
+                        bonusDiceReroll={onRerollBonusDice ? {
+                            canReroll: canRerollBonusDice,
+                            onReroll: onRerollBonusDice,
+                        } : undefined}
                     />
                 </div>
-                )}
-                {showBonusDiceConfirm && (
-                    <div className={`${actionRailWidthClassName} flex justify-center`}>
-                        <GameButton
-                            onClick={onConfirmBonusDice}
-                            disabled={!canConfirmBonusDice}
-                            variant={canConfirmBonusDice ? 'primary' : 'secondary'}
-                            clickSoundKey={null}
-                            className={`${advanceButtonSizeClassName} w-full`}
-                            size="sm"
-                            data-testid="bonus-dice-confirm-button"
-                            data-tutorial-id="bonus-dice-confirm-button"
-                        >
-                            {t('bonusDie.confirmBonusDice')}
-                        </GameButton>
-                    </div>
                 )}
                 {showDiceActions && (
                     <DiceActions
@@ -260,6 +248,7 @@ export const RightSidebar = ({
                         setIsRolling={setIsRolling}
                         interaction={isDiceMultistep ? interaction : undefined}
                         multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
+                        isBonusDiceSettlement={isBonusDiceSettlement}
                     />
                 )}
                 <div className={`w-full flex justify-center ${showAdvancePhaseButton ? '' : 'invisible pointer-events-none'}`}>

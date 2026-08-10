@@ -29,7 +29,7 @@
 - `D:\codex-home\skills\show-image-to-user\SKILL.md`
 - `D:\codex-home\skills\ui-design-pipeline\SKILL.md`
 - `D:\codex-home\skills\ui-ux-pro-max\SKILL.md`
-- `D:\gongzuo\webgame\BoardGame\.codex\skill\boardgame-ui-imagegen\SKILL.md`
+- `D:\gongzuo\webgame\BoardGame\.spec\skills\boardgame-ui-imagegen\SKILL.md`
 
 ## 规则对象结论与画面映射
 

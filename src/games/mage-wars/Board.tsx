@@ -500,7 +500,6 @@ function PreparedSpellCard({
     label,
     role,
     compact = false,
-    shelf = false,
     testId,
     preparedScope,
     selected = false,
@@ -512,7 +511,6 @@ function PreparedSpellCard({
     label: string;
     role?: 'source';
     compact?: boolean;
-    shelf?: boolean;
     testId?: string;
     preparedScope?: 'self' | 'opponent';
     selected?: boolean;
@@ -525,7 +523,7 @@ function PreparedSpellCard({
     const cardAspectRatio = cardId == null || hidden
         ? SPELL_CARD_BACK_ASPECT_RATIO
         : getMageWarsSpellCardAspectRatio(cardId) ?? SPELL_CARD_BACK_ASPECT_RATIO;
-    const cardSizeClass = compact ? 'h-[5.05rem]' : shelf ? 'h-[11rem]' : 'h-[14rem]';
+    const cardSizeClass = compact ? 'h-[5.05rem]' : 'h-[14rem]';
     const cardSizeStyle = { aspectRatio: cardAspectRatio };
 
     const content = (
@@ -950,7 +948,6 @@ function SpellbookShelf({
                         key={`${player.id}-spellbook-desktop-${cardId}`}
                         cardId={cardId}
                         label={getMageWarsSpellCardName(cardId) ?? t('privateZones.spell')}
-                        shelf
                         testId="mage-wars-desktop-spellbook-card"
                         selected={selectedCardIds.includes(cardId)}
                         disabled={!planning}
@@ -1298,7 +1295,7 @@ function ArenaStage({
                     isLegalTargetZone ? t('arena.legalTarget') : null,
                 ].filter(Boolean).join('，');
                 const entityCount = fieldObjects.length + zoneOccupants.length;
-                const usesOwnershipLanes = fieldCardIds.length === 0 && entityCount >= 2;
+                const usesOwnershipLanes = fieldCardIds.length === 0 && entityCount > 0;
                 const selfFieldObjects = fieldObjects.filter((object) => object.ownerId === viewingPlayerId);
                 const opponentFieldObjects = fieldObjects.filter((object) => object.ownerId !== viewingPlayerId);
                 const selfZoneOccupants = zoneOccupants.filter((occupant) => occupant.id === viewingPlayerId);

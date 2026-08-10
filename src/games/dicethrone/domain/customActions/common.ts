@@ -118,7 +118,7 @@ function resolveAllowedDieIdsForDiceInteraction(
     attackerId?: PlayerId,
 ): number[] | undefined {
     if (!state) return undefined;
-    if (state.pendingBonusDiceSettlement?.allowDiceModification && isCurrentBonusRollSettlement(state)) {
+    if (state.pendingBonusDiceSettlement && isCurrentBonusRollSettlement(state)) {
         return getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).map(die => die.index);
     }
     const currentRollDice = getCurrentRollDice(state, state.turnPhase);

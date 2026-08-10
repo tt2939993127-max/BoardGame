@@ -81,21 +81,11 @@ export function buildBonusDiceSettlementEvents({
             targetId: settlement.targetId,
             sourceAbilityId: settlement.sourceAbilityId,
             ...(settlement.displayOnly ? { displayOnly: true } : {}),
-            ...(settlement.allowDiceModification ? { allowDiceModification: true } : {}),
+            allowDiceModification: true,
         },
         sourceCommandType,
         timestamp,
     } as import('./types').BonusDiceSettledEvent);
-
-    const shouldResolveDisplayOnlyByCurrentDice =
-        settlement.displayOnly === true
-        && settlement.allowDiceModification === true
-        && !settlement.customResolutionId
-        && settlement.resolutionMode !== 'none';
-    if (settlement.displayOnly && !shouldResolveDisplayOnlyByCurrentDice) {
-        events.push(...followupEvents);
-        return events;
-    }
 
     if (settlement.resolutionMode === 'attackBonus') {
         const attackBonus = settlement.attackBonusScale === 'halfUp'
@@ -375,22 +365,39 @@ export function executeTokenCommand(
                     }
                 }
                 if (handler) {
+                    const isFlightToken = tokenDef.id === TOKEN_IDS.FLIGHT;
+                    const customActionActorId = isFlightToken
+                        ? playerId
+                        : pendingDamage.sourcePlayerId;
+                    const customActionTargetId = isFlightToken
+                        ? (playerId === pendingDamage.sourcePlayerId
+                            ? pendingDamage.targetPlayerId
+                            : pendingDamage.sourcePlayerId)
+                        : pendingDamage.targetPlayerId;
+                    const customActionSourceAbilityId = isFlightToken
+                        ? tokenId
+                        : (pendingDamage.sourceAbilityId ?? 'token-use');
                     const customCtx: import('../domain/effects').CustomActionContext = {
                         ctx: {
-                            attackerId: pendingDamage.sourcePlayerId,
-                            defenderId: pendingDamage.targetPlayerId,
-                            sourceAbilityId: pendingDamage.sourceAbilityId ?? 'token-use',
+                            attackerId: customActionActorId,
+                            defenderId: customActionTargetId,
+                            sourceAbilityId: customActionSourceAbilityId,
                             state,
                             damageDealt: 0,
                             timestamp,
                         },
-                        targetId: pendingDamage.targetPlayerId,
-                        attackerId: pendingDamage.sourcePlayerId,
-                        sourceAbilityId: pendingDamage.sourceAbilityId ?? 'token-use',
+                        targetId: customActionTargetId,
+                        attackerId: customActionActorId,
+                        sourceAbilityId: customActionSourceAbilityId,
                         state,
                         timestamp,
                         random,
-                        action: { type: 'custom', target: 'opponent', customActionId: resolvedCustomActionId },
+                        action: {
+                            type: 'custom',
+                            target: 'opponent',
+                            customActionId: resolvedCustomActionId,
+                            params: { phase },
+                        },
                     };
                     const customEvents = handler(customCtx);
                     for (const customEvent of customEvents) {
@@ -456,8 +463,8 @@ export function executeTokenCommand(
             
             // 闪避结果进入 currentRollContext，允许改骰/重掷后再由 SKIP_TOKEN_RESPONSE 收口。
             // 其它立即完成的 Token 仍保持原有自动关闭行为。
-            if (result.fullyEvaded && !result.rollResult) {
-                const stateAfterToken = applyEvents(state, events, reduce);
+            const stateAfterToken = applyEvents(state, events, reduce);
+            if (stateAfterToken.pendingDamage?.isFullyEvaded && !result.rollResult) {
                 const updatedPendingDamage: PendingDamage = {
                     ...(stateAfterToken.pendingDamage ?? pendingDamage),
                     currentDamage: 0,
@@ -614,7 +621,7 @@ export function executeTokenCommand(
             const playerId = command.playerId;
             const settlement = state.pendingBonusDiceSettlement;
             
-            if (!playerId || !settlement || !isCurrentBonusRollSettlement(state, settlement) || settlement.ultimateLocked === true) {
+            if (!playerId || !settlement || !isCurrentBonusRollSettlement(state, settlement)) {
                 console.warn('[DiceThrone] REROLL_BONUS_DIE: invalid state');
                 break;
             }

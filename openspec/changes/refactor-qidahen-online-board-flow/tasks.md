@@ -7,4 +7,4 @@
 ## 2. Verification
 - [x] 2.1 补/改《七大恨》相关单测与 compatSource，覆盖局内剧本投票、setup 壳、playerView 与行动壳。
 - [x] 2.2 跑《七大恨》在线房间局内剧本投票到首回合前置完成的 E2E，并输出关键截图与 evidence 文档。
-- [x] 2.3 更新 `.codex/skill/create-new-game/SKILL.md` 与 `docs/ai-rules/ui-ux.md`，把“局内剧本介绍与投票、联机 seat/viewer 视角、一级/二级行动壳、同类交互复用 E2E”写成硬门禁。
+- [x] 2.3 更新 `.spec/skills/create-new-game/SKILL.md` 与 `docs/ai-rules/ui-ux.md`，把“局内剧本介绍与投票、联机 seat/viewer 视角、一级/二级行动壳、同类交互复用 E2E”写成硬门禁。

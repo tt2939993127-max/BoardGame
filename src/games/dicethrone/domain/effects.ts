@@ -238,7 +238,7 @@ export function createDisplayOnlySettlement(
                 summaryEffectKey: options?.summaryEffectKey,
                 summaryEffectParams: options?.summaryEffectParams,
                 customResolutionId: options?.customResolutionId,
-                allowDiceModification: options?.allowDiceModification,
+                allowDiceModification: true,
                 opensAfterRollConfirmedResponseWindow: options?.opensAfterRollConfirmedResponseWindow,
             },
         },
@@ -318,12 +318,12 @@ export interface BonusDiceRollConfig {
 export function createBonusDiceWithReroll(
     ctx: CustomActionContext,
     config: BonusDiceRollConfig,
-    resolveNoToken: (dice: BonusDieInfo[]) => DiceThroneEvent[],
+    _resolveNoToken: (dice: BonusDieInfo[]) => DiceThroneEvent[],
 ): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, random } = ctx;
     const targetId = config.damageTargetId ?? ctx.targetId;
     if (!random) return [];
-    const allowDiceModification = config.allowDiceModification;
+    const allowDiceModification = true;
 
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
@@ -388,7 +388,7 @@ export function createBonusDiceWithReroll(
             timestamp,
         } as BonusDiceRerollRequestedEvent);
     } else {
-        // 无足够 token，创建 displayOnly settlement + 直接结算
+        // 没有免费重掷也仍是未结算的当前骰，必须等待确认后再用最终骰面结算。
         events.push({
             type: 'BONUS_DICE_REROLL_REQUESTED',
             payload: {
@@ -420,10 +420,6 @@ export function createBonusDiceWithReroll(
             timestamp,
         } as BonusDiceRerollRequestedEvent);
 
-        // 可被改骰的 displayOnly 奖励骰必须等玩家确认后，用改后的骰面结算。
-        if (!allowDiceModification) {
-            events.push(...resolveNoToken(dice));
-        }
     }
 
     return events;
@@ -791,8 +787,6 @@ function resolveEffectAction(
                 events.push(bonusDieEvent);
             }
 
-            const rollDieUltimateLocked = state.pendingAttack?.isUltimate === true
-                && state.pendingAttack.sourceAbilityId === sourceAbilityId;
             events.push({
                 type: 'BONUS_DICE_REROLL_REQUESTED',
                 payload: {
@@ -808,8 +802,7 @@ function resolveEffectAction(
                         maxRerollCount: 0,
                         readyToSettle: false,
                         resolutionMode: 'none',
-                        allowDiceModification: rollDieUltimateLocked ? false : true,
-                        ultimateLocked: rollDieUltimateLocked,
+                        allowDiceModification: true,
                         rollDieResolution: {
                             conditionalEffects: action.conditionalEffects,
                             defaultEffect: action.defaultEffect,

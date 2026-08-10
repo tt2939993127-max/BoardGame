@@ -170,39 +170,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         });
         onReroll(dieIndex);
     }, [bonusDice?.length, canReroll, displayOnly, onReroll, rerollLimitReached]);
-    const handleConfirmDamage = React.useCallback(() => {
-        bonusDieOverlayLogger.info('confirm-damage-click', {
-            hasOnSkipReroll: typeof onSkipReroll === 'function',
-            fallbackToClose: typeof onSkipReroll !== 'function',
-            bonusDiceCount: bonusDice?.length ?? 0,
-        });
-
-        if (onSkipReroll) {
-            onSkipReroll();
-            return;
-        }
-
-        handleOverlayClose();
-    }, [bonusDice?.length, handleOverlayClose, onSkipReroll]);
     const handleEmergencyDismiss = React.useCallback((event?: React.MouseEvent) => {
         event?.stopPropagation();
-        if (
-            isRerollMode
-            && typeof onSkipReroll === 'function'
-            && (!displayOnly || allowBackgroundInteraction)
-        ) {
-            handleConfirmDamage();
-            return;
-        }
         handleOverlayClose();
-    }, [
-        allowBackgroundInteraction,
-        displayOnly,
-        handleConfirmDamage,
-        handleOverlayClose,
-        isRerollMode,
-        onSkipReroll,
-    ]);
+    }, [handleOverlayClose]);
 
     // 调试日志：组件渲染
     React.useEffect(() => {
@@ -237,9 +208,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             : bonusDice.length >= 5
                 ? '0.8vw'
                 : '1.2vw';
-        // 可改骰的展示态也必须保留最终结算入口，但不能封锁后方手牌交互。
-        const requiresExplicitSettlement = typeof onSkipReroll === 'function'
-            && (!displayOnly || allowBackgroundInteraction);
+        // 右侧骰盘承接未结算奖励骰的普通“确认”；特写层只负责展示，不再复制确认入口。
+        const requiresExplicitSettlement = typeof onSkipReroll === 'function';
         const canSelectDieToReroll = canReroll === true;
         const shouldDisableAutoClose = isManualCloseOnly || requiresExplicitSettlement;
 
@@ -265,16 +235,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                     <span className="whitespace-nowrap text-[1.15vw] font-black italic tracking-wider text-white drop-shadow">
                         {compactSummaryText ?? t('bonusDie.diceResult')}
                     </span>
-                    {requiresExplicitSettlement && (
-                        <GameButton
-                            onClick={handleConfirmDamage}
-                            variant="primary"
-                            size="sm"
-                            className="pointer-events-auto !min-h-0 !rounded-[0.55vw] !px-[1.25vw] !py-[0.45vw] !text-[0.85vw]"
-                        >
-                            {t('bonusDie.confirmDamage')}
-                        </GameButton>
-                    )}
                 </div>
             );
         }
@@ -298,15 +258,17 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                     className="relative flex flex-col items-center gap-[1.5vw]"
                     data-testid="bonus-die-overlay"
                 >
-                    <GameButton
-                        type="button"
-                        variant="glass"
-                        size="sm"
-                        icon={<X size={16} />}
-                        onClick={handleEmergencyDismiss}
-                        aria-label={requiresExplicitSettlement ? t('bonusDie.confirmDamage') : t('bonusDie.closeSpotlight')}
-                        className="absolute right-0 top-0 !min-h-0 !rounded-full !px-[0.7vw] !py-[0.7vw] !shadow-[0_0_16px_rgba(0,0,0,0.35)]"
-                    />
+                    {!requiresExplicitSettlement && (
+                        <GameButton
+                            type="button"
+                            variant="glass"
+                            size="sm"
+                            icon={<X size={16} />}
+                            onClick={handleEmergencyDismiss}
+                            aria-label={t('bonusDie.closeSpotlight')}
+                            className="absolute right-0 top-0 !min-h-0 !rounded-full !px-[0.7vw] !py-[0.7vw] !shadow-[0_0_16px_rgba(0,0,0,0.35)]"
+                        />
+                    )}
                     {/* 提示文字 - DiceThrone 风格 */}
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
@@ -438,23 +400,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         </motion.div>
                     )}
 
-                    {/* 操作按钮：只有可重掷时才显示确认入口 */}
-                    {requiresExplicitSettlement && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.8 }}
-                        >
-                            <GameButton
-                                onClick={handleConfirmDamage}
-                                variant="primary"
-                                size="md"
-                                className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
-                            >
-                                {t('bonusDie.confirmDamage')}
-                            </GameButton>
-                        </motion.div>
-                    )}
                 </div>
             </SpotlightContainer>
         );

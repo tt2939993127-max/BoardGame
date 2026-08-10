@@ -77,6 +77,7 @@ export const DiceTray = ({
     interaction,
     multistepInteraction,
     isPassiveRerollMode,
+    bonusDiceReroll,
 }: {
     dice: Die[];
     rollCount: number;
@@ -90,6 +91,10 @@ export const DiceTray = ({
     interaction?: InteractionDescriptor;
     multistepInteraction?: MultistepInteractionState<DiceModifyResult | DiceSelectResult>;
     isPassiveRerollMode?: boolean;
+    bonusDiceReroll?: {
+        canReroll: boolean;
+        onReroll: (dieIndex: number) => void;
+    };
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const decreaseLabel = t('decrease', { ns: 'common' });
@@ -117,6 +122,8 @@ export const DiceTray = ({
     const diceOwnerId = dtMeta?.diceOwnerId;
     const isAnyMode = dieModifyConfig?.mode === 'any';
     const isAdjustMode = dieModifyConfig?.mode === 'adjust';
+    const isBonusRerollMode = Boolean(bonusDiceReroll);
+    const canRerollBonusDie = bonusDiceReroll?.canReroll === true;
     const adjustRange = dieModifyConfig?.adjustRange ?? { min: -1, max: 1 };
 
     const canInteractWithDie = React.useCallback((die: Die): boolean => {
@@ -162,6 +169,13 @@ export const DiceTray = ({
 
     const handleRailDieClick = (dieId: number) => {
         if (isRolling && !isInteractionMode && rollCount === 0) return;
+
+        if (isBonusRerollMode) {
+            if (canRerollBonusDie) {
+                bonusDiceReroll?.onReroll(dieId);
+            }
+            return;
+        }
 
         if (isInteractionMode && !isAnyMode && multistepInteraction) {
             if (isSelectMode) {
@@ -225,8 +239,10 @@ export const DiceTray = ({
                     const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
-                        : canToggleDieLock;
-                    const isReadOnlyDisplayDie = !isInteractionMode && Boolean(die.displayOnly);
+                        : (isBonusRerollMode ? canRerollBonusDie : canToggleDieLock);
+                    const isReadOnlyDisplayDie = !isInteractionMode
+                        && Boolean(die.displayOnly)
+                        && !isBonusRerollMode;
                     const displayValue = (isAnyMode || isAdjustMode)
                         ? (modifyResult?.modifications[die.id] ?? die.value)
                         : die.value;
@@ -331,6 +347,7 @@ export const DiceActions = ({
     setIsRolling,
     interaction,
     multistepInteraction,
+    isBonusDiceSettlement = false,
 }: {
     rollCount: number;
     rollLimit: number;
@@ -344,6 +361,7 @@ export const DiceActions = ({
     setIsRolling: (isRolling: boolean) => void;
     interaction?: InteractionDescriptor;
     multistepInteraction?: MultistepInteractionState<DiceModifyResult | DiceSelectResult>;
+    isBonusDiceSettlement?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const actionTokens = DESKTOP_DICE_ACTION_TOKENS;
@@ -428,15 +446,20 @@ export const DiceActions = ({
     const leftVariant = isInteractionMode
         ? 'secondary' as const
         : (isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' as const : 'secondary' as const);
-    const rightDisabled = isInteractionMode
+    const rightDisabled = isBonusDiceSettlement
+        ? !canInteract
+        : isInteractionMode
         ? !(multistepInteraction?.canConfirm ?? false)
         : (rollConfirmed || rollCount === 0 || !canInteract || isRolling);
-    const rightVariant = isInteractionMode
+    const rightVariant = isBonusDiceSettlement
+        ? (canInteract ? 'primary' as const : 'secondary' as const)
+        : isInteractionMode
         ? 'primary' as const
         : (rollConfirmed ? 'glass' as const : 'secondary' as const);
 
     return (
-        <div className={actionTokens.containerClassName}>
+        <div className={isBonusDiceSettlement ? `${actionTokens.containerClassName} grid-cols-1` : actionTokens.containerClassName}>
+            {!isBonusDiceSettlement && (
             <GameButton
                 onClick={handleRollClick}
                 disabled={leftDisabled}
@@ -460,6 +483,7 @@ export const DiceActions = ({
                     </>
                 )}
             </GameButton>
+            )}
 
             <GameButton
                 onClick={handleConfirmClick}
@@ -470,11 +494,13 @@ export const DiceActions = ({
                 clickSoundKey={isInteractionMode ? undefined : null}
                 className={clsx(
                     `flex items-center justify-center h-full whitespace-nowrap overflow-hidden font-black !py-0 ${actionTokens.buttonClassName} ${actionTokens.confirmTextClassName}`,
-                    !isInteractionMode && rollConfirmed && '!text-white/60',
+                    !isBonusDiceSettlement && !isInteractionMode && rollConfirmed && '!text-white/60',
                 )}
                 data-tutorial-id={isInteractionMode ? undefined : 'dice-confirm-button'}
             >
-                {isInteractionMode ? t('common.confirm') : (rollConfirmed ? t('dice.confirmed') : t('dice.confirm'))}
+                {isBonusDiceSettlement || isInteractionMode
+                    ? t('common.confirm')
+                    : (rollConfirmed ? t('dice.confirmed') : t('dice.confirm'))}
             </GameButton>
         </div>
     );

@@ -29,7 +29,7 @@
 | 原始截图 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v66.png` |
 | 几何证据 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v66-geometry.json` |
 | 用户标注图 | `C:\Users\ZHUAGE~1\AppData\Local\Temp\codex-clipboard-73035d4e-f795-481c-bded-840b68dcd787.png` |
-| 用户原话反思 skill | `.codex/skill/mage-wars-ui-design-memory/SKILL.md` |
+| 用户原话反思 skill | `.spec/skills/mage-wars-ui-design-memory/SKILL.md` |
 
 ## 几何证据
 

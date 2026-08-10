@@ -811,6 +811,8 @@
       "damageReduce": "{{amount}} damage",
       "damageReflect": "Reflect {{amount}} damage back to the opponent",
       "undefendable": "Make the attack undefendable",
+      "flightAttack": "Roll 2 dice; if either is a 6, make this attack undefendable",
+      "flightDefend": "Roll 2 dice; if either is a 6, ignore all incoming damage from this attack",
       "evasive": "Roll 1-2 to fully evade",
       "unknown": "Unknown effect"
     }
@@ -897,7 +899,6 @@
   "bonusDie": {
     "title": "Bonus Roll",
     "confirm": "Confirm",
-    "confirmBonusDice": "Confirm Bonus Die",
     "spotlight": {
       "initialGainCp": "Initial roll {{value}}: Gain {{cp}} CP"
     },
@@ -1177,6 +1178,7 @@
     "notUpgradeCard": "This card is not an upgrade card",
     "player_not_found": "Player not found",
     "card_not_in_hand": "Card is not in hand",
+    "game_over": "The match has ended",
     "invalid_phase": "Cannot perform this action in current phase",
     "roll_limit_reached": "Roll limit reached",
     "defense_reroll_die_limit_exceeded": "This defense ability can only reroll a limited number of dice this time",

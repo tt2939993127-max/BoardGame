@@ -120,7 +120,8 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
             const handCard = document.querySelector<HTMLElement>('[data-testid="hand-area"] [data-card-id="card-surprise"]');
             if (!panel || !handCard) throw new Error('响应提示或可响应手牌缺失');
             const panelRect = panel.getBoundingClientRect();
-            const handCardRect = handCard.getBoundingClientRect();
+            const handCardVisual = handCard.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? handCard;
+            const handCardRect = handCardVisual.getBoundingClientRect();
             return {
                 panelBottom: panelRect.bottom,
                 panelTop: panelRect.top,
@@ -134,7 +135,7 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
         await game.screenshot('01-真人响应位于手牌区上沿', testInfo);
 
         await responseHandCard.hover();
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(520);
 
         const responseVisual = await responseHintPanel.evaluate((panel) => {
             const hintStyle = getComputedStyle(panel);
@@ -153,7 +154,8 @@ test.describe('DiceThrone AI 终极招式发动前响应', () => {
             const buttonStyle = getComputedStyle(passButton);
             const hoveredHandCard = document.querySelector<HTMLElement>('[data-testid="hand-area"] [data-card-id="card-surprise"]');
             if (!hoveredHandCard) throw new Error('可响应手牌缺失');
-            const hoveredHandCardRect = hoveredHandCard.getBoundingClientRect();
+            const hoveredHandCardVisual = hoveredHandCard.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? hoveredHandCard;
+            const hoveredHandCardRect = hoveredHandCardVisual.getBoundingClientRect();
             return {
                 panelBorderWidth: Number.parseFloat(hintStyle.borderTopWidth),
                 panelShadow: hintStyle.boxShadow,

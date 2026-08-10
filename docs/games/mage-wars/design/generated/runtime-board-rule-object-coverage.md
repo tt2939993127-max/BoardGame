@@ -1,6 +1,6 @@
 # Mage Wars foundation Board 规则对象覆盖矩阵
 
-> 角色：`evidence / drift-check`。本文件记录当前真实 `Board.tsx` foundation 实现如何承载规则对象；可用于送验前防遗漏，但不是独立规范来源。规范真相源为 `.codex/skill/mage-wars-ui-design-memory/SKILL.md`，用户纠正账本为 `docs/games/mage-wars/design/reference/user-correction-traceability-ledger.md`。
+> 角色：`evidence / drift-check`。本文件记录当前真实 `Board.tsx` foundation 实现如何承载规则对象；可用于送验前防遗漏，但不是独立规范来源。规范真相源为 `.spec/skills/mage-wars-ui-design-memory/SKILL.md`，用户纠正账本为 `docs/games/mage-wars/design/reference/user-correction-traceability-ledger.md`。
 
 更新时间：2026-08-01，状态：`AI_OBJECT_SPLIT_PASS / full-ui-approval-not-implied`
 

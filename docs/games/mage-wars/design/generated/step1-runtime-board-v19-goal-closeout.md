@@ -20,7 +20,7 @@
 | 证据 | 文件 / 结果 |
 | --- | --- |
 | 全局规范回代 | `D:\codex-home\skills\ui-design-pipeline\SKILL.md` |
-| 项目生图 / 设计稿 skill 回代 | `.codex/skill/boardgame-ui-imagegen/SKILL.md` |
+| 项目生图 / 设计稿 skill 回代 | `.spec/skills/boardgame-ui-imagegen/SKILL.md` |
 | 项目 UI 门禁回代 | `docs/ai-rules/ui-change-gates.md` |
 | Mage Wars 专项设计系统 | `design-system/games/mage-wars.md` |
 | 学徒区域锚点合同 | `docs/games/mage-wars/design/implementable/apprentice-zone-layout-contract.md` |

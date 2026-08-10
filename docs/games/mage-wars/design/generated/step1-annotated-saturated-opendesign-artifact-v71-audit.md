@@ -40,7 +40,7 @@
 | Artifact 元数据 | `D:\codex-home\tools\open-design\.od\projects\mage-wars-ui-design\mage-wars-step1-annotated-saturated-v71.html.artifact.json` |
 | 原始截图 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v71.png` |
 | 几何证据 | `docs/games/mage-wars/design/generated/step1-annotated-saturated-opendesign-artifact-v71-geometry.json` |
-| 用户原话反思 skill | `.codex/skill/mage-wars-ui-design-memory/SKILL.md` |
+| 用户原话反思 skill | `.spec/skills/mage-wars-ui-design-memory/SKILL.md` |
 
 ## 几何证据
 

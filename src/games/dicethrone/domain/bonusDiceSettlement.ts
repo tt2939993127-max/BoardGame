@@ -34,11 +34,10 @@ export function getBonusDiceSettlementHandler(
 }
 
 export function canRerollBonusDiceSettlement(
-    settlement: Pick<PendingBonusDiceSettlement, 'rerollCostTokenId' | 'rerollCostAmount' | 'rerollCount' | 'maxRerollCount' | 'ultimateLocked'> | undefined,
+    settlement: Pick<PendingBonusDiceSettlement, 'rerollCostTokenId' | 'rerollCostAmount' | 'rerollCount' | 'maxRerollCount'> | undefined,
     tokens: Record<string, number> | undefined,
 ): boolean {
     if (!settlement) return false;
-    if (settlement.ultimateLocked === true) return false;
     if (settlement.maxRerollCount !== undefined && settlement.rerollCount >= settlement.maxRerollCount) {
         return false;
     }

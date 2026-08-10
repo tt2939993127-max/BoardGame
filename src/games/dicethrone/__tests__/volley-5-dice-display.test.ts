@@ -260,6 +260,7 @@ describe('Volley 5 Dice Display', () => {
             name: 'Volley copy source no-op should keep bonus',
             commands: [
                 cmd('PLAY_CARD', '0', { cardId: 'volley' }),
+                cmd('RESPONSE_PASS', '0'),
                 cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 cmd('PLAY_CARD', '0', { cardId: 'card-me-too' }),
                 cmd('MODIFY_DIE', '0', { dieId: 4, newValue: 5 }),

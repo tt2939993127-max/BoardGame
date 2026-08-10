@@ -494,6 +494,7 @@ export const enableTestMode = async (context: BrowserContext) => {
 export const waitForTestHarness = async (page: Page, timeout = 5000) => {
     await page.waitForFunction(
         () => !!(window as any).__BG_TEST_HARNESS__,
+        undefined,
         { timeout }
     );
 };

@@ -24,6 +24,6 @@
 
 ## 使用方式
 
-- 先读通用 `.codex/skill/boardgame-ui-imagegen/SKILL.md`，拿共性约束。
+- 先读通用 `.spec/skills/boardgame-ui-imagegen/SKILL.md`，拿共性约束。
 - 再读本文档，补七大恨自己的棋盘结构、主行动模型和禁止项。
 - 如果后续七大恨 UI 再出现新特例，继续写在这里或同目录专项文档，不要回写到通用 skill。

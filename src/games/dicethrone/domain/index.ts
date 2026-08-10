@@ -173,6 +173,10 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     normalizeRuntimeState: normalizeLegacyDiceThroneMatchState,
 
     validate: (state, command) => {
+        if (state.sys.gameover) {
+            return { valid: false, error: 'game_over' };
+        }
+
         const normalizedCore = normalizeLegacyDiceThroneMatchState(state).core;
         const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
         const interaction = state.sys?.interaction?.current;

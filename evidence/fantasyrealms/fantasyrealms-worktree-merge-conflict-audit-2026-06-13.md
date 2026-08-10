@@ -242,7 +242,7 @@
 
 2. **保留根目录项目级规范修复**
    - `AGENTS.md`
-   - `.codex/skill/git-operations/SKILL.md`
+   - `.spec/skills/git-operations/SKILL.md`
 
 3. **Fantasy Realms 专项文件以工作树为主**
    - `src/games/fantasyrealms/Board.tsx`

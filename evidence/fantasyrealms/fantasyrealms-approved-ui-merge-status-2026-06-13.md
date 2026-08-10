@@ -90,7 +90,7 @@
 - `docs/ai-rules/**`
 - `docs/e2e-testing-guide.md`
 - `docs/testing-best-practices.md`
-- `.codex/skill/git-operations/SKILL.md`
+- `.spec/skills/git-operations/SKILL.md`
 
 原因：
 

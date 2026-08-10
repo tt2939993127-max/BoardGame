@@ -48,7 +48,9 @@ import {
     getEvasionDamageBeforeRoll,
     getEvasionRollSuccess,
     markCurrentRollContextStatus,
+    openTemporaryRollContext,
     replaceCurrentRollContext,
+    restoreSuspendedParentRollContext,
     setCurrentRollContextDice,
     isCurrentBonusRollSettlement,
 } from './rollContext';
@@ -360,17 +362,7 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
         : undefined;
     const nextState = { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
     if (currentBonusContextId && nextState.currentRollContext?.id === currentBonusContextId) {
-        return {
-            ...nextState,
-            currentRollContext: {
-                ...nextState.currentRollContext,
-                status: 'settled',
-                display: {
-                    ...nextState.currentRollContext.display,
-                    replayOnly: true,
-                },
-            },
-        };
+        return restoreSuspendedParentRollContext(nextState, currentBonusContextId);
     }
     return nextState;
 };
@@ -995,11 +987,10 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
         && (target === 'pendingBonusDie'
         || (
             target === undefined
-            && state.pendingBonusDiceSettlement?.allowDiceModification === true
             && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId)
             && !state.dice.some(die => die.id === dieId)
         ));
-    const pendingBonusDiceSettlement = targetsPendingBonusDie && state.pendingBonusDiceSettlement?.allowDiceModification
+    const pendingBonusDiceSettlement = targetsPendingBonusDie && state.pendingBonusDiceSettlement
         ? {
             ...state.pendingBonusDiceSettlement,
             dice: getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).map(die => {
@@ -1092,7 +1083,7 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
         ...(contextDice ? { currentRollContext: { ...state.currentRollContext!, dice: contextDice } } : {}),
     };
     if (targetsPendingBonusDie && pendingBonusDiceSettlement) {
-        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(pendingBonusDiceSettlement));
+        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(nextState, pendingBonusDiceSettlement));
     }
     if (contextDice) return nextState;
     return syncLegacyMainDiceToCurrentRollContext(nextState);
@@ -1120,11 +1111,10 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
         && (target === 'pendingBonusDie'
         || (
             target === undefined
-            && state.pendingBonusDiceSettlement?.allowDiceModification === true
             && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId)
             && !state.dice.some(die => die.id === dieId)
         ));
-    if (targetsPendingBonusDie && state.pendingBonusDiceSettlement?.allowDiceModification) {
+    if (targetsPendingBonusDie && state.pendingBonusDiceSettlement) {
         const pendingBonusDiceSettlement = {
             ...state.pendingBonusDiceSettlement,
             dice: getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).map(die => {
@@ -1153,7 +1143,7 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
         };
         return setCurrentRollContextDice(
             { ...state, pendingBonusDiceSettlement },
-            getBonusSettlementContextDice(pendingBonusDiceSettlement),
+            getBonusSettlementContextDice({ ...state, pendingBonusDiceSettlement }, pendingBonusDiceSettlement),
         );
     }
     const isCurrentContextOnlyDie = Boolean(
@@ -1270,8 +1260,8 @@ const handleBonusDiceRerollRequested: EventHandler<Extract<DiceThroneEvent, { ty
     event
 ) => {
     const nextState = { ...state, pendingBonusDiceSettlement: event.payload.settlement };
-    if (getBonusSettlementContextDice(event.payload.settlement).length > 0) {
-        return replaceCurrentRollContext(
+    if (getBonusSettlementContextDice(nextState, event.payload.settlement).length > 0) {
+        return openTemporaryRollContext(
             nextState,
             createBonusRollContextFromSettlement(nextState, event.payload.settlement),
         );
@@ -1333,7 +1323,7 @@ const handleBonusDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
         { ...nextState, currentRollContext: state.currentRollContext },
         pendingBonusDiceSettlement,
     )) {
-        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(pendingBonusDiceSettlement));
+        return setCurrentRollContextDice(nextState, getBonusSettlementContextDice(nextState, pendingBonusDiceSettlement));
     }
     return nextState;
 };

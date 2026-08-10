@@ -21,7 +21,7 @@
 - `docs/ai-rules/doc-index.md`
 - `docs/ai-rules/ui-ux.md`
 - `docs/ai-rules/asset-pipeline.md`
-- `.codex/skill/boardgame-ui-imagegen/SKILL.md`
+- `.spec/skills/boardgame-ui-imagegen/SKILL.md`
 - `docs/infra/open-design.md`
 - `docs/games/smashup/design/reference/munchkin-ui-design-brief-2026-08-01.md`
 

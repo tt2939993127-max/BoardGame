@@ -168,7 +168,7 @@ npm run start:open-design
 
 项目内置了完整的 AI 辅助创建工作流，分 6 个阶段逐步完成（骨架 → 类型 → 领域逻辑 → 系统组装 → UI → 收尾）。
 
-使用支持 Skill 的 AI 编辑器（或者直接扔文档），调用 `.codex/skill/create-new-game` 技能即可开始，AI 会引导你完成全部流程……大概。
+使用支持 Skill 的 AI 编辑器（或者直接扔文档），调用 `.spec/skills/create-new-game` 技能即可开始，AI 会引导你完成全部流程……大概。
 
 数据录入使用的截图工具推荐pixpin
 
@@ -273,7 +273,7 @@ npm run test:e2e
 
 ## 📄 文档
 
-- [**文档总入口**](docs/README.md) — 按职责说明 docs、openspec、evidence、.codex/skill 和游戏规则文档该从哪里读
+- [**文档总入口**](docs/README.md) — 按职责说明 docs、openspec、evidence、.spec/skills 和游戏规则文档该从哪里读
 - [**架构可视化**](docs/architecture-visual.svg) — 动画 SVG，一图看懂整体架构与管线流程
 - [架构设计文档](docs/architecture.md) — 完整技术架构说明
 - [部署指南](docs/deploy.md) — 同域 / Pages 分离 / 镜像部署完整说明

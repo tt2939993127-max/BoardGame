@@ -1,0 +1,4 @@
+interface:
+  display_name: "Before You Code"
+  short_description: "Load BoardGame context before changing files"
+  default_prompt: "Use $before-you-code to choose the right reading depth before changing BoardGame files."

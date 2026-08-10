@@ -47,10 +47,10 @@
 本轮实际读取的规则与合同入口：
 
 - `AGENTS.md`
-- `.codex/skill/create-new-game/SKILL.md`
-- `.codex/skill/create-new-game/references/preflight-gates.md`
-- `.codex/skill/create-new-game/references/mechanics-data-design.md`
-- `.codex/skill/data-entry-workflow/SKILL.md`
+- `.spec/skills/create-new-game/SKILL.md`
+- `.spec/skills/create-new-game/references/preflight-gates.md`
+- `.spec/skills/create-new-game/references/mechanics-data-design.md`
+- `.spec/skills/data-entry-workflow/SKILL.md`
 - `docs/ai-rules/data-entry.md`
 - `evidence/betrayal/full-audit/full-deck-scope-audit.md`
 - `docs/games/betrayal/intake-contract.md`
@@ -687,10 +687,10 @@
 
 | 规范入口 | 本轮修正 / 复核结果 | 后续执行口径 |
 | --- | --- | --- |
-| `.codex/skill/create-new-game/SKILL.md` | 阶段 0 一票否决改为 `in_progress / S0-blocked` 或 `in_progress / downstream-blocked`，并明确 blocked 只拦阶段升级和完成宣称 | S0 缺口存在时继续补合同字段，不进入实现/UI/E2E/截图 |
-| `.codex/skill/create-new-game/references/preflight-gates.md` | 提案状态写法改为 `S0-blocked / downstream-blocked`，并保留“停在 S0，但不能停工” | 提案或矩阵只能引用已录入事实，不能写成完成方案 |
-| `.codex/skill/create-new-game/references/mechanics-data-design.md` | 数据量大、分批录入两处旧 `in_progress / blocked` 改为 `S0-blocked / downstream-blocked`，并说明不是数据层停工理由 | 可以分批录入已锁数据，但未闭合对象继续留在对象全集和缺口表 |
-| `.codex/skill/data-entry-workflow/SKILL.md`、`docs/ai-rules/data-entry.md` | 已有明确规则：`blocked / disputed / unknown-slot / not-in-runtime` 是阶段升级门禁，不是停工口令 | 作为后续继续合同层补证的主执行口径 |
+| `.spec/skills/create-new-game/SKILL.md` | 阶段 0 一票否决改为 `in_progress / S0-blocked` 或 `in_progress / downstream-blocked`，并明确 blocked 只拦阶段升级和完成宣称 | S0 缺口存在时继续补合同字段，不进入实现/UI/E2E/截图 |
+| `.spec/skills/create-new-game/references/preflight-gates.md` | 提案状态写法改为 `S0-blocked / downstream-blocked`，并保留“停在 S0，但不能停工” | 提案或矩阵只能引用已录入事实，不能写成完成方案 |
+| `.spec/skills/create-new-game/references/mechanics-data-design.md` | 数据量大、分批录入两处旧 `in_progress / blocked` 改为 `S0-blocked / downstream-blocked`，并说明不是数据层停工理由 | 可以分批录入已锁数据，但未闭合对象继续留在对象全集和缺口表 |
+| `.spec/skills/data-entry-workflow/SKILL.md`、`docs/ai-rules/data-entry.md` | 已有明确规则：`blocked / disputed / unknown-slot / not-in-runtime` 是阶段升级门禁，不是停工口令 | 作为后续继续合同层补证的主执行口径 |
 
 ### 6.20 74 行对象表结构完整性复核（2026-07-29）
 

@@ -25,8 +25,8 @@ export const TIANSHI_TOKENS: TokenDef[] = [
         stackLimit: 3,
         category: 'consumable',
         activeUse: {
-            // 规则文本限定为任意掷骰阶段；不能作为伤害响应 Token 出现在弹窗中。
-            timing: ['duringRoll'],
+            // 伤害响应弹窗仍处于当前掷骰阶段时，刚获得的飞行必须可立即使用。
+            timing: ['beforeDamageDealt', 'beforeDamageReceived', 'duringRoll'],
             consumeAmount: 1,
             effect: { type: 'modifyDamageDealt', value: 0 },
             customActionId: 'tianshi-use-flight',

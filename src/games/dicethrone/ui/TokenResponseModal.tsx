@@ -30,6 +30,10 @@ function getTokenCategory(
 ): 'boost' | 'reduce' | 'reflect' | 'undefendable' | 'evasive' | 'unknown' {
     const effectType = tokenDef.activeUse?.effect.type;
 
+    if (tokenDef.id === TOKEN_IDS.FLIGHT) {
+        return responsePhase === 'attackerBoost' ? 'undefendable' : 'evasive';
+    }
+
     if (effectType === 'rollToNegate') return 'evasive';
 
     if (tokenDef.id === TOKEN_IDS.RETRIBUTION) return 'reflect';
@@ -56,6 +60,16 @@ function getTokenEffectPreview(
     amount = 1,
     responsePhase?: TokenResponsePhase,
 ): { damageChange: number; description: string; canUse: boolean } {
+    if (tokenDef.id === TOKEN_IDS.FLIGHT) {
+        return {
+            damageChange: 0,
+            description: responsePhase === 'attackerBoost'
+                ? t('tokenResponse.preview.flightAttack')
+                : t('tokenResponse.preview.flightDefend'),
+            canUse: true,
+        };
+    }
+
     const category = getTokenCategory(tokenDef, responsePhase);
 
     switch (category) {

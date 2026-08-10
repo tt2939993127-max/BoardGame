@@ -1227,6 +1227,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const rightTrayBonusDiceSettlement = pendingBonusDiceRoutedToRightTray
         ? currentPendingBonusDiceSettlement
         : undefined;
+    const isBonusDiceResponseWindowForOwner = Boolean(
+        G.pendingBonusDiceSettlement
+        && rawG.sys.responseWindow?.current?.windowType === 'afterRollConfirmed'
+        && String(G.pendingBonusDiceSettlement.attackerId) === String(rootPid)
+    );
     const canUseRightTrayBonusDiceActions = Boolean(
         rightTrayBonusDiceSettlement
         && !isSpectator
@@ -1237,26 +1242,28 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             || rawG.sys.interaction.current.kind === 'dt:bonus-dice'
         )
     );
-    const requiresManualBonusDiceSettlement = Boolean(
-        rightTrayBonusDiceSettlement
-        && rightTrayBonusDiceSettlement.displayOnly !== true
-        && !(
-            rightTrayBonusDiceSettlement.allowDiceModification === true
-            && rightTrayBonusDiceSettlement.maxRerollCount === 0
-            && rightTrayBonusDiceSettlement.rerollCount === 0
-            && rightTrayBonusDiceSettlement.ultimateLocked !== true
-        )
-    );
-    const canConfirmBonusDiceFromRightTray = Boolean(
+    const requiresManualBonusDiceSettlement = Boolean(rightTrayBonusDiceSettlement);
+    const isRightTrayBonusDiceSettlementActive = Boolean(
         canUseRightTrayBonusDiceActions
         && requiresManualBonusDiceSettlement
     );
-    const handleConfirmBonusDiceFromRightTray = React.useCallback(() => {
-        if (!canConfirmBonusDiceFromRightTray || !rightTrayBonusDiceSettlement) {
+    const canRerollBonusDiceFromRightTray = Boolean(
+        canUseRightTrayBonusDiceActions
+        && requiresManualBonusDiceSettlement
+        && canRerollBonusDiceSettlement(rightTrayBonusDiceSettlement, player.tokens)
+    );
+    const completeRightTrayBonusDiceSettlement = React.useCallback(() => {
+        if (!isRightTrayBonusDiceSettlementActive || !rightTrayBonusDiceSettlement) {
             return;
         }
         handlePendingBonusSettlementClose(rightTrayBonusDiceSettlement);
-    }, [canConfirmBonusDiceFromRightTray, handlePendingBonusSettlementClose, rightTrayBonusDiceSettlement]);
+    }, [handlePendingBonusSettlementClose, isRightTrayBonusDiceSettlementActive, rightTrayBonusDiceSettlement]);
+    const handleRerollBonusDiceFromRightTray = React.useCallback((dieIndex: number) => {
+        if (!canRerollBonusDiceFromRightTray) {
+            return;
+        }
+        engineMoves.rerollBonusDie(dieIndex);
+    }, [canRerollBonusDiceFromRightTray, engineMoves]);
     // 状态效果/玩家交互配置
     const isStatusInteraction = pendingInteraction && (
         pendingInteraction.type === 'selectStatus' ||
@@ -2155,7 +2162,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         rollConfirmed={rollConfirmed}
                         isCompareRoll={isCompareRoll}
                         currentPhase={currentPhase}
-                        canInteractDice={canInteractDice || !!rerollSelectingAction}
+                        canInteractDice={canInteractDice || !!rerollSelectingAction || isRightTrayBonusDiceSettlementActive}
                         isRolling={isRolling}
                         setIsRolling={(rolling: boolean) => setIsRolling(rolling)}
                         rerollingDiceIds={rerollingDiceIds}
@@ -2176,6 +2183,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             advanceTutorialIfNeeded('dice-roll-button');
                         }}
                         onConfirm={() => {
+                            if (isRightTrayBonusDiceSettlementActive) {
+                                completeRightTrayBonusDiceSettlement();
+                                return;
+                            }
                             if (!canInteractDice) return;
                             if (isCompareRoll) {
                                 engineMoves.confirmCompareRoll();
@@ -2202,11 +2213,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         interaction={diceMultistepInteraction ?? pendingInteraction}
                         multistepInteraction={diceMultistepState}
                         showDiceTray={showRailDiceTray || Boolean(bonusDiceTrayDice)}
-                        showDiceActions={!rightTrayBonusDiceSettlement || Boolean(diceMultistepInteraction)}
-                        showBonusDiceConfirm={requiresManualBonusDiceSettlement
-                            && String(rightTrayBonusDiceSettlement?.attackerId) === String(rootPid)}
-                        canConfirmBonusDice={canConfirmBonusDiceFromRightTray}
-                        onConfirmBonusDice={handleConfirmBonusDiceFromRightTray}
+                        showDiceActions={!isBonusDiceResponseWindowForOwner && (
+                            !rightTrayBonusDiceSettlement
+                            || Boolean(diceMultistepInteraction)
+                            || isRightTrayBonusDiceSettlementActive
+                        )}
+                        isBonusDiceSettlement={isRightTrayBonusDiceSettlementActive}
+                        canRerollBonusDice={canRerollBonusDiceFromRightTray}
+                        onRerollBonusDice={isRightTrayBonusDiceSettlementActive
+                            ? handleRerollBonusDiceFromRightTray
+                            : undefined}
                         activeModifiers={activeModifiers}
                         attackModifierBonusDamage={
                             G.pendingAttack?.attackModifierBonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage

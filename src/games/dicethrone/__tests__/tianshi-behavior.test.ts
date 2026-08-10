@@ -9,6 +9,7 @@ import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import { canRerollBonusDiceSettlement } from '../domain/bonusDiceSettlement';
+import { checkPlayCard } from '../domain/rules';
 import { getUsableTokensForTiming } from '../domain/tokenResponse';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { initHeroState } from '../domain/characters';
@@ -90,16 +91,71 @@ describe('炽天使领域行为', () => {
         expect(state.core.tokenDefinitions.find(token => token.id === STATUS_IDS.DAZZLE)?.stackLimit).toBe(1);
     });
 
-    it('飞行只在掷骰阶段可用，不应进入伤害响应弹窗', () => {
+    it('飞行在当前掷骰阶段的伤害响应弹窗中可立即使用', () => {
         const state = createTianshiState();
         state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] = 1;
         const flight = TIANSHI_TOKENS.find((token) => token.id === TOKEN_IDS.FLIGHT);
 
-        expect(flight?.activeUse?.timing).toEqual(['duringRoll']);
+        expect(flight?.activeUse?.timing).toEqual(['beforeDamageDealt', 'beforeDamageReceived', 'duringRoll']);
         expect(getUsableTokensForTiming(state.core, '0', 'beforeDamageDealt').map((token) => token.id))
-            .not.toContain(TOKEN_IDS.FLIGHT);
+            .toContain(TOKEN_IDS.FLIGHT);
         expect(getUsableTokensForTiming(state.core, '0', 'beforeDamageReceived').map((token) => token.id))
-            .not.toContain(TOKEN_IDS.FLIGHT);
+            .toContain(TOKEN_IDS.FLIGHT);
+    });
+
+    it('防御掷骰阶段刚获得的飞行投骰需确认后才收口', () => {
+        const state = createTianshiState();
+        state.sys.phase = 'defensiveRoll';
+        state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] = 1;
+        state.core.pendingAttack = {
+            attackerId: '1',
+            defenderId: '0',
+            sourceAbilityId: 'holy-blade-3',
+            isDefendable: true,
+            damage: 7,
+        };
+        state.core.pendingDamage = {
+            id: 'tianshi-flight-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 7,
+            currentDamage: 7,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+
+        const result = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('USE_TOKEN', '0', { tokenId: TOKEN_IDS.FLIGHT, amount: 1 }),
+            createQueuedRandom([6, 1]),
+            playerIds,
+        );
+
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        expect(result.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] ?? 0).toBe(0);
+        expect(result.state.core.pendingAttack?.defensiveFlightActivated).toBe(true);
+        expect(result.state.core.pendingDamage).toBeUndefined();
+        expect(result.state.core.players['0'].resources[RESOURCE_IDS.HP]).toBe(50);
+        expect(result.state.core.currentRollContext).toMatchObject({
+            kind: 'bonus',
+            status: 'open',
+            display: { replayOnly: false },
+            dice: [{ value: 6 }, { value: 1 }],
+        });
+
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            result.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(confirmed.state.core.currentRollContext).toBeUndefined();
     });
 
     it('智天使升级卡的费用应与卡面一致，为 3 CP', () => {
@@ -997,7 +1053,7 @@ describe('炽天使领域行为', () => {
         expect(settled.state.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
     });
 
-    it('至高圣洁没有可用改骰牌时自动按奖励骰结果结算，不生成攻击骰确认交互', () => {
+    it('至高圣洁没有可用改骰牌时也必须确认奖励骰后结算', () => {
         const state = createTianshiState();
         const supremeHoliness = TIANSHI_CARDS.find(entry => entry.id === 'card-tianshi-supreme-holiness');
         if (!supremeHoliness) throw new Error('缺少至高圣洁卡牌定义');
@@ -1015,14 +1071,35 @@ describe('炽天使领域行为', () => {
 
         expect(result.success).toBe(true);
         if (!result.success) return;
-        expect(result.state.core.pendingBonusDiceSettlement).toBeUndefined();
-        expect(result.state.sys.interaction?.current).toBeUndefined();
+        expect(result.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            allowDiceModification: true,
+            dice: [{ value: 6 }],
+        });
+        expect(result.state.core.currentRollContext).toMatchObject({
+            kind: 'bonus',
+            status: 'open',
+        });
+        expect(result.state.sys.interaction?.current?.kind).toBe('dt:bonus-dice');
         expect(result.state.sys.responseWindow?.current).toBeUndefined();
-        expect(result.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT]).toBe(2);
-        expect(result.state.core.players['0'].tokens[TOKEN_IDS.PURIFY]).toBe(2);
+        expect(result.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] ?? 0).toBe(0);
+        expect(result.state.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
+
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            result.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(confirmed.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT]).toBe(2);
+        expect(confirmed.state.core.players['0'].tokens[TOKEN_IDS.PURIFY]).toBe(2);
     });
 
-    it('至高圣洁有改骰牌时先开放当前骰响应，改成 6 后自动结算', () => {
+    it('至高圣洁在主要阶段掷出奖励骰时，不会放开来个六', () => {
         const state = createTianshiState();
         const supremeHoliness = TIANSHI_CARDS.find(entry => entry.id === 'card-tianshi-supreme-holiness');
         const playSix = getCardById('card-play-six');
@@ -1041,49 +1118,19 @@ describe('炽天使领域行为', () => {
         expect(rolled.success).toBe(true);
         if (!rolled.success) return;
         expect(rolled.state.core.pendingBonusDiceSettlement?.dice).toMatchObject([{ value: 1 }]);
-        expect(rolled.state.sys.interaction?.current).toBeUndefined();
-        expect(rolled.state.sys.responseWindow?.current).toMatchObject({
-            windowType: 'afterRollConfirmed',
-            responderQueue: ['0'],
+        expect(rolled.state.sys.interaction?.current).toMatchObject({
+            kind: 'dt:bonus-dice',
+            playerId: '0',
         });
-
-        const playSixResult = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            rolled.state,
-            command('PLAY_CARD', '0', { cardId: playSix.id }),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(playSixResult.success).toBe(true);
-        if (!playSixResult.success) return;
-
-        const modified = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            playSixResult.state,
-            command('MODIFY_DIE', '0', { dieId: 0, newValue: 6 }),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(modified.success).toBe(true);
-        if (!modified.success) return;
-
-        const completedCard = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            modified.state,
-            command('SYS_INTERACTION_CONFIRM', '0'),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(completedCard.success).toBe(true);
-        if (!completedCard.success) return;
-        expect(completedCard.state.sys.interaction?.current).toBeUndefined();
-        expect(completedCard.state.core.pendingBonusDiceSettlement).toBeUndefined();
-        expect(completedCard.state.sys.responseWindow?.current).toBeUndefined();
-        expect(completedCard.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT]).toBe(2);
-        expect(completedCard.state.core.players['0'].tokens[TOKEN_IDS.PURIFY]).toBe(2);
+        expect(checkPlayCard(
+            rolled.state.core,
+            '0',
+            playSix,
+            'main1',
+        )).toEqual({ ok: false, reason: 'wrongPhaseForRoll' });
     });
 
-    it('至高圣洁的奖励骰可被通用改骰牌改为圣洁吊坠，并按改后的骰面获得 2 飞行和 2 净化', () => {
+    it('至高圣洁在主要阶段产生的奖励骰不能让来个六越过阶段限制', () => {
         const state = createTianshiState();
         const supremeHoliness = TIANSHI_CARDS.find(entry => entry.id === 'card-tianshi-supreme-holiness');
         const playSix = getCardById('card-play-six');
@@ -1105,7 +1152,7 @@ describe('炽天使领域行为', () => {
         expect(afterRoll.currentRollContext).toMatchObject({
             kind: 'bonus',
             dice: [{ value: 1 }],
-            policy: { allowRollCards: true },
+            policy: { allowDiceCardTargeting: true },
         });
 
         const playSixResult = executePipeline(
@@ -1115,42 +1162,10 @@ describe('炽天使领域行为', () => {
             createQueuedRandom([1]),
             playerIds,
         );
-        expect(playSixResult.success).toBe(true);
-        if (!playSixResult.success) return;
-
-        const modified = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            playSixResult.state,
-            command('MODIFY_DIE', '0', { dieId: 0, newValue: 6 }),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(modified.success).toBe(true);
-        if (!modified.success) return;
-        expect(modified.state.core.pendingBonusDiceSettlement?.dice).toMatchObject([{ value: 6, face: 'shield' }]);
-
-        const completedCard = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            modified.state,
-            command('SYS_INTERACTION_CONFIRM', '0'),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(completedCard.success).toBe(true);
-        if (!completedCard.success) return;
-
-        const settled = executePipeline(
-            { domain: DiceThroneDomain, systems: testSystems },
-            completedCard.state,
-            command('SKIP_BONUS_DICE_REROLL', '0'),
-            createQueuedRandom([1]),
-            playerIds,
-        );
-        expect(settled.success).toBe(true);
-        if (!settled.success) return;
-        expect(settled.state.core.players['0'].tokens[TOKEN_IDS.FLIGHT]).toBe(2);
-        expect(settled.state.core.players['0'].tokens[TOKEN_IDS.PURIFY]).toBe(2);
-        expect(settled.state.core.players['0'].hand).toEqual([]);
+        expect(playSixResult.success).toBe(false);
+        if (playSixResult.success) return;
+        expect(playSixResult.error).toBe('wrongPhaseForRoll');
+        expect(playSixResult.state.core.players['0'].hand).toMatchObject([{ id: 'card-play-six' }]);
     });
 
     it('圣刃 II / 小天使只获得飞行和神圣降临，不额外获得净化', () => {
@@ -1278,7 +1293,7 @@ describe('炽天使领域行为', () => {
         }
     });
 
-    it('防御阶段先选择天使斗篷后，飞行失败不会取消已激活的防御能力', () => {
+    it('防御阶段先选择天使斗篷后，飞行失败不会取消已激活的防御能力，且需确认骰面', () => {
         let state = createTianshiState();
         state.sys.phase = 'defensiveRoll';
         state.core.players['0'].tokens[TOKEN_IDS.FLIGHT] = 1;
@@ -1318,10 +1333,19 @@ describe('炽天使领域行为', () => {
         expect(flight.state.core.pendingAttack?.defensiveFlightActivated).not.toBe(true);
         expect(flight.state.core.currentRollContext).toMatchObject({
             kind: 'bonus',
-            status: 'settled',
-            display: { replayOnly: true },
+            status: 'open',
+            display: { replayOnly: false },
             dice: [{ value: 1 }, { value: 2 }],
         });
+
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            flight.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+            playerIds,
+        );
+        expect(confirmed.success).toBe(true);
     });
 
     it('神圣祝福在炽天使持有者遭受致死伤害时消耗标记并保留 1 点生命', () => {

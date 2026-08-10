@@ -30,4 +30,4 @@
   - `scripts/deploy/`
   - `docs/deploy.md`
   - `docs/ai-rules/asset-pipeline.md`
-  - `.codex/skill/android-app-release/SKILL.md`
+  - `.spec/skills/android-app-release/SKILL.md`

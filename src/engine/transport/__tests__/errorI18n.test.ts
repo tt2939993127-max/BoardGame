@@ -81,6 +81,8 @@ const TUTORIAL_GAME_IDS = ['dicethrone', 'summonerwars', 'smashup', 'fantasyreal
 // 新增游戏 error code 时，在对应游戏的数组中追加，并在 game-<id>.json 补翻译。
 
 const DICETHRONE_ERROR_CODES = [
+    // domain/index.ts
+    'game_over',
     // commandValidation.ts
     'roll_limit_reached',
     'defense_ability_not_selected',

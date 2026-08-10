@@ -298,6 +298,7 @@ export function useGameProviderRuntime(args: {
     useEffect(() => {
         if (!isTestEnvironment()) return;
 
+        TestHarness.init();
         const harness = TestHarness.getInstance();
         harness.state.register(
             () => state,

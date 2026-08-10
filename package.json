@@ -34,6 +34,8 @@
     "build:game:bundle": "node scripts/infra/build-node-bundle.mjs --label game-prod --entry server.ts --outfile temp/prod-bundles/game/server.mjs --tsconfig tsconfig.server.json",
     "build:servers": "npm run build:api:bundle && npm run build:game:bundle",
     "lint": "eslint .",
+    "spec:lint": "node .spec/tools/spec-lint.mjs",
+    "spec:hosts": "node .spec/tools/setup-hosts.mjs",
     "clean:ports": "node scripts/infra/clean_ports.js",
     "generate:manifests": "node scripts/game/generate_game_manifests.js",
     "generate:locales": "node scripts/game/generate-card-locales.cjs",

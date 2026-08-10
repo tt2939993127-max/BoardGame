@@ -3,18 +3,16 @@ import { test, expect } from '../framework';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath, withJpegEvidenceScreenshotOptions } from '../framework/evidenceScreenshots';
 import { waitForTestHarness } from '../helpers/common';
 import {
-    applyCoreStateDirect,
     dispatchDiceThroneCommand,
     ensureDebugPanelClosed,
     readyAndStartGame,
-    readCoreState,
     selectCharacter,
     setupDTOnlineMatch,
     setDiceThroneBonusDiceValues,
-    setDiceThroneDiceValues,
     waitForGameBoard,
     waitForDiceThroneHarness,
 } from '../helpers/dicethrone';
+import { getMatchState, injectMatchState } from '../helpers/state-injection';
 import { COMMON_CARDS } from '../../src/games/dicethrone/domain/commonCards';
 import { MOON_ELF_CARDS } from '../../src/games/dicethrone/heroes/moon_elf/cards';
 
@@ -41,11 +39,6 @@ async function screenshotStep(
     name: string,
 ): Promise<string> {
     const path = getEvidenceScreenshotPath(testInfo, name, { requireChineseName: true });
-    const boardRoot = page.getByTestId('dicethrone-board-root').first();
-    if (await boardRoot.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await boardRoot.screenshot(withJpegEvidenceScreenshotOptions({ path, timeout: 20000 }));
-        return path;
-    }
     await page.screenshot(withJpegEvidenceScreenshotOptions({ path, fullPage: false, timeout: 20000 }));
     return path;
 }
@@ -55,11 +48,92 @@ async function dispatch(page: Page, type: string, playerId: string, payload: Rec
     await page.waitForTimeout(350);
 }
 
-async function updateCoreState(page: Page, mutate: (core: MutableCore) => void) {
-    const coreState = clone(await readCoreState(page) as MutableCore);
-    mutate(coreState);
-    await applyCoreStateDirect(page, coreState);
-    await page.waitForTimeout(500);
+async function updateOnlineCoreState(matchId: string, page: Page, mutate: (core: MutableCore) => void) {
+    const currentState = clone(await getMatchState(matchId, page) as MutableCore);
+    const root = currentState.G && typeof currentState.G === 'object' ? currentState.G : currentState;
+    const core = clone(root.core ?? {}) as MutableCore;
+    mutate(core);
+    root.core = {
+        ...core,
+        phase: typeof core.phase === 'string' ? core.phase : root.sys?.phase,
+    };
+    root.sys = {
+        ...(root.sys ?? {}),
+        matchId,
+        turnOrder: Array.isArray(root.sys?.turnOrder)
+            ? root.sys.turnOrder
+            : Array.isArray(core.turnOrder)
+                ? core.turnOrder
+                : Object.keys(core.players ?? {}),
+        currentPlayerIndex: typeof root.sys?.currentPlayerIndex === 'number'
+            ? root.sys.currentPlayerIndex
+            : Math.max(0, (Array.isArray(core.turnOrder) ? core.turnOrder : Object.keys(core.players ?? {}))
+                .indexOf(core.activePlayerId ?? '0')),
+    };
+    await injectMatchState(matchId, currentState, page);
+    await page.waitForTimeout(700);
+}
+
+async function updateCoreState(matchId: string, page: Page, mutate: (core: MutableCore) => void) {
+    await updateOnlineCoreState(matchId, page, mutate);
+}
+
+async function readResponseHintHandGeometry(page: Page) {
+    return page.evaluate(() => {
+        const hint = document.querySelector<HTMLElement>('[data-testid="dicethrone-response-window-hint"]');
+        const hand = document.querySelector<HTMLElement>('[data-testid="hand-area"]');
+        if (!hint || !hand) return null;
+        const hintRect = hint.getBoundingClientRect();
+        const cardRects = Array.from(hand.querySelectorAll<HTMLElement>('[data-card-id]'))
+            .map((card) => card.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? card)
+            .map((card) => card.getBoundingClientRect())
+            .filter((rect) => rect.width > 0 && rect.height > 0)
+            .map((rect) => rect.top);
+        const hoveredCard = hand.querySelector<HTMLElement>('[data-card-id]:hover');
+        const hoveredCardVisual = hoveredCard?.querySelector<HTMLElement>('[data-testid="hand-card-visual"]') ?? hoveredCard;
+        return {
+            viewportWidth: window.innerWidth,
+            hintCenterX: hintRect.left + hintRect.width / 2,
+            hintBottom: hintRect.bottom,
+            visibleHandTop: cardRects.length > 0 ? Math.min(...cardRects) : null,
+            hoveredHandTop: hoveredCardVisual?.getBoundingClientRect().top ?? null,
+        };
+    });
+}
+
+function assertResponseHintGap(
+    geometry: NonNullable<Awaited<ReturnType<typeof readResponseHintHandGeometry>>>,
+    minGap: number,
+    maxGap: number,
+    message: string,
+): void {
+    expect(Math.abs(geometry.hintCenterX - geometry.viewportWidth / 2)).toBeLessThan(4);
+    expect(geometry.visibleHandTop, '响应窗口必须有可见手牌作为锚点').not.toBeNull();
+    const gap = geometry.visibleHandTop! - geometry.hintBottom;
+    expect(gap, message).toBeGreaterThanOrEqual(minGap);
+    expect(gap, message).toBeLessThanOrEqual(maxGap);
+}
+
+async function assertResponseHintAboveHand(page: Page): Promise<void> {
+    const geometry = await readResponseHintHandGeometry(page);
+    expect(geometry).not.toBeNull();
+    assertResponseHintGap(geometry!, 8, 20, '响应条必须贴在可见手牌顶边上方');
+}
+
+async function assertResponseHintClearsHoveredHandCard(page: Page, cardId: string): Promise<void> {
+    const card = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+    const initialGeometry = await readResponseHintHandGeometry(page);
+    expect(initialGeometry).not.toBeNull();
+
+    await card.hover();
+    await page.waitForTimeout(520);
+
+    const hoveredGeometry = await readResponseHintHandGeometry(page);
+    expect(hoveredGeometry).not.toBeNull();
+    expect(hoveredGeometry!.hoveredHandTop, '悬浮手牌必须成为响应条锚点').not.toBeNull();
+    expect(hoveredGeometry!.hoveredHandTop!).toBeLessThan(initialGeometry!.visibleHandTop! - 20);
+    expect(hoveredGeometry!.hintBottom).toBeLessThan(initialGeometry!.hintBottom - 20);
+    assertResponseHintGap(hoveredGeometry!, 6, 20, '响应条必须为悬浮抬起的手牌让位');
 }
 
 async function waitForHandCardVisualReady(page: Page, cardId: string): Promise<void> {
@@ -169,15 +243,16 @@ async function dragHandCardToPlay(page: Page, cardId: string): Promise<void> {
 }
 
 async function clickBonusConfirm(page: Page, playerId: string): Promise<void> {
-    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-testid="bonus-dice-confirm-button"]`).first();
+    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-tutorial-id="dice-confirm-button"]`).first();
     await expect(confirmButton).toBeEnabled({ timeout: 8000 });
     await confirmButton.click();
     await page.waitForTimeout(500);
 }
 
 async function assertRuleSourcedBonusConfirmation(page: Page, playerId: string): Promise<void> {
-    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-testid="bonus-dice-confirm-button"]`).first();
-    await expect(confirmButton).toHaveText(/^(确认奖励骰|Confirm Bonus Die)$/);
+    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-tutorial-id="dice-confirm-button"]`).first();
+    await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
+    await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
     await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
 }
 
@@ -317,11 +392,12 @@ function chooseThunderDie(snapshot: Awaited<ReturnType<typeof readVisibleBonusSn
 }
 
 async function normalizePendingBonusDice(
+    matchId: string,
     page: Page,
     diceValues: number[],
     faceForValue: (value: number) => string,
 ) {
-    await updateCoreState(page, (core) => {
+    await updateCoreState(matchId, page, (core) => {
         const settlement = core.pendingBonusDiceSettlement;
         if (!settlement) {
             throw new Error('当前没有待确认的奖励骰结算');
@@ -337,19 +413,36 @@ async function normalizePendingBonusDice(
                 value,
             },
         }));
+        if (core.currentRollContext && Array.isArray(core.currentRollContext.dice)) {
+            core.currentRollContext = {
+                ...core.currentRollContext,
+                dice: core.currentRollContext.dice.map((die: Record<string, unknown>, index: number) => {
+                    const value = diceValues[index] ?? Number(die.value ?? 1);
+                    const face = faceForValue(value);
+                    return {
+                        ...die,
+                        value,
+                        symbol: face,
+                        symbols: [face],
+                        isKept: false,
+                    };
+                }),
+            };
+        }
     });
     await ensureDebugPanelClosed(page);
     await page.waitForTimeout(350);
 }
 
 async function normalizeCurrentDice(
+    matchId: string,
     page: Page,
     diceValues: number[],
     faceForValue: (value: number) => string,
 ) {
-    await updateCoreState(page, (core) => {
+    await updateCoreState(matchId, page, (core) => {
         const previousDice = Array.isArray(core.dice) ? core.dice : [];
-        core.dice = previousDice.map((die: Record<string, unknown>, index: number) => {
+        const normalizedDice = previousDice.map((die: Record<string, unknown>, index: number) => {
             const value = diceValues[index] ?? Number(die.value ?? 1);
             const face = faceForValue(value);
             return {
@@ -360,6 +453,13 @@ async function normalizeCurrentDice(
                 isKept: false,
             };
         });
+        core.dice = normalizedDice;
+        if (core.currentRollContext && Array.isArray(core.currentRollContext.dice)) {
+            core.currentRollContext = {
+                ...core.currentRollContext,
+                dice: normalizedDice,
+            };
+        }
         core.rollConfirmed = true;
     });
     await ensureDebugPanelClosed(page);
@@ -393,7 +493,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
         const { hostPage, guestPage, hostContext, guestContext } = setup;
 
         try {
-            await updateCoreState(hostPage, (core) => {
+            await updateCoreState(setup.matchId, hostPage, (core) => {
                 core.players['0'].hand = [];
                 core.players['0'].resources.cp = 5;
                 core.players['0'].resources.CP = 5;
@@ -412,14 +512,13 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             await ensureDebugPanelClosed(hostPage);
             await ensureDebugPanelClosed(guestPage);
 
-            await setDiceThroneDiceValues(hostPage, [1, 1, 1, 1, 4]);
             await dispatch(hostPage, 'ADVANCE_PHASE', '0');
             await dispatch(hostPage, 'ROLL_DICE', '0');
             await dispatch(hostPage, 'CONFIRM_ROLL', '0');
-            await normalizeCurrentDice(hostPage, [1, 1, 1, 1, 4], moonElfFaceForValue);
+            await normalizeCurrentDice(setup.matchId, hostPage, [1, 1, 1, 1, 4], moonElfFaceForValue);
             await dispatch(hostPage, 'SELECT_ABILITY', '0', { abilityId: 'longbow' });
 
-            await updateCoreState(hostPage, (core) => {
+            await updateCoreState(setup.matchId, hostPage, (core) => {
                 core.players['0'].hand = [getCard('volley')];
                 core.players['1'].hand = [getCard('card-flick')];
                 core.pendingAttack = {
@@ -460,6 +559,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             });
 
             await waitForHandCardVisualReady(hostPage, 'volley');
+            await expect(hostPage.getByText('该技能当前不可用', { exact: true })).toHaveCount(0, { timeout: 5000 });
             await screenshotStep(hostPage, testInfo, '01-万箭齐发-攻击已选且手牌可见');
 
             await setDiceThroneBonusDiceValues(hostPage, [1, 2, 3, 4, 5]);
@@ -467,9 +567,9 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             await dragHandCardToPlay(hostPage, 'volley');
             await dismissAttackShowcaseIfVisible(guestPage);
             const volleySpotlight = await waitForCardSpotlightVisualReady(guestPage, 'volley');
-            await expect(volleySpotlight.locator('[data-testid="card-spotlight-summary-text"]').first())
-                .toHaveAttribute('data-effect-key', 'bonusDie.effect.volley.result', { timeout: 5000 });
-            await screenshotStep(guestPage, testInfo, '02-万箭齐发-卡牌特写显示首次奖励骰结果描述');
+            await expect(volleySpotlight.locator('[data-testid="card-spotlight-summary-text"]'))
+                .toHaveCount(0);
+            await screenshotStep(guestPage, testInfo, '02-万箭齐发-卡牌特写与右侧2D奖励骰盘');
 
             await expect.poll(() => readVisibleBonusSnapshot(guestPage), { timeout: 15000 }).toMatchObject({
                 sourceAbilityId: 'volley',
@@ -478,7 +578,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 windowType: 'afterRollConfirmed',
                 currentResponderId: '1',
             });
-            await normalizePendingBonusDice(hostPage, [1, 2, 3, 4, 5], moonElfFaceForValue);
+            await normalizePendingBonusDice(setup.matchId, hostPage, [1, 2, 3, 4, 5], moonElfFaceForValue);
             await expect.poll(() => readVisibleBonusSnapshot(guestPage), { timeout: 10000 }).toMatchObject({
                 diceValues: [1, 2, 3, 4, 5],
             });
@@ -488,7 +588,10 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             await closeCardSpotlightIfVisible(guestPage);
             await waitForHandCardVisualReady(guestPage, 'card-flick');
             await expect(guestPage.getByRole('button', { name: /^(跳过|Pass)$/i }).first()).toBeVisible({ timeout: 5000 });
-            await screenshotStep(guestPage, testInfo, '03-万箭齐发-奖励骰响应窗口可出弹一手');
+            await assertResponseHintAboveHand(guestPage);
+            await screenshotStep(guestPage, testInfo, '03a-万箭齐发-奖励骰响应提示贴在手牌上沿');
+            await assertResponseHintClearsHoveredHandCard(guestPage, 'card-flick');
+            await screenshotStep(guestPage, testInfo, '03b-万箭齐发-悬浮手牌时响应提示自动避让');
 
             await dispatch(guestPage, 'PLAY_CARD', '1', { cardId: 'card-flick' });
             await expect.poll(() => readVisibleBonusSnapshot(guestPage), { timeout: 10000 }).toMatchObject({
@@ -528,6 +631,8 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 pendingAttackBonusDamage: volleyChoice.afterBowCount,
                 defenderEntangle: 1,
             });
+            await closeCardSpotlightIfVisible(hostPage);
+            await hostPage.waitForTimeout(900);
             await screenshotStep(hostPage, testInfo, '07-万箭齐发-改后弓面数已写入加伤并施加缠绕');
         } finally {
             await guestContext.close();
@@ -549,7 +654,7 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
         const { hostPage, guestPage, hostContext, guestContext } = setup;
 
         try {
-            await updateCoreState(hostPage, (core) => {
+            await updateCoreState(setup.matchId, hostPage, (core) => {
                 core.players['0'].hand = [];
                 core.players['0'].tokens = {};
                 core.players['0'].resources.cp = 0;
@@ -569,18 +674,17 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             await ensureDebugPanelClosed(hostPage);
             await ensureDebugPanelClosed(guestPage);
 
-            await setDiceThroneDiceValues(hostPage, [3, 3, 3, 1, 1]);
             await dispatch(hostPage, 'ADVANCE_PHASE', '0');
             await dispatch(hostPage, 'ROLL_DICE', '0');
             await dispatch(hostPage, 'CONFIRM_ROLL', '0');
-            await normalizeCurrentDice(hostPage, [3, 3, 3, 1, 1], monkFaceForValue);
+            await normalizeCurrentDice(setup.matchId, hostPage, [3, 3, 3, 1, 1], monkFaceForValue);
             const thunderStrikeSlot = await getThunderStrikeSlot(hostPage);
             await expect(thunderStrikeSlot).toBeVisible({ timeout: 10000 });
             await expect(thunderStrikeSlot).toHaveAttribute('data-can-click', 'true', { timeout: 10000 });
             await screenshotStep(hostPage, testInfo, '01-雷霆万钧-三掌骰面已确认技能可选');
 
             await dispatch(hostPage, 'SELECT_ABILITY', '0', { abilityId: 'thunder-strike' });
-            await updateCoreState(hostPage, (core) => {
+            await updateCoreState(setup.matchId, hostPage, (core) => {
                 core.players['1'].hand = [getCard('card-flick')];
                 core.players['1'].resources.cp = 5;
                 core.players['1'].resources.CP = 5;
@@ -616,14 +720,17 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 windowType: 'afterRollConfirmed',
                 currentResponderId: '1',
             });
-            await normalizePendingBonusDice(hostPage, [4, 5, 6], monkFaceForValue);
+            await normalizePendingBonusDice(setup.matchId, hostPage, [4, 5, 6], monkFaceForValue);
             await expect.poll(() => readVisibleBonusSnapshot(guestPage), { timeout: 10000 }).toMatchObject({
                 diceValues: [4, 5, 6],
             });
             const thunderBeforeSnapshot = await readVisibleBonusSnapshot(guestPage);
             const thunderChoice = chooseThunderDie(thunderBeforeSnapshot);
             await waitForHandCardVisualReady(guestPage, 'card-flick');
-            await screenshotStep(guestPage, testInfo, '03-雷霆万钧-奖励骰响应窗口可出弹一手');
+            await assertResponseHintAboveHand(guestPage);
+            await screenshotStep(guestPage, testInfo, '03a-雷霆万钧-奖励骰响应提示贴在手牌上沿');
+            await assertResponseHintClearsHoveredHandCard(guestPage, 'card-flick');
+            await screenshotStep(guestPage, testInfo, '03b-雷霆万钧-悬浮手牌时响应提示自动避让');
 
             await dispatch(guestPage, 'PLAY_CARD', '1', { cardId: 'card-flick' });
             await expect.poll(() => readVisibleBonusSnapshot(guestPage), { timeout: 10000 }).toMatchObject({
@@ -661,6 +768,8 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 sourceAbilityId: null,
                 defenderHp: 50 - thunderChoice.afterTotal,
             });
+            await closeCardSpotlightIfVisible(hostPage);
+            await hostPage.waitForTimeout(900);
             await screenshotStep(hostPage, testInfo, '07-雷霆万钧-按改后点数和造成伤害');
         } finally {
             await guestContext.close();

@@ -1346,7 +1346,7 @@ describe('encoding check candidate scope', () => {
         expect(shouldIncludeChangedGitFile('android/build.gradle')).toBe(true);
 
         expect(shouldIncludeChangedGitFile('.kiro/specs/demo/tasks.md')).toBe(false);
-        expect(shouldIncludeChangedGitFile('.codex/skill/demo/SKILL.md')).toBe(false);
+        expect(shouldIncludeChangedGitFile('.spec/skills/demo/SKILL.md')).toBe(false);
         expect(shouldIncludeChangedGitFile('.devin/skills/demo/SKILL.md')).toBe(false);
         expect(shouldIncludeChangedGitFile('.windsurf/skills/demo/SKILL.md')).toBe(false);
         expect(shouldIncludeChangedGitFile('evidence/scope-audit.md')).toBe(false);

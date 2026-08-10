@@ -16,7 +16,7 @@ import type {
 import { RESOURCE_IDS } from '../domain/resources';
 import { TOKEN_IDS } from '../domain/ids';
 import { COMMON_CARDS } from '../domain/commonCards';
-import { checkPlayCard } from '../domain/rules';
+import { canAdvancePhase, checkPlayCard } from '../domain/rules';
 import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../heroes/zhanshujia/tokens';
 import { createEvasionRollContext, createMainRollContext } from '../domain/rollContext';
 
@@ -147,9 +147,9 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.currentRollContext?.dice[0]?.value).toBe(6);
     });
 
-    it('可改奖励骰会覆盖主骰当前区，后续改骰不会误改旧主骰', () => {
+    it('可改奖励骰会暂时挂起主骰，并使用实际掷骰者的骰子定义', () => {
         const rolled = roll(createCore(), [1, 2, 3, 4, 5]);
-        const rolledContextId = rolled.currentRollContext?.id;
+        const rolledContext = rolled.currentRollContext;
 
         const bonusOpened = reduce(rolled, {
             type: 'BONUS_DICE_REROLL_REQUESTED',
@@ -162,6 +162,13 @@ describe('DiceThrone 单槽当前骰区', () => {
             kind: 'bonus',
             ownerPlayerId: '0',
             targetPlayerId: '1',
+            dice: [{ definitionId: 'zhanshujia-dice', value: 3 }],
+            suspendedParent: {
+                id: rolledContext?.id,
+                kind: 'offensive',
+                ownerPlayerId: '0',
+                dice: [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }, { value: 5 }],
+            },
         });
         expect(bonusOpened.currentRollContext).not.toHaveProperty('coveredPreviousRollRef');
         expect(bonusOpened).not.toHaveProperty('rollContextRecovery');
@@ -185,7 +192,7 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.dice[0].value).toBe(1);
     });
 
-    it('奖励骰结算后保留最终骰面为右侧骰盘的只读回看，直到下一次投掷覆盖它', () => {
+    it('奖励骰确认后结算最终骰面，并自动恢复被挂起的主攻击骰', () => {
         const settlement: PendingBonusDiceSettlement = {
             ...createBonusSettlement(),
             dice: [
@@ -193,7 +200,8 @@ describe('DiceThrone 单槽当前骰区', () => {
                 { index: 1, value: 4, face: 'sabre', effectParams: { value: 4 } },
             ],
         };
-        const opened = reduce(createCore(), {
+        const parent = roll(createCore(), [1, 2, 3, 4, 5]);
+        const opened = reduce(parent, {
             type: 'BONUS_DICE_REROLL_REQUESTED',
             payload: { settlement },
             timestamp: 3,
@@ -219,11 +227,30 @@ describe('DiceThrone 单槽当前骰区', () => {
 
         expect(settled.pendingBonusDiceSettlement).toBeUndefined();
         expect(settled.currentRollContext).toMatchObject({
-            id: 'bonus:bonus-test-1',
-            kind: 'bonus',
-            status: 'settled',
-            display: { replayOnly: true },
-            dice: [{ value: 6 }, { value: 4 }],
+            id: parent.currentRollContext?.id,
+            kind: 'offensive',
+            ownerPlayerId: '0',
+            phase: 'offensiveRoll',
+            dice: [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }, { value: 5 }],
+        });
+    });
+
+    it('临时奖励骰未确认时禁止推进原攻击阶段', () => {
+        const parent = roll(createCore(), [1, 2, 3, 4, 5]);
+        const bonusOpened = reduce(parent, {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+
+        expect(canAdvancePhase(bonusOpened, 'offensiveRoll')).toBe(false);
+        expect(validateCommand(bonusOpened, {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: {},
+        } as any, 'offensiveRoll')).toMatchObject({
+            valid: false,
+            error: 'cannot_advance_phase',
         });
     });
 
@@ -273,7 +300,7 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.currentRollContext?.dice[0]?.value).toBe(6);
     });
 
-    it('当前可改奖励骰允许在主要阶段打出改骰牌', () => {
+    it('当前可改奖励骰不会放宽掷骰牌的主要阶段限制', () => {
         const opened = reduce(createCore(), {
             type: 'BONUS_DICE_REROLL_REQUESTED',
             payload: { settlement: createBonusSettlement() },
@@ -286,9 +313,41 @@ describe('DiceThrone 单槽当前骰区', () => {
 
         expect(opened.currentRollContext).toMatchObject({
             kind: 'bonus',
-            policy: { allowRollCards: true },
+            policy: { allowDiceCardTargeting: true },
         });
-        expect(checkPlayCard(opened, '0', playSix, 'main1')).toEqual({ ok: true });
+        expect(checkPlayCard(opened, '0', playSix, 'main1')).toEqual({
+            ok: false,
+            reason: 'wrongPhaseForRoll',
+        });
+    });
+
+    it('奖励骰只在掷骰阶段允许骰子牌以它为目标', () => {
+        const opened = reduce(createCore(), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const playSix = COMMON_CARDS.find((card) => card.id === 'card-play-six');
+
+        expect(playSix).toBeDefined();
+        if (!playSix) return;
+
+        expect(checkPlayCard(opened, '0', playSix, 'offensiveRoll')).toEqual({ ok: true });
+
+        const lockedTarget = {
+            ...opened,
+            currentRollContext: opened.currentRollContext && {
+                ...opened.currentRollContext,
+                policy: {
+                    ...opened.currentRollContext.policy,
+                    allowDiceCardTargeting: false,
+                },
+            },
+        };
+        expect(checkPlayCard(lockedTarget, '0', playSix, 'offensiveRoll')).toEqual({
+            ok: false,
+            reason: 'rollContextLocked',
+        });
     });
 
     it('新投掷覆盖后不产生无规则来源的玩家恢复步骤', () => {
@@ -300,10 +359,11 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(covered).not.toHaveProperty('rollContextRecovery');
     });
 
-    it('终极成功发动后的结算骰会进入当前骰区但禁止改骰和重掷', () => {
+    it('展示型与终极来源的临时骰仍允许战术优势重掷', () => {
         const settlement: PendingBonusDiceSettlement = {
             ...createBonusSettlement(),
-            id: 'ultimate-roll-test',
+            id: 'all-temporary-dice-modifiable',
+            displayOnly: true,
             allowDiceModification: false,
             ultimateLocked: true,
             rerollCostTokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
@@ -317,49 +377,29 @@ describe('DiceThrone 单槽当前骰区', () => {
         } as DiceThroneEvent);
 
         expect(opened.currentRollContext).toMatchObject({
-            id: 'bonus:ultimate-roll-test',
+            id: 'bonus:all-temporary-dice-modifiable',
             kind: 'bonus',
-            status: 'locked',
+            status: 'open',
             policy: {
-                modifiableBy: 'none',
-                rerollableBy: 'none',
-                allowPassiveReroll: false,
-                allowRollCards: false,
-                ultimateLocked: true,
+                modifiableBy: 'owner',
+                rerollableBy: 'owner',
+                allowPassiveReroll: true,
+                allowDiceCardTargeting: true,
+                ultimateLocked: false,
             },
         });
-        expect(validateCommand(opened, {
-            type: 'REROLL_BONUS_DIE',
-            playerId: '0',
-            payload: { dieIndex: 0 },
-        } as any, 'main1')).toMatchObject({ valid: false, error: 'dice_locked' });
-        expect(validateCommand(opened, {
-            type: 'MODIFY_DIE',
-            playerId: '0',
-            payload: { dieId: 0, newValue: 6 },
-        } as any, 'main1', {
-            id: 'ultimate-roll-modify',
-            playerId: '0',
-            sourceCardId: 'card-test',
-            type: 'modifyDie',
-            titleKey: 'interaction.selectDieToModify',
-            selectCount: 1,
-            selected: [],
-            allowedDieIds: [0],
-        } as any)).toMatchObject({ valid: false, error: 'dice_locked' });
-        expect(validateCommand(opened, {
-            type: 'SKIP_BONUS_DICE_REROLL',
-            playerId: '0',
-            payload: {},
-        } as any, 'main1').valid).toBe(true);
+        expect(isPassiveActionUsable(
+            opened,
+            '0',
+            'zhanshujia-tactical-advantage',
+            1,
+            'main1',
+        )).toBe(true);
 
         const playSix = COMMON_CARDS.find((card) => card.id === 'card-play-six');
         expect(playSix).toBeDefined();
         if (!playSix) return;
-        expect(checkPlayCard(opened, '0', playSix, 'offensiveRoll')).toMatchObject({
-            ok: false,
-            reason: 'rollContextLocked',
-        });
+        expect(checkPlayCard(opened, '0', playSix, 'offensiveRoll')).toEqual({ ok: true });
     });
 
     it('战术家的战术优势可在非投掷阶段重掷当前奖励骰', () => {

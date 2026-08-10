@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-用于把 `public/assets/i18n/<locale>/summonerwars/hero/<faction>/` 中的召唤师、卡牌图集和提示板接入为完整可玩派系。该流程承接 `.codex/skill/add-new-faction/SKILL.md` 与 `.codex/skill/data-entry-workflow/SKILL.md`，不替代通用资源、审计和 E2E 门禁。
+用于把 `public/assets/i18n/<locale>/summonerwars/hero/<faction>/` 中的召唤师、卡牌图集和提示板接入为完整可玩派系。该流程承接 `.spec/skills/add-new-faction/SKILL.md` 与 `.spec/skills/data-entry-workflow/SKILL.md`，不替代通用资源、审计和 E2E 门禁。
 
 ## S0：锁定输入
 

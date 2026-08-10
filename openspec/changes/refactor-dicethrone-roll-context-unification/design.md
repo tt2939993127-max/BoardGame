@@ -12,14 +12,13 @@ DiceThrone 当前把“现在玩家能理解和操作的骰子”拆成多套实
 
 这些路线会让“任何骰子都可以被修改”的规则口径在实现中变成若干特例。战术家的战术优势、闪避、目标掷骰、奖励骰、对掷 / 比骰都可能因为不在同一个当前骰子模型里而被错误拒绝、提前结算或重复开窗口。
 
-本轮用户已明确新的核心不变量：**当前骰子永远只有一种，而且新投掷会覆盖旧投掷**。因此本设计不做多套前台骰区，也不做 `core.dice`、奖励骰和 display-only 三个并行当前源。
+本轮用户已明确新的核心不变量：**当前骰子永远只有一种，而且独立新投掷会覆盖旧投掷**。奖励骰、额外效果骰等由既有攻击 / 效果流程派生的临时骰不是新的独立流程；它们临时占用唯一骰区，确认后自动恢复父骰。因此本设计不做多套前台骰区，也不做 `core.dice`、奖励骰和 display-only 三个并行当前源。
 
 ## Goals
 - 用一个领域层 Module 表达 DiceThrone 当前唯一可操作骰子，语义上等同于一个单槽当前骰区。
 - 让通用改骰卡、被动、Token、响应窗口、AI 和 UI 都读取同一个当前骰子上下文。
 - 支持“出牌后回到对应步骤继续游戏”：若后续出牌或效果产生新投掷并覆盖旧骰区，要修改旧骰面时必须回到覆盖前对应步骤，再沿同一流程继续。
-- 显式区分规则可修改的骰子、规则锁定的骰子、已结算回放展示。
-- 保留 Ultimate 成功发动后的硬例外：规则锁定后的结算骰不可被非法修改。
+- 显式区分未结算骰子与已结算回放展示；骰子来源和展示标记不决定未结算骰是否可修改。
 
 ## Non-Goals
 - 不重写引擎层通用骰子 primitive。
@@ -29,24 +28,24 @@ DiceThrone 当前把“现在玩家能理解和操作的骰子”拆成多套实
 
 ## Decisions
 
-- Decision: DiceThrone 只有一个单槽当前骰区，且新投掷破坏性覆盖旧投掷。
-  - Rationale: 用户口径是“当前骰子只有一个，新投掷的骰子会覆盖旧的”。实现上必须把“当前骰子”收敛为唯一字段 / 唯一读取入口，而不是让主骰、奖励骰和展示骰各自争抢前台。
-  - Consequence: 所有 UI、校验、AI、响应窗口只能消费 `currentRollContext`，旧字段只能作为迁移期兼容或派生展示，不得作为第二套当前源。
+- Decision: DiceThrone 只有一个活动当前骰区；独立投掷破坏性覆盖，临时子骰自动恢复父骰。
+  - Rationale: 用户口径是“当前骰子只有一个”，但奖励骰与额外效果骰确认后必须回到尚未完成的攻击骰。实现上必须区分无父流程的独立投掷与有父流程的临时子骰，而不是让主骰、奖励骰和展示骰并行争抢前台。
+  - Consequence: 所有 UI、校验、AI、响应窗口只能消费 `currentRollContext`。临时子骰可携带内部挂起的父上下文，但父上下文在子骰确认前不是第二个当前骰子，也不可被操作。
 
 - Decision: “骰子区域没有被覆盖”翻译成规则语义：当前骰区仍保存该次投掷，且尚未被后续投掷覆盖。
   - Rationale: 覆盖不是 UI z-index 问题，而是单槽当前骰区的数据覆盖问题。只要后续投掷写入当前骰区，旧骰子就不再是当前可修改对象。
   - Consequence: 不允许 UI 自己判断“哪里没盖住就能改”。必须由领域层 current context 策略给出当前单槽里哪一次投掷可操作，以及旧骰面是否已经被覆盖。
 
-- Decision: 覆盖骰区是内部状态替换，不产生玩家恢复操作。
-  - Rationale: “旧骰子已不再是当前骰子”只定义状态归属，不能凭此发明规则书没有的恢复、回到或结算操作。
-  - Consequence: 后续投掷正常覆盖当前骰区；旧骰值只可作为已提交结算输入保留。任何回到某步骤的玩家动作都必须由独立规则和既有流程承载，不能由骰区框架自动生成。
+- Decision: 临时子骰的恢复是既有父流程的自动收口，不产生玩家恢复操作。
+  - Rationale: 奖励骰和额外效果骰的确认本来就是父攻击 / 效果流程的一步；确认后继续父流程不是新增规则动作。相反，独立投掷的覆盖不应凭空生成恢复。
+  - Consequence: 临时子骰确认后恢复其挂起父上下文；不得向玩家暴露恢复按钮、恢复命令或可同时操作的双骰区。无父流程的后续独立投掷仍正常覆盖当前骰区。
 
 - Decision: `displayOnly` 不承载未完成规则结算。
   - Rationale: 只要某次掷骰仍可能被卡牌 / 状态 / 被动修改，就必须进入当前骰子上下文，而不是先自动结算再播特写。
-  - Consequence: `displayOnly` 只用于已结算回放、明确不可干预的结果或纯汇总说明。
+  - Consequence: `displayOnly` 只用于已结算回放或纯汇总说明。任何尚未结算的临时骰，即使规则不允许重掷或改骰，也必须等待掷骰者确认后才能收口。
 
 - Decision: 所有权和干预权限来自同一策略矩阵。
-  - Rationale: 2v2 队友干预、对手改骰、战术家“任意时刻”、闪避投骰、Ultimate 锁定不能由 UI、validate、execute 各自推断。
+  - Rationale: 2v2 队友干预、对手改骰、战术家“任意时刻”和闪避投骰不能由 UI、validate、execute 各自推断；Ultimate 来源也不能另造锁定分支。
   - Consequence: `currentRollContext.policy` 是合法操作者、可修改性、可重掷性、是否阻塞流程的单一来源。
 
 ## Proposed Model
@@ -67,10 +66,11 @@ DiceThrone 领域状态新增一个唯一当前上下文。它不是栈顶视图
 - `sourceTokenId?`
 - `phase`
 - `dice[]`
-- `status`: `open | settling | settled | locked`
+- `status`: `open | settling | settled`；旧 `locked` 状态读取后按未结算当前骰处理
 - `policy`
 - `settlement`
 - `display`
+- `suspendedParent?`：仅临时子骰使用的内部父上下文；确认子骰后自动恢复，恢复前不属于当前骰区。
 
 ### Policy
 `policy` 是所有校验层的单一判断来源：
@@ -78,8 +78,8 @@ DiceThrone 领域状态新增一个唯一当前上下文。它不是栈顶视图
 - `modifiableBy`: `owner | opponents | allies | both | any | none`
 - `rerollableBy`: `owner | opponents | allies | both | any | none`
 - `allowPassiveReroll`
-- `allowRollCards`
-- `ultimateLocked`
+- `allowDiceCardTargeting`：当前骰区能否作为骰子牌效果目标；卡牌阶段时机由卡牌和响应窗口单独裁决
+- 历史 `ultimateLocked` 字段仅用于旧数据读取，不参与当前合法性判断
 - `blocksPhaseFlow`
 
 ### Settlement
@@ -101,11 +101,15 @@ DiceThrone 领域状态新增一个唯一当前上下文。它不是栈顶视图
 - 同一时刻最多只有一个 `currentRollContext`，它就是当前骰区。
 - 任何改骰 / 重掷 / 被动重掷 / 骰子响应命令都必须携带或解析到这个唯一上下文。
 - 若当前骰区未被覆盖，不得用另一个字段继续表达“也能操作的骰子”。
-- 若效果中途产生新骰子：
+- 若效果中途产生独立新骰子：
   1. 覆盖前若旧骰面还要被后续流程使用，先提交为结算输入 / 快照；
   2. 新投掷破坏性写入唯一 `currentRollContext`；
-  3. 旧骰子不再是当前骰子，不能继续被普通改骰命令修改；
-  4. 旧骰子不再产生恢复按钮、命令或额外结算流程；只有规则已定义的后续步骤可以消费已提交的结算输入。
+  3. 旧骰子不再是当前骰子，不能继续被普通改骰命令修改。
+- 若既有攻击 / 效果流程产生临时子骰：
+  1. 子骰写入唯一 `currentRollContext`，并内部挂起父上下文；
+  2. 父骰在子骰确认前不展示为可操作骰子；
+  3. 子骰以最终骰面完成结算后自动恢复父上下文；
+  4. 系统不得产生玩家恢复按钮、恢复命令或可同时操作的双骰区。
 
 ## Migration Strategy
 1. 合并 OpenSpec：保留 `refactor-dicethrone-roll-context-unification`，删除重复的 `refactor-dicethrone-extra-dice-unification`。
@@ -113,8 +117,8 @@ DiceThrone 领域状态新增一个唯一当前上下文。它不是栈顶视图
 3. 将 `getActiveDice`、`getRollerId`、可改骰判断、骰子签名、响应窗口源 ID 改为优先读取当前上下文。
 4. 将 `MODIFY_DIE`、`REROLL_DIE`、`USE_PASSIVE_ABILITY.rerollDie` 改为面向当前上下文。
 5. 将目标掷骰、闪避、`rollDie`、可改奖励骰、对掷 / 比骰迁入当前上下文。
-6. 将 `pendingBonusDiceSettlement` 退化为迁移期适配或展示派生数据。
-7. 清理 `displayOnly` 滥用，只保留已结算回放和明确不可干预结果。
+6. 将 `pendingBonusDiceSettlement` 退化为迁移期适配或展示派生数据，并让其临时子骰确认后恢复父上下文。
+7. 清理 `displayOnly` 滥用，只保留已结算回放和纯汇总说明；未结算骰统一等待确认。
 8. 更新 UI、AI、Vitest、E2E 和 evidence。
 
 ## Risks / Trade-offs

@@ -21,5 +21,5 @@
   - `src/games/qidahen/roomSetup.ts`
   - `src/components/lobby/CreateRoomModal.tsx`
   - `e2e/qidahen/online-inmatch-setup.e2e.ts`
-  - `.codex/skill/create-new-game/SKILL.md`
+  - `.spec/skills/create-new-game/SKILL.md`
   - `docs/ai-rules/ui-ux.md`

@@ -21,7 +21,7 @@
 | 现实故障现象 | 用户指出“法师的提示卡”和“代表法师本人的卡”不是同一对象；旧实现把 HUD 昵称上方提示卡和竞技场法师实体都渲染成完整法师规则卡。 |
 | 直接触发条件 | `MageHud` 使用 `getMageWarsMagePreviewRef(player.mageId, 'card')`，E2E 用 `mage-wars-mage-hud-identity-card` 这种含混锚点只验证“有一张卡”，没有验证它是提示卡还是战场实体。 |
 | 根本机制 | 规则对象覆盖矩阵没有把 `法师战场实体`、`玩家 / 法师提示卡`、`法师规则卡` 拆成三行，导致素材 `card` 与 `portrait` 被按变量名而不是对象职责使用。 |
-| 最小修正 | 更新 `.codex/skill/mage-wars-ui-design-memory/SKILL.md` 作为唯一规范真相源；HUD 改用肖像 / 提示视觉并命名为 `mage-wars-mage-hud-hint-card`；竞技场实体命名为 `mage-wars-zone-mage-entity`；E2E 断言两者 `data-mage-preview-kind` 和 `data-mage-ui-role` 不同。 |
+| 最小修正 | 更新 `.spec/skills/mage-wars-ui-design-memory/SKILL.md` 作为唯一规范真相源；HUD 改用肖像 / 提示视觉并命名为 `mage-wars-mage-hud-hint-card`；竞技场实体命名为 `mage-wars-zone-mage-entity`；E2E 断言两者 `data-mage-preview-kind` 和 `data-mage-ui-role` 不同。 |
 
 ## 实现状态
 

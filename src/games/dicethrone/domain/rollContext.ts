@@ -64,7 +64,7 @@ const defaultPolicy = (
     modifiableBy: actorScope,
     rerollableBy: actorScope,
     allowPassiveReroll: true,
-    allowRollCards: true,
+    allowDiceCardTargeting: true,
     ultimateLocked: false,
     blocksPhaseFlow: true,
 });
@@ -101,13 +101,18 @@ export const createMainRollContext = (
 };
 
 const bonusDieToContextDie = (
+    state: DiceThroneCore,
     settlement: PendingBonusDiceSettlement,
     die: PendingBonusDiceSettlement['dice'][number],
 ): Die => {
+    const characterId = state.players[settlement.attackerId]?.characterId;
+    if (!characterId || characterId === 'unselected') {
+        throw new Error(`奖励骰缺少掷骰者角色：playerId=${settlement.attackerId}`);
+    }
     const face = die.face as DieFace;
     return {
         id: die.index,
-        definitionId: `bonus:${settlement.sourceAbilityId}`,
+        definitionId: `${characterId}-dice`,
         value: die.value,
         symbol: face,
         symbols: face ? [face] : [],
@@ -118,10 +123,11 @@ const bonusDieToContextDie = (
 };
 
 export const getBonusSettlementContextDice = (
+    state: DiceThroneCore,
     settlement: PendingBonusDiceSettlement | null | undefined,
 ): Die[] => {
     const dice = Array.isArray(settlement?.dice) ? settlement.dice : [];
-    return settlement ? dice.map((die) => bonusDieToContextDie(settlement, die)) : [];
+    return settlement ? dice.map((die) => bonusDieToContextDie(state, settlement, die)) : [];
 };
 
 export const createBonusRollContextFromSettlement = (
@@ -129,32 +135,15 @@ export const createBonusRollContextFromSettlement = (
     settlement: PendingBonusDiceSettlement,
 ): DiceThroneRollContext => {
     const id = `bonus:${settlement.id}`;
-    const isReplayOnly = settlement.displayOnly === true && settlement.allowDiceModification !== true;
-    const isUltimateLocked = settlement.ultimateLocked === true;
-    const policy = isReplayOnly
-        ? {
-            ...defaultPolicy('none'),
-            allowPassiveReroll: false,
-            allowRollCards: false,
-            blocksPhaseFlow: false,
-        }
-        : isUltimateLocked
-            ? {
-                ...defaultPolicy('none'),
-                allowPassiveReroll: false,
-                allowRollCards: false,
-                ultimateLocked: true,
-            }
-        : defaultPolicy('owner');
     return {
         id,
         kind: 'bonus',
         ownerPlayerId: settlement.attackerId,
         targetPlayerId: settlement.targetId,
         sourceAbilityId: settlement.sourceAbilityId,
-        dice: getBonusSettlementContextDice(settlement),
-        status: isReplayOnly ? 'settled' : isUltimateLocked ? 'locked' : 'open',
-        policy,
+        dice: getBonusSettlementContextDice(state, settlement),
+        status: 'open',
+        policy: defaultPolicy('owner'),
         settlement: {
             mode: settlement.resolutionMode === 'attackBonus'
                 ? 'attackBonus'
@@ -167,7 +156,7 @@ export const createBonusRollContextFromSettlement = (
         },
         display: {
             surface: 'diceTray',
-            replayOnly: isReplayOnly,
+            replayOnly: false,
             summaryKey: settlement.summaryEffectKey,
         },
     };
@@ -206,7 +195,7 @@ export const createEvasionRollContext = (
             modifiableBy: 'any',
             rerollableBy: 'owner',
             allowPassiveReroll: true,
-            allowRollCards: true,
+            allowDiceCardTargeting: true,
             ultimateLocked: false,
             blocksPhaseFlow: true,
         },
@@ -247,7 +236,7 @@ export const createCompareRollContext = (
         modifiableBy: 'any',
         rerollableBy: 'owner',
         allowPassiveReroll: true,
-        allowRollCards: true,
+        allowDiceCardTargeting: true,
         ultimateLocked: false,
         blocksPhaseFlow: true,
     },
@@ -411,6 +400,47 @@ export const replaceCurrentRollContext = (
     };
 };
 
+/** 临时骰只挂起尚未结算的父骰；父骰在子骰确认前不属于当前骰区。 */
+export const openTemporaryRollContext = (
+    state: DiceThroneCore,
+    context: DiceThroneRollContext,
+): DiceThroneCore => {
+    const parent = state.currentRollContext ?? (() => {
+        const legacyDice = getLegacyActiveDice(state);
+        if (state.rollCount <= 0 || legacyDice.length === 0) return undefined;
+        return createMainRollContext(state, {
+            phase: state.phase,
+            ownerPlayerId: state.activePlayerId,
+            dice: legacyDice,
+        });
+    })();
+    const canSuspendParent = parent
+        && parent.status !== 'settled'
+        && parent.display.replayOnly !== true;
+    return {
+        ...state,
+        currentRollContext: canSuspendParent
+            ? { ...context, suspendedParent: parent }
+            : context,
+    };
+};
+
+/** 临时骰确认后的内部收口；不生成玩家恢复命令或恢复按钮。 */
+export const restoreSuspendedParentRollContext = (
+    state: DiceThroneCore,
+    contextId: string,
+): DiceThroneCore => {
+    const current = state.currentRollContext;
+    if (!current || current.id !== contextId) return state;
+    if (current.suspendedParent) {
+        return {
+            ...state,
+            currentRollContext: current.suspendedParent,
+        };
+    }
+    return clearCurrentRollContext(state, contextId);
+};
+
 export const clearCurrentRollContext = (
     state: DiceThroneCore,
     contextId?: string,
@@ -445,9 +475,9 @@ export const resolveCurrentRollContext = (
     if (state.currentRollContext) return state.currentRollContext;
     const settlement = state.pendingBonusDiceSettlement;
     if (
-        settlement?.allowDiceModification === true
+        settlement
         && isCurrentBonusRollSettlement(state, settlement)
-        && getBonusSettlementContextDice(settlement).length > 0
+        && getBonusSettlementContextDice(state, settlement).length > 0
     ) {
         return createBonusRollContextFromSettlement(state, settlement);
     }

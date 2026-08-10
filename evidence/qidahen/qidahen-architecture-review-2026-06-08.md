@@ -3178,7 +3178,7 @@
 
 - 这轮继续按 `create-new-game` 新流程补正式架构审查，不新增生产实现。目标是把当前 `core / sys.interaction` 这条 seam 再锁深一层，避免把现态误写成“只剩几个 `ForCore(...)` getter 在兼容回退”。
 - 当前静态证据已经足够说明：`getter` 只是表层，真正还没退休的是 `core` 自己仍在承接多组“等待玩家输入”的镜像字段。
-  - 新流程与当前项目规则都已经明确写死：等待玩家输入的状态应走 `sys.interaction`，不应继续留在 `core`。证据见 [.codex/skill/create-new-game/SKILL.md](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/.codex/skill/create-new-game/SKILL.md) 与 [AGENTS.md](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/AGENTS.md) 里“禁止在 core 中存放交互状态”的强制口径。
+  - 新流程与当前项目规则都已经明确写死：等待玩家输入的状态应走 `sys.interaction`，不应继续留在 `core`。证据见 [.spec/skills/create-new-game/SKILL.md](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/.spec/skills/create-new-game/SKILL.md) 与 [AGENTS.md](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/AGENTS.md) 里“禁止在 core 中存放交互状态”的强制口径。
   - 但当前 [types.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/types.ts) 里，`QidahenCore` 仍正式持有 `diplomacySelection / driveTigerConsentSelection / fortificationMaintenanceSelection / internalDispatchSelection / wheelDispatchSelection / pendingTargetAction / postBattleSelection` 这些交互期字段。
   - [actionWindowEntryState.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/actionWindowEntryState.ts) 当前在每次进入行动窗口时仍会统一清空这批字段；这说明它们还被当成回合主状态的一部分，而不只是旧兼容残片。
   - [coreDerivedState.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/coreDerivedState.ts) 当前仍持续把 `diplomacySelection / internalDispatchSelection / wheelDispatchSelection` 回写到 `core`；与此同时，[selectionBuilders.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/selectionBuilders.ts) 与 [dispatchSelectionBuilders.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/dispatchSelectionBuilders.ts) 也仍把 `state.diplomacySelection / state.wheelDispatchSelection` 当成优先返回值。
@@ -9117,7 +9117,7 @@
 
 ## 0.93 按新流程复核补记（2026-06-09 06:42 +08）
 
-- 这轮不是继续下沉某一条 owner，而是把当前 formal evidence 重新对齐 `.codex/skill/create-new-game/SKILL.md` 里的“新游戏架构审查清单”，确认《七大恨》当前是否还卡在对象建模门禁上。
+- 这轮不是继续下沉某一条 owner，而是把当前 formal evidence 重新对齐 `.spec/skills/create-new-game/SKILL.md` 里的“新游戏架构审查清单”，确认《七大恨》当前是否还卡在对象建模门禁上。
 - 复核 `A. 规则对象与工程对象一一映射` 与 `B. 状态粒度裁定` 后，当前源码真相已经足够明确：
   - [types.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/types.ts) 里已经同时存在 `QidahenPiece`、`QidahenPieceLocation`、`QidahenSpecialTroopStack.pieceIds?`、`QidahenCore.pieces[]`、`QidahenCore.mapTokens[]`。
   - 这说明《七大恨》当前已不再是“只有聚合栈、没有正式单对象”的初始坏态；单棋子 `piece.id`、区域摘要 `pieceIds` 桥和显示派生 `mapTokens` 的层次已经建出来。
@@ -10883,7 +10883,7 @@
   - [index.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/index.ts)
   - [runtimeInteractions.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/runtimeInteractions.ts)
   - [commands.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/commands.ts)
-- 对照源：[`architecture-review-template.md`](D:/gongzuo/webgame/BoardGame/.codex/skill/create-new-game/references/architecture-review-template.md)
+- 对照源：[`architecture-review-template.md`](D:/gongzuo/webgame/BoardGame/.spec/skills/create-new-game/references/architecture-review-template.md)
 - 当前 OpenSpec / change：本轮不新建 proposal / change；且本审查不并入 `openspec/changes/refactor-qidahen-printed-region-topology/`
 - 审查日期：2026-06-08
 - 审查人：Codex

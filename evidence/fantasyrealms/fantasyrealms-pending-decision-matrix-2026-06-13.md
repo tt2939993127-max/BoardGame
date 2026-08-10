@@ -111,7 +111,7 @@
 
 这些不是 Fantasy Realms 通过 UI 线的一部分，不能借本轮合并自动吞并：
 
-- `.codex/skill/git-operations/SKILL.md`
+- `.spec/skills/git-operations/SKILL.md`
 - `AGENTS.md`
 - `docs/ai-rules/animation-effects.md`
 - `docs/ai-rules/asset-pipeline.md`

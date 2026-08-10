@@ -1,6 +1,6 @@
 # Mage Wars 用户纠正覆盖账本
 
-> 角色：`drift-check / evidence`。本文件只把用户在 Mage Wars PC Open Design 设计稿线上反复指出的纠正，映射到规则证据、项目设计合同和送验前检查项。它不是独立规范来源；新增硬规则必须回写到 `D:\codex-home\skills\ui-design-pipeline\SKILL.md`、`D:\codex-home\skills\ui-audit-loop\SKILL.md` 或 `.codex/skill/mage-wars-ui-design-memory/SKILL.md` 后，再由本账本引用。
+> 角色：`drift-check / evidence`。本文件只把用户在 Mage Wars PC Open Design 设计稿线上反复指出的纠正，映射到规则证据、项目设计合同和送验前检查项。它不是独立规范来源；新增硬规则必须回写到 `D:\codex-home\skills\ui-design-pipeline\SKILL.md`、`D:\codex-home\skills\ui-audit-loop\SKILL.md` 或 `.spec/skills/mage-wars-ui-design-memory/SKILL.md` 后，再由本账本引用。
 
 ## 使用方式
 
@@ -58,7 +58,7 @@
 ## 当前下一稿 / 实现截图送验前最低勾选
 
 - [ ] 规则真相源已在当前轮次实际读取，而不是继承摘要。
-- [ ] 已按 `.codex/skill/mage-wars-ui-design-memory/SKILL.md` 的“规则到 UI 到实现执行顺序”锁定规则对象、唯一实体锚点和主交互链。
+- [ ] 已按 `.spec/skills/mage-wars-ui-design-memory/SKILL.md` 的“规则到 UI 到实现执行顺序”锁定规则对象、唯一实体锚点和主交互链。
 - [ ] 已建立规则对象覆盖矩阵；foundation 最低对象行都有 `visible`、`collapsed-with-visible-entry`、`hidden-by-rule`、`out-of-scope`、`blocked` 或 `approved-programmatic` 结论。
 - [ ] Open Design artifact 路线确认，未调用 media 生图链。
 - [ ] `法术书 / 已计划法术 / 弃牌堆 / 隐性结界` 牌区命名无“手牌”。

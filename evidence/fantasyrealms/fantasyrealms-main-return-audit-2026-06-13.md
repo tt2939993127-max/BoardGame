@@ -142,7 +142,7 @@
 #### 根目录 `main` 当前脏改
 
 - `AGENTS.md`
-- `.codex/skill/git-operations/SKILL.md`
+- `.spec/skills/git-operations/SKILL.md`
 - `docs/ai-rules/asset-pipeline.md`
 - `docs/ai-rules/doc-index.md`
 - `docs/automated-testing.md`

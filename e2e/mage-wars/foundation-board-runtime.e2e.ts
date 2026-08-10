@@ -10,6 +10,7 @@ import {
 } from '../helpers/common';
 
 const SCREENSHOT_PATH = 'test-results/evidence-screenshots/mage-wars/foundation-board-runtime/e2e-desktop-board.png';
+const DEFAULT_MAGE_SPACE_SCREENSHOT_PATH = 'test-results/evidence-screenshots/mage-wars/foundation-board-runtime/e2e-desktop-default-mage-space.png';
 const ATTACK_SETTLEMENT_SCREENSHOT_PATH = 'test-results/evidence-screenshots/mage-wars/foundation-board-runtime/e2e-desktop-attack-settlement.png';
 const MOBILE_SCREENSHOT_PATH = 'test-results/evidence-screenshots/mage-wars/foundation-board-runtime/e2e-mobile-landscape-board.png';
 
@@ -347,6 +348,38 @@ test.describe('Mage Wars foundation runtime board', () => {
     test('真实入口加载正式牌桌素材并落桌面验收截图', async ({ context, page }) => {
         test.setTimeout(60_000);
         const diagnostics = await openMageWarsBoard(context, page, 'mage-wars-foundation-runtime-board');
+        const defaultMageLayout = await page.evaluate(() => Array.from(
+            document.querySelectorAll<HTMLElement>('[data-testid="mage-wars-zone-mage-entity"]'),
+        ).map((mage) => {
+            const laneGroup = mage.closest<HTMLElement>('[data-testid="mage-wars-zone-ownership-lanes"]');
+            const lane = mage.closest<HTMLElement>('[data-lane-owner-side]');
+            const lanes = laneGroup
+                ? Array.from(laneGroup.querySelectorAll<HTMLElement>('[data-lane-owner-side]')).map((entry) => ({
+                    ownerSide: entry.dataset.laneOwnerSide ?? null,
+                    mageEntityCount: entry.querySelectorAll('[data-testid="mage-wars-zone-mage-entity"]').length,
+                }))
+                : [];
+            return {
+                mageId: mage.dataset.mageId ?? null,
+                zoneId: mage.closest<HTMLElement>('[data-testid^="mage-wars-arena-zone-"]')?.dataset.testid ?? null,
+                ownerSide: lane?.dataset.laneOwnerSide ?? null,
+                laneCount: lanes.length,
+                ownLaneMageCount: lanes.find((entry) => entry.ownerSide === lane?.dataset.laneOwnerSide)?.mageEntityCount ?? 0,
+                otherLaneMageCount: lanes
+                    .filter((entry) => entry.ownerSide !== lane?.dataset.laneOwnerSide)
+                    .reduce((total, entry) => total + entry.mageEntityCount, 0),
+            };
+        }));
+        expect(defaultMageLayout).toHaveLength(2);
+        defaultMageLayout.forEach((mage) => {
+            expect(mage.zoneId).not.toBeNull();
+            expect(mage.ownerSide).not.toBeNull();
+            expect(mage.laneCount).toBe(2);
+            expect(mage.ownLaneMageCount).toBe(1);
+            expect(mage.otherLaneMageCount).toBe(0);
+        });
+        await mkdir(dirname(DEFAULT_MAGE_SPACE_SCREENSHOT_PATH), { recursive: true });
+        await page.screenshot({ path: DEFAULT_MAGE_SPACE_SCREENSHOT_PATH, fullPage: false });
         await applyMageWarsSaturatedState(page);
         const board = page.getByTestId('mage-wars-board');
         await expect(page.getByTestId('mage-wars-stage-chip')).toHaveText('行动环节');
@@ -645,7 +678,7 @@ test.describe('Mage Wars foundation runtime board', () => {
         expect(Math.abs(desktopLayoutAudit.opponentHud!.y - 70)).toBeLessThanOrEqual(8);
         expect(Math.abs(desktopLayoutAudit.opponentHud!.width - 248)).toBeLessThanOrEqual(4);
         expect(Math.abs(desktopLayoutAudit.spellbookCard!.x - 374)).toBeLessThanOrEqual(8);
-        expect(Math.abs(desktopLayoutAudit.spellbookCard!.y - 847)).toBeLessThanOrEqual(8);
+        expect(Math.abs(desktopLayoutAudit.spellbookCard!.y - 797)).toBeLessThanOrEqual(8);
         expect(Math.abs(desktopLayoutAudit.preparedCard!.x - 1714)).toBeLessThanOrEqual(10);
         expect(Math.abs(desktopLayoutAudit.preparedCard!.y - 745)).toBeLessThanOrEqual(10);
         expect(Math.abs(desktopLayoutAudit.discardPile!.x - 1724)).toBeLessThanOrEqual(10);
@@ -653,9 +686,9 @@ test.describe('Mage Wars foundation runtime board', () => {
         expect(Math.abs(desktopLayoutAudit.turnEnd!.x - 1700)).toBeLessThanOrEqual(10);
         expect(Math.abs(desktopLayoutAudit.turnEnd!.y - 1010)).toBeLessThanOrEqual(10);
         expect(Math.abs(desktopLayoutAudit.preparedCard!.height - 224)).toBeLessThanOrEqual(2);
-        expect(Math.abs(desktopLayoutAudit.spellbookCard!.height - 176)).toBeLessThanOrEqual(2);
+        expect(Math.abs(desktopLayoutAudit.spellbookCard!.height - 224)).toBeLessThanOrEqual(2);
         expect(Math.abs(desktopLayoutAudit.preparedCard!.width - 158)).toBeLessThanOrEqual(2);
-        expect(Math.abs(desktopLayoutAudit.spellbookCard!.width - 124)).toBeLessThanOrEqual(2);
+        expect(Math.abs(desktopLayoutAudit.spellbookCard!.width - 158)).toBeLessThanOrEqual(2);
         expect(desktopLayoutAudit.fieldCards).toHaveLength(10);
         expect(desktopLayoutAudit.fieldCards.every((card) => card.zoneId === 'a2')).toBe(true);
         expect(desktopLayoutAudit.fieldCards.filter((card) => card.role === 'target').length).toBeGreaterThan(0);

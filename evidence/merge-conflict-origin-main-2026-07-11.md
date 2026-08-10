@@ -13,7 +13,7 @@
 
 - Git 合并过程没有产生真实冲突文件。
 - pre-push 门禁对 merge commit 做了双侧重叠改动审计，识别到 8 个双方都涉及的文件：
-  - `.codex/skill/android-app-release/SKILL.md`
+  - `.spec/skills/android-app-release/SKILL.md`
   - `.github/workflows/android-ota-publish.yml`
   - `docs/mobile-release.md`
   - `scripts/mobile/ota-publish-config.mjs`

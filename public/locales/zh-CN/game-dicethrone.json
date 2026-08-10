@@ -873,6 +873,8 @@
       "damageReduce": "{{amount}} 伤害",
       "damageReflect": "反弹 {{amount}} 伤害给对手",
       "undefendable": "使攻击不可防御",
+      "flightAttack": "投 2 骰；任一骰为 6 时使本次攻击不可防御",
+      "flightDefend": "投 2 骰；任一骰为 6 时忽略本次即将受到的全部伤害",
       "evasive": "掷骰 1-2 完全闪避",
       "unknown": "未知效果"
     }
@@ -959,7 +961,6 @@
   "bonusDie": {
     "title": "额外投掷",
     "confirm": "确认",
-    "confirmBonusDice": "确认奖励骰",
     "spotlight": {
       "initialGainCp": "首次投掷 {{value}}：获得 {{cp}} CP"
     },
@@ -1224,6 +1225,7 @@
     "notUpgradeCard": "该卡不是升级卡",
     "player_not_found": "找不到玩家",
     "card_not_in_hand": "卡牌不在手牌中",
+    "game_over": "对局已结束",
     "invalid_phase": "当前阶段无法执行此操作",
     "roll_limit_reached": "已达到投掷次数上限",
     "defense_reroll_die_limit_exceeded": "当前防御技能本次只能重掷限定数量的骰子",

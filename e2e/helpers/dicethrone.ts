@@ -628,8 +628,8 @@ export const readyMultiplePlayersAndStartGame = async (
 };
 
 export const waitForGameBoard = async (page: Page, timeout = 30000) => {
-    // 等待游戏棋盘的关键元素出现（使用 tutorial-id 定位骰子投掷按钮）
-    await expect(page.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout });
+    // 棋盘在等待响应或奖励骰结算时可以合法隐藏投掷按钮；根节点才是稳定的真实入口。
+    await expect(page.getByTestId('dicethrone-board-root')).toBeVisible({ timeout });
 };
 
 // ============================================================================
@@ -908,7 +908,7 @@ export const cleanupDTMatch = async (setup: DTMatchSetup | DTMultiMatchSetup) =>
 export const ensureDebugPanelOpen = async (page: Page) => {
     const panel = page.getByTestId('debug-panel');
     if (await panel.isVisible().catch(() => false)) return;
-    await page.getByTestId('debug-toggle').click();
+    await page.getByTestId('debug-toggle').click({ timeout: 5000 });
     await expect(panel).toBeVisible({ timeout: 5000 });
 };
 
@@ -916,7 +916,7 @@ export const ensureDebugPanelOpen = async (page: Page) => {
 export const ensureDebugPanelClosed = async (page: Page) => {
     const panel = page.getByTestId('debug-panel');
     if (await panel.isHidden().catch(() => false)) return;
-    await page.getByTestId('debug-toggle').click();
+    await page.getByTestId('debug-toggle').click({ timeout: 5000 });
     await expect(panel).toBeHidden({ timeout: 5000 });
 };
 
@@ -935,7 +935,7 @@ export const ensureDebugStateTab = async (page: Page) => {
     await ensureDebugPanelOpen(page);
     const stateTab = page.getByTestId('debug-tab-state');
     if (await stateTab.isVisible().catch(() => false)) {
-        await stateTab.click();
+        await stateTab.click({ timeout: 5000 });
     }
 };
 
@@ -953,14 +953,14 @@ export const ensureDebugControlsTab = async (page: Page) => {
  */
 export const readCoreState = async (page: Page) => {
     await ensureDebugStateTab(page);
-    const raw = await page.getByTestId('debug-state-json').innerText();
+    const raw = await page.getByTestId('debug-state-json').innerText({ timeout: 5000 });
     const parsed = JSON.parse(raw);
     return parsed?.core ?? parsed?.G?.core ?? parsed;
 };
 
-const readDebugStateRoot = async (page: Page) => {
+export const readMatchState = async (page: Page) => {
     await ensureDebugStateTab(page);
-    const raw = await page.getByTestId('debug-state-json').innerText();
+    const raw = await page.getByTestId('debug-state-json').innerText({ timeout: 5000 });
     const parsed = JSON.parse(raw);
     return parsed?.G ?? parsed;
 };
@@ -969,10 +969,8 @@ const readDebugStateRoot = async (page: Page) => {
  * 读取事件流（EventStream）
  */
 export const readEventStream = async (page: Page) => {
-    await ensureDebugStateTab(page);
-    const raw = await page.getByTestId('debug-state-json').innerText();
-    const parsed = JSON.parse(raw);
-    const sys = parsed?.sys ?? parsed?.G?.sys;
+    const state = await readMatchState(page);
+    const sys = state?.sys;
     return sys?.eventStream?.entries ?? [];
 };
 
@@ -982,11 +980,11 @@ export const readEventStream = async (page: Page) => {
 export const applyCoreStateDirect = async (page: Page, coreState: unknown) => {
     await ensureDebugStateTab(page);
     const toggleBtn = page.getByTestId('debug-state-toggle-input');
-    await toggleBtn.click();
+    await toggleBtn.click({ timeout: 5000 });
     const input = page.getByTestId('debug-state-input');
     await expect(input).toBeVisible({ timeout: 3000 });
     await input.fill(JSON.stringify(coreState));
-    await page.getByTestId('debug-state-apply').click();
+    await page.getByTestId('debug-state-apply').click({ timeout: 5000 });
     await expect(input).toBeHidden({ timeout: 5000 }).catch(() => {});
 };
 
@@ -1189,14 +1187,32 @@ export const setupOnlineMatch = setupDTOnlineMatch;
 // ============================================================================
 
 export const waitForDiceThroneHarness = async (page: Page, timeout = 10000) => {
-    await page.waitForFunction(
-        () => {
+    try {
+        await page.waitForFunction(
+            () => {
+                const harness = (window as Window).__BG_TEST_HARNESS__;
+                return harness?.state?.isRegistered?.() === true
+                    && harness?.command?.isRegistered?.() === true;
+            },
+            undefined,
+            { timeout, polling: 200 },
+        );
+    } catch (error) {
+        const diagnostic = await page.evaluate(() => {
             const harness = (window as Window).__BG_TEST_HARNESS__;
-            return harness?.state?.isRegistered?.() === true
-                && harness?.command?.isRegistered?.() === true;
-        },
-        { timeout, polling: 200 },
-    );
+            return {
+                url: window.location.href,
+                readyState: document.readyState,
+                testMode: Boolean((window as Window & { __E2E_TEST_MODE__?: boolean }).__E2E_TEST_MODE__),
+                hasHarness: Boolean(harness),
+                stateRegistered: harness?.state?.isRegistered?.() ?? false,
+                commandRegistered: harness?.command?.isRegistered?.() ?? false,
+                boardVisible: Boolean(document.querySelector('[data-testid="dicethrone-board-root"]')),
+            };
+        }).catch(() => null);
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`DiceThrone 测试工具未就绪：${reason}; 诊断=${JSON.stringify(diagnostic)}`);
+    }
 };
 
 export const readDiceThroneHarnessState = async <T = unknown>(page: Page): Promise<T> => {

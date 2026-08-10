@@ -711,8 +711,7 @@ export function execute(
             const currentRollDie = findCurrentRollDie(state, dieId, phase);
             const evasionDieActive = currentRollContext?.kind === 'evasion' && currentRollDie !== undefined;
             const die = currentRollDie?.die;
-            const pendingBonusDie = state.pendingBonusDiceSettlement?.allowDiceModification === true
-                && isCurrentBonusRollSettlement(state)
+            const pendingBonusDie = isCurrentBonusRollSettlement(state)
                 ? getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).find(d => d.index === dieId)
                 : undefined;
             const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);

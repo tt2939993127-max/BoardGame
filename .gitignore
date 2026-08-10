@@ -164,6 +164,11 @@ production/session-logs/
 # Codex/OMX 状态文件
 .omx/
 
+# .spec/ 是唯一 AI 规范源；这些目录由 npm run spec:hosts 再生。
+/.codex/skill/
+/.agents/skills/
+/.claude/skills/
+
 # codedb-mcp local indexes
 .codedb-mcp/**
 !.codedb-mcp/

@@ -11,7 +11,7 @@
   - [domain/index.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/domain/index.ts)
   - [Board.tsx](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/Board.tsx)
   - [game.ts](D:/gongzuo/webgame/BoardGame/.worktrees/qidahen/src/games/qidahen/game.ts)
-- 对照源：[`create-new-game` 架构审查模板](D:/gongzuo/webgame/BoardGame/.codex/skill/create-new-game/references/architecture-review-template.md)
+- 对照源：[`create-new-game` 架构审查模板](D:/gongzuo/webgame/BoardGame/.spec/skills/create-new-game/references/architecture-review-template.md)
 - 当前 OpenSpec / change：无。本轮为正式架构审查，不启动新的 proposal/change
 - 审查日期：2026-06-07
 - 审查人：Codex

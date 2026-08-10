@@ -601,13 +601,13 @@ export interface PendingBonusDiceSettlement {
     postSettleBonusDamageAdds?: Array<{ amount: number; sourceCardId?: string }>;
     /** 自定义奖励骰收口处理器 ID（用于非“点数总和即伤害”的特殊结算） */
     customResolutionId?: string;
-    /** 允许普通改骰牌修改这组奖励骰，并在确认结算时读取改后的结果 */
+    /** 历史存档兼容字段；所有未结算骰默认允许规则修改，不再据此决定权限。 */
     allowDiceModification?: boolean;
-    /** 终极技能成功发动后的结算骰：可展示/确认，但不可再被改骰或重掷。 */
+    /** 历史存档兼容字段；终极来源不再锁定未结算骰。 */
     ultimateLocked?: boolean;
     /**
-     * 旧存档兼容字段。奖励骰是否开放改骰响应现在只由 allowDiceModification 决定，
-     * 不再根据初始骰面决定，避免玩家无法把未命中的骰面改为有效结果。
+     * 旧存档兼容字段。未结算奖励骰一律开放改骰响应，
+     * 不再根据初始骰面或来源类型缩小改骰机会。
      */
     opensAfterRollConfirmedResponseWindow?: boolean;
     /** rollDie 延后结算所需的规则输入；投掷前不执行条件效果。 */
@@ -646,7 +646,9 @@ export interface DiceThroneRollContextPolicy {
     modifiableBy: DiceThroneRollContextActorScope;
     rerollableBy: DiceThroneRollContextActorScope;
     allowPassiveReroll: boolean;
-    allowRollCards: boolean;
+    /** 当前骰区是否允许骰子牌把这组骰面作为效果目标；不承担卡牌阶段时机。 */
+    allowDiceCardTargeting: boolean;
+    /** 历史策略字段；合法性只由可修改/可重掷范围决定。 */
     ultimateLocked: boolean;
     blocksPhaseFlow: boolean;
 }
@@ -686,6 +688,8 @@ export interface DiceThroneRollContext {
     policy: DiceThroneRollContextPolicy;
     settlement: DiceThroneRollContextSettlement;
     display: DiceThroneRollContextDisplay;
+    /** 临时子骰确认前挂起的父骰区；它不是第二个当前骰区，也不向玩家暴露恢复操作。 */
+    suspendedParent?: DiceThroneRollContext;
 }
 
 export interface HeroState {

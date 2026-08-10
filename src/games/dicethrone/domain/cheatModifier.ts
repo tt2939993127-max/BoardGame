@@ -115,7 +115,7 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         }
 
         const isCurrentBonusRoll = core.currentRollContext?.kind === 'bonus'
-            || (!core.currentRollContext && core.pendingBonusDiceSettlement?.allowDiceModification === true);
+            || (!core.currentRollContext && Boolean(core.pendingBonusDiceSettlement));
         if (isCurrentBonusRoll && core.pendingBonusDiceSettlement) {
             nextCore = {
                 ...nextCore,

@@ -56,7 +56,7 @@ describe('正义战法奖励骰时机', () => {
                 cmd('CONFIRM_ROLL', '0'),             // 确认骰面
                 cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-combat' }),
                 cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie，当前骰区暂停
-                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认奖励骰最终面 → defensiveRoll
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认当前奖励骰结果 → defensiveRoll
                 cmd('ROLL_DICE', '1'),               // 防御方投掷防御骰
                 cmd('CONFIRM_ROLL', '1'),             // 确认防御骰面
                 cmd('ADVANCE_PHASE', '1'),           // defensiveRoll exit → resolveAttack
@@ -124,7 +124,7 @@ describe('正义战法奖励骰时机', () => {
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-combat' }),
                 cmd('ADVANCE_PHASE', '0'),           // offensiveRoll → preDefense rollDie，当前骰区暂停
-                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认奖励骰最终面 → defensiveRoll
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),  // 确认当前奖励骰结果 → defensiveRoll
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
                 cmd('ADVANCE_PHASE', '1'),           // defensiveRoll exit → resolveAttack
