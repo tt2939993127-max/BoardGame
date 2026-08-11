@@ -649,6 +649,8 @@ describe('派系选择系统', () => {
                 'base_the_squared_circle_pod',
                 'base_ancient_temple_pod',
                 'base_city_of_gold_pod',
+                'base_tokyo_pod',
+                'base_kaiju_island_pod',
             ]);
 
             const missingPodBaseMappings = getAllBaseDefs()

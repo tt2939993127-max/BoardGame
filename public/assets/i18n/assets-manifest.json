@@ -16304,6 +16304,24 @@
           "mime": "image/png"
         }
       }
+    },
+    "zh-CN/smashup/cards/compressed/kaiju_pod": {
+      "variants": {
+        "webp": {
+          "sha256": "f178424b2bb49012fb67ffa743fdad657e18cf1c3967b0965c7abe0e6a839df1",
+          "bytes": 1393084,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "zh-CN/smashup/cards/kaiju_pod": {
+      "variants": {
+        "png": {
+          "sha256": "887f27dde9579b9ba77e1c67653f9f29a2da33f76899cbbc479419ad52c901e3",
+          "bytes": 5928968,
+          "mime": "image/png"
+        }
+      }
     }
   },
   "zh-CN/qidahen/cards/atlases/compressed/ordinary-hand-atlas05": {

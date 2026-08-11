@@ -438,6 +438,7 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.ITTY_CRITTERS, nameKey: 'factions.itty_critters.name', icon: PawPrint, color: '#facc15', descriptionKey: 'factions.itty_critters.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.ITTY_CRITTERS_POD, nameKey: 'factions.itty_critters_pod.name', icon: PawPrint, color: '#facc15', descriptionKey: 'factions.itty_critters_pod.description' },
     { id: SMASHUP_FACTION_IDS.KAIJU, nameKey: 'factions.kaiju.name', icon: Bone, color: '#be123c', descriptionKey: 'factions.kaiju.description' },
+    { id: SMASHUP_FACTION_IDS.KAIJU_POD, nameKey: 'factions.kaiju_pod.name', icon: Bone, color: '#be123c', descriptionKey: 'factions.kaiju_pod.description' },
     { id: SMASHUP_FACTION_IDS.MAGICAL_GIRLS, nameKey: 'factions.magical_girls.name', icon: Wand2, color: '#ec4899', descriptionKey: 'factions.magical_girls.description' },
     { id: SMASHUP_FACTION_IDS.MAGICAL_GIRLS_POD, nameKey: 'factions.magical_girls_pod.name', icon: Wand2, color: '#ec4899', descriptionKey: 'factions.magical_girls_pod.description' },
     { id: SMASHUP_FACTION_IDS.MEGA_TROOPERS, nameKey: 'factions.mega_troopers.name', icon: Bot, color: '#dc2626', descriptionKey: 'factions.mega_troopers.description' },

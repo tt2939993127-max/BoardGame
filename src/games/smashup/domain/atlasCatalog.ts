@@ -33,6 +33,7 @@ export const SMASHUP_ATLAS_DEFINITIONS: readonly SmashUpAtlasDefinition[] = [
     { id: SMASHUP_ATLAS_IDS.MARVEL_VILLAINS_POD_CARDS, kind: 'card', image: 'smashup/cards/marvel_villains_pod', grid: { rows: 6, cols: 9 } },
     { id: SMASHUP_ATLAS_IDS.CULTURE_SHOCK_CARDS, kind: 'card', image: 'smashup/cards/culture_shock/atlas', grid: { rows: 6, cols: 10 } },
     { id: SMASHUP_ATLAS_IDS.ITTY_CRITTERS_POD_CARDS, kind: 'card', image: 'smashup/cards/itty_critters_pod', grid: { rows: 4, cols: 5 } },
+    { id: SMASHUP_ATLAS_IDS.KAIJU_POD_CARDS, kind: 'card', image: 'smashup/cards/kaiju_pod', grid: { rows: 4, cols: 5 } },
     { id: SMASHUP_ATLAS_IDS.TIME_TRAVELERS_POD_CARDS, kind: 'card', image: 'smashup/cards/time_travelers_pod', grid: { rows: 4, cols: 5 } },
     { id: SMASHUP_ATLAS_IDS.MARVEL_WAVE_ONE_CARDS, kind: 'card', image: 'smashup/cards/marvel_wave_one', grid: { rows: 6, cols: 9 } },
     { id: SMASHUP_ATLAS_IDS.MARVEL_WAVE_ONE_POD_CARDS, kind: 'card', image: 'smashup/cards/marvel_wave_one_pod', grid: { rows: 6, cols: 9 } },
