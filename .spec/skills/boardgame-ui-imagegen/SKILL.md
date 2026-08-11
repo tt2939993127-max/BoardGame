@@ -24,7 +24,7 @@ description: "BoardGame 桌游 UI 设计稿前置门禁与 imagegen/Open Design 
 6. 先输出 UI 元素拆解，再生成 prompt；没有拆解，不要直接生图。
 7. 如果用户明确要“生成图 / image2 / UI 指导图”，交付物仍然是 imagegen 概念图；真实素材 mockup/screenshot 只能作为辅助校验和 prompt 参考，不能替代生成图。
 8. 如果用户要求保留/使用真实地图或棋盘素材，prompt 必须把“完整地图素材作为结构参考”写清楚；必要时先做 HTML/CSS/React 静态 mockup 辅助定位，但最终仍按用户要求输出生成图。
-9. 如果默认 imagegen 路线不可用，而 Open Design 工具链可用，必须自动转入 **Open Design artifact 候选稿路线**，不得停在“缺 imagegen / 缺 API key”。Open Design 候选稿仍必须继承本 skill 的规则重读、素材输入包、出图前硬回执、少边框和 AI 图面核验门禁；只有渲染导出的 PNG/JPG/WebP 或等价图片证据通过 AI 核验后，才允许打开给用户验收。
+9. 如果默认 imagegen 路线不可用，而 Open Design 工具链可用，必须自动转入 **Open Design artifact 候选稿路线**，不得停在“缺 imagegen / 缺 API key”。Open Design 候选稿仍必须继承本 skill 的规则重读、素材输入包、出图前硬回执、少边框和 AI 图面核验门禁；只有渲染导出的 PNG/JPG/WebP 或等价图片证据通过 AI 核验后，才允许按系统 `D:\\codex-home\\skills\\show-image-to-user\\SKILL.md` 进入用户验收展示。
 
 ### 设计启动门禁（强制）
 
@@ -50,7 +50,7 @@ description: "BoardGame 桌游 UI 设计稿前置门禁与 imagegen/Open Design 
 - 需要正式素材的对象，只有处于 `design-asset-ready`、`pass` 或 `approved-programmatic`，并且角色允许可见时，才允许进入位图设计稿和 AI 图面核验；`reference-only` 只能进入证据链、输入包或详情 / 帮助语义，不能作为主画面可见主体；`planned-not-moved`、`frame-candidate`、`temp-only`、`blocked` 或未登记对象不得被画成正式卡牌、token、棋盘、骰子、角色板、状态标记或其它完成态素材。
 - `design-asset-ready` 只允许证明“可作为视觉设计输入”，不能证明运行时已接线或 UI 已完成；若最终口径是运行时完成截图，必须另有运行时代码引用、真实页面截图和资源链验证。
 - AI 图面核验必须先核矩阵再看图。前置矩阵不过，或图中出现素材状态不允许的对象，即使画面好看也只能判 `REVISE`。
-- 人工验收只能发生在 AI 图面核验给出 `PASS` 后；未通过 AI 自检的候选图不得打开给用户验收，也不得放进 PureRef 作为“当前设计稿”。
+- 人工验收只能发生在 AI 图面核验给出 `PASS` 后；未通过 AI 自检的候选图不得进入用户验收展示。具体展示通道和原图选择统一按系统 `D:\\codex-home\\skills\\show-image-to-user\\SKILL.md` 执行。
 
 ### 同稿同源证据块（强制）
 
@@ -77,7 +77,7 @@ description: "BoardGame 桌游 UI 设计稿前置门禁与 imagegen/Open Design 
 - **框体职责回执**：列出所有非素材自带边界的常驻边框 / 底板 / 面板；每一项必须说明它保护的真实交互对象。说不出对象或只是“为了清楚 / 好看 / 分区”的，生成前先删除或降级。
 - **人工验收状态回执**：明确当前是否允许人工验收；默认值必须是 `human-review-not-allowed`，只有随图 AI 审计按规则、素材、少边框和可复刻门禁给出 `PASS` 后才能改为允许。
 
-硬回执是生成前门禁，不是生成后补说明。缺任一项时，当前动作只能是补回执或报告阻塞，不能继续出图、不能打开给用户看，也不能把旧稿改名为新设计稿。
+硬回执是生成前门禁，不是生成后补说明。缺任一项时，当前动作只能是补回执或报告阻塞，不能继续出图、不能进入用户验收展示，也不能把旧稿改名为新设计稿。
 
 ### 正式素材输入包门禁（强制）
 
@@ -205,7 +205,7 @@ description: "BoardGame 桌游 UI 设计稿前置门禁与 imagegen/Open Design 
 
 - 固定构图类棋盘 / 牌桌 / 战场设计，PC 桌面设计稿或桌面真实页是主基线；移动端只能在 PC 基线通过后做适配。
 - 当用户指出 PC 端没好、PC 端未通过、边框 / 素材 / 规则主链仍失败，当前稿必须标为 `REVISE / implementation-blocked / mobile-blocked-by-desktop`。
-- 在上述状态下不得生成移动端验收图、不得打开移动端截图给用户当完成证据、不得跑移动端 E2E 作为收口；移动风险可以记录，但不能成为下一主阶段。
+- 在上述状态下不得生成移动端验收图、不得把移动端截图当完成证据、不得跑移动端 E2E 作为收口；移动风险可以记录，但不能成为下一主阶段。需要展示已通过的图时，另按系统 `D:\\codex-home\\skills\\show-image-to-user\\SKILL.md` 执行。
 
 ## 实现导向生图的可复刻门禁（强制）
 
