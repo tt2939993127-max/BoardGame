@@ -2367,7 +2367,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.sys.interaction.current?.kind).toBe('dt:bonus-dice');
+            expect(getCurrentInteractionSummary(result.finalState).kind).toBe('dt:bonus-dice');
             expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
