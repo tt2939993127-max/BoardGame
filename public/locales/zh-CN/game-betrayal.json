@@ -870,7 +870,7 @@
       "girlPlaced": "可拾取",
       "girlHeldByMummy": "由木乃伊携带",
       "girlHeldByPlayer": "由{{player}}持有",
-      "officialTokenMissing": "缺正式 token",
+      "officialTokenMissing": "缺少正式标记",
       "essence": "本质"
     },
     "players": {

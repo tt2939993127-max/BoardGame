@@ -138,8 +138,8 @@
 - E2E 的目标是验证真实 UI 入口、交互链是否可操作、以及最终可见结果是否完整，不是把同一种交互模式在不同卡上重复铺满。
 - 同一种交互模式通常只保留 1 条代表性完整流程；只有当入口位置、控件形态、链路阶段、布局风险或跨系统协作明显不同，才新增第二条 E2E。
 - 写完整流程 E2E 前必须先锁定规则时序家族，例如 `先选择后投骰`、`先投骰后选择`、`投骰后直接结算`、`可选是否触发`。不同家族不能互相代表；测试标题、截图名和 evidence 必须写清本用例证明的是哪一种时序。
-- 一条合格的“完整流程 E2E”必须回到 `docs/ai-rules/e2e-verification.md` 的六段链口径：`触发前可操作 -> 牌或对象翻出/亮相 -> 选择或投骰前 -> 选择/投骰后 -> 结算结果可见 -> 关闭/继续后回到牌桌`。如果某类流程没有弹层或关闭按钮，最后一段也必须证明临时选择、目标锁定、高亮或确认提示已经清空，主界面可继续操作。
-- 牌翻出类流程必须按 `docs/ai-rules/e2e-verification.md` 的“牌翻出类完整链路固定执行表”记录 evidence：每一行都要有玩家动作、自动断言、截图文件和用户目标对应。只要缺少“牌翻出/亮相”“选择或投骰前”“选择/投骰后”“结算结果”“关闭后回牌桌”中的任一段，就只能登记为局部链路，不能写完整流程通过。
+- 一条合格的“完整流程 E2E”必须回到 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 的六段链口径；本文只讨论测试设计与测试工具，不复制截图证据规则。
+- 牌翻出类流程的 evidence 固定执行表、截图阶段和用户目标对账，统一由 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 承载。
 - 被称为“完整端到端”的用例必须同时交付规则时序证据、真实入口 Playwright 用例、六段截图、六段四列表、用户目标矩阵和最终截图肉眼核图结论；缺任一项，即使测试 `passed` 也只能写局部链路。
 - 测试结果必须和用户目标直接相连：每段都要能对应 `玩家实际动作 / 自动断言 / 截图文件 / 用户目标对应`。直接注入最终 prompt、只截最终结果、只点按钮、只看日志或只证明 DOM 存在，都只能叫“阶段承接 / 局部链路”，不能写成“完整流程 E2E”。
 - `passed` 不是验收结论本身。完整流程用例通过后，evidence 或汇报还必须逐项说明它证明了哪个用户目标；没有出现在步骤、断言和截图里的目标，继续登记为 `待补`。
@@ -708,7 +708,7 @@ import { makeMinion } from "./helpers";
 ### 相关文档
 
 - `docs/automated-testing.md` - 测试框架总览
-- `docs/ai-rules/engine-systems.md` - 引擎测试工具
+- [`.spec/knowledge/standards/engine-systems.md`](../.spec/knowledge/standards/engine-systems.md) - 引擎测试工具规范
 - `src/games/smashup/__tests__/helpers.ts` - 测试辅助函数源码
 - `src/games/smashup/__tests__/testRunner.ts` - runCommand 实现
 
@@ -823,78 +823,10 @@ test: {
 
 ---
 
-## E2E 测试框架最佳实践
+## E2E 专项入口
 
-> **完整规范见 AGENTS.md**。本节仅列出关键要点和代码示例。
+E2E 的运行命令、`GameTestContext` API、就绪检查、截图产物目录和启动日志统一由 [`docs/automated-testing.md`](automated-testing.md) 承载。
 
-### 核心要求（强制）
+E2E 的真实入口、状态注入与真实链路边界、流程阶段、截图证据资格、视觉结果和对外结论以 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 为唯一正文。这里不再复制 E2E 截图清单、人工看图要求或用户开图步骤。
 
-1. **使用 GameTestContext API**：禁止直接操作 `window.__BG_TEST_HARNESS__`
-2. **轮询间隔优化**：`waitForFunction` 必须使用 `{ polling: 200 }`
-3. **同步等待优先**：UI 操作后先 `waitForTimeout(300)`，再按需异步等待
-4. **服务器就绪检查**：Playwright 配置使用 `/__ready` 端点
-5. **文件编码检查**：测试命令前运行 `npm run check:encoding`；发现 BOM 时执行 `npm run check:encoding:fix`；如果要把可疑乱码也视为失败，使用 `npm run check:encoding:strict`
-6. **截图目录单一真实来源**：失败自动产物只看 `test-results/playwright-artifacts/`；显式证据截图只写 `test-results/evidence-screenshots/_shared/`
-7. **按用例分目录**：`game.screenshot()` 默认按“测试文件/测试用例”建子目录，并在该用例首次截图前自动清理旧图
-8. **禁止一图多存**：不要把同一张截图同时复制到多个稳定目录
-9. **`evidence/` 放文档，不放自动截图池**：证据文档可以引用 `../test-results/evidence-screenshots/_shared/...`，但不要默认把自动化截图写进 `evidence/_shared/screenshots/`
-10. **UI 结果必须人工看图并对照需求验收**：UI 改动交付前，必须实际打开至少一张显式证据截图核对结果，并逐项确认截图里的结果已经满足本轮需求/用户反馈；禁止只依据断言、日志或文档文字判定“已修复”
-11. **必须先看图并确认符合需求，再写结论**：证据文档、PR 说明、对用户的汇报都必须在人工看图且完成需求对照之后再写；禁止先写“正常/已修复”再回头补看图，也禁止只因“肉眼看着还行”就跳过需求核对
-12. **区分环境截图**：如果用户反馈的是线上/预发问题，必须补一张对应环境的现状截图，并明确区分“本地修复截图”和“线上现状截图”
-13. **尺寸类 UI 回归必须断言最终包围盒**：按钮、入口、面板、卡槽等“看起来过大/过小”的问题，E2E 必须对最终 `boundingBox()` 或等价尺寸做断言；不要只看 className、设计稿尺寸或截图主观判断
-14. **必要时同时断言最小值和最大值**：只断言“至少可点”不够，像“按钮被做肥”这类回归必须补最大尺寸约束，避免额外 padding、默认 `min-height`、浏览器按钮样式兜底蒙混过关
-15. **先查最终样式，再怪文本或自适应**：文本按钮异常变大时，优先检查 `padding`、`gap`、`min-height`、默认 button 样式和父容器约束；禁止未经验证就把问题归因于“文本自适应”
-16. **时序/重复挂载/动画是否播出这类问题，截图不是充分证据**：凡用户反馈“弹窗半开后重开 / 动画没播 / 浮字丢了 / 只播结果没播过程 / 一闪而过 / 打开两次”这类生命周期问题，E2E 必须补机器可复查的时序证据（例如交互 id 轨迹、modal/overlay 挂载次数、可见段数、事件流与最终 DOM 消费日志、关键元素 `boundingBox`/opacity/transform 采样）。截图仍然要看，但只能证明“画面长什么样”，不能单独证明“中间没有重开/没有丢事件/动画确实播过”。
-17. **isolated 启动超时先看 bootstrap 日志**：`global-setup` 已支持 fail-fast；若出现 `/games`、`/health`、`/__ready` 就绪超时，优先查看 `.tmp/playwright-bootstrap-<scope>-worker-<id>.log` 和错误里附带的日志尾部内容，不要先改业务代码
-
-### E2E 截图结论约束（补充）
-
-1. 必须先“看图并对照需求”再“下结论”：没有人工核对截图，或虽已看图但尚未确认其满足本轮需求，不得说“正常”或“已修复”。
-2. 必须先“看图并确认符合需求”再“写文档”：证据文档中的结论段不得早于人工看图和需求核对产生，禁止先写结论再回头补观察。
-   2.1. 对用户症状的文字复述必须与用户原话等价：用户说“两次缩放”“弹两次”“没播动画”，就按这个症状原样记录；没有证据前不要自行改写成“像重开”“像二段”“像卡了一下”。
-   2.2. 若当前证据只支持相近现象，不得写成“已复现原问题”；必须明确标注“仅复现到相近现象”或“未复现原症状”。
-3. 若失败产物目录无图，结论必须显式标注“无图可核对”，并说明为什么无图。
-4. 向他人汇报时必须提供已核对截图的完整工作区绝对路径和可见证据点，路径必须可直接复制使用（不是只贴文件夹名、相对路径或目录名）。
-5. 打开截图所在文件夹时，每轮只打开 1 个目标文件夹；不要连续列出或打开多个兄弟目录刷屏。
-6. 若只是汇报截图位置，默认只给实际核对过的截图完整绝对路径；除非用户明确要求，否则不要额外列父目录或多个文件夹路径。
-7. 证据文档中每张截图都要有自己对应的绝对路径说明；不要只给一个父目录路径再让读者自己找图。
-8. 黑图、纯加载页、纯空白页、只有遮罩层、只有单个亮点/噪点且无法辨认业务界面的截图，不算“已完成看图”；这类情况必须按“无有效截图”处理。
-   8.1. 对象完整性优先于元素存在：截图里目标对象被视口、容器、遮挡层或截图边界裁切到只露边角/只露局部时，最多只能证明事件触发或元素存在，不能证明视觉达标。用于证明浮层、表情、popover、HUD overlay、特写、控件位置正确的截图，必须看到目标对象完整主体或足以识别的主要轮廓；若还要证明锚点位置，必须同时看到锚点参照物和目标对象完整边界。全页截图收不全时必须补局部放大图、调整截图时机或调整视口后重验。
-9. 如果只知道某张图存在，但还没亲自打开看过，就不能把这张图当作“已核对证据”汇报给用户；最多只能说“有产物，尚未验图”。
-10. 一旦发现当前轮只有无效截图，下一步应该是补拿有效截图或明确承认“本轮无法完成视觉验收”，不能继续给出像“截图在这”“可直接验收”这种误导性表述。
-
-### 代码示例
-
-```typescript
-import { test, expect } from "./fixtures";
-import { GameTestContext } from "./framework/GameTestContext";
-
-test("wizard portal", async ({ page }) => {
-  const game = new GameTestContext(page);
-
-  await game.setupScene({
-    gameId: "smashup",
-    player0: { hand: ["wizard_portal"], discard: ["alien_invader"] },
-    currentPlayer: "0",
-    phase: "playCards",
-  });
-
-  await game.playCard("wizard_portal");
-  await game.waitForInteraction("wizard_portal_pick");
-  await game.selectOption("minion-0");
-  await game.confirm();
-  await game.expectCardInHand("alien_invader");
-});
-```
-
-### 性能基准
-
-- 单个测试：< 15 秒
-- 服务器启动：< 20 秒
-- 总耗时：< 35 秒
-
-### 相关文档
-
-- `docs/automated-testing.md` - 测试框架总览
-- `e2e/framework/GameTestContext.ts` - API 源码
-- `AGENTS.md` - 完整 E2E 测试规范
+涉及玩家视角 UI 审计时，追加系统 [`ui-audit-loop`](D:/codex-home/skills/ui-audit-loop/SKILL.md) 和项目 [`ui-change-gates`](../.spec/knowledge/standards/ui-change-gates.md)；涉及把最终图片展示给用户时，追加系统 [`show-image-to-user`](D:/codex-home/skills/show-image-to-user/SKILL.md)。测试通过、截图落盘和 AI 核图分别证明不同事实，不能互相替代。

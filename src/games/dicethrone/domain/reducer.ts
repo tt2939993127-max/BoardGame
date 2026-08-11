@@ -354,7 +354,7 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     // 仅“独立伤害型”奖励骰才标记 bonusDiceResolved。
     const pendingAttack = isInlineRollDieSettlement && state.pendingAttack
         ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'withDamageChoicePending')
-        : !isDisplayOnly && !isAttackBonusSettlement && !isNoDamageSettlement && state.pendingAttack
+        : !isAttackBonusSettlement && !isNoDamageSettlement && state.pendingAttack
             ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'readyToResolve')
             : state.pendingAttack;
     const currentBonusContextId = state.pendingBonusDiceSettlement
@@ -665,6 +665,7 @@ const handleChoiceRequested: EventHandler<Extract<DiceThroneEvent, { type: 'CHOI
     ...state,
     activatingAbilityId: event.payload.sourceAbilityId,
     currentChoiceSourceAbilityId: event.payload.sourceAbilityId,
+    currentChoiceContext: event.payload.choiceContext,
 });
 
 const handleDefenderSelectionRequested: EventHandler<Extract<DiceThroneEvent, { type: 'DEFENDER_SELECTION_REQUESTED' }>> = (
@@ -842,6 +843,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
         resultState = {
             ...resultState,
             currentChoiceSourceAbilityId: undefined,
+            currentChoiceContext: undefined,
         };
     }
 
@@ -889,6 +891,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
         turnNumber,
         lastResolvedAttackDamage: undefined,
         currentChoiceSourceAbilityId: undefined,
+        currentChoiceContext: undefined,
         taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
         treantSpiritSpentThisTurn: undefined,
         offensiveRollAttemptsThisTurn: undefined,
@@ -1244,6 +1247,7 @@ const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 
         players,
         activatingAbilityId: undefined,
         currentChoiceSourceAbilityId: undefined,
+        currentChoiceContext: undefined,
     };
 };
 

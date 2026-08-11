@@ -25,7 +25,19 @@
 
 ## 截图、图片与教程交付
 
-- E2E 截图、用户要看当前截图、AI 图面验收或截图交付：转 [`测试与审计`](testing.md)，并读 [`e2e-verification`](../standards/e2e-verification.md)、项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md) 和系统 `show-image-to-user`。
-- 用户明确说“打开图片/图呢/给我看图”：优先读系统 `show-image-to-user`；本项目截图命名和 evidence 流程读项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md)。
+- E2E 截图、AI 图面验收或截图交付：先读 [`e2e-verification`](../standards/e2e-verification.md) 取得证据资格，再读系统 `show-image-to-user` 处理用户可见开图；只有需要 BoardGame 截图目录、项目脚本或相册规则时，才追加项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md)。
+- 用户明确说“打开图片/图呢/给我看图”：第一入口固定是系统 `show-image-to-user`；项目 `screenshot-delivery` 只作为本地脚本与项目路径适配，不重新定义开图、编号、查看器或成功标准。
 - 教程、新手引导或教程 E2E：读项目 [`tutorial-workflow`](../../skills/tutorial-workflow/SKILL.md)、[`tutorial-design`](../standards/tutorial-design.md) 和 [`e2e-verification`](../standards/e2e-verification.md)。
 - UI 审计、玩家视角验收、截图不通过后继续重构：读系统 `ui-audit-loop`、[`ui-change-gates`](../standards/ui-change-gates.md)、[`ui-ux`](../standards/ui-ux.md)。
+
+## 职责落点
+
+同一张截图可能同时用于测试证据、玩家视角审计和用户交付，但三者不是同一职责。按下面的主从关系读取，不要把一个入口的步骤复制到另一个入口：
+
+| 需要回答的问题 | 唯一正文 / 执行入口 | 其它入口的职责 |
+| --- | --- | --- |
+| UI 的布局、空间、主交互槽位和 BoardGame 特有改动门禁 | [`ui-change-gates`](../standards/ui-change-gates.md) | `ui-ux` 只承载审美、组件单一来源和游戏 UI 范式；`ui-responsive-layout` 承载双端专项。 |
+| E2E 从哪里起跑、状态如何触发、截图能证明什么 | [`e2e-verification`](../standards/e2e-verification.md) | `docs/automated-testing.md` 只承载运行命令、API、启动链和产物目录。 |
+| AI 如何做图面审计、何时继续返工 | 系统 [`ui-audit-loop`](D:/codex-home/skills/ui-audit-loop/SKILL.md) | `ui-change-gates` 只补 BoardGame 项目门禁；不得复制查看器选择和通用循环。 |
+| 如何把通过的图展示给用户 | 系统 [`show-image-to-user`](D:/codex-home/skills/show-image-to-user/SKILL.md) | `screenshot-delivery` 只补项目路径、命名辅助脚本和授权后的相册入口。 |
+| 项目截图目录、标记图脚本和相册发布边界 | 项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md) | 不定义截图是否通过，也不定义用户是否已经看到图。 |

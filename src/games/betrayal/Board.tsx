@@ -696,16 +696,6 @@ const ROOM_CANVAS_PADDING = 8;
 const ROOM_CANVAS_MIN_WIDTH = 780;
 const ROOM_CANVAS_MIN_HEIGHT = 560;
 
-const EXPLORER_BOARD_MARKER_RANGE: Record<
-  BetrayalTraitKey,
-  { from: { x: number; y: number }; to: { x: number; y: number } }
-> = {
-  might: { from: { x: 14.5, y: 44.5 }, to: { x: 35.5, y: 23.5 } },
-  speed: { from: { x: 18.5, y: 79.5 }, to: { x: 18.5, y: 54.5 } },
-  knowledge: { from: { x: 85.5, y: 44.5 }, to: { x: 64.5, y: 23.5 } },
-  sanity: { from: { x: 81.5, y: 79.5 }, to: { x: 81.5, y: 54.5 } },
-};
-
 const ASSETS = {
   titleBanner: "betrayal/ui/title-banner",
   cover: "betrayal/thumbnails/cover",
@@ -1944,20 +1934,6 @@ function resolveRoomEdgeLabel(
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
   return t(`board.rooms.edges.${edge}`);
-}
-
-function resolveExplorerBoardMarkerPosition(
-  trait: BetrayalTraitKey,
-  position: number,
-  maxPosition: number,
-) {
-  const range = EXPLORER_BOARD_MARKER_RANGE[trait];
-  const clampedPosition = Math.max(0, Math.min(maxPosition, Math.round(position)));
-  const progress = clampedPosition / Math.max(1, maxPosition);
-  return {
-    left: `${range.from.x + (range.to.x - range.from.x) * progress}%`,
-    top: `${range.from.y + (range.to.y - range.from.y) * progress}%`,
-  };
 }
 
 function buildRoomOccupants(
@@ -14794,54 +14770,26 @@ export default function BetrayalBoard({
           >
             <article className="pointer-events-none relative overflow-visible bg-transparent px-1 py-1">
               <div className="mx-auto flex w-full max-w-[252px] flex-col gap-1 pb-1 pt-1 xl:mx-0">
-                <div className="relative mx-auto w-full max-w-[188px]">
-                  <div className="pointer-events-none absolute inset-[12%] rounded-full bg-[rgba(77,138,92,0.18)] blur-3xl" />
-                  <OptimizedImage
-                    src={observedExplorer.portraitAsset}
+                <div
+                  className="relative mx-auto flex min-h-[86px] w-full max-w-[188px] items-center justify-center"
+                  data-testid="betrayal-observed-explorer-token-slot"
+                >
+                  <div className="pointer-events-none absolute left-1/2 top-1/2 h-[74px] w-[74px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(77,138,92,0.18)] blur-3xl" />
+                  <ExplorerFigureToken
+                    explorer={observedExplorer}
                     locale={effectiveLocale}
-                    alt={observedExplorer.displayName}
-                    className="relative z-10 aspect-[1/1.05] h-auto w-full object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,0.38)]"
-                    draggable={false}
+                    label={resolvePlayerName(
+                      observedExplorer.playerId,
+                      observedExplorer.displayName,
+                      matchData,
+                    )}
+                    tone={isObservingOtherExplorer ? "ally" : "self"}
+                    size="board"
+                    missingTokenLabel={t(
+                      "board.hauntTokens.officialTokenMissing",
+                    )}
+                    testIdPrefix="betrayal-observed-explorer-token"
                   />
-                  {(
-                    Object.entries(observedExplorer.traits) as [
-                      BetrayalTraitKey,
-                      number,
-                    ][]
-                  ).map(([key, value]) => {
-                    const track = resolveExplorerTraitTrack(
-                      observedExplorer,
-                      key,
-                    );
-                    const markerPosition = resolveExplorerBoardMarkerPosition(
-                      key,
-                      track.position,
-                      track.maxPosition,
-                    );
-                    return (
-                      <div
-                        key={`explorer-board-marker-${key}`}
-                        data-testid={`betrayal-explorer-board-marker-${key}`}
-                        data-trait-track-position={track.position}
-                        data-trait-track-value={value}
-                        data-trait-board-marker-shape="blank-material-marker"
-                        data-trait-board-marker-asset={ASSETS.marker.numberBlank}
-                        data-trait-board-marker-visible-value="false"
-                        aria-label={`${TRAIT_LABEL_LOCAL[key]}当前位置，第 ${track.position} 位，数值 ${value}`}
-                        title={`${TRAIT_LABEL_LOCAL[key]}当前位置：第 ${track.position} 位，数值 ${value}`}
-                        className="pointer-events-none absolute z-20 h-[20px] w-[20px] -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_3px_7px_rgba(0,0,0,0.44)]"
-                        style={markerPosition}
-                      >
-                        <OptimizedImage
-                          src={ASSETS.marker.numberBlank}
-                          locale={effectiveLocale}
-                          alt=""
-                          className="h-full w-full object-contain"
-                          draggable={false}
-                        />
-                      </div>
-                    );
-                  })}
                 </div>
                 <div className="-mt-4 flex justify-center px-2">
                   <div className="relative inline-flex min-w-[194px] max-w-[214px] items-center justify-between gap-2 overflow-hidden rounded-[7px] border border-[rgba(103,82,48,0.62)] bg-[linear-gradient(180deg,rgba(14,18,16,0.9),rgba(9,12,10,0.96))] px-2.5 py-1.5 shadow-[0_8px_16px_rgba(0,0,0,0.14)]">
@@ -15470,7 +15418,11 @@ export default function BetrayalBoard({
                     >
                       {shouldShowLatestDiscoveryCardFace ? (
                       <div
-                          className={`shrink-0 ${
+                          className={`shrink-0 transition-opacity duration-100 ${
+                          visualTransition?.kind === "possession-gain"
+                            ? "opacity-0"
+                            : "opacity-100"
+                        } ${
                           isPhoneLandscapeLayout &&
                           shouldShowLatestDiscoveryRoll &&
                           latestDiscoveryRecentRoll

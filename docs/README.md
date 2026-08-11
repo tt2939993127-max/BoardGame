@@ -6,8 +6,8 @@
 
 | 你要做的事 | 优先入口 | 说明 |
 | --- | --- | --- |
-| AI 协作规则、改代码前该读什么 | AGENTS.md + docs/ai-rules/doc-index.md | 根规范只放触发入口和红线；专项流程从索引继续跳转。 |
-| AI 规范重构、规范去重、规范落点裁决 | docs/ai-rules/README.md + docs/ai-rules/document-consolidation.md | 这是 AI 规范层的主入口；不走 OpenSpec。 |
+| AI 协作规则、改代码前该读什么 | AGENTS.md + .spec/AGENTS.md + .spec/knowledge/README.md | `.spec/` 是 AI 规范真相源；根文件只负责入口，专项流程从任务域路由继续跳转。 |
+| AI 规范重构、规范去重、规范落点裁决 | .spec/decisions/document-consolidation.md + .spec/decisions/document-merge-ledger.md | 这是 AI 规范层的整理裁决入口；不走 OpenSpec。 |
 | 新功能、架构变化、规格变更 | openspec/AGENTS.md + openspec/project.md + openspec/specs/ | openspec/specs/ 是当前能力真相源；openspec/changes/ 是提案/进行中变更。 |
 | 前后端/API/通用框架 | docs/framework/ + docs/api/README.md + docs/architecture/ | 项目级公共技术文档放这里，不写单个游戏的临时结论。 |
 | 单个游戏的规则、设计、流程、用户故事 | docs/games/<gameId>/ | 只服务单个游戏的文档默认落在这里；不要在 docs 顶层为单游戏长期扩第二套入口。 |
@@ -20,7 +20,9 @@
 
 | 目录 | 职责边界 |
 | --- | --- |
-| docs/ai-rules/ | 项目通用流程、门禁、验证、文档整理规则；具体 SOP 由 doc-index.md 路由。 |
+| .spec/knowledge/ | 项目标准与任务域路由；`.spec/knowledge/README.md` 是 AI 知识导航。 |
+| .spec/skills/ | 项目 workflow 的唯一版本控制真相源；`.codex/`、`.agents/`、`.claude/` 只保存生成适配副本。 |
+| docs/ai-rules/ | 旧路径兼容页；只跳转到 `.spec/knowledge/` 或 `.spec/decisions/`，不承载规范正文。 |
 | docs/framework/ | 前端、后端、框架级公共约定。 |
 | docs/api/ | REST / WebSocket / 管理接口说明。 |
 | docs/architecture/ | 架构分析、迁移审计和技术边界说明。 |

@@ -4987,6 +4987,128 @@ const buildMunchkinOrcsPitsProtectionScene = (): SmashUpSceneConfig => ({
     },
 });
 
+const buildMunchkinOrcsPitsLeaveProtectionScene = (): SmashUpSceneConfig => ({
+    gameId: 'smashup',
+    currentPlayer: '1',
+    phase: 'playCards',
+    player0: {
+        hand: [
+            { uid: 'orcs-pits-leave-death-breath', defId: 'munchkin_orcs_death_breath', type: 'action', owner: '0' },
+        ],
+        deck: deckCards('0', 'munchkin_orcs_sword_lord', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'ninjas'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    player1: {
+        hand: [
+            { uid: 'orcs-pits-leave-dogpile', defId: 'munchkin_orcs_dogpile', type: 'action', owner: '1' },
+        ],
+        deck: deckCards('1', 'munchkin_orcs_dork_orc', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'pirates'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    extra: {
+        core: {
+            turnOrder: ['0', '1'],
+            seatOrder: ['0', '1'],
+            currentPlayerIndex: 1,
+            turnNumber: 36,
+            nextUid: 3600,
+            deckQueryEnabled: false,
+            enabledExpansions: ['munchkin'],
+            monsterDeck: MUNCHKIN_MONSTER_DECK_DEF_IDS,
+            treasureDeck: MUNCHKIN_TREASURE_DECK_DEF_IDS,
+            baseDeck: ['base_the_homeworld'],
+            baseDiscard: [],
+            bases: [
+                {
+                    defId: 'base_the_pits',
+                    minions: [
+                        minion('orcs-pits-leaving-target', 'alien_invader', '1', 3),
+                    ],
+                    ongoingActions: [],
+                    monsters: [],
+                },
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        minion('orcs-pits-leave-destination-a', 'pirate_first_mate', '1', 2),
+                        minion('orcs-pits-leave-destination-b', 'alien_scout', '1', 2),
+                    ],
+                    ongoingActions: [],
+                    monsters: [],
+                },
+            ],
+        },
+    },
+});
+
+const buildMunchkinOrcsPitsControllerActionScene = (): SmashUpSceneConfig => ({
+    gameId: 'smashup',
+    currentPlayer: '1',
+    phase: 'playCards',
+    player0: {
+        hand: [],
+        deck: deckCards('0', 'munchkin_orcs_sword_lord', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'ninjas'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    player1: {
+        hand: [
+            { uid: 'orcs-pits-controller-death-breath', defId: 'munchkin_orcs_death_breath', type: 'action', owner: '1' },
+        ],
+        deck: deckCards('1', 'munchkin_orcs_dork_orc', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'pirates'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    extra: {
+        core: {
+            turnOrder: ['0', '1'],
+            seatOrder: ['0', '1'],
+            currentPlayerIndex: 1,
+            turnNumber: 38,
+            nextUid: 3800,
+            deckQueryEnabled: false,
+            enabledExpansions: ['munchkin'],
+            monsterDeck: MUNCHKIN_MONSTER_DECK_DEF_IDS,
+            treasureDeck: MUNCHKIN_TREASURE_DECK_DEF_IDS,
+            baseDeck: ['base_the_homeworld'],
+            baseDiscard: [],
+            bases: [
+                {
+                    defId: 'base_the_pits',
+                    minions: [
+                        minion('orcs-pits-controller-target', 'alien_invader', '1', 3),
+                    ],
+                    ongoingActions: [],
+                    monsters: [],
+                },
+                { defId: 'base_the_homeworld', minions: [], ongoingActions: [], monsters: [] },
+            ],
+        },
+    },
+});
+
 const buildMunchkinOrcsHammerSlammerScene = (options: { includeLegalTarget?: boolean } = {}): SmashUpSceneConfig => {
     const includeLegalTarget = options.includeLegalTarget ?? true;
     return ({
@@ -5527,7 +5649,9 @@ const buildMunchkinOrcsStallingPlacementScene = (): SmashUpSceneConfig => ({
     },
 });
 
-const buildMunchkinOrcsCrushScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsCrushScene = (options: { includeDefender?: boolean } = {}): SmashUpSceneConfig => {
+    const includeDefender = options.includeDefender ?? true;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5571,7 +5695,7 @@ const buildMunchkinOrcsCrushScene = (): SmashUpSceneConfig => ({
                     minions: [
                         minion('orcs-crush-attacker-a', 'alien_invader', '0', 3),
                         minion('orcs-crush-attacker-b', 'alien_scout', '0', 2),
-                        minion('orcs-crush-defender', 'pirate_first_mate', '1', 3),
+                        ...(includeDefender ? [minion('orcs-crush-defender', 'pirate_first_mate', '1', 3)] : []),
                     ],
                     ongoingActions: [],
                     monsters: [],
@@ -5580,9 +5704,12 @@ const buildMunchkinOrcsCrushScene = (): SmashUpSceneConfig => ({
             ],
         },
     },
-});
+    });
+};
 
-const buildMunchkinOrcsDeathBreathProtectionScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsDeathBreathProtectionScene = (options: { includeFree?: boolean } = {}): SmashUpSceneConfig => {
+    const includeFree = options.includeFree ?? true;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5628,7 +5755,7 @@ const buildMunchkinOrcsDeathBreathProtectionScene = (): SmashUpSceneConfig => ({
                             ...minion('orcs-death-breath-protected', 'pirate_first_mate', '1', 3),
                             attachedActions: [{ uid: 'orcs-death-breath-too-tough', defId: 'munchkin_orcs_too_tough', ownerId: '1' }],
                         },
-                        minion('orcs-death-breath-free', 'alien_scout', '1', 3),
+                        ...(includeFree ? [minion('orcs-death-breath-free', 'alien_scout', '1', 3)] : []),
                     ],
                     ongoingActions: [],
                     monsters: [],
@@ -5637,7 +5764,8 @@ const buildMunchkinOrcsDeathBreathProtectionScene = (): SmashUpSceneConfig => ({
             ],
         },
     },
-});
+    });
+};
 
 const buildMunchkinOrcsTooToughPlacementScene = (): SmashUpSceneConfig => ({
     gameId: 'smashup',
@@ -8488,6 +8616,432 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-坑洞保护-坑洞保留而另一基地目标被摧毁', testInfo);
     });
 
+    test('兽人坑洞移动端过滤坑洞内保护目标并保留另一基地手动目标', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsPitsProtectionScene());
+
+        const firstAction = page.locator('[data-card-uid="orcs-pits-crush-1"]').first();
+        const secondAction = page.locator('[data-card-uid="orcs-pits-crush-2"]').first();
+        await expect(firstAction).toBeVisible({ timeout: 15000 });
+        await expect(secondAction).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-pits-protected-a"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-pits-protected-b"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-pits-free"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人坑洞保护-两座基地与两张行动', testInfo);
+
+        await firstAction.click({ force: true });
+        await page.waitForTimeout(300);
+        await firstAction.click({ force: true });
+        await game.waitForInteraction('munchkin_orcs_crush_base', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="0"]',
+            '移动端坑洞保护第一张行动应显示坑洞基地本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人坑洞保护-第一张行动选择坑洞', testInfo);
+        await clickManualBaseChoice(page, 0, '移动端坑洞保护第一张行动选择坑洞');
+        await game.waitForInteraction('munchkin_orcs_crush_player', 10000);
+        await clickVisibleInteractionOptionBy(page, game, option => option.value?.targetPlayerId === '1', '移动端坑洞保护第一张行动选择目标玩家');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                protectedAOnPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-protected-a'),
+                protectedBOnPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-protected-b'),
+                firstActionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-pits-crush-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            protectedAOnPits: true,
+            protectedBOnPits: true,
+            firstActionInDiscard: true,
+            interactionSourceId: null,
+        });
+        await game.screenshot('移动端-兽人坑洞保护-坑洞目标全部过滤并收口', testInfo);
+
+        await secondAction.click({ force: true });
+        await page.waitForTimeout(300);
+        await secondAction.click({ force: true });
+        await game.waitForInteraction('munchkin_orcs_crush_base', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="1"]',
+            '移动端坑洞保护第二张行动应显示另一基地本体',
+            { forbidPromptContext: true },
+        );
+        await clickManualBaseChoice(page, 1, '移动端坑洞保护第二张行动选择另一基地');
+        await game.waitForInteraction('munchkin_orcs_crush_player', 10000);
+        await clickVisibleInteractionOptionBy(page, game, option => option.value?.targetPlayerId === '1', '移动端坑洞保护第二张行动选择目标玩家');
+        await game.waitForInteraction('munchkin_orcs_crush_minion', 10000);
+        const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-pits-protected-a')).toBe(false);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-pits-protected-b')).toBe(false);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-pits-free')).toBe(true);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-pits-free',
+            '移动端坑洞保护第二张行动应只显示另一基地普通随从本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人坑洞保护-另一基地手动选择普通随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-pits-free', '移动端坑洞保护选择另一基地普通随从');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                protectedAOnPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-protected-a'),
+                protectedBOnPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-protected-b'),
+                freeOnOtherBase: state.core.bases[1].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-free'),
+                freeInDiscard: state.core.players?.['1']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-pits-free') ?? false,
+                secondActionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-pits-crush-2') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            protectedAOnPits: true,
+            protectedBOnPits: true,
+            freeOnOtherBase: false,
+            freeInDiscard: true,
+            secondActionInDiscard: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端坑洞保护收口后两座基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人坑洞保护-坑洞保留另一基地目标被摧毁并收口', testInfo);
+    });
+
+    test('兽人坑洞移动端随从离开后恢复为可受其他玩家行动影响', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', {
+            skipInitialization: true,
+            seat1: 'human',
+            playerID: '0',
+        }, 20000);
+        await game.setupScene(buildMunchkinOrcsPitsLeaveProtectionScene());
+        const targetPage = await openSmashUpPlayerView(page, '1');
+        await targetPage.setViewportSize({ width: 844, height: 390 });
+
+        try {
+            const initialState = await game.getState();
+            await mirrorSmashUpHarnessState(targetPage, initialState);
+
+            const dogpile = targetPage.locator('[data-card-uid="orcs-pits-leave-dogpile"]').first();
+            await expect(dogpile).toBeVisible({ timeout: 15000 });
+            await expect(page.locator('[data-minion-uid="orcs-pits-leaving-target"]').first()).toBeVisible({ timeout: 15000 });
+            await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+            await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+            await game.screenshot('移动端-兽人坑洞离开保护-坑洞随从与死亡之息入口', testInfo);
+
+            await dogpile.click({ force: true });
+            await targetPage.waitForTimeout(300);
+            await dogpile.click({ force: true });
+            await targetPage.waitForFunction(
+                () => (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.data?.sourceId
+                    === 'munchkin_orcs_dogpile_minion',
+                { timeout: 10000, polling: 200 },
+            );
+            await waitForSmashUpFxToSettle(targetPage);
+            await expectManualMinionChoiceVisible(
+                targetPage,
+                'orcs-pits-leaving-target',
+                '离开坑洞前必须显示坑洞中的随从本体供玩家手动选择',
+                { forbidPromptContext: true },
+            );
+            await saveMunchkinEvidenceScreenshot(targetPage, '兽人-坑洞离开保护-手动选择坑洞随从.png');
+            await clickManualMinionChoice(targetPage, 'orcs-pits-leaving-target', '坑洞离开保护链选择要移动的随从');
+            await targetPage.waitForFunction(
+                () => (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.data?.sourceId
+                    === 'munchkin_orcs_dogpile_base',
+                { timeout: 10000, polling: 200 },
+            );
+            await waitForSmashUpFxToSettle(targetPage);
+            await expectManualChoiceVisible(
+                targetPage,
+                '[data-base-index="1"]',
+                '离开坑洞后必须显示另一基地本体供玩家手动选择',
+                { forbidPromptContext: true },
+            );
+            await saveMunchkinEvidenceScreenshot(targetPage, '兽人-坑洞离开保护-手动选择另一基地.png');
+            await clickManualBaseChoice(targetPage, 1, '坑洞离开保护链选择另一基地');
+
+            const movedState = await targetPage.evaluate(() => (
+                (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()
+            )) as {
+                core?: {
+                    bases?: Array<{ minions?: Array<{ uid?: string }> }>;
+                    players?: Record<string, { discard?: Array<{ uid?: string }> }>;
+                };
+                sys?: { interaction?: { current?: { data?: { sourceId?: string | null } } } };
+            };
+            expect(movedState.core?.bases?.[0]?.minions?.some((entry) => entry.uid === 'orcs-pits-leaving-target')).toBe(false);
+            expect(movedState.core?.bases?.[1]?.minions?.some((entry) => entry.uid === 'orcs-pits-leaving-target')).toBe(true);
+            expect(movedState.core?.players?.['1']?.discard?.some((card) => card.uid === 'orcs-pits-leave-dogpile')).toBe(true);
+            expect(movedState.sys?.interaction?.current?.data?.sourceId ?? null).toBeNull();
+
+            await mirrorSmashUpHarnessState(page, movedState);
+            await targetPage.getByTestId('su-end-turn-action-button').click({ force: true });
+            await targetPage.waitForFunction(
+                () => (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()?.core?.currentPlayerIndex === 0,
+                { timeout: 10000, polling: 200 },
+            );
+            const p0TurnState = await targetPage.evaluate(() => (
+                (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()
+            ));
+            await mirrorSmashUpHarnessState(page, p0TurnState);
+            await expect(page.locator('[data-card-uid="orcs-pits-leave-death-breath"]').first()).toBeVisible({ timeout: 15000 });
+            await game.screenshot('移动端-兽人坑洞离开保护-随从移到另一基地后P0行动入口', testInfo);
+
+            const deathBreath = page.locator('[data-card-uid="orcs-pits-leave-death-breath"]').first();
+            await deathBreath.click({ force: true });
+            await page.waitForTimeout(300);
+            await deathBreath.click({ force: true });
+            await game.waitForInteraction('munchkin_orcs_death_breath_target', 10000);
+            await waitForSmashUpFxToSettle(page);
+            const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+            expect(targetOptions.some((option) => option.value?.minionUid === 'orcs-pits-leaving-target')).toBe(true);
+            await expectManualMinionChoiceVisible(
+                page,
+                'orcs-pits-leaving-target',
+                '离开坑洞后的随从必须重新成为其他玩家行动的可选目标',
+                { forbidPromptContext: true },
+            );
+            await game.screenshot('移动端-兽人坑洞离开保护-另一基地手动选择已恢复保护外随从', testInfo);
+            await clickManualMinionChoice(page, 'orcs-pits-leaving-target', '死亡之息选择离开坑洞后的随从');
+            await game.waitForNoInteraction(10000);
+            await waitForSmashUpFxToSettle(page);
+
+            await expect.poll(async () => {
+                const state = await game.getState();
+                return {
+                    movedMinionInPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-leaving-target'),
+                    movedMinionOnDestination: state.core.bases[1].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-leaving-target'),
+                    movedMinionInOwnerDeck: state.core.players?.['1']?.deck?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-leaving-target') ?? false,
+                    dogpileInOwnerDiscard: state.core.players?.['1']?.discard?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-leave-dogpile') ?? false,
+                    deathBreathInDiscard: state.core.players?.['0']?.discard?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-leave-death-breath') ?? false,
+                    interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                    responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                };
+            }, { timeout: 15000 }).toEqual({
+                movedMinionInPits: false,
+                movedMinionOnDestination: false,
+                movedMinionInOwnerDeck: true,
+                dogpileInOwnerDiscard: true,
+                deathBreathInDiscard: true,
+                interactionSourceId: null,
+                responseWindowType: null,
+            });
+
+            const mobileResolutionEvidence = await page.evaluate(() => {
+                const inViewport = (selector: string) => {
+                    const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                    return !!rect
+                        && rect.width > 24
+                        && rect.height > 24
+                        && rect.left >= -2
+                        && rect.right <= window.innerWidth + 2
+                        && rect.top >= -2
+                        && rect.bottom <= window.innerHeight + 2;
+                };
+                const supplyBadgeInViewport = (selector: string) => {
+                    const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                    return !!rect
+                        && rect.width > 0
+                        && rect.height > 0
+                        && rect.left >= -2
+                        && rect.right <= window.innerWidth + 2
+                        && rect.top >= -2
+                        && rect.bottom <= window.innerHeight + 2;
+                };
+                return {
+                    noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                    firstBaseVisible: inViewport('[data-base-index="0"]'),
+                    secondBaseVisible: inViewport('[data-base-index="1"]'),
+                    handVisible: inViewport('[data-testid="su-hand-area"]'),
+                    supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                    turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                    endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                    monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                    treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+                };
+            });
+            expect(mobileResolutionEvidence, '移动端坑洞随从离开后恢复可受行动影响的收口布局应完整且无横向溢出').toEqual({
+                noUnexpectedOverflow: true,
+                firstBaseVisible: true,
+                secondBaseVisible: true,
+                handVisible: true,
+                supplyVisible: true,
+                turnTrackerVisible: true,
+                endTurnVisible: true,
+                monsterDiscardAbsent: true,
+                treasureDiscardAbsent: true,
+            });
+            await game.screenshot('移动端-兽人坑洞离开保护-目标进入牌库底并收口', testInfo);
+        } finally {
+            await targetPage.close();
+        }
+    });
+
+    test('兽人坑洞移动端控制者自己的行动仍可影响坑洞随从', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', {
+            skipInitialization: true,
+            seat1: 'human',
+            playerID: '1',
+        }, 20000);
+        await game.setupScene(buildMunchkinOrcsPitsControllerActionScene());
+
+        const action = page.locator('[data-card-uid="orcs-pits-controller-death-breath"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-pits-controller-target"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人坑洞控制者行动-坑洞随从与死亡之息入口', testInfo);
+
+        await action.click({ force: true });
+        await page.waitForTimeout(300);
+        await action.click({ force: true });
+        await game.waitForInteraction('munchkin_orcs_death_breath_target', 10000);
+        await waitForSmashUpFxToSettle(page);
+        const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(targetOptions.some((option) => option.value?.minionUid === 'orcs-pits-controller-target')).toBe(true);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-pits-controller-target',
+            '坑洞控制者自己的行动必须显示坑洞内自己的随从本体作为可选目标',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人坑洞控制者行动-手动选择坑洞随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-pits-controller-target', '坑洞控制者行动选择自己的坑洞随从');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                targetOnPits: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-controller-target'),
+                targetInOwnerDeck: state.core.players?.['1']?.deck?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-controller-target') ?? false,
+                actionInOwnerDiscard: state.core.players?.['1']?.discard?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-controller-death-breath') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            targetOnPits: false,
+            targetInOwnerDeck: true,
+            actionInOwnerDiscard: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端坑洞控制者自己的行动收口后应保留原版布局且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人坑洞控制者行动-目标进入牌库底并收口', testInfo);
+    });
+
     test('兽人重击者真实入口手动选择力量目标，单候选也不自动结算', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -9150,6 +9704,86 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             treasureDiscardAbsent: true,
         });
         await game.screenshot('移动端-兽人挤碎-目标随从被摧毁后', testInfo);
+    });
+
+    test('兽人挤碎移动端无合法目标时不生成隐藏交互并保持手牌', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsCrushScene({ includeDefender: false }));
+
+        const action = page.locator('[data-card-uid="orcs-crush-action-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-crush-attacker-a"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人挤碎-无合法目标前手牌与两座基地', testInfo);
+
+        await action.click({ force: true });
+        await waitForSmashUpFxToSettle(page);
+        await game.waitForNoInteraction(10000);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                actionInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-crush-action-1') ?? false,
+                actionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-crush-action-1') ?? false,
+                ownMinionsUnchanged: state.core.bases[0]?.minions.filter((entry: { controller?: string }) => entry.controller === '0').map((entry: { uid?: string }) => entry.uid) ?? [],
+                defenderAbsent: !state.core.bases.some((base: { minions?: Array<{ uid?: string }> }) => base.minions?.some(entry => entry.uid === 'orcs-crush-defender')),
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            phase: 'playCards',
+            actionInHand: true,
+            actionInDiscard: false,
+            ownMinionsUnchanged: ['orcs-crush-attacker-a', 'orcs-crush-attacker-b'],
+            defenderAbsent: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await expect(page.locator('[data-testid="smashup-docked-prompt"]')).toHaveCount(0);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                sourceBaseVisible: inViewport('[data-base-index="0"]'),
+                targetBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端挤碎无合法目标时应保持手牌并保留两座基地、公共小牌和原版操作入口，且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            sourceBaseVisible: true,
+            targetBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await game.screenshot('移动端-兽人挤碎-无合法目标保持手牌且不生成隐藏交互', testInfo);
     });
 
     test('兽人躺下！计分前真实响应先手动选择行动并压制其他玩家特殊能力', async ({ page, game }, testInfo) => {
@@ -9866,7 +10500,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('移动端-兽人狗堆-随从移动后流程收口', testInfo);
     });
 
-    test('兽人狗堆移动端无合法目标时不生成隐藏基地交互并收口', async ({ page, game }, testInfo) => {
+    test('兽人狗堆移动端无合法目标时不生成隐藏基地交互并保持手牌', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await page.setViewportSize({ width: 844, height: 390 });
@@ -9901,8 +10535,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             };
         }, { timeout: 15000 }).toEqual({
             phase: 'playCards',
-            actionInHand: false,
-            actionInDiscard: true,
+            actionInHand: true,
+            actionInDiscard: false,
             sourcePresent: true,
             targetBaseOwnMinionCount: 0,
             interactionSourceId: null,
@@ -9932,7 +10566,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
                 treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
             };
         });
-        expect(mobileResolutionEvidence, '移动端狗堆无合法目标收口后两座基地、公共小牌、手牌和原版操作入口应可见且无横向溢出').toEqual({
+        expect(mobileResolutionEvidence, '移动端狗堆无合法目标时应保持手牌并保留两座基地、公共小牌和原版操作入口，且无横向溢出').toEqual({
             noUnexpectedOverflow: true,
             sourceBaseVisible: true,
             targetBaseVisible: true,
@@ -9943,7 +10577,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             treasureDiscardAbsent: true,
         });
 
-        await game.screenshot('移动端-兽人狗堆-无合法目标不生成隐藏交互并收口', testInfo);
+        await game.screenshot('移动端-兽人狗堆-无合法目标保持手牌且不生成隐藏交互', testInfo);
     });
 
     test('兽人洗手间在对手行动后把手动保护选择交给行动卡控制者', async ({ page, game }, _testInfo) => {
@@ -10325,6 +10959,98 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             treasureDiscardAbsent: true,
         });
         await game.screenshot('移动端-兽人死亡之息-受保护随从保留并收口', testInfo);
+    });
+
+    test('兽人死亡之息移动端全目标受保护时不生成隐藏目标并保持手牌', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsDeathBreathProtectionScene({ includeFree: false }));
+
+        const action = page.locator('[data-card-uid="orcs-death-breath-action-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-death-breath-protected"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人死亡之息-全目标受保护前手牌与随从', testInfo);
+
+        await action.click({ force: true });
+        await waitForSmashUpFxToSettle(page);
+        await game.waitForNoInteraction(10000);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                actionInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-death-breath-action-1') ?? false,
+                actionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-death-breath-action-1') ?? false,
+                protectedPresent: state.core.bases[0]?.minions.some((entry: { uid?: string }) => entry.uid === 'orcs-death-breath-protected') ?? false,
+                freePresent: state.core.bases.some((base: { minions?: Array<{ uid?: string }> }) => base.minions?.some(entry => entry.uid === 'orcs-death-breath-free')),
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            phase: 'playCards',
+            actionInHand: true,
+            actionInDiscard: false,
+            protectedPresent: true,
+            freePresent: false,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await expect(page.locator('[data-testid="smashup-docked-prompt"]')).toHaveCount(0);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端死亡之息全目标受保护时应保持手牌并保留基地、公共小牌和原版操作入口，且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await game.screenshot('移动端-兽人死亡之息-全目标受保护保持手牌且不生成隐藏目标', testInfo);
     });
 
     test('兽人重击者移动端横屏手动选择低力量目标并收口', async ({ page, game }, testInfo) => {

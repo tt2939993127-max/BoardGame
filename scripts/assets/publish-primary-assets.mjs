@@ -32,7 +32,9 @@ const DEFAULT_SSH_KNOWN_HOSTS_PATH = path.join(
 const DEFAULT_SSH_KEY_PATH = path.join(homedir(), '.ssh', 'id_ed25519');
 const DEFAULT_USER_SSH_KNOWN_HOSTS_PATH = path.join(homedir(), '.ssh', 'known_hosts');
 const MAX_PROCESS_OUTPUT_CHARS = 256 * 1024;
-const DEFAULT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+const MAX_ASSET_INVENTORY_RESPONSE_CHARS = 16 * 1024 * 1024;
+const DEFAULT_UPLOAD_CHUNK_BYTES = 2 * 1024 * 1024;
+const DEFAULT_UPLOAD_CONCURRENCY = 4;
 
 const appendProcessOutput = (current, chunk) => {
     const next = current + chunk.toString();
@@ -184,7 +186,7 @@ const appendUploadPath = (endpointUrl, suffix) => {
     return url;
 };
 
-const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body }) => new Promise((resolve, reject) => {
+const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body, agent }) => new Promise((resolve, reject) => {
     const client = endpointUrl.protocol === 'https:' ? https : http;
     let settled = false;
     const fail = (error) => {
@@ -198,6 +200,7 @@ const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body }) => n
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...headers,
         },
+        agent,
     }, (response) => {
         let responseBody = '';
         response.setEncoding('utf8');
@@ -235,8 +238,12 @@ const requestAssetPublishJson = ({ endpointUrl, token, method = 'GET' }) => new 
         let responseBody = '';
         response.setEncoding('utf8');
         response.on('data', (chunk) => {
-            responseBody = appendProcessOutput(responseBody, chunk);
+            responseBody += chunk.toString();
+            if (responseBody.length > MAX_ASSET_INVENTORY_RESPONSE_CHARS) {
+                response.destroy(new Error('素材发布清单响应超过 16MiB'));
+            }
         });
+        response.on('error', reject);
         response.on('end', () => {
             if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
                 reject(new Error(
@@ -291,6 +298,11 @@ export const publishStagedAssetsToUploadEndpoint = async ({
         DEFAULT_UPLOAD_CHUNK_BYTES,
         '素材上传分块大小',
     ),
+    concurrency = resolvePositiveInteger(
+        process.env.ASSET_SERVER_UPLOAD_CONCURRENCY,
+        DEFAULT_UPLOAD_CONCURRENCY,
+        '素材上传并行度',
+    ),
 }) => {
     if (!uploadUrl) {
         throw new Error('缺少素材上传入口 ASSET_SERVER_UPLOAD_URL');
@@ -312,23 +324,45 @@ export const publishStagedAssetsToUploadEndpoint = async ({
     const safeChunkSizeBytes = resolvePositiveInteger(chunkSizeBytes, DEFAULT_UPLOAD_CHUNK_BYTES, '素材上传分块大小');
     const archive = await createAssetUploadArchive(stagingRoot);
     const uploadId = randomUUID();
+    const agent = endpointUrl.protocol === 'https:'
+        ? new https.Agent({ keepAlive: true, maxSockets: concurrency })
+        : new http.Agent({ keepAlive: true, maxSockets: concurrency });
     try {
+        const chunks = [];
         for (let start = 0; start < archive.size; start += safeChunkSizeBytes) {
-            const end = Math.min(start + safeChunkSizeBytes, archive.size) - 1;
-            await sendAssetUploadRequest({
-                endpointUrl: appendUploadPath(endpointUrl, `chunks/${uploadId}`),
-                token,
-                headers: {
-                    'Content-Type': 'application/octet-stream',
-                    'Content-Length': String(end - start + 1),
-                    'Content-Range': `bytes ${start}-${end}/${archive.size}`,
-                },
-                body: createReadStream(archive.archivePath, { start, end }),
+            chunks.push({
+                start,
+                end: Math.min(start + safeChunkSizeBytes, archive.size) - 1,
             });
         }
+        let nextChunkIndex = 0;
+        const uploadChunk = async () => {
+            while (nextChunkIndex < chunks.length) {
+                const chunk = chunks[nextChunkIndex];
+                nextChunkIndex += 1;
+                await sendAssetUploadRequest({
+                    endpointUrl: appendUploadPath(endpointUrl, `chunks/${uploadId}`),
+                    token,
+                    agent,
+                    headers: {
+                        'Content-Type': 'application/octet-stream',
+                        'Content-Length': String(chunk.end - chunk.start + 1),
+                        'Content-Range': `bytes ${chunk.start}-${chunk.end}/${archive.size}`,
+                    },
+                    body: createReadStream(archive.archivePath, {
+                        start: chunk.start,
+                        end: chunk.end,
+                    }),
+                });
+            }
+        };
+        await Promise.all(
+            Array.from({ length: Math.min(concurrency, chunks.length) }, () => uploadChunk()),
+        );
         const responseBody = await sendAssetUploadRequest({
             endpointUrl: appendUploadPath(endpointUrl, `complete/${uploadId}`),
             token,
+            agent,
             headers: { 'Content-Length': '0' },
         });
         if (responseBody) {
@@ -337,6 +371,7 @@ export const publishStagedAssetsToUploadEndpoint = async ({
     } catch (error) {
         throw error;
     } finally {
+        agent.destroy();
         await removeStagingRoot(archive.archiveRoot);
     }
 };

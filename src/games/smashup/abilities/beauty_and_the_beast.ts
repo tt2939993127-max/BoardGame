@@ -122,7 +122,9 @@ function buildBeautyDiscardOptions(context: BeautyDiscardPromptContext): PromptO
             value: { cardUid: card.uid, defId: card.defId },
             displayMode: 'card' as const,
         }));
-    return context.optional ? [createSkipOption('不弃牌'), ...options] : options;
+    return context.optional
+        ? [createSkipOption('不弃牌', 'ui.beauty_and_the_beast_skip_discard_option'), ...options]
+        : options;
 }
 
 function resolveBeautyDiscardEffect(

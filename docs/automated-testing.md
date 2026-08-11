@@ -1,6 +1,6 @@
 # 自动化测试
 
-> 本文档是项目唯一的测试规范文档。引擎层审计工具的详细规范见 `docs/ai-rules/engine-systems.md` 的引擎层系统与原语清单。
+> 本文档是项目测试运行、工具 API、启动链和产物目录的主入口，不是所有测试验收规则的唯一正文。E2E 入口、截图证据和视觉验收以 [`.spec/knowledge/routes/testing.md`](../.spec/knowledge/routes/testing.md) 路由的项目标准为准；引擎系统与原语规范见 [`.spec/knowledge/standards/engine-systems.md`](../.spec/knowledge/standards/engine-systems.md)。
 
 ## 目录
 
@@ -108,7 +108,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 1. **先锁问题位点，再写或跑对应验证**：默认先用最靠近问题语义的验证层锁定位点，例如 `Vitest / GameTestRunner / 代表态注入 / 单条页面链`，不要一上来就从主页或完整对局起跑。
 2. **先推进实现，再做收口回归**：测试驱动不等于长时间停在“反复跑 E2E 看哪里又不对”；默认节奏应是`最小证据锁位 -> 改实现 -> 最窄回归收口`。
 3. **长链 E2E 不是主调试器**：当同一问题已经在长链里失败一次，却仍未直接命中问题位点时，优先退回状态注入、局部合同或更低层测试；不要继续把整局自然链当默认调试循环。
-4. **游戏流程里的“开局”默认不是主页漏斗**：如果目标是验证游戏内流程、牌桌交互、HUD、结算或刷新恢复，默认从 `game route / match route / 代表态` 起跑；主页、创建房间、加入房间另算入口合同。详细规则见 `docs/ai-rules/e2e-verification.md`。
+4. **游戏流程里的“开局”默认不是主页漏斗**：如果目标是验证游戏内流程、牌桌交互、HUD、结算或刷新恢复，默认从 `game route / match route / 代表态` 起跑；主页、创建房间、加入房间另算入口合同。详细规则见 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md)。
 
 ### 测试前置依赖与运行模式（强制）
 
@@ -168,7 +168,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 ### 引擎层审计工具（`src/engine/testing/`）
 
 > **GameTestRunner 行为测试是最优先、最可靠的测试手段**。审计工具是补充，用于批量覆盖 GameTestRunner 无法高效覆盖的注册表引用完整性和交互链完整性。
-> 详细规范见 `docs/ai-rules/engine-systems.md` 的引擎层系统与原语清单。
+> 详细规范见 [`.spec/knowledge/standards/engine-systems.md`](../.spec/knowledge/standards/engine-systems.md) 的引擎层系统与原语清单。
 
 | 工具 | 文件 | 用途 |
 |------|------|------|
@@ -404,8 +404,8 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 - 给出建议和警告
 
 **截图验收主源**：
-- 看图验收、外部资源缺失、线上现状图、移动端主方向和截图有效性，以 `docs/ai-rules/e2e-verification.md` 的「看图验收」和「截图来源与证据文档」为准。
-- 本文只保留 E2E 运行、截图产物位置和测试工具用法；不要在这里新增第二套验收清单。
+- 看图验收、外部资源缺失、线上现状图、移动端主方向和截图有效性，以 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 的「看图验收」和「截图来源与证据文档」为准。
+- 本文只保留 E2E 运行、截图产物位置和测试工具用法；新增验收规则必须回到 `.spec/knowledge/standards/` 的 canonical-source，不要在这里新增第二套清单。
 
 #### 2. 服务器就绪检查
 
@@ -1493,7 +1493,7 @@ npm run test:api
 
 ## E2E 截图核对规范入口（2026-03）
 
-> 截图核对、流程截图证据链、状态切换、奖励骰 / 特写、攻击修正、视觉项、资源缺失和对外结论口径已归并到 `docs/ai-rules/e2e-verification.md`。
+> 截图核对、流程截图证据链、状态切换、奖励骰 / 特写、攻击修正、视觉项、资源缺失和对外结论口径统一归 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md)。
 >
 > 本文只保留测试运行、截图附件目录和工具 API；新增截图验收规则必须改 E2E 主源，避免 `automated-testing.md` 与 `e2e-verification.md` 双写。
 

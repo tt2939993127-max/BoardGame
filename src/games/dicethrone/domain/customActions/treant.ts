@@ -1,4 +1,5 @@
 import { createDisplayOnlySettlement, registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { hasCurrentChoiceAnchor, registerChoiceEffectHandler } from '../choiceEffects';
 import { getPlayerAbilityEffects } from '../abilityLookup';
 import { RESOURCE_IDS } from '../resources';
@@ -33,6 +34,12 @@ const SHATTERING_FIST_3_CULTIVATE_CHOICE_ID = 'treant-shattering-fist-3-cultivat
 const QUIET_CULTIVATION_CHOICE_ID = 'treant-quiet-cultivation-resolve';
 const NATURE_TOUCH_CULTIVATE_CHOICE_ID = 'treant-nature-touch-cultivate-resolve';
 const ROOTED_CHOICE_ID = 'treant-rooted-resolve';
+const TREANT_LIFE_SAP_SETTLEMENT_ID = 'treant-life-sap-roll';
+const TREANT_WILD_GROWTH_2_SETTLEMENT_ID = 'treant-wild-growth-2-roll';
+const TREANT_TRAMPLE_SETTLEMENT_ID = 'treant-trample-roll';
+const TREANT_SOULFIRE_SETTLEMENT_ID = 'treant-soulfire-roll';
+const TREANT_MOTHER_TREE_SETTLEMENT_ID = 'treant-mother-tree-roll';
+const TREANT_ROOTED_SETTLEMENT_ID = 'treant-rooted-roll';
 const FOREST_AWAKENS_CHOICE_ID = 'treant-forest-awakens-resolve';
 const TEND_CARE_2_CULTIVATE_CHOICE_ID = 'treant-tend-care-2-cultivate-resolve';
 const NATURE_TOUCH_2_MERCY_CHOICE_ID = 'treant-nature-touch-2-mercy-resolve';
@@ -428,9 +435,21 @@ function getCurrentCardCultivateAmount(
     state: CustomActionContext['state'],
     playerId: string,
     sourceAbilityId: string | undefined,
+    customId?: string,
 ): number | undefined {
     if (sourceAbilityId === 'treant-card-cultivate' || sourceAbilityId === 'treant-card-planting') {
         return 3;
+    }
+
+    if (sourceAbilityId === 'treant-card-soulfire') {
+        const expectedAmount = state.currentChoiceContext?.expectedCultivateAmount;
+        if (typeof expectedAmount === 'number') return expectedAmount;
+        const customAmount = Object.entries(CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT)
+            .find(([, choiceId]) => choiceId === customId)?.[0];
+        if (customAmount) return Number(customAmount);
+    }
+    if (sourceAbilityId === 'treant-card-mother-tree' && customId === CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[4]) {
+        return 4;
     }
 
     const settlement = state.pendingBonusDiceSettlement;
@@ -749,13 +768,12 @@ function handleLifeSapUse({ attackerId, sourceAbilityId, state, timestamp, rando
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
-    const healAmount = Math.ceil(value / 2);
     const die = {
         index: 0,
         value,
         face,
         effectKey: 'bonusDie.effect.treantLifeSap',
-        effectParams: { value, heal: healAmount },
+        effectParams: { value, heal: Math.ceil(value / 2) },
     };
 
     return [
@@ -767,21 +785,16 @@ function handleLifeSapUse({ attackerId, sourceAbilityId, state, timestamp, rando
                 playerId: attackerId,
                 targetPlayerId: attackerId,
                 effectKey: 'bonusDie.effect.treantLifeSap',
-                effectParams: { value, heal: healAmount },
+                effectParams: { value, heal: Math.ceil(value / 2) },
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as BonusDieRolledEvent,
         createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, [die], timestamp + 1, {
             summaryEffectKey: 'bonusDie.effect.treantLifeSapResult',
-            summaryEffectParams: { value, heal: healAmount },
+            summaryEffectParams: { value, heal: Math.ceil(value / 2) },
+            customResolutionId: TREANT_LIFE_SAP_SETTLEMENT_ID,
         }),
-        {
-            type: 'HEAL_APPLIED',
-            payload: { targetId: attackerId, amount: healAmount, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2,
-        } as HealAppliedEvent,
     ];
 }
 
@@ -1015,16 +1028,10 @@ function handleWildGrowth2Main(ctx: CustomActionContext): DiceThroneEvent[] {
 
     const rollDice: Array<{ index: number; value: number; face: string; effectKey: string; effectParams: Record<string, number> }> = [];
     const events: DiceThroneEvent[] = [];
-    let branchCount = 0;
-    let leafCount = 0;
-    let spiritCount = 0;
 
     for (let i = 0; i < 5; i += 1) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === TREANT_DICE_FACE_IDS.BRANCH) branchCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.LEAF) leafCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.SPIRIT) spiritCount += 1;
         const effectKey = `bonusDie.effect.treantWildGrowth2.${face || 'other'}`;
         const effectParams = { value, index: i };
         rollDice.push({ index: i, value, face, effectKey, effectParams });
@@ -1045,61 +1052,8 @@ function handleWildGrowth2Main(ctx: CustomActionContext): DiceThroneEvent[] {
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, rollDice, timestamp + 5, {
         summaryEffectKey: 'bonusDie.effect.treantWildGrowth2.result',
-        summaryEffectParams: { branchCount, leafCount, spiritCount },
+        customResolutionId: TREANT_WILD_GROWTH_2_SETTLEMENT_ID,
     }));
-
-    if (branchCount > 0) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: branchCount,
-                sourceCardId: sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 6,
-        } as BonusDamageAddedEvent);
-    }
-
-    if (leafCount > 0) {
-        const currentLifeSap = state.players[attackerId]?.tokens[TOKEN_IDS.LIFE_SAP] ?? 0;
-        const maxLifeSap = getTokenStackLimit(state, attackerId, TOKEN_IDS.LIFE_SAP);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: {
-                targetId: attackerId,
-                tokenId: TOKEN_IDS.LIFE_SAP,
-                amount: Math.max(0, Math.min(currentLifeSap + 1, maxLifeSap) - currentLifeSap),
-                newTotal: Math.min(currentLifeSap + 1, maxLifeSap),
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 7,
-        } as TokenGrantedEvent);
-    }
-
-    if (spiritCount <= 0) return events;
-
-    const choiceId = WILD_GROWTH_2_CULTIVATE_CHOICE_ID_BY_AMOUNT[spiritCount];
-    if (!choiceId) return events;
-    const choiceOptions = buildGenericCultivateChoices(ctx, spiritCount, choiceId);
-    if (choiceOptions.length === 0) return events;
-    if (choiceOptions.length === 1) {
-        events.push(...buildSpiritTransitionEvents(ctx, decodeSpiritCounts(choiceOptions[0].value)));
-        return events;
-    }
-
-    events.push({
-        type: 'CHOICE_REQUESTED',
-        payload: {
-            playerId: attackerId,
-            sourceAbilityId,
-            titleKey: 'choices.treantCultivate.title',
-            options: choiceOptions,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 8,
-    } as ChoiceRequestedEvent);
     return events;
 }
 
@@ -1209,12 +1163,10 @@ function handleTrample(ctx: CustomActionContext): DiceThroneEvent[] {
 
     const dice: Array<{ index: number; value: number; face: string; effectKey: string; effectParams: Record<string, number> }> = [];
     const events: DiceThroneEvent[] = [];
-    let branchCount = 0;
 
     for (let i = 0; i < 5; i += 1) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === TREANT_DICE_FACE_IDS.BRANCH) branchCount += 1;
         const effectKey = `bonusDie.effect.treantTrample.${face || 'other'}`;
         const effectParams = { value, index: i };
         dice.push({ index: i, value, face, effectKey, effectParams });
@@ -1235,42 +1187,8 @@ function handleTrample(ctx: CustomActionContext): DiceThroneEvent[] {
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, dice, timestamp + 5, {
         summaryEffectKey: 'bonusDie.effect.treantTrample.result',
-        summaryEffectParams: { branchCount },
+        customResolutionId: TREANT_TRAMPLE_SETTLEMENT_ID,
     }));
-
-    if (branchCount > 0) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: branchCount,
-                sourceCardId: 'treant-card-trample',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 6,
-        } as BonusDamageAddedEvent);
-    }
-
-    if (branchCount >= 3) {
-        const thornTargetId = state.pendingAttack?.defenderId ?? getOpponents(state, attackerId)[0];
-        if (thornTargetId) {
-            const currentThorn = state.players[thornTargetId]?.tokens[TOKEN_IDS.THORN] ?? 0;
-            const maxThorn = getTokenStackLimit(state, thornTargetId, TOKEN_IDS.THORN);
-            events.push({
-                type: 'TOKEN_GRANTED',
-                payload: {
-                    targetId: thornTargetId,
-                    tokenId: TOKEN_IDS.THORN,
-                    amount: Math.max(0, Math.min(currentThorn + 1, maxThorn) - currentThorn),
-                    newTotal: Math.min(currentThorn + 1, maxThorn),
-                    sourceAbilityId,
-                },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp + 7,
-            } as TokenGrantedEvent);
-        }
-    }
-
     return events;
 }
 
@@ -1280,16 +1198,10 @@ function handleSoulfire(ctx: CustomActionContext): DiceThroneEvent[] {
 
     const dice: Array<{ index: number; value: number; face: string; effectKey: string; effectParams: Record<string, number> }> = [];
     const events: DiceThroneEvent[] = [];
-    let branchCount = 0;
-    let leafCount = 0;
-    let spiritCount = 0;
 
     for (let i = 0; i < 3; i += 1) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === TREANT_DICE_FACE_IDS.BRANCH) branchCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.LEAF) leafCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.SPIRIT) spiritCount += 1;
         const effectKey = `bonusDie.effect.treantSoulfire.${face || 'other'}`;
         const effectParams = { value, index: i };
         dice.push({ index: i, value, face, effectKey, effectParams });
@@ -1310,67 +1222,8 @@ function handleSoulfire(ctx: CustomActionContext): DiceThroneEvent[] {
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, dice, timestamp + 3, {
         summaryEffectKey: 'bonusDie.effect.treantSoulfire.result',
-        summaryEffectParams: { branchCount, leafCount, spiritCount },
+        customResolutionId: TREANT_SOULFIRE_SETTLEMENT_ID,
     }));
-
-    for (const opponentId of getOpponents(state, attackerId)) {
-        if (branchCount <= 0) continue;
-        const currentHp = state.players[opponentId]?.resources[RESOURCE_IDS.HP] ?? 0;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: {
-                targetId: opponentId,
-                amount: branchCount,
-                actualDamage: Math.min(branchCount, currentHp),
-                sourceAbilityId,
-                unblockable: true,
-                damageScope: 'direct',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 4,
-        } as DamageDealtEvent);
-    }
-
-    if (leafCount > 0) {
-        const currentLifeSap = state.players[attackerId]?.tokens[TOKEN_IDS.LIFE_SAP] ?? 0;
-        const maxLifeSap = getTokenStackLimit(state, attackerId, TOKEN_IDS.LIFE_SAP);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: {
-                targetId: attackerId,
-                tokenId: TOKEN_IDS.LIFE_SAP,
-                amount: Math.max(0, Math.min(currentLifeSap + leafCount, maxLifeSap) - currentLifeSap),
-                newTotal: Math.min(currentLifeSap + leafCount, maxLifeSap),
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 5,
-        } as TokenGrantedEvent);
-    }
-
-    if (spiritCount > 0) {
-        const outcomes = enumerateCultivateOutcomes(getSpiritCounts(ctx), getSpiritLimits(ctx), spiritCount);
-        if (outcomes.length === 1) {
-            events.push(...buildSpiritTransitionEvents({ ...ctx, timestamp: timestamp + 6 }, outcomes[0]));
-        } else if (outcomes.length > 1) {
-            events.push({
-                type: 'CHOICE_REQUESTED',
-                payload: {
-                    playerId: attackerId,
-                    sourceAbilityId,
-                    titleKey: 'choices.treantSoulfire.title',
-                    options: outcomes.map(outcome => ({
-                        value: encodeSpiritCounts(outcome),
-                        customId: getCardCultivateChoiceId(Math.min(spiritCount, 4)),
-                        labelKey: getCultivateLabelKey(outcome),
-                    })),
-                },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp + 6,
-            } as ChoiceRequestedEvent);
-        }
-    }
-
     return events;
 }
 
@@ -1399,36 +1252,9 @@ function handleMotherTree(ctx: CustomActionContext): DiceThroneEvent[] {
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent, createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, [die], timestamp + 1)];
-
-    if (face !== TREANT_DICE_FACE_IDS.SPIRIT) {
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 2, sourceAbilityId));
-        return events;
-    }
-
-    const outcomes = enumerateCultivateOutcomes(getSpiritCounts(ctx), getSpiritLimits(ctx), 4);
-    if (outcomes.length === 1) {
-        events.push(...buildSpiritTransitionEvents({ ...ctx, timestamp: timestamp + 2 }, outcomes[0]));
-        return events;
-    }
-    if (outcomes.length > 1) {
-        events.push({
-            type: 'CHOICE_REQUESTED',
-            payload: {
-                playerId: attackerId,
-                sourceAbilityId,
-                titleKey: 'choices.treantMotherTree.title',
-                options: outcomes.map(outcome => ({
-                    value: encodeSpiritCounts(outcome),
-                    customId: CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[4],
-                    labelKey: getCultivateLabelKey(outcome),
-                })),
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2,
-        } as ChoiceRequestedEvent);
-    }
-
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, [die], timestamp + 1, {
+        customResolutionId: TREANT_MOTHER_TREE_SETTLEMENT_ID,
+    })];
     return events;
 }
 
@@ -1438,17 +1264,11 @@ function handleRootedDefense(ctx: CustomActionContext): DiceThroneEvent[] {
 
     const diceCount = Math.max(1, Math.floor(action.diceCount ?? 3));
     const rollDice: Array<{ index: number; value: number; face: string; effectKey: string }> = [];
-    let branchCount = 0;
-    let leafCount = 0;
-    let spiritCount = 0;
     const events: DiceThroneEvent[] = [];
 
     for (let i = 0; i < diceCount; i += 1) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === TREANT_DICE_FACE_IDS.BRANCH) branchCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.LEAF) leafCount += 1;
-        if (face === TREANT_DICE_FACE_IDS.SPIRIT) spiritCount += 1;
 
         rollDice.push({ index: i, value, face, effectKey: `bonusDie.effect.treantRooted.${face}` });
         events.push({
@@ -1465,63 +1285,9 @@ function handleRootedDefense(ctx: CustomActionContext): DiceThroneEvent[] {
         } as BonusDieRolledEvent);
     }
 
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, rollDice, timestamp));
-
-    const preventAmount = branchCount + spiritCount;
-    const originalAttackerId = state.pendingAttack?.attackerId;
-    if (preventAmount > 0 && originalAttackerId) {
-        events.push({
-            type: 'PENDING_ATTACK_UPDATED',
-            payload: {
-                attackerId: originalAttackerId,
-                patch: {
-                    bonusDamage: (state.pendingAttack?.bonusDamage ?? 0) - preventAmount,
-                },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as PendingAttackUpdatedEvent);
-    }
-
-    const needsCultivate = leafCount >= 2;
-    const needsLifeSap = spiritCount >= 2;
-    if (!needsCultivate && !needsLifeSap) return events;
-
-    const cultivateOutcomes = needsCultivate
-        ? enumerateCultivateOutcomes(getSpiritCounts(ctx), getSpiritLimits(ctx), 1)
-        : [getSpiritCounts(ctx)];
-    const playerIds = needsLifeSap
-        ? getRootedLifeSapTargetIds(state, attackerId)
-        : [attackerId];
-
-    const options = cultivateOutcomes.flatMap((outcome) => playerIds.map((_, targetIndex) => {
-        const choice = {
-            ...outcome,
-            lifeSapTargetIndex: needsLifeSap ? targetIndex : -1,
-            requiresCultivate: needsCultivate,
-            requiresLifeSap: needsLifeSap,
-        };
-        return {
-            value: encodeRootedChoice(choice),
-            customId: ROOTED_CHOICE_ID,
-            labelKey: getRootedChoiceLabelKey(choice, needsCultivate, needsLifeSap),
-        };
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, rollDice, timestamp, {
+        customResolutionId: TREANT_ROOTED_SETTLEMENT_ID,
     }));
-
-    if (options.length > 0) {
-        events.push({
-            type: 'CHOICE_REQUESTED',
-            payload: {
-                playerId: attackerId,
-                sourceAbilityId,
-                titleKey: 'choices.treantRooted.title',
-                options,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as ChoiceRequestedEvent);
-    }
-
     return events;
 }
 
@@ -1718,7 +1484,13 @@ registerChoiceEffectHandler(QUIET_CULTIVATION_CHOICE_ID, ({ state, playerId, val
     };
 });
 
-registerChoiceEffectHandler(ROOTED_CHOICE_ID, ({ state, playerId, value, sourceAbilityId }) => {
+const resolveRootedChoice = ({ state, playerId, value, sourceAbilityId, customId }: {
+    state: CustomActionContext['state'];
+    playerId: string;
+    value?: number;
+    sourceAbilityId?: string;
+    customId: string;
+}) => {
     const player = state.players[playerId];
     if (!player) return undefined;
     if (!isExpectedChoiceSource(sourceAbilityId, ROOTED_SOURCE_IDS)) return undefined;
@@ -1726,20 +1498,22 @@ registerChoiceEffectHandler(ROOTED_CHOICE_ID, ({ state, playerId, value, sourceA
     if (!state.pendingAttack || state.pendingAttack.defenderId !== playerId) return undefined;
 
     const rootedSettlement = state.pendingBonusDiceSettlement;
-    if (rootedSettlement?.sourceAbilityId !== 'rooted') return undefined;
-    if (rootedSettlement.attackerId !== playerId || rootedSettlement.targetId !== playerId) return undefined;
-    const rootedDice = getPendingBonusSettlementDice(rootedSettlement);
-    const summaryLeafCount = rootedDice.reduce(
-        (count, die) => count + (die.face === TREANT_DICE_FACE_IDS.LEAF ? 1 : 0),
-        0,
-    );
-    const summarySpiritCount = rootedDice.reduce(
-        (count, die) => count + (die.face === TREANT_DICE_FACE_IDS.SPIRIT ? 1 : 0),
-        0,
-    );
+    let needsCultivate: boolean;
+    let needsLifeSap: boolean;
+    if (rootedSettlement) {
+        if (rootedSettlement.sourceAbilityId !== 'rooted') return undefined;
+        if (rootedSettlement.attackerId !== playerId || rootedSettlement.targetId !== playerId) return undefined;
+        const rootedDice = getPendingBonusSettlementDice(rootedSettlement);
+        needsCultivate = rootedDice.filter(die => die.face === TREANT_DICE_FACE_IDS.LEAF).length >= 2;
+        needsLifeSap = rootedDice.filter(die => die.face === TREANT_DICE_FACE_IDS.SPIRIT).length >= 2;
+    } else {
+        const choiceContext = state.currentChoiceContext;
+        if (typeof choiceContext?.requiresCultivate !== 'boolean'
+            || typeof choiceContext.requiresLifeSap !== 'boolean') return undefined;
+        needsCultivate = choiceContext.requiresCultivate;
+        needsLifeSap = choiceContext.requiresLifeSap;
+    }
 
-    const needsCultivate = summaryLeafCount >= 2;
-    const needsLifeSap = summarySpiritCount >= 2;
     const choice = decodeRootedChoice(value);
     const ctx: TreantSpiritContext = { attackerId: playerId, state };
     const legalCultivateOutcomes = enumerateCultivateOutcomes(
@@ -1794,7 +1568,9 @@ registerChoiceEffectHandler(ROOTED_CHOICE_ID, ({ state, playerId, value, sourceA
     }
 
     return { players: nextPlayers };
-});
+};
+
+registerChoiceEffectHandler(ROOTED_CHOICE_ID, resolveRootedChoice);
 
 registerChoiceEffectHandler(FOREST_AWAKENS_CHOICE_ID, ({ state, playerId, value, sourceAbilityId }) => {
     const player = state.players[playerId];
@@ -1865,11 +1641,13 @@ function resolveCardCultivateChoice(amount: number) {
         playerId,
         value,
         sourceAbilityId,
+        customId,
     }: {
         state: CustomActionContext['state'];
         playerId: string;
         value?: number;
         sourceAbilityId?: string;
+        customId: string;
     }) => {
         const player = state.players[playerId];
         if (!isExpectedChoiceSource(sourceAbilityId, CARD_CULTIVATE_SOURCE_IDS)) return undefined;
@@ -1877,7 +1655,7 @@ function resolveCardCultivateChoice(amount: number) {
         if (!CARD_CULTIVATE_ALLOWED_AMOUNTS_BY_SOURCE[sourceAbilityId].includes(amount)) return undefined;
         if (state.activePlayerId !== playerId) return undefined;
         if (!player) return undefined;
-        if (getCurrentCardCultivateAmount(state, playerId, sourceAbilityId) !== amount) return undefined;
+        if (getCurrentCardCultivateAmount(state, playerId, sourceAbilityId, customId) !== amount) return undefined;
 
         const choice = decodeSpiritCounts(value);
         const ctx: TreantSpiritContext = { attackerId: playerId, state };
@@ -2039,6 +1817,8 @@ function resolveCultivateOnlyChoice(
         if (!matchesCurrentChoiceSource(state, sourceAbilityId)) return undefined;
         if (state.activePlayerId !== playerId) return undefined;
         if (!player) return undefined;
+        const expectedAmount = state.currentChoiceContext?.expectedCultivateAmount;
+        if (typeof expectedAmount === 'number' && expectedAmount !== amount) return undefined;
 
         const choice = decodeSpiritCounts(value);
         const ctx: TreantSpiritContext = { attackerId: playerId, state };
@@ -2162,6 +1942,336 @@ function resolveTendCareChoice(amount: number) {
     };
 }
 
+function buildTreantCultivateChoiceOptions(
+    state: CustomActionContext['state'],
+    attackerId: string,
+    amount: number,
+    customId: string,
+): ChoiceRequestedEvent['payload']['options'] {
+    const ctx: TreantSpiritContext = { attackerId, state };
+    return enumerateCultivateOutcomes(getSpiritCounts(ctx), getSpiritLimits(ctx), amount).map(outcome => ({
+        value: encodeSpiritCounts(outcome),
+        customId,
+        labelKey: getCultivateLabelKey(outcome),
+    }));
+}
+
+function buildTreantSpiritSettlementContext(
+    state: CustomActionContext['state'],
+    attackerId: string,
+    sourceAbilityId: string,
+    timestamp: number,
+): TreantSpiritContext & { sourceAbilityId: string; timestamp: number } {
+    return { attackerId, state, sourceAbilityId, timestamp };
+}
+
+function registerTreantBonusDiceSettlementHandlers(): void {
+    registerBonusDiceSettlementHandler(TREANT_LIFE_SAP_SETTLEMENT_ID, ({ settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'HEAL_APPLIED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    amount: Math.ceil(die.value / 2),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as HealAppliedEvent],
+        };
+    });
+
+    registerBonusDiceSettlementHandler(TREANT_WILD_GROWTH_2_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const dice = getPendingBonusSettlementDice(settlement);
+        const branchCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.BRANCH).length;
+        const leafCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.LEAF).length;
+        const spiritCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.SPIRIT).length;
+        const followupEvents: DiceThroneEvent[] = [];
+
+        if (branchCount > 0) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    amount: branchCount,
+                    sourceCardId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDamageAddedEvent);
+        }
+
+        if (leafCount > 0) {
+            const currentLifeSap = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.LIFE_SAP] ?? 0;
+            const maxLifeSap = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.LIFE_SAP);
+            const newTotal = Math.min(currentLifeSap + 1, maxLifeSap);
+            followupEvents.push({
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.LIFE_SAP,
+                    amount: Math.max(0, newTotal - currentLifeSap),
+                    newTotal,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp: timestamp + 1,
+            } as TokenGrantedEvent);
+        }
+
+        if (spiritCount > 0) {
+            const choiceId = WILD_GROWTH_2_CULTIVATE_CHOICE_ID_BY_AMOUNT[spiritCount];
+            if (choiceId) {
+                const options = buildTreantCultivateChoiceOptions(state, settlement.attackerId, spiritCount, choiceId);
+                if (options.length === 1) {
+                    followupEvents.push(...buildSpiritTransitionEvents(
+                        buildTreantSpiritSettlementContext(state, settlement.attackerId, settlement.sourceAbilityId, timestamp + 2),
+                        decodeSpiritCounts(options[0].value),
+                    ));
+                } else if (options.length > 1) {
+                    followupEvents.push({
+                        type: 'CHOICE_REQUESTED',
+                        payload: {
+                            playerId: settlement.attackerId,
+                            sourceAbilityId: settlement.sourceAbilityId,
+                            titleKey: 'choices.treantCultivate.title',
+                            choiceContext: { expectedCultivateAmount: spiritCount },
+                            options,
+                        },
+                        sourceCommandType: 'BONUS_DICE_SETTLED',
+                        timestamp: timestamp + 2,
+                    } as ChoiceRequestedEvent);
+                }
+            }
+        }
+
+        return { totalDamage: 0, followupEvents };
+    });
+
+    registerBonusDiceSettlementHandler(TREANT_TRAMPLE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const branchCount = getPendingBonusSettlementDice(settlement)
+            .filter(die => die.face === TREANT_DICE_FACE_IDS.BRANCH).length;
+        const followupEvents: DiceThroneEvent[] = [];
+        if (branchCount > 0) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    amount: branchCount,
+                    sourceCardId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDamageAddedEvent);
+        }
+
+        if (branchCount >= 3) {
+            const thornTargetId = state.pendingAttack?.defenderId ?? settlement.targetId ?? getOpponents(state, settlement.attackerId)[0];
+            if (thornTargetId) {
+                const currentThorn = state.players[thornTargetId]?.tokens[TOKEN_IDS.THORN] ?? 0;
+                const maxThorn = getTokenStackLimit(state, thornTargetId, TOKEN_IDS.THORN);
+                const newTotal = Math.min(currentThorn + 1, maxThorn);
+                followupEvents.push({
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: thornTargetId,
+                        tokenId: TOKEN_IDS.THORN,
+                        amount: Math.max(0, newTotal - currentThorn),
+                        newTotal,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp: timestamp + 1,
+                } as TokenGrantedEvent);
+            }
+        }
+
+        return { totalDamage: 0, followupEvents };
+    });
+
+    registerBonusDiceSettlementHandler(TREANT_SOULFIRE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const dice = getPendingBonusSettlementDice(settlement);
+        const branchCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.BRANCH).length;
+        const leafCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.LEAF).length;
+        const spiritCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.SPIRIT).length;
+        const followupEvents: DiceThroneEvent[] = [];
+
+        if (branchCount > 0) {
+            for (const [index, opponentId] of getOpponents(state, settlement.attackerId).entries()) {
+                followupEvents.push(buildDirectDamageEvent(
+                    state,
+                    settlement.sourceAbilityId,
+                    opponentId,
+                    branchCount,
+                    timestamp + index,
+                ));
+            }
+        }
+
+        if (leafCount > 0) {
+            const currentLifeSap = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.LIFE_SAP] ?? 0;
+            const maxLifeSap = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.LIFE_SAP);
+            const newTotal = Math.min(currentLifeSap + leafCount, maxLifeSap);
+            followupEvents.push({
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.LIFE_SAP,
+                    amount: Math.max(0, newTotal - currentLifeSap),
+                    newTotal,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp: timestamp + 2,
+            } as TokenGrantedEvent);
+        }
+
+        if (spiritCount > 0) {
+            const choiceId = getCardCultivateChoiceId(Math.min(spiritCount, 4));
+            const options = buildTreantCultivateChoiceOptions(state, settlement.attackerId, spiritCount, choiceId);
+            if (options.length === 1) {
+                followupEvents.push(...buildSpiritTransitionEvents(
+                    buildTreantSpiritSettlementContext(state, settlement.attackerId, settlement.sourceAbilityId, timestamp + 3),
+                    decodeSpiritCounts(options[0].value),
+                ));
+            } else if (options.length > 1) {
+                followupEvents.push({
+                    type: 'CHOICE_REQUESTED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                        titleKey: 'choices.treantSoulfire.title',
+                        choiceContext: { expectedCultivateAmount: spiritCount },
+                        options,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp: timestamp + 3,
+                } as ChoiceRequestedEvent);
+            }
+        }
+
+        return { totalDamage: 0, followupEvents };
+    });
+
+    registerBonusDiceSettlementHandler(TREANT_MOTHER_TREE_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face !== TREANT_DICE_FACE_IDS.SPIRIT) {
+            return {
+                totalDamage: 0,
+                followupEvents: random
+                    ? buildDrawEvents(state, settlement.attackerId, 1, random, 'BONUS_DICE_SETTLED', timestamp, settlement.sourceAbilityId)
+                    : [],
+            };
+        }
+
+        const options = buildTreantCultivateChoiceOptions(
+            state,
+            settlement.attackerId,
+            4,
+            CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[4],
+        );
+        if (options.length === 1) {
+            return {
+                totalDamage: 0,
+                followupEvents: buildSpiritTransitionEvents(
+                    buildTreantSpiritSettlementContext(state, settlement.attackerId, settlement.sourceAbilityId, timestamp + 1),
+                    decodeSpiritCounts(options[0].value),
+                ),
+            };
+        }
+        return {
+            totalDamage: 0,
+            followupEvents: options.length > 1
+                ? [{
+                    type: 'CHOICE_REQUESTED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                        titleKey: 'choices.treantMotherTree.title',
+                        choiceContext: { expectedCultivateAmount: 4 },
+                        options,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp: timestamp + 1,
+                } as ChoiceRequestedEvent]
+                : [],
+        };
+    });
+
+    registerBonusDiceSettlementHandler(TREANT_ROOTED_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const dice = getPendingBonusSettlementDice(settlement);
+        const branchCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.BRANCH).length;
+        const leafCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.LEAF).length;
+        const spiritCount = dice.filter(die => die.face === TREANT_DICE_FACE_IDS.SPIRIT).length;
+        const needsCultivate = leafCount >= 2;
+        const needsLifeSap = spiritCount >= 2;
+        const followupEvents: DiceThroneEvent[] = [];
+        const originalAttackerId = state.pendingAttack?.attackerId;
+        const preventAmount = branchCount + spiritCount;
+
+        if (preventAmount > 0 && originalAttackerId) {
+            followupEvents.push({
+                type: 'PENDING_ATTACK_UPDATED',
+                payload: {
+                    attackerId: originalAttackerId,
+                    patch: {
+                        bonusDamage: (state.pendingAttack?.bonusDamage ?? 0) - preventAmount,
+                    },
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as PendingAttackUpdatedEvent);
+        }
+
+        if (needsCultivate || needsLifeSap) {
+            const cultivateOutcomes = needsCultivate
+                ? enumerateCultivateOutcomes(
+                    getSpiritCounts({ attackerId: settlement.attackerId, state }),
+                    getSpiritLimits({ attackerId: settlement.attackerId, state }),
+                    1,
+                )
+                : [getSpiritCounts({ attackerId: settlement.attackerId, state })];
+            const playerIds = needsLifeSap
+                ? getRootedLifeSapTargetIds(state, settlement.attackerId)
+                : [settlement.attackerId];
+            const options = cultivateOutcomes.flatMap(outcome => playerIds.map((_, targetIndex) => {
+                const choice: RootedChoice = {
+                    ...outcome,
+                    lifeSapTargetIndex: needsLifeSap ? targetIndex : -1,
+                    requiresCultivate: needsCultivate,
+                    requiresLifeSap: needsLifeSap,
+                };
+                return {
+                    value: encodeRootedChoice(choice),
+                    customId: ROOTED_CHOICE_ID,
+                    labelKey: getRootedChoiceLabelKey(choice, needsCultivate, needsLifeSap),
+                };
+            }));
+
+            if (options.length > 0) {
+                followupEvents.push({
+                    type: 'CHOICE_REQUESTED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                        titleKey: 'choices.treantRooted.title',
+                        choiceContext: { requiresCultivate: needsCultivate, requiresLifeSap: needsLifeSap },
+                        options,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp: timestamp + 1,
+                } as ChoiceRequestedEvent);
+            }
+        }
+
+        return { totalDamage: 0, followupEvents };
+    });
+}
+
 registerChoiceEffectHandler(CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[1], resolveCardCultivateChoice(1));
 registerChoiceEffectHandler(CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[2], resolveCardCultivateChoice(2));
 registerChoiceEffectHandler(CARD_CULTIVATE_CHOICE_ID_BY_AMOUNT[3], resolveCardCultivateChoice(3));
@@ -2177,6 +2287,7 @@ registerChoiceEffectHandler(WILD_GROWTH_2_CULTIVATE_CHOICE_ID_BY_AMOUNT[4], reso
 registerChoiceEffectHandler(WILD_GROWTH_2_CULTIVATE_CHOICE_ID_BY_AMOUNT[5], resolveCultivateOnlyChoice(WILD_GROWTH_2_MAIN_SOURCE_IDS, 5));
 
 export function registerTreantCustomActions(): void {
+    registerTreantBonusDiceSettlementHandlers();
     registerCustomActionHandler('treant-sapling-heal-cp', handleSaplingHealCp, { categories: ['resource', 'token'] });
     registerCustomActionHandler('treant-sapling-draw', handleSaplingDraw, { categories: ['card', 'token'] });
     registerCustomActionHandler('treant-life-sap-use', handleLifeSapUse, { categories: ['dice', 'resource', 'token'] });

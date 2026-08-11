@@ -11,8 +11,11 @@ import {
     readFileSync,
     readdirSync,
     realpathSync,
+    renameSync,
     rmSync,
     statSync,
+    truncateSync,
+    writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -430,6 +433,13 @@ async function loadAssetPublishInventory() {
                 sha256: await hashAssetFile(filePath),
             };
         }
+        const tempIndexPath = `${indexPath}.tmp-${process.pid}`;
+        writeFileSync(tempIndexPath, `${JSON.stringify({
+            schemaVersion: 1,
+            generatedAt: new Date().toISOString(),
+            objects,
+        })}\n`, { encoding: 'utf8', mode: 0o644 });
+        renameSync(tempIndexPath, indexPath);
     }
 
     assetPublishInventoryCache = { releaseId, objects };
@@ -560,37 +570,35 @@ async function handleAssetPublishChunkRequest(req, res) {
         if (session.totalBytes !== range.total) {
             throw new Error('Asset upload total size does not match the existing session');
         }
-        if (session.writing) {
-            sendJson(res, 409, { ok: false, error: 'Asset upload session is busy' });
-            return;
-        }
-        if (range.start < session.receivedBytes) {
-            if (range.end < session.receivedBytes) {
-                req.resume();
-                res.writeHead(204);
-                res.end();
-                return;
-            }
-            throw new Error(`Asset upload range overlaps existing data at ${session.receivedBytes}`);
-        }
-        if (range.start !== session.receivedBytes) {
-            sendJson(res, 409, {
-                ok: false,
-                error: 'Asset upload range is out of order',
-                expectedStart: session.receivedBytes,
+        const duplicate = session.receivedRanges.find((item) => (
+            item.start === range.start && item.end === range.end
+        ));
+        if (duplicate) {
+            req.resume();
+            await new Promise((resolve, reject) => {
+                req.on('end', resolve);
+                req.on('error', reject);
             });
+            res.writeHead(204);
+            res.end();
             return;
+        }
+        const overlaps = session.receivedRanges.some((item) => (
+            range.start <= item.end && range.end >= item.start
+        ));
+        if (overlaps) {
+            throw new Error(`Asset upload range overlaps an existing range: ${range.start}-${range.end}`);
         }
 
-        session.writing = true;
-        const receivedBytes = await writeRequestBody(req, session.archivePath, {
+        session.writing += 1;
+        const receivedBytes = await writeRequestBodyAtOffset(req, session.archivePath, range.start, {
             maxBytes: assetPublishMaxChunkBytes,
-            append: true,
         });
         if (receivedBytes !== range.length) {
             throw new Error(`Asset upload chunk length mismatch: expected=${range.length} actual=${receivedBytes}`);
         }
         session.receivedBytes += receivedBytes;
+        session.receivedRanges.push({ start: range.start, end: range.end });
         session.updatedAt = Date.now();
         res.writeHead(204);
         res.end();
@@ -604,7 +612,7 @@ async function handleAssetPublishChunkRequest(req, res) {
         });
     } finally {
         if (session) {
-            session.writing = false;
+            session.writing = Math.max(0, session.writing - 1);
         }
     }
 }
@@ -972,6 +980,23 @@ async function writeRequestBody(req, targetPath, { maxBytes, append = false } = 
     return receivedBytes;
 }
 
+async function writeRequestBodyAtOffset(req, targetPath, start, { maxBytes } = {}) {
+    const contentLength = Number(req.headers['content-length']);
+    if (Number.isSafeInteger(contentLength) && contentLength > maxBytes) {
+        req.resume();
+        throw new Error(`Asset upload too large: ${contentLength} > ${maxBytes}`);
+    }
+    let receivedBytes = 0;
+    req.on('data', (chunk) => {
+        receivedBytes += chunk.length;
+        if (receivedBytes > maxBytes) {
+            req.destroy(new Error(`Asset upload too large: ${receivedBytes} > ${maxBytes}`));
+        }
+    });
+    await pipeline(req, createWriteStream(targetPath, { flags: 'r+', start }));
+    return receivedBytes;
+}
+
 function readAssetPublishSessionId(rawUrl, action) {
     const pathname = new URL(rawUrl, 'http://deploy-runner').pathname;
     const prefix = `/asset-publish/${action}/`;
@@ -1021,11 +1046,14 @@ function createAssetPublishSession(id, totalBytes, source) {
         totalBytes,
         source,
         receivedBytes: 0,
+        receivedRanges: [],
         workRoot,
         archivePath: path.join(workRoot, 'upload.tar'),
-        writing: false,
+        writing: 0,
         updatedAt: Date.now(),
     };
+    writeFileSync(session.archivePath, Buffer.alloc(0));
+    truncateSync(session.archivePath, totalBytes);
     assetPublishSessions.set(id, session);
     return session;
 }

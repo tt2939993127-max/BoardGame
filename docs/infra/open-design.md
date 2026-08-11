@@ -6,7 +6,7 @@
 
 - **默认范围**：设计稿探索、`DESIGN.md` 设计系统、HTML / PDF / PPTX / 图片类产物，以及 Codex 通过 MCP 调用 Open Design。
 - **交付边界**：用户要“设计稿 / 视觉稿 / 效果图”时，默认交付物仍是 PNG / JPG / WebP 图片证据；imagegen 可用时走位图生图，imagegen 不可用且 Open Design 可用时自动转 Open Design artifact 候选稿。本项目固定采用“Open Design artifact + 固定视口浏览器渲染截图 + AI 图面核验 + 用户看图”的交付模式；未审计的 Open Design artifact、HTML 预览、产品运行页截图或 reference sheet 只能是工具产物 / 内部校准物，不能直接冒充设计稿。
-- **规则与素材门禁**：涉及游戏主 UI、桌游版面、卡牌、token、骰子、角色板、棋盘、状态板等领域对象时，Open Design 运行前必须先按 `docs/ai-rules/doc-index.md` 的“新游戏位图设计稿 / 设计批准门禁”完成本轮规则重读、规则到画面映射、正式素材输入包和出图前硬回执。没有这些证据时，只能产出 blocked brief / 缺口清单，不得生成或打开完成态设计稿。
+- **规则与素材门禁**：涉及游戏主 UI、桌游版面、卡牌、token、骰子、角色板、棋盘、状态板等领域对象时，Open Design 运行前必须先按 [`.spec/knowledge/routes/ui.md`](../../.spec/knowledge/routes/ui.md) 和项目 `boardgame-ui-imagegen` workflow 的设计稿入口，完成本轮规则重读、规则到画面映射、正式素材输入包和出图前硬回执。没有这些证据时，只能产出 blocked brief / 缺口清单，不得生成或打开完成态设计稿。
 - **素材不是 prompt 文案**：正式素材必须实际进入 Open Design 项目目录、reference sheet、图像输入、拼接基底、atlas crop 或运行时渲染链；只在 prompt 里写工作树路径、素材名或规则对象名，不算使用素材。
 - **人工验收顺序**：候选图必须先经过 AI 图面核验，确认规则、素材、少边框和可复刻门禁均为 PASS 后，才允许打开给用户人工验收。
 

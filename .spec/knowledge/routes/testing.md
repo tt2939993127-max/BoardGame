@@ -6,7 +6,7 @@
 
 - 编写或修复 Vitest/Playwright 测试：读项目 [`自动化测试`](../../../docs/automated-testing.md) 与 [`e2e-verification`](../standards/e2e-verification.md)。
 - 本地联机或单人同步调试：读 [`本地测试模式`](../../../docs/test-mode.md)；若涉及真实开房、状态注入和截图，再读 [`e2e-verification`](../standards/e2e-verification.md)。
-- E2E 交互、真实入口、截图证据、视觉验收或用户直接要截图：读 [`e2e-verification`](../standards/e2e-verification.md)、[`自动化测试`](../../../docs/automated-testing.md)、项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md) 和系统 `show-image-to-user`。
+- E2E 交互、真实入口和截图证据：先读 [`e2e-verification`](../standards/e2e-verification.md)；需要用户看到图片时再读系统 `show-image-to-user`，只有需要 BoardGame 项目脚本、证据目录或相册约定时才追加项目 [`screenshot-delivery`](../../skills/screenshot-delivery/SKILL.md)。
 - E2E 太慢、长链拆分、主页起跑或“测试驱动一直写测试没推进实现”：先读 [`e2e-verification`](../standards/e2e-verification.md)，再读 [`自动化测试`](../../../docs/automated-testing.md)，不要自行换成另一套验证链。
 
 ## 审计与回归

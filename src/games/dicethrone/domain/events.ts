@@ -602,6 +602,8 @@ export interface ChoiceRequestedEvent extends GameEvent<'CHOICE_REQUESTED'> {
         playerId: PlayerId;
         sourceAbilityId: string;
         titleKey: string;
+        /** 选择依赖的已确认结果元数据；仅描述当前交互，不作为骰子状态真相。 */
+        choiceContext?: Record<string, string | number | boolean>;
         /**
          * 对比掷骰特写元数据（可选）。
          * 当存在时，UI 使用 compare-roll-choice 覆盖层展示双方骰面与结果。

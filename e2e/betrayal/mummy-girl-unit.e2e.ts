@@ -113,6 +113,17 @@ test.describe("山屋惊魂女孩单位重构", () => {
     await expect(page.getByTestId("betrayal-board")).toBeVisible({
       timeout: 30000,
     });
+    await expect(
+      page.getByTestId("betrayal-observed-explorer-token-slot"),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("betrayal-observed-explorer-token-2"),
+    ).toHaveAttribute("data-token-state", "official");
+    await expect(
+      page.getByTestId("betrayal-observed-explorer-token-slot").locator(
+        '[data-testid="betrayal-observed-explorer-token-missing-2"]',
+      ),
+    ).toHaveCount(0);
     await expect(page.getByTestId("betrayal-room-floor-down")).toBeEnabled();
     await page.getByTestId("betrayal-room-floor-down").click();
     await expect(page.getByTestId("betrayal-room-floor-basement")).toBeVisible();

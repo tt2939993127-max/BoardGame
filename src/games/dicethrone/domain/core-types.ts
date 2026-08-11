@@ -788,6 +788,7 @@ export interface DiceThroneCore {
     tokenDefinitions: TokenDef[];
     activatingAbilityId?: string;
     currentChoiceSourceAbilityId?: string;
+    currentChoiceContext?: Record<string, string | number | boolean>;
     lastEffectSourceByPlayerId?: Record<PlayerId, string | undefined>;
     lastSoldCardId?: string;
     /** 待处理的伤害（等待 Token 响应） */
