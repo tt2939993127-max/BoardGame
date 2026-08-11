@@ -67,6 +67,15 @@
         }
       }
     },
+    "en/smashup/cards/compressed/half_the_battle_geckos": {
+      "variants": {
+        "webp": {
+          "sha256": "2e7b19c01ae4ad5f30fcb40ce571ad6930221f3457b09c1147541d1efaea9edd",
+          "bytes": 1518200,
+          "mime": "image/webp"
+        }
+      }
+    },
     "en/smashup/cards/compressed/kung_fu_fighters_pod": {
       "variants": {
         "webp": {
@@ -2439,6 +2448,15 @@
         "png": {
           "sha256": "82a3c99ebb7aa5a57c521607af09d9ea790a605f0a96de3a36b7947d13f683fa",
           "bytes": 6223028,
+          "mime": "image/png"
+        }
+      }
+    },
+    "en/smashup/cards/half_the_battle_geckos": {
+      "variants": {
+        "png": {
+          "sha256": "071489bdcf5675347c52354acf3cf0eb00eac8c170ef2dba458e85a51fcbd19e",
+          "bytes": 4959241,
           "mime": "image/png"
         }
       }
