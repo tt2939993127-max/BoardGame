@@ -15,7 +15,11 @@ import type {
 } from '../types';
 import { CP_MAX } from '../types';
 import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
-import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
+import {
+    registerBonusDiceSettlementHandler,
+    type BonusDiceSettlementHandlerContext,
+    type BonusDiceSettlementHandlerResult,
+} from '../bonusDiceSettlement';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 
@@ -242,6 +246,9 @@ type ThunderStrikeBonusConfig = {
     opensAfterRollConfirmedResponseWindow?: boolean;
 };
 
+const THUNDER_STRIKE_SETTLEMENT_ID = 'monk-thunder-strike-settlement';
+const THUNDER_STRIKE_2_SETTLEMENT_ID = 'monk-thunder-strike-2-settlement';
+
 import { STATUS_IDS } from '../ids';
 import type {
     StatusAppliedEvent,
@@ -289,6 +296,48 @@ const createThunderStrikeRollDamageEvents = (
     });
 };
 
+function resolveThunderStrikeSettlement({
+    state,
+    settlement,
+    timestamp,
+}: BonusDiceSettlementHandlerContext): BonusDiceSettlementHandlerResult {
+    const dice = Array.isArray(settlement.dice) ? settlement.dice : [];
+    const totalDamage = dice.reduce((sum, die) => sum + die.value, 0);
+    const followupEvents: DiceThroneEvent[] = [];
+
+    // 无太极时旧路径会立即执行这段伤害；现在必须等确认后的最终骰面再生成。
+    if (settlement.displayOnly) {
+        followupEvents.push(...createDamageCalculation({
+            source: { playerId: settlement.attackerId, abilityId: settlement.sourceAbilityId },
+            target: { playerId: settlement.targetId },
+            baseDamage: totalDamage,
+            state,
+            timestamp,
+        }).toEvents());
+
+        if (settlement.threshold !== undefined && totalDamage >= settlement.threshold && settlement.thresholdEffect === 'knockdown') {
+            const target = state.players[settlement.targetId];
+            const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+            const def = state.tokenDefinitions.find((entry) => entry.id === STATUS_IDS.KNOCKDOWN);
+            const maxStacks = def?.stackLimit || 99;
+            followupEvents.push({
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: settlement.targetId,
+                    statusId: STATUS_IDS.KNOCKDOWN,
+                    stacks: 1,
+                    newTotal: Math.min(currentStacks + 1, maxStacks),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as StatusAppliedEvent);
+        }
+    }
+
+    return { totalDamage, followupEvents };
+}
+
 /**
  * 雷霆万钧: 投掷3骰，造成总和伤害，可花费2太极重掷其中1颗
  */
@@ -300,6 +349,7 @@ function handleThunderStrikeRollDamage(context: CustomActionContext): DiceThrone
         maxRerollCount: 1,
         dieEffectKey: 'bonusDie.effect.thunderStrikeDie',
         rerollEffectKey: 'bonusDie.effect.thunderStrikeReroll',
+        customResolutionId: THUNDER_STRIKE_SETTLEMENT_ID,
         allowDiceModification: true,
         opensAfterRollConfirmedResponseWindow: true,
     });
@@ -316,6 +366,7 @@ function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThron
         maxRerollCount: 1,
         dieEffectKey: 'bonusDie.effect.thunderStrike2Die',
         rerollEffectKey: 'bonusDie.effect.thunderStrike2Reroll',
+        customResolutionId: THUNDER_STRIKE_2_SETTLEMENT_ID,
         threshold: 12,
         thresholdEffect: 'knockdown',
         allowDiceModification: true,
@@ -349,6 +400,8 @@ function handleGrantExtraRoll({ targetId, sourceAbilityId, state, timestamp }: C
 // ============================================================================
 
 export function registerMonkCustomActions(): void {
+    registerBonusDiceSettlementHandler(THUNDER_STRIKE_SETTLEMENT_ID, resolveThunderStrikeSettlement);
+    registerBonusDiceSettlementHandler(THUNDER_STRIKE_2_SETTLEMENT_ID, resolveThunderStrikeSettlement);
     registerBonusDiceSettlementHandler(ONE_THROW_FORTUNE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
         const dieValue = Math.max(1, Math.min(6, Math.trunc(settlement.dice[0]?.value ?? 1)));
         const cpGain = Math.ceil(dieValue / 2);

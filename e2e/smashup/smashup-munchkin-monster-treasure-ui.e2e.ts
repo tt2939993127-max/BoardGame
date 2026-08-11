@@ -78,8 +78,9 @@ type InteractionOption = {
             mode?: string;
             playerId?: string;
             skip?: boolean;
-        targetBaseIndex?: number;
-        targetMinionUid?: string;
+            sourceDefId?: string;
+            targetBaseIndex?: number;
+            targetMinionUid?: string;
         treasureDefId?: string;
         treasureUid?: string;
         triggerId?: string;
@@ -5109,6 +5110,67 @@ const buildMunchkinOrcsPitsControllerActionScene = (): SmashUpSceneConfig => ({
     },
 });
 
+const buildMunchkinOrcsPitsNonActionScene = (): SmashUpSceneConfig => ({
+    gameId: 'smashup',
+    currentPlayer: '0',
+    phase: 'playCards',
+    player0: {
+        hand: [],
+        deck: deckCards('0', 'munchkin_orcs_sword_lord', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'ninjas'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    player1: {
+        hand: [],
+        deck: deckCards('1', 'munchkin_orcs_dork_orc', 18),
+        discard: [],
+        factions: ['munchkin_orcs', 'pirates'],
+        minionsPlayed: 0,
+        minionLimit: 1,
+        actionsPlayed: 0,
+        actionLimit: 1,
+        vp: 4,
+    },
+    extra: {
+        core: {
+            turnOrder: ['0', '1'],
+            seatOrder: ['0', '1'],
+            turnNumber: 39,
+            nextUid: 3900,
+            deckQueryEnabled: false,
+            enabledExpansions: ['munchkin'],
+            monsterDeck: MUNCHKIN_MONSTER_DECK_DEF_IDS,
+            treasureDeck: MUNCHKIN_TREASURE_DECK_DEF_IDS,
+            baseDeck: ['base_the_homeworld', 'base_mages_tower'],
+            baseDiscard: [],
+            bases: [
+                {
+                    defId: 'base_ninja_dojo',
+                    minions: [
+                        minion('orcs-pits-non-action-score-own', 'alien_invader', '0', 10),
+                        minion('orcs-pits-non-action-score-opponent', 'pirate_first_mate', '1', 9),
+                    ],
+                    ongoingActions: [],
+                    monsters: [],
+                },
+                {
+                    defId: 'base_the_pits',
+                    minions: [
+                        minion('orcs-pits-non-action-target', 'alien_invader', '1', 3),
+                    ],
+                    ongoingActions: [],
+                    monsters: [],
+                },
+            ],
+        },
+    },
+});
+
 const buildMunchkinOrcsHammerSlammerScene = (options: { includeLegalTarget?: boolean } = {}): SmashUpSceneConfig => {
     const includeLegalTarget = options.includeLegalTarget ?? true;
     return ({
@@ -9040,6 +9102,136 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             treasureDiscardAbsent: true,
         });
         await game.screenshot('移动端-兽人坑洞控制者行动-目标进入牌库底并收口', testInfo);
+    });
+
+    test('兽人坑洞移动端其他玩家的非行动效果仍可影响坑洞随从', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsPitsNonActionScene());
+
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-pits-non-action-target"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人坑洞非行动-忍者道场计分前与坑洞目标', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases' || state?.sys?.phase === 'playCards';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const state = await game.getState();
+            const sourceId = state.sys?.interaction?.current?.data?.sourceId ?? null;
+            if (sourceId === 'base_ninja_dojo') break;
+            if (state.sys?.phase === 'playCards' && !state.sys?.interaction?.current) break;
+            if (sourceId === 'smashup_reaction_choose') {
+                const dojoButton = page.getByRole('button', { name: '忍者道场', exact: true }).first();
+                if (await dojoButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+                    await dojoButton.click({ force: true });
+                    await page.waitForTimeout(300);
+                    continue;
+                }
+            }
+            const didPass = await passOpenReactionOrResponseWindow(page, game, `移动端坑洞非行动计分前让过响应 ${attempt + 1}`);
+            if (!didPass) await page.waitForTimeout(300);
+        }
+
+        await game.waitForInteraction('base_ninja_dojo', 15000);
+        await expectCurrentInteractionManual(game, '移动端忍者道场非行动效果');
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-pits-non-action-target',
+            '移动端忍者道场必须显示坑洞内对手随从本体作为可选目标',
+            { forbidPromptContext: true },
+        );
+        await expect(page.locator('[data-base-index="1"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人坑洞非行动-忍者道场手动选择坑洞随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-pits-non-action-target', '移动端忍者道场选择坑洞内对手随从');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                scoringBaseReplaced: state.core.bases?.[0]?.defId !== 'base_ninja_dojo',
+                scoringBaseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                pitsTargetStillPresent: state.core.bases?.[1]?.minions?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-non-action-target') ?? false,
+                targetInOwnerDiscard: state.core.players?.['1']?.discard?.some((entry: { uid?: string }) => entry.uid === 'orcs-pits-non-action-target') ?? false,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            scoringBaseReplaced: true,
+            scoringBaseCleared: true,
+            pitsTargetStillPresent: false,
+            targetInOwnerDiscard: true,
+            ownVp: 7,
+            opponentVp: 6,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端坑洞非行动效果收口后应保留两座基地、手牌、公共小牌和原版操作入口且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人坑洞非行动-目标被忍者道场消灭并收口', testInfo);
     });
 
     test('兽人重击者真实入口手动选择力量目标，单候选也不自动结算', async ({ page, game }, testInfo) => {
