@@ -132,7 +132,8 @@ export function getUsableTokenAmountForTiming(
 
 /**
  * 获取玩家在指定时机下实际可用的 Token 列表（已过滤 category、timing、持有量）
- * 这是 Token 响应窗口的唯一数据源——有可用 token 才弹窗，窗口直接渲染此列表
+ * 这是 Token 响应窗口的唯一数据源——有可用 Token 才把对应 Token 标为可点击；
+ * UI 提示必须保持非阻塞，不能把 Token 响应改造成默认弹窗。
  */
 export function getUsableTokensForTiming(
     state: DiceThroneCore,

@@ -866,6 +866,10 @@
       "sarcophagusShort": "S",
       "girl": "Girl",
       "girlShort": "G",
+      "girlPlaced": "available to pick up",
+      "girlHeldByMummy": "carried by the Mummy",
+      "girlHeldByPlayer": "carried by {{player}}",
+      "officialTokenMissing": "official token missing",
       "essence": "Essence"
     },
     "players": {

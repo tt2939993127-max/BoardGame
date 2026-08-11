@@ -32,7 +32,8 @@ import { getTokenUseOptions } from './tokenTypes';
 import { getCustomActionHandler, resolveRollDieSettlement } from './effects';
 import { getBonusDiceSettlementHandler } from './bonusDiceSettlement';
 import { applyEvents } from './utils';
-import { isCurrentBonusRollSettlement } from './rollContext';
+import { findCurrentRollDie, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
+import { rollDieValue } from './reroll';
 
 /**
  * 按当前奖励骰面生成最终结算事件。
@@ -121,6 +122,13 @@ export function buildBonusDiceSettlementEvents({
     }
 
     if (settlement.resolutionMode === 'none') {
+        events.push(...followupEvents);
+        return events;
+    }
+
+    // displayOnly 只负责展示临时骰；最终副作用必须由专属 settlement handler
+    // 按确认后的骰面生成，不能再落入默认“骰面总和造成伤害”的分支。
+    if (settlement.displayOnly) {
         events.push(...followupEvents);
         return events;
     }
@@ -620,21 +628,20 @@ export function executeTokenCommand(
             const { dieIndex } = command.payload as { dieIndex: number };
             const playerId = command.playerId;
             const settlement = state.pendingBonusDiceSettlement;
+            const currentRollContext = resolveCurrentRollContext(state, phase);
+            const currentDie = findCurrentRollDie(state, dieIndex, phase)?.die;
             
-            if (!playerId || !settlement || !isCurrentBonusRollSettlement(state, settlement)) {
+            if (!playerId
+                || !settlement
+                || !isCurrentBonusRollSettlement(state, settlement)
+                || currentRollContext?.kind !== 'bonus'
+                || !currentDie) {
                 console.warn('[DiceThrone] REROLL_BONUS_DIE: invalid state');
                 break;
             }
             
-            const settlementDice = getPendingBonusSettlementDice(settlement);
-            const die = settlementDice.find(d => d.index === dieIndex);
-            if (!die) {
-                console.warn('[DiceThrone] REROLL_BONUS_DIE: die not found');
-                break;
-            }
-            
             // 重掷骰子
-            const newValue = random.d(6);
+            const newValue = rollDieValue(random);
             const newFace = getPlayerDieFace(state, settlement.attackerId, newValue) ?? '';
             
             // 发出 BONUS_DIE_REROLLED 事件（包含 UI 展示字段，避免 reducer 从 core 派生）
@@ -647,7 +654,7 @@ export function executeTokenCommand(
                 type: 'BONUS_DIE_REROLLED',
                 payload: {
                     dieIndex,
-                    oldValue: die.value,
+                    oldValue: currentDie.value,
                     newValue,
                     newFace,
                     costTokenId: settlement.rerollCostTokenId,

@@ -1,7 +1,8 @@
 import { createBonusDiceWithReroll, createDisplayOnlySettlement, registerCustomActionHandler, resolveEffectsToEvents, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { registerChoiceResolvedEventHandler } from '../choiceResolvedEvents';
 import { GUNSLINGER_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
-import { getActiveDice, getMaxDuplicateValueCount, getOpponents, getPlayerDieFace, getSeatingOrder, getSelectedCombatOpponentId, getTokenStackLimit } from '../rules';
+import { getActiveDice, getMaxDuplicateValueCount, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getSeatingOrder, getSelectedCombatOpponentId, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
 import type { PendingInteraction } from '../core-types';
@@ -18,6 +19,10 @@ import type {
 } from '../events';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 import { createCompareRollContext } from '../rollContext';
+
+const GUNSLINGER_LOADED_SETTLEMENT_ID = 'gunslinger-loaded-use';
+const GUNSLINGER_EAT_MY_LEAD_SETTLEMENT_ID = 'gunslinger-eat-my-lead';
+const GUNSLINGER_HIGH_NOON_SETTLEMENT_ID = 'gunslinger-high-noon';
 
 function createLoadedChoiceContext(
     state: CustomActionContext['state'],
@@ -144,16 +149,8 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                 effectParams: { value: roll, index: 0, bonusDamage },
             }],
             timestamp + 1,
+            { customResolutionId: GUNSLINGER_LOADED_SETTLEMENT_ID },
         ),
-        {
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: bonusDamage,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2,
-        } as BonusDamageAddedEvent,
     ];
 }
 
@@ -367,44 +364,13 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
         dice,
         timestamp + 10,
         {
+            customResolutionId: GUNSLINGER_EAT_MY_LEAD_SETTLEMENT_ID,
             summaryEffectKey: bonusDamage > 4
                 ? 'bonusDie.effect.gunslingerEatMyLead.resultKnockdown'
                 : 'bonusDie.effect.gunslingerEatMyLead.result',
-            summaryEffectParams: {
-                bulletCount,
-                bonusDamage,
-            },
+            summaryEffectParams: { bulletCount, bonusDamage },
         },
     ));
-
-    if (bonusDamage > 0) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: bonusDamage,
-                sourceCardId: sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 11,
-        } as BonusDamageAddedEvent);
-    }
-
-    if (bonusDamage > 4 && opponentId !== attackerId) {
-        const currentStacks = state.players[opponentId]?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: {
-                targetId: opponentId,
-                statusId: STATUS_IDS.KNOCKDOWN,
-                stacks: 1,
-                newTotal: Math.min(currentStacks + 1, 1),
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 12,
-        } as StatusAppliedEvent);
-    }
 
     return events;
 }
@@ -731,19 +697,8 @@ function handleHighNoonResolve({ attackerId, targetId, sourceAbilityId, state, t
         targetId,
         [{ index: 0, value, face, effectKey }],
         timestamp + 1,
+        { customResolutionId: GUNSLINGER_HIGH_NOON_SETTLEMENT_ID },
     ));
-
-    if (face === GUNSLINGER_DICE_FACE_IDS.BULLET) {
-        events.push(createUnblockableDamageEvent(state, targetId, 2, sourceAbilityId, timestamp + 2));
-        return events;
-    }
-
-    if (face === GUNSLINGER_DICE_FACE_IDS.DASH) {
-        events.push(createKnockdownEvent(state, targetId, sourceAbilityId, timestamp + 2));
-        return events;
-    }
-
-    events.push(createBountyEvent(state, targetId, sourceAbilityId, timestamp + 2));
     return events;
 }
 
@@ -803,6 +758,65 @@ function handleRevolver2FourKindKnockdown({ ctx, state, sourceAbilityId, timesta
 }
 
 export function registerGunslingerCustomActions(): void {
+    registerBonusDiceSettlementHandler(GUNSLINGER_LOADED_SETTLEMENT_ID, ({ settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        return {
+            totalDamage: 0,
+            followupEvents: die
+                ? [{
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        amount: Math.ceil(die.value / 2),
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as BonusDamageAddedEvent]
+                : [],
+        };
+    });
+    registerBonusDiceSettlementHandler(GUNSLINGER_EAT_MY_LEAD_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const bulletCount = getPendingBonusSettlementDice(settlement)
+            .filter(die => die.face === GUNSLINGER_DICE_FACE_IDS.BULLET).length;
+        const followupEvents: DiceThroneEvent[] = [];
+        if (bulletCount > 0) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    amount: bulletCount,
+                    sourceCardId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDamageAddedEvent);
+        }
+        if (bulletCount > 4 && settlement.targetId !== settlement.attackerId) {
+            followupEvents.push(createKnockdownEvent(state, settlement.targetId, settlement.sourceAbilityId, timestamp + 1));
+        }
+        return { totalDamage: 0, followupEvents };
+    });
+    registerBonusDiceSettlementHandler(GUNSLINGER_HIGH_NOON_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === GUNSLINGER_DICE_FACE_IDS.BULLET) {
+            return {
+                totalDamage: 0,
+                followupEvents: [createUnblockableDamageEvent(state, settlement.targetId, 2, settlement.sourceAbilityId, timestamp)],
+            };
+        }
+        if (die.face === GUNSLINGER_DICE_FACE_IDS.DASH) {
+            return {
+                totalDamage: 0,
+                followupEvents: [createKnockdownEvent(state, settlement.targetId, settlement.sourceAbilityId, timestamp)],
+            };
+        }
+        return {
+            totalDamage: 0,
+            followupEvents: [createBountyEvent(state, settlement.targetId, settlement.sourceAbilityId, timestamp)],
+        };
+    });
+
     registerCustomActionHandler('gunslinger-loaded-use', handleLoadedUse, {
         categories: ['token', 'dice'],
     });

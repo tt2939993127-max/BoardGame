@@ -22599,6 +22599,47 @@ export const BetrayalDomain: DomainCore<BetrayalCore, BetrayalCommand, BetrayalE
     },
 };
 
+const resolveBetrayalPendingCardResolutionRecovery = (args: {
+    state: MatchState<unknown>;
+    phase: string;
+}) => {
+    const core = args.state.core as Partial<Pick<BetrayalCore, 'pendingCardResolutionQueue'>> | undefined;
+    const pendingResolution = core?.pendingCardResolutionQueue?.[0];
+    if (!pendingResolution) {
+        return null;
+    }
+
+    const requiredPlayerIds = pendingResolution.requiredPlayerIds?.length
+        ? pendingResolution.requiredPlayerIds
+        : [pendingResolution.playerId];
+    const acknowledgedPlayerIds = new Set(pendingResolution.acknowledgedPlayerIds ?? []);
+    const playerId = requiredPlayerIds.find((candidate) => !acknowledgedPlayerIds.has(candidate));
+    if (!playerId) {
+        return null;
+    }
+
+    const resolutionId = pendingResolution.id;
+    return {
+        playerId,
+        fingerprintHint: `card-resolution:${playerId}:${args.phase}:${resolutionId}:${requiredPlayerIds.join(',')}:${[...acknowledgedPlayerIds].join(',')}`,
+        attemptSuffix: `card-resolution:${playerId}:${resolutionId}`,
+        command: {
+            type: BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION,
+            payload: { resolutionId },
+        },
+    };
+};
+
+const shouldSuppressBetrayalActiveTurnRecovery = (args: {
+    state: MatchState<unknown>;
+}) => {
+    return (args.state.core as Partial<Pick<BetrayalCore, 'pendingCardResolutionQueue'>> | undefined)
+        ?.pendingCardResolutionQueue
+        ?.length
+        ? true
+        : false;
+};
+
 const systems = [
     ...createBaseSystems<BetrayalCore>({
         actionLog: {
@@ -22612,13 +22653,21 @@ const systems = [
     createCheatSystem<BetrayalCore>(),
 ];
 
-export const engineConfig = createGameEngine<BetrayalCore, BetrayalCommand, BetrayalEvent>({
+const baseEngineConfig = createGameEngine<BetrayalCore, BetrayalCommand, BetrayalEvent>({
     domain: BetrayalDomain,
     systems,
     minPlayers: 3,
     maxPlayers: 6,
     commandTypes: Object.values(BETRAYAL_COMMANDS),
 });
+
+export const engineConfig = {
+    ...baseEngineConfig,
+    onlineAiRecovery: {
+        resolveSeatLegalOnlyRecovery: resolveBetrayalPendingCardResolutionRecovery,
+        shouldSuppressActiveTurnCandidate: shouldSuppressBetrayalActiveTurnRecovery,
+    },
+};
 
 export const betrayalAiRuntime = createBetrayalAiRuntime({
     validate: (state, command) => BetrayalDomain.validate(

@@ -2,7 +2,7 @@
  * 烈焰术士 (Pyromancer) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getAttackDiceFaceCounts, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getAttackDiceFaceCounts, getFaceCounts, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS } from '../ids';
 import { buildDrawEvents } from '../deckEvents';
@@ -16,7 +16,7 @@ import type {
     BonusDieRolledEvent,
     TokenLimitChangedEvent,
 } from '../types';
-import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createBonusDiceWithReroll, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 import { registerChoiceEffectHandler } from '../choiceEffects';
 import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { resourceSystem } from '../resourceSystem';
@@ -29,6 +29,9 @@ import { createDamageCalculation } from '../../../../engine/primitives/damageCal
 const getFireMasteryCount = (ctx: CustomActionContext): number => {
     return ctx.state.players[ctx.attackerId]?.tokens[TOKEN_IDS.FIRE_MASTERY] || 0;
 };
+
+const PYRO_GET_FIRED_UP_SETTLEMENT_ID = 'pyro-get-fired-up-roll';
+const PYRO_INFERNAL_EMBRACE_SETTLEMENT_ID = 'pyro-infernal-embrace-roll';
 
 const getBurnNewTotal = (ctx: CustomActionContext, targetId: string): number => {
     const current = ctx.state.players[targetId]?.statusEffects[STATUS_IDS.BURN] ?? 0;
@@ -655,7 +658,6 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
 const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const { attackerId, sourceAbilityId, state, timestamp, random } = ctx;
     if (!random) return [];
-    const events: DiceThroneEvent[] = [];
     const opponentId = ctx.ctx.defenderId;
 
     const value = random.d(6);
@@ -664,55 +666,26 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
     let effectKey = `bonusDie.effect.${face}`;
     if (face === PYROMANCER_DICE_FACE_IDS.FIRE) {
         effectKey = 'bonusDie.effect.fire';
-        // 统一走事件 + reducer，保证攻击修正卡在攻击创建前后都能落到正确的伤害字段。
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: 3,
-                sourceCardId: 'card-get-fired-up',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as DiceThroneEvent);
     } else if (face === PYROMANCER_DICE_FACE_IDS.MAGMA) {
         effectKey = 'bonusDie.effect.magma';
-        // 施加灼烧给对手
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: getBurnNewTotal(ctx, opponentId), sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT', timestamp,
-        } as StatusAppliedEvent);
     } else if (face === PYROMANCER_DICE_FACE_IDS.FIERY_SOUL) {
         effectKey = 'bonusDie.effect.fiery_soul';
-        // 获得2火焰专精
-        const current = state.players[attackerId]?.tokens[TOKEN_IDS.FIRE_MASTERY] ?? 0;
-        const max = getTokenStackLimit(state, attackerId, TOKEN_IDS.FIRE_MASTERY);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: 2, newTotal: Math.min(current + 2, max), sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT', timestamp,
-        } as TokenGrantedEvent);
     } else if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
         effectKey = 'bonusDie.effect.meteor';
-        // 施加倒地给对手
-        const current = state.players[opponentId]?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
-        const max = def?.stackLimit || 99;
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal: Math.min(current + 1, max), sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT', timestamp,
-        } as StatusAppliedEvent);
     }
 
-    events.unshift({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey },
         sourceCommandType: 'ABILITY_EFFECT', timestamp,
-    } as BonusDieRolledEvent);
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        opponentId,
+        [{ index: 0, value, face: face as any, effectKey }],
+        timestamp + 1,
+        { customResolutionId: PYRO_GET_FIRED_UP_SETTLEMENT_ID },
+    )];
 };
 
 /**
@@ -803,62 +776,28 @@ const resolveInfernalEmbraceRoll = (ctx: CustomActionContext): DiceThroneEvent[]
     const { attackerId, sourceAbilityId, state, timestamp } = ctx;
     const value = ctx.random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
-    const events: DiceThroneEvent[] = [];
-
-    if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
-        const currentFM = getFireMasteryCount(ctx);
-        const limit = getTokenStackLimit(state, attackerId, TOKEN_IDS.FIRE_MASTERY);
-        const newTotal = Math.min(limit, Math.max(currentFM, limit));
-        const amountToGain = Math.max(0, newTotal - currentFM);
-
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: attackerId,
-                effectKey: 'bonusDie.effect.infernalEmbrace.meteor',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as BonusDieRolledEvent);
-
-        if (amountToGain > 0) {
-            events.push({
-                type: 'TOKEN_GRANTED',
-                payload: {
-                    targetId: attackerId,
-                    tokenId: TOKEN_IDS.FIRE_MASTERY,
-                    amount: amountToGain,
-                    newTotal,
-                    sourceAbilityId,
-                },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as TokenGrantedEvent);
-        }
-
-        return events;
-    }
-
-    events.push({
+    const effectKey = face === PYROMANCER_DICE_FACE_IDS.METEOR
+        ? 'bonusDie.effect.infernalEmbrace.meteor'
+        : `bonusDie.effect.infernalEmbrace.${value}`;
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: {
             value,
             face,
             playerId: attackerId,
             targetPlayerId: attackerId,
-            effectKey: `bonusDie.effect.infernalEmbrace.${value}`,
+            effectKey,
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent);
-
-    return [
-        ...events,
-        ...buildDrawEvents(state, attackerId, 1, ctx.random, 'ABILITY_EFFECT', timestamp, sourceAbilityId),
-    ];
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        attackerId,
+        [{ index: 0, value, face: face as any, effectKey }],
+        timestamp + 1,
+        { customResolutionId: PYRO_INFERNAL_EMBRACE_SETTLEMENT_ID },
+    )];
 };
 
 // ============================================================================
@@ -866,6 +805,98 @@ const resolveInfernalEmbraceRoll = (ctx: CustomActionContext): DiceThroneEvent[]
 // ============================================================================
 
 export function registerPyromancerCustomActions(): void {
+    registerBonusDiceSettlementHandler(PYRO_GET_FIRED_UP_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        const followupEvents: DiceThroneEvent[] = [];
+        if (die.face === PYROMANCER_DICE_FACE_IDS.FIRE) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: { playerId: settlement.attackerId, amount: 3, sourceCardId: 'card-get-fired-up' },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            });
+        } else if (die.face === PYROMANCER_DICE_FACE_IDS.MAGMA) {
+            const current = state.players[settlement.targetId]?.statusEffects[STATUS_IDS.BURN] ?? 0;
+            const max = state.tokenDefinitions.some(def => def.id === STATUS_IDS.BURN)
+                ? getTokenStackLimit(state, settlement.targetId, STATUS_IDS.BURN)
+                : 1;
+            followupEvents.push({
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: settlement.targetId,
+                    statusId: STATUS_IDS.BURN,
+                    stacks: 1,
+                    newTotal: Math.min(current + 1, max),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as StatusAppliedEvent);
+        } else if (die.face === PYROMANCER_DICE_FACE_IDS.FIERY_SOUL) {
+            const current = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.FIRE_MASTERY] ?? 0;
+            const max = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.FIRE_MASTERY);
+            followupEvents.push({
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.FIRE_MASTERY,
+                    amount: Math.max(0, Math.min(current + 2, max) - current),
+                    newTotal: Math.min(current + 2, max),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as TokenGrantedEvent);
+        } else if (die.face === PYROMANCER_DICE_FACE_IDS.METEOR) {
+            const current = state.players[settlement.targetId]?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+            const max = state.tokenDefinitions.find(def => def.id === STATUS_IDS.KNOCKDOWN)?.stackLimit || 99;
+            followupEvents.push({
+                type: 'STATUS_APPLIED',
+                payload: {
+                    targetId: settlement.targetId,
+                    statusId: STATUS_IDS.KNOCKDOWN,
+                    stacks: 1,
+                    newTotal: Math.min(current + 1, max),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as StatusAppliedEvent);
+        }
+        return { totalDamage: 0, followupEvents };
+    });
+    registerBonusDiceSettlementHandler(PYRO_INFERNAL_EMBRACE_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === PYROMANCER_DICE_FACE_IDS.METEOR) {
+            const current = getFireMasteryCount({
+                attackerId: settlement.attackerId,
+                state,
+            } as CustomActionContext);
+            const max = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.FIRE_MASTERY);
+            return {
+                totalDamage: 0,
+                followupEvents: [{
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: settlement.attackerId,
+                        tokenId: TOKEN_IDS.FIRE_MASTERY,
+                        amount: Math.max(0, max - current),
+                        newTotal: max,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as TokenGrantedEvent],
+            };
+        }
+        return {
+            totalDamage: 0,
+            followupEvents: buildDrawEvents(state, settlement.attackerId, 1, random, 'BONUS_DICE_SETTLED', timestamp, settlement.sourceAbilityId),
+        };
+    });
+
     registerBonusDiceSettlementHandler(PYRO_BLAST_SETTLEMENT_ID, ({ state, settlement, timestamp }) => ({
         followupEvents: buildPyroBlastDieEvents({
             state,

@@ -1221,6 +1221,34 @@ describe('漫威第一波新增派系代表性玩法行为', () => {
         expect(resolvedSpecial.finalState.core.bases[1].minions.map(minion => minion.uid)).toContain('own-second');
     });
 
+    it('搬运从真实出牌命令进入目标随从选择后的目标基地交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('lift', 'ultimates_lift_and_carry', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_juice_bar', [makeMinion('target', 'shield_agent', '1', 2)]),
+                makeBase('base_moon_dumpster'),
+            ],
+        });
+
+        const played = runCommand(
+            makeMatchState(core),
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'lift', targetMinionUid: 'target' },
+            },
+            FIXED_RANDOM,
+        );
+
+        expect(played.success, played.error).toBe(true);
+        expect(getSimpleChoicePrompt(played.finalState, 'ultimates_lift_and_carry_destination')).toBeDefined();
+    });
+
     it('最先到达只给没有己方角色的基地额外角色额度，英雄登场可连续移动并跳过收口', () => {
         const firstCore = makeState({
             bases: [

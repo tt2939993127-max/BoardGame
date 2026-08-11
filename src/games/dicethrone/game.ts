@@ -1430,10 +1430,6 @@ const resolveDiceThroneSeatLegalOnlyRecovery = (args: {
             displayOnly?: unknown;
         };
     } | undefined;
-    if (core?.pendingAttack) {
-        return null;
-    }
-
     const settlement = core?.pendingBonusDiceSettlement;
     if (settlement?.displayOnly !== true || typeof settlement.attackerId !== 'string') {
         return null;

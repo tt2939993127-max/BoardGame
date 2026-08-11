@@ -817,10 +817,27 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             hasEvasiveDefinition: true,
         });
 
-        const tokenResponse = page.getByTestId('token-response-modal');
+        const tokenResponse = page.getByTestId('dicethrone-response-window-hint');
+        const evasiveToken = page.getByTestId(`dt-player-1-token-${TOKEN_IDS.EVASIVE}`);
         await expect(tokenResponse).toBeVisible({ timeout: 10000 });
-        await expect(page.getByTestId(`token-response-use-${TOKEN_IDS.EVASIVE}`)).toBeVisible();
-        await page.getByTestId(`token-response-use-${TOKEN_IDS.EVASIVE}`).click();
+        await expect(tokenResponse).toHaveAttribute('data-response-kind', 'token');
+        await expect(evasiveToken).toBeVisible();
+        await expect(evasiveToken).toHaveAttribute('data-token-clickable', 'true');
+        await expect(page.getByTestId('token-response-modal')).toHaveCount(0);
+        await expect(page.getByTestId('dicethrone-token-response-inline')).toHaveCount(0);
+        await expect.poll(() => tokenResponse.evaluate((node) => {
+            const handArea = document.querySelector<HTMLElement>('[data-testid="hand-area"]');
+            const card = handArea?.querySelector<HTMLElement>('[data-testid="hand-card-visual"]');
+            const prompt = node.getBoundingClientRect();
+            const hand = handArea?.getBoundingClientRect();
+            const cardRect = card?.getBoundingClientRect();
+            return {
+                isFixed: getComputedStyle(node).position === 'fixed',
+                centeredOnHand: hand ? Math.abs((prompt.left + prompt.width / 2) - (hand.left + hand.width / 2)) < 2 : false,
+                aboveHand: cardRect ? prompt.bottom <= cardRect.top - 8 : false,
+            };
+        })).toEqual({ isFixed: true, centeredOnHand: true, aboveHand: true });
+        await evasiveToken.click();
 
         await expect.poll(async () => {
             const state = await game.getState();
@@ -839,6 +856,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             tacticalAdvantage: 1,
         });
         await expect(tokenResponse).toBeVisible();
+        await page.mouse.move(960, 80);
         await game.screenshot('闪避骰-成功后可干预', testInfo);
 
         const tacticalReroll = page.getByTestId('passive-action-zhanshujia-tactical-advantage-1');
@@ -880,6 +898,255 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             rollAnimation: 'settled',
             animationName: 'none',
         });
+        await page.mouse.move(960, 80);
         await game.screenshot('闪避骰-战术优势重掷后', testInfo);
+    });
+
+    test('战术家在右侧奖励骰专用入口存在时仍可主动使用战术优势重掷', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone', { playerID: '0' });
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 2, HP: 50 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'main1',
+            extra: {
+                selectedCharacters: { '0': 'zhanshujia', '1': 'barbarian' },
+                hostStarted: true,
+            },
+        });
+        await game.waitForPhase('main1', 5000);
+
+        await page.evaluate((scenario) => {
+            const harness = (window as Window & {
+                __BG_TEST_HARNESS__?: {
+                    random?: { setQueue?: (values: number[]) => void };
+                    state?: { get?: () => any; set?: (state: any) => void | Promise<void> };
+                };
+            }).__BG_TEST_HARNESS__;
+            const current = harness?.state?.get?.();
+            if (!current || !harness?.state?.set) {
+                throw new Error('TestHarness state 不可用');
+            }
+
+            const settlementId = 'e2e-zhanshujia-passive-bonus-reroll';
+            const currentRollContext = {
+                id: `bonus:${settlementId}`,
+                kind: 'bonus',
+                ownerPlayerId: '0',
+                targetPlayerId: '1',
+                sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
+                dice: [{
+                    id: 0,
+                    definitionId: 'zhanshujia-dice',
+                    value: 3,
+                    symbol: 'banner',
+                    symbols: ['banner'],
+                    isKept: false,
+                    ownerId: '0',
+                    displayOnly: true,
+                }],
+                status: 'open',
+                policy: {
+                    modifiableBy: 'owner',
+                    rerollableBy: 'owner',
+                    allowPassiveReroll: true,
+                    allowDiceCardTargeting: true,
+                    ultimateLocked: false,
+                    blocksPhaseFlow: true,
+                },
+                settlement: {
+                    mode: 'none',
+                    metadata: { pendingBonusDiceSettlementId: settlementId },
+                },
+                display: { surface: 'diceTray', replayOnly: false },
+            };
+            const pendingBonusDiceSettlement = {
+                id: settlementId,
+                sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
+                attackerId: '0',
+                targetId: '1',
+                dice: [{
+                    index: 0,
+                    value: 3,
+                    face: 'banner',
+                    effectKey: 'bonusDie.effect.zhanshujiaWarRoom',
+                    effectParams: { value: 3, amount: 2 },
+                }],
+                rerollCostTokenId: scenario.unavailableBonusRerollTokenId,
+                rerollCostAmount: 1,
+                rerollCount: 0,
+                maxRerollCount: 1,
+                readyToSettle: false,
+                displayOnly: true,
+                showTotal: false,
+                resolutionMode: 'none',
+                allowDiceModification: false,
+            };
+
+            harness.random?.setQueue?.([0.999]);
+            return harness.state.set({
+                ...current,
+                sys: {
+                    ...current.sys,
+                    phase: 'main1',
+                    interaction: { current: undefined, queue: [] },
+                    responseWindow: { current: undefined },
+                },
+                core: {
+                    ...current.core,
+                    activePlayerId: '0',
+                    rollCount: 0,
+                    rollLimit: 3,
+                    rollConfirmed: false,
+                    currentRollContext,
+                    pendingBonusDiceSettlement,
+                    players: {
+                        ...current.core.players,
+                        '0': {
+                            ...current.core.players['0'],
+                            passiveAbilities: scenario.passiveAbilities,
+                            tokens: {
+                                ...current.core.players['0'].tokens,
+                                [scenario.tacticalAdvantageTokenId]: 1,
+                            },
+                        },
+                    },
+                },
+            });
+        }, {
+            passiveAbilities: ZHANSHUJIA_PASSIVE_ABILITIES,
+            tacticalAdvantageTokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+            unavailableBonusRerollTokenId: TOKEN_IDS.TAIJI,
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                rollCount: state?.core?.rollCount ?? null,
+                rollKind: state?.core?.currentRollContext?.kind ?? null,
+                dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
+                tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            rollCount: 0,
+            rollKind: 'bonus',
+            dieValue: 3,
+            tacticalAdvantage: 1,
+        });
+
+        const passiveReroll = page.getByTestId('passive-action-zhanshujia-tactical-advantage-1');
+        await expect(passiveReroll).toBeVisible({ timeout: 10000 });
+        await expect(passiveReroll).toBeEnabled();
+        await game.screenshot('01-战术家-奖励骰主动重掷前', testInfo);
+        await passiveReroll.click();
+
+        const bonusDie = page.getByTestId('die-button-0').first();
+        await expect(bonusDie).toBeVisible({ timeout: 5000 });
+        await expect(bonusDie).toHaveAttribute('data-display-only', 'true');
+        await expect(bonusDie).toHaveAttribute('data-clickable', 'true');
+        await game.screenshot('02-战术家-主动重掷模式下奖励骰可点击', testInfo);
+        await bonusDie.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
+                pendingDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
+                tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            dieValue: 6,
+            pendingDieValue: 6,
+            tacticalAdvantage: 0,
+        });
+        await expect(bonusDie).toHaveAttribute('data-display-value', '6');
+        await expect.poll(() => bonusDie.getByTestId('dice-2d').getAttribute('data-roll-animation'), { timeout: 5000 })
+            .toBe('settled');
+        await game.screenshot('03-战术家-战术优势已消耗且奖励骰改为六', testInfo);
+    });
+
+    test('战术家可从真实主骰入口主动使用战术优势重掷', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone', { playerID: '0' });
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 2, HP: 50 },
+                tokens: { [TOKEN_IDS.TACTICAL_ADVANTAGE]: 1 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'zhanshujia', '1': 'barbarian' },
+                hostStarted: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollConfirmed: false,
+                dice: [
+                    { id: 0, value: 3, isKept: false },
+                    { id: 1, value: 2, isKept: false },
+                    { id: 2, value: 4, isKept: false },
+                    { id: 3, value: 5, isKept: false },
+                    { id: 4, value: 1, isKept: false },
+                ],
+            },
+        });
+        await game.waitForPhase('offensiveRoll', 5000);
+
+        await page.evaluate(() => {
+            const harness = (window as Window & {
+                __BG_TEST_HARNESS__?: { random?: { setQueue?: (values: number[]) => void } };
+            }).__BG_TEST_HARNESS__;
+            harness?.random?.setQueue?.([0.999]);
+        });
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state?.sys?.phase ?? null,
+                dieValue: state?.core?.dice?.[0]?.value ?? null,
+                tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            phase: 'offensiveRoll',
+            dieValue: 3,
+            tacticalAdvantage: 1,
+        });
+
+        const passiveReroll = page.getByTestId('passive-action-zhanshujia-tactical-advantage-1');
+        const die = page.getByTestId('die-button-0').first();
+        await expect(passiveReroll).toBeVisible({ timeout: 10000 });
+        await expect(passiveReroll).toBeEnabled();
+        await expect(die).toHaveAttribute('data-clickable', 'true');
+        await game.screenshot('04-战术家-主骰主动重掷前', testInfo);
+
+        await passiveReroll.click();
+        await expect(passiveReroll).toContainText(/取消|Cancel/);
+        await expect(die).toHaveAttribute('data-clickable', 'true');
+        await game.screenshot('05-战术家-主骰主动重掷选择中', testInfo);
+        await die.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                dieValue: state?.core?.dice?.[0]?.value ?? null,
+                tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+                passiveButtonVisible: await passiveReroll.isVisible().catch(() => false),
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            dieValue: 6,
+            tacticalAdvantage: 0,
+            passiveButtonVisible: false,
+        });
+        await expect.poll(() => die.getByTestId('dice-2d').getAttribute('data-roll-animation'), { timeout: 5000 })
+            .toBe('settled');
+        await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden({ timeout: 10000 });
+        await game.screenshot('06-战术家-主骰已重掷且战术优势已消耗', testInfo);
     });
 });

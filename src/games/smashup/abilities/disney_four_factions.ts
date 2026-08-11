@@ -1481,6 +1481,35 @@ function drawOnPowerCounterHere(ctx: TriggerContext, onceKey: string): SmashUpEv
     ];
 }
 
+function jungleParadiseAfterMinionDiscarded(ctx: TriggerContext): AbilityResult {
+    const baseIndex = ctx.sourceBaseIndex ?? ctx.baseIndex;
+    const playerId = ctx.triggerMinion?.controller ?? ctx.playerId;
+    if (baseIndex === undefined || ctx.baseIndex !== baseIndex || !ctx.triggerMinion) return { events: [] };
+    if (ctx.triggerMinion.controller !== playerId) return { events: [] };
+    const targets = collectMinions(ctx.state, (minion, candidateBaseIndex) =>
+        candidateBaseIndex === baseIndex && minion.controller === playerId,
+    );
+    if (targets.length === 0 || !ctx.matchState) return { events: [] };
+    return promptMinion({
+        state: ctx.state,
+        matchState: ctx.matchState,
+        playerId,
+        cardUid: ctx.triggerMinionUid ?? '',
+        defId: 'base_jungle_paradise',
+        baseIndex,
+        random: ctx.random,
+        now: ctx.now,
+    }, {
+        sourceId: 'base_jungle_paradise',
+        title: '丛林乐园：选择放置 +1 力量标记的角色',
+        kind: 'addCounters',
+        minions: targets,
+        amount: 1,
+        optional: true,
+        reason: 'base_jungle_paradise',
+    });
+}
+
 function bigHeroProtection(ctx: ProtectionCheckContext): boolean {
     if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
     return ctx.state.bases[ctx.targetBaseIndex]?.minions.some(minion =>
@@ -1647,6 +1676,15 @@ export function registerDisneyFourFactionsAbilities(): void {
         if (ctx.sourceCardUid === undefined) return [];
         return [grantContextualExtraMinion({ playerId: ctx.sourceControllerId ?? ctx.playerId, now: ctx.now, matchState: ctx.matchState }, 'lion_king_circle_of_life', undefined, { powerMax: 3 })];
     }, { optional: true, playerContext: 'sourceController' });
+
+    registerTrigger('base_jungle_paradise', 'onMinionDiscardedFromBase', jungleParadiseAfterMinionDiscarded, {
+        optional: true,
+        sourceScope: 'triggerBase',
+        playerContext: 'eventPlayer',
+        canTrigger: ctx => (ctx.sourceBaseIndex ?? ctx.baseIndex) !== undefined
+            && ctx.state.bases[ctx.sourceBaseIndex ?? ctx.baseIndex!]?.defId === 'base_jungle_paradise'
+            && ctx.triggerMinion?.controller === ctx.playerId,
+    });
 
     for (const defId of ['mulan_chien_po', 'mulan_ling', 'mulan_yao']) {
         registerTrigger(defId, 'onMinionAffected', ctx => drawOnPowerCounterHere(ctx, `${defId}_counter_draw_turn`), {

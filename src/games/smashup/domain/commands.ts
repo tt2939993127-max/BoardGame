@@ -812,6 +812,24 @@ export function validate(
                     return { valid: false, error: '该行动卡不需要选择随从目标' };
                 }
 
+                const specialValidation = resolveSpecial(rCard.defId)
+                    ? validateSpecialUse({
+                        state: core,
+                        matchState: state,
+                        playerId: command.playerId,
+                        cardUid: rCard.uid,
+                        defId: rCard.defId,
+                        baseIndex: typeof targetBase === 'number' ? targetBase : undefined,
+                        targetBaseIndex: typeof targetBase === 'number' ? targetBase : undefined,
+                        targetMinionUid,
+                        random: { random: () => Math.random(), d: () => 1, range: (min: number) => min, shuffle: <T>(arr: T[]) => [...arr] },
+                        now: core.turnNumber ?? 0,
+                    })
+                    : { valid: true };
+                if (!specialValidation.valid) {
+                    return specialValidation;
+                }
+
                 return { valid: true };
             }
 

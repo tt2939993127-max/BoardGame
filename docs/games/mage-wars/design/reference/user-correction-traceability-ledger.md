@@ -53,7 +53,7 @@
 | 规则到 UI 不能靠纠正账本兜底，必须先有对象覆盖矩阵 | 用户没有逐条骂到的规则对象可能继续被遗漏，例如骰子、token、公开弃牌、已计划法术或合法目标高亮 | `mage-wars-ui-design-memory` 规则对象覆盖矩阵；本账本仅作 drift-check / evidence | 设计 / 实现 / 送验前必须列出 foundation 规则对象，每行裁定可见性、实体锚点、素材 / 程序化来源和截图验收方式；无结论行按遗漏处理 | covered |
 | 规则到 UI 再到实现不能只看最后一张图 | 规则对象、交互职责和用户纠正项在实现时被遗漏 | `mage-wars-ui-design-memory` 规则到 UI 到实现执行顺序；`generated-design-implementation.md` | 实现前必须重新锁规则对象、唯一实体锚点、主交互链，并逐条把本账本映射到真实 Board/UI 承载位置 | covered |
 | 设计稿到实现不能漏掉纠正项 | 只按最后一张图的大致布局实现，容易重新漏骰子、token、公开弃牌堆正面、分页样式或规则术语 | `generated-design-implementation`；`docs/ai-rules/generated-design-implementation.md`；`board-layout-contract.md` | 真实 Board/UI 实现前必须逐项消费本账本；实现截图必须回答每个用户纠正项在图面中的承载、是否可读、是否被省略或误改 | covered |
-| 不允许自创未经验证的战棋主交互 | 把单位行动做成全局按钮栏、把结算做成常驻骰盘，脱离正常战棋的单位直选和攻击因果 | `design-system/game-ui/source-families.md` 的“棋盘对象 / 位置直选”“事件驱动主舞台结算”；`design-system/games/mage-wars.md` 的战术单位适配 | 验收图必须同时证明：法师和生物本体可选；合法移动 / 攻击候选只在棋盘；守卫仅在选中单位附近；无常驻动作栏或骰盘；真实攻击事件才短暂出现骰子 | in-progress-runtime-e2e |
+| 不允许自创未经验证的战棋主交互 | 把单位行动做成全局按钮栏、把结算做成常驻骰盘，脱离正常战棋的单位直选和攻击因果 | `design-system/game-ui/source-families.md` 的“棋盘对象 / 位置直选”“事件驱动主舞台结算”；`design-system/games/mage-wars.md` 的战术单位适配 | 验收图必须同时证明：法师和生物本体可选；合法移动 / 攻击候选只在棋盘；守卫仅在选中单位附近；无常驻动作栏或骰盘；真实攻击事件才短暂出现骰子 | covered-by-runtime-e2e |
 
 ## 当前下一稿 / 实现截图送验前最低勾选
 

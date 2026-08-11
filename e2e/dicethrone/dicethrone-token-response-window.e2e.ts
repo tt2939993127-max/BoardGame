@@ -1,6 +1,7 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from '../framework';
 import type { GameTestContext } from '../framework';
+import { getEvidenceScreenshotPath, withJpegEvidenceScreenshotOptions } from '../framework/evidenceScreenshots';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import {
     setupOnlineMatch,
@@ -54,6 +55,28 @@ type HarnessWindow = Window & {
             get?: () => TokenHarnessState;
         };
     };
+};
+
+async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+    const path = getEvidenceScreenshotPath(testInfo, name, { requireChineseName: true });
+    await page.screenshot(withJpegEvidenceScreenshotOptions({ path, fullPage: false, timeout: 20000 }));
+}
+
+const dismissAttackShowcaseIfVisible = async (page: Page) => {
+    const showcase = page.getByTestId('attack-showcase-overlay');
+    if (!(await showcase.isVisible({ timeout: 1500 }).catch(() => false))) return;
+
+    const continueButton = showcase.getByRole('button', { name: /开始防御|继续|Start Defense|Continue/i }).first();
+    await expect(continueButton).toBeVisible({ timeout: 5000 });
+    await continueButton.click();
+    await expect(showcase).toBeHidden({ timeout: 5000 }).catch(() => undefined);
+};
+
+const clickDefendEntryIfVisible = async (page: Page) => {
+    const defendEntryButton = page.getByRole('button', { name: /^(DEFEND|Defend|防御|开始防御)$/i }).first();
+    if (await defendEntryButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await defendEntryButton.click();
+    }
 };
 
 /** 读取指定玩家 tokens */
@@ -285,20 +308,22 @@ test.describe('Token 响应窗口完整流程', () => {
         await expectTokenCount(game, '0', TOKEN_IDS.CRIT, 1);
     });
 
-    test('月精灵闪避成功后应自动收口到 main2，不再卡在 defensiveRoll', async ({ page, game }, testInfo) => {
+    test('月精灵闪避成功后由共享响应框确认收口到 main2，不再卡在 defensiveRoll', async ({ page, game }, testInfo) => {
         await setupTokenScene(game, { '0': 'moon_elf', '1': 'shadow_thief' }, '0');
         await injectMoonElfEvasiveResponseScene(page);
 
-        const defenderTitle = page.getByText(/响应（防御方）|defender/i).first();
-        const evasiveLabel = page.getByText(/^闪避$|^Evasive$/i).first();
-        const useButton = page.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
+        const evasiveToken = page.getByTestId(`dt-player-0-token-${TOKEN_IDS.EVASIVE}`);
+        const sharedResponsePrompt = page.getByTestId('dicethrone-response-window-hint');
 
-        await expect(defenderTitle).toBeVisible({ timeout: 5000 });
-        await expect(evasiveLabel).toBeVisible({ timeout: 5000 });
-        await expect(useButton).toBeVisible({ timeout: 5000 });
+        await expect(sharedResponsePrompt).toBeVisible({ timeout: 5000 });
+        await expect(sharedResponsePrompt).toHaveAttribute('data-response-kind', 'token');
+        await expect(evasiveToken).toBeVisible({ timeout: 5000 });
+        await expect(evasiveToken).toHaveAttribute('data-token-clickable', 'true');
+        await expect(page.getByTestId('token-response-modal')).toHaveCount(0);
+        await expect(page.getByTestId('dicethrone-token-response-inline')).toHaveCount(0);
         await game.screenshot('moon-elf-evasive-before-use', testInfo);
 
-        await useButton.click();
+        await evasiveToken.click();
 
         await expect.poll(async () => {
             const state = await game.getState();
@@ -318,17 +343,43 @@ test.describe('Token 响应窗口完整流程', () => {
                 lastEventTypes: entries.slice(-8).map((entry: any) => entry.event?.type),
             };
         }, { timeout: 10000 }).toMatchObject({
-            phase: 'main2',
-            pendingDamage: null,
-            interaction: null,
+            phase: 'defensiveRoll',
+            pendingDamage: {
+                currentDamage: 0,
+                isFullyEvaded: true,
+            },
+            interaction: {
+                kind: 'dt:token-response',
+            },
             defenderHp: 50,
             evasive: 0,
             evasionRoll: 1,
             evasionSuccess: true,
         });
 
-        await expect(useButton).toBeHidden({ timeout: 5000 });
-        await game.screenshot('moon-elf-evasive-after-use', testInfo);
+        const confirmButton = page.getByTestId('dicethrone-response-pass-button');
+        await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
+        await game.screenshot('moon-elf-evasive-after-use-awaiting-confirm', testInfo);
+        await confirmButton.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state?.sys?.phase ?? null,
+                pendingDamage: state?.core?.pendingDamage ?? null,
+                interaction: state?.sys?.interaction?.current ?? null,
+                defenderHp: state?.core?.players?.['0']?.resources?.hp ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            phase: 'main2',
+            pendingDamage: null,
+            interaction: null,
+            defenderHp: 50,
+        });
+
+        await expect(sharedResponsePrompt).toBeHidden({ timeout: 5000 });
+        await page.waitForTimeout(1200);
+        await game.screenshot('moon-elf-evasive-after-confirm', testInfo);
     });
 });
 
@@ -368,10 +419,16 @@ test.describe('Token 响应窗口真实入口', () => {
             await confirmButton.click();
             await hostPage.waitForTimeout(500);
 
+            // 确认攻击骰后，先让防御方结束改骰响应，再选择攻击技能。
+            await maybePassResponse(guestPage);
+
             const abilitySlot = hostPage.locator('[data-ability-slot="fist"]').first();
             await expect(abilitySlot).toBeVisible({ timeout: 5000 });
             await abilitySlot.click();
             await hostPage.waitForTimeout(500);
+
+            await dismissAttackShowcaseIfVisible(guestPage);
+            await maybePassResponse(guestPage);
 
             const attackAdvanceButton = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
             for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -379,13 +436,13 @@ test.describe('Token 响应窗口真实入口', () => {
                     break;
                 }
                 await maybePassResponse(hostPage, 10000);
+                await maybePassResponse(guestPage);
                 await hostPage.waitForTimeout(500);
             }
             await expect(attackAdvanceButton).toBeEnabled({ timeout: 5000 });
             await attackAdvanceButton.click();
-            const defendEntryButton = guestPage.getByRole('button', { name: /^(DEFEND|Defend|防御)$/i }).first();
-            await expect(defendEntryButton).toBeVisible({ timeout: 10000 });
-            await defendEntryButton.click();
+            await dismissAttackShowcaseIfVisible(guestPage);
+            await clickDefendEntryIfVisible(guestPage);
 
             const defenseRollButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(defenseRollButton).toBeEnabled({ timeout: 5000 });
@@ -401,6 +458,7 @@ test.describe('Token 响应窗口真实入口', () => {
             await defenseConfirmButton.click();
             await guestPage.waitForTimeout(300);
 
+            await maybePassResponse(hostPage);
             await maybePassResponse(guestPage, 10000);
 
             const defenseAdvanceButton = guestPage.locator('[data-tutorial-id="advance-phase-button"]');
@@ -408,26 +466,31 @@ test.describe('Token 响应窗口真实入口', () => {
                 if (await defenseAdvanceButton.isEnabled().catch(() => false)) {
                     break;
                 }
+                await maybePassResponse(hostPage);
                 await maybePassResponse(guestPage, 10000);
                 await guestPage.waitForTimeout(500);
             }
             await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
             await defenseAdvanceButton.click();
 
-            const honorLabel = hostPage.getByText(/^荣誉$|^Honor$/).first();
-            const useButton = hostPage.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
-            await expect(honorLabel).toBeVisible({ timeout: 8000 });
-            await expect(useButton).toBeVisible({ timeout: 5000 });
+            const honorToken = hostPage.getByTestId(`dt-player-0-token-${TOKEN_IDS.HONOR}`);
+            const sharedResponsePrompt = hostPage.getByTestId('dicethrone-response-window-hint');
+            await expect(sharedResponsePrompt).toBeVisible({ timeout: 8000 });
+            await expect(sharedResponsePrompt).toHaveAttribute('data-response-kind', 'token');
+            await expect(honorToken).toBeVisible({ timeout: 5000 });
+            await expect(honorToken).toHaveAttribute('data-token-clickable', 'true');
+            await expect(hostPage.getByTestId('token-response-modal')).toHaveCount(0);
             await hostPage.screenshot({ path: testInfo.outputPath('samurai-honor-real-flow-before-use.png'), fullPage: false });
 
-            await useButton.click();
+            await honorToken.click();
             await hostPage.waitForFunction(() => {
                 const state = (window as HarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
                 return state?.core?.pendingDamage?.currentDamage === 8
                     && state?.core?.pendingDamage?.tokenUsageTotals?.honor === 1;
             }, undefined, { timeout: 10000, polling: 200 });
 
-            await useButton.click();
+            await honorToken.click();
+            await hostPage.getByTestId('dicethrone-response-pass-button').click();
 
             await hostPage.waitForFunction(() => {
                 const state = (window as HarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
@@ -496,7 +559,7 @@ test.describe('Token 响应窗口真实入口', () => {
         await game.screenshot('samurai-honor-pass-after', testInfo);
     });
 
-    test('samurai back strike should open from real attack flow and retaliate on click', async ({ browser }, testInfo) => {
+    test('武士背击从真实攻击链点击 Token 后由右侧骰盘确认并结算反伤', async ({ browser }, testInfo) => {
         test.setTimeout(180000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -505,7 +568,7 @@ test.describe('Token 响应窗口真实入口', () => {
         const { hostPage, guestPage, hostContext, guestContext } = setup;
 
         try {
-            await selectCharacter(hostPage, 'samurai');
+            await selectCharacter(hostPage, 'barbarian');
             await selectCharacter(guestPage, 'samurai');
             await readyAndStartGame(hostPage, guestPage);
             await waitForGameBoard(hostPage);
@@ -531,13 +594,18 @@ test.describe('Token 响应窗口真实入口', () => {
             await confirmButton.click();
             await hostPage.waitForTimeout(500);
 
+            await maybePassResponse(guestPage);
+
             const abilitySlot = hostPage.locator('[data-ability-slot="fist"]').first();
             await expect(abilitySlot).toBeVisible({ timeout: 5000 });
             await abilitySlot.click();
             await hostPage.waitForTimeout(500);
 
+            await dismissAttackShowcaseIfVisible(guestPage);
+            await maybePassResponse(guestPage);
             await hostPage.waitForTimeout(500);
             await maybePassResponse(hostPage, 10000);
+            await maybePassResponse(guestPage);
 
             const resolveAttackButton = hostPage.getByRole('button', { name: /^(Resolve Attack|结算攻击)$/i }).first();
             await expect(resolveAttackButton).toBeVisible({ timeout: 10000 });
@@ -546,13 +614,13 @@ test.describe('Token 响应窗口真实入口', () => {
                     break;
                 }
                 await maybePassResponse(hostPage, 10000);
+                await maybePassResponse(guestPage);
                 await hostPage.waitForTimeout(500);
             }
             await expect(resolveAttackButton).toBeEnabled({ timeout: 5000 });
             await resolveAttackButton.click();
-            const defendEntryButton = guestPage.getByRole('button', { name: /^(DEFEND|Defend|防御)$/i }).first();
-            await expect(defendEntryButton).toBeVisible({ timeout: 10000 });
-            await defendEntryButton.click();
+            await dismissAttackShowcaseIfVisible(guestPage);
+            await clickDefendEntryIfVisible(guestPage);
 
             const defenseRollButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(defenseRollButton).toBeEnabled({ timeout: 5000 });
@@ -568,17 +636,20 @@ test.describe('Token 响应窗口真实入口', () => {
             await defenseConfirmButton.click();
             await guestPage.waitForTimeout(300);
 
+            await maybePassResponse(hostPage);
             await maybePassResponse(guestPage, 10000);
 
             const defenseAdvanceButton = guestPage.locator('[data-tutorial-id="advance-phase-button"]');
             await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
             await defenseAdvanceButton.click();
 
-            const backStrikeLabel = guestPage.getByText(/^反击$|^Back Strike$|^Retribution$/).first();
-            const useButton = guestPage.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
-
-            await expect(backStrikeLabel).toBeVisible({ timeout: 8000 });
-            await expect(useButton).toBeVisible({ timeout: 5000 });
+            const backStrikeToken = guestPage.getByTestId(`dt-player-1-token-${TOKEN_IDS.SAMURAI_RETRIBUTION}`);
+            const sharedResponsePrompt = guestPage.getByTestId('dicethrone-response-window-hint');
+            await expect(sharedResponsePrompt).toBeVisible({ timeout: 8000 });
+            await expect(sharedResponsePrompt).toHaveAttribute('data-response-kind', 'token');
+            await expect(backStrikeToken).toBeVisible({ timeout: 5000 });
+            await expect(backStrikeToken).toHaveAttribute('data-token-clickable', 'true');
+            await expect(guestPage.getByTestId('token-response-modal')).toHaveCount(0);
             await guestPage.screenshot({ path: testInfo.outputPath('samurai-back-strike-real-flow-before-use.png'), fullPage: false });
 
             const beforeUseState = await guestPage.evaluate(() => {
@@ -596,10 +667,18 @@ test.describe('Token 响应窗口真实入口', () => {
             expect(beforeUseState.pendingDamage).toBeGreaterThan(0);
             expect(beforeUseState.retribution).toBe(1);
 
-            await useButton.click();
+            await backStrikeToken.click();
+            await guestPage.getByTestId('dicethrone-response-pass-button').click();
+            const bonusDiceConfirmButton = guestPage.locator('[data-tutorial-id="dice-confirm-button"]');
+            await expect(bonusDiceConfirmButton).toBeEnabled({ timeout: 10000 });
+            await expect(guestPage.getByTestId('dicethrone-2d-dice-tray')).toBeVisible();
+            await expect(guestPage.getByTestId('bonus-die-overlay')).toHaveCount(0);
+            await saveEvidenceScreenshot(guestPage, testInfo, '武士背击-右侧骰盘确认前');
+            await bonusDiceConfirmButton.click();
             await guestPage.waitForFunction(() => {
                 const state = (window as HarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
                 return !state?.core?.pendingDamage
+                    && !state?.core?.pendingBonusDiceSettlement
                     && (state?.core?.players?.['1']?.tokens?.samurai_retribution ?? 0) === 0;
             }, undefined, { timeout: 10000, polling: 200 });
 
@@ -633,7 +712,7 @@ test.describe('Token 响应窗口真实入口', () => {
             expect(finalState.lastEventTypes).toContain('DAMAGE_DEALT');
 
             await closeDebugPanelIfOpen(guestPage);
-            await guestPage.screenshot({ path: testInfo.outputPath('samurai-back-strike-real-flow-after-use.png'), fullPage: false });
+            await saveEvidenceScreenshot(guestPage, testInfo, '武士背击-反伤结算后');
         } finally {
             await hostContext.close();
             await guestContext.close();

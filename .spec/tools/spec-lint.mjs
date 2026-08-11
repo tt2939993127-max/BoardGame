@@ -55,6 +55,26 @@ const required = [
 ]
 for (const path of required) if (!exists(path)) fail(path, '核心入口缺失')
 
+const knowledgeRoutes = [
+  'rule-bug.md',
+  'ui.md',
+  'testing.md',
+  'data-assets.md',
+  'architecture.md',
+  'operations.md',
+]
+const knowledgeIndex = join(spec, 'knowledge', 'README.md')
+for (const route of knowledgeRoutes) {
+  const path = join(spec, 'knowledge', 'routes', route)
+  if (!exists(path)) fail(path, '任务路由缺失')
+  if (exists(knowledgeIndex) && !read(knowledgeIndex).includes(`routes/${route}`)) {
+    fail(knowledgeIndex, `未挂载任务路由 ${route}`)
+  }
+}
+if (exists(knowledgeIndex) && read(knowledgeIndex).trim().split(/\r?\n/).length > 40) {
+  fail(knowledgeIndex, '知识主入口必须保持为浅路由，专项任务表应下沉到 knowledge/routes')
+}
+
 const adapters = [
   [join(root, 'AGENTS.md'), '.spec/AGENTS.md'],
   [join(root, 'CLAUDE.md'), '.spec/AGENTS.md'],
@@ -111,7 +131,10 @@ for (const path of activeSpecMarkdown) {
 }
 
 const standards = walk(join(spec, 'knowledge', 'standards'), (path) => path.endsWith('.md') && basename(path) !== 'README.md')
-const catalogs = read(join(spec, 'knowledge', 'README.md')) + read(join(spec, 'knowledge', 'standards', 'README.md'))
+const routeCatalog = walk(join(spec, 'knowledge', 'routes'), (path) => path.endsWith('.md'))
+  .map(read)
+  .join('\n')
+const catalogs = read(join(spec, 'knowledge', 'README.md')) + read(join(spec, 'knowledge', 'standards', 'README.md')) + routeCatalog
 for (const path of standards) {
   if (!catalogs.includes(basename(path))) fail(path, '没有进入知识导航或标准目录')
 }

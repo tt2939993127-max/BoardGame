@@ -793,6 +793,7 @@
     "boostHint": "Spend tokens to boost damage",
     "reduceHint": "Spend tokens to reduce damage",
     "useToken": "Use",
+    "clickTokenHint": "Click a highlighted token to use it",
     "evasiveHint": "Spend Evasive to attempt a full evade",
     "evasiveDesc": "Spend 1 Evasive and roll 1 die. On success, damage becomes 0.",
     "useEvasive": "Use Evasive",

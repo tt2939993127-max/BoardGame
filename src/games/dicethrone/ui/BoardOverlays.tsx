@@ -10,14 +10,13 @@ import { AnimatePresence } from 'framer-motion';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { BonusDieOverlay } from './BonusDieOverlay';
 import { CardSpotlightOverlay } from './CardSpotlightOverlay';
 import { AbilityOverlays } from './AbilityOverlays';
 import { EndgameOverlay } from '../../../components/game/framework/widgets/EndgameOverlay';
 import { RematchActions } from '../../../components/game/framework/widgets/RematchActions';
 import { DiceThroneEndgameContent, renderDiceThroneButton } from './DiceThroneEndgame';
 import type { StatusAtlases } from './statusEffects';
-import type { AbilityCard, DieFace, HeroState, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
+import type { AbilityCard, HeroState, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import {
@@ -62,34 +61,6 @@ export interface BoardOverlaysProps {
     opponentHeaderRef: React.RefObject<HTMLDivElement | null>;
 
 
-    // 额外骰子
-    bonusDie: {
-        value?: number;
-        face?: DieFace;
-        effectKey?: string;
-        effectParams?: Record<string, string | number>;
-        bonusDice?: import('../domain/types').BonusDieInfo[];
-        summaryEffectKey?: string;
-        summaryEffectParams?: Record<string, string | number>;
-        presentationKey?: string | number;
-        showTotal?: boolean;
-        displayOnly?: boolean;
-        show: boolean;
-        /** 骰子所属角色（用于图集选择） */
-        characterId?: string;
-    };
-    onBonusDieClose: () => void;
-    suppressBonusDieOverlay?: boolean;
-    /** 当前奖励骰仍在结算时，允许背景手牌向领域层发起改骰尝试。 */
-    allowBonusDieBackgroundInteraction?: boolean;
-
-    // 奖励骰重掷交互
-    pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
-    canRerollBonusDie: boolean;
-    onRerollBonusDie?: (dieIndex: number) => void;
-    onSkipBonusDiceReroll?: () => void;
-
-
     // 游戏结束
     isGameOver: boolean;
     gameoverResult: any;
@@ -109,27 +80,11 @@ export interface BoardOverlaysProps {
 
     /** 教程模式下特写强制自动关闭延迟（毫秒） */
     tutorialSpotlightAutoCloseDelayMs?: number;
-    /** 奖励骰特写手动关闭模式（仅游戏态启用） */
-    bonusDieManualCloseOnly?: boolean;
 }
 
 export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const { t } = useTranslation('game-dicethrone');
     const { ref: multiCardScrollRef, dragProps: multiCardDragProps } = useHorizontalDragScroll();
-    const shouldShowBonusDieOverlay = !props.suppressBonusDieOverlay
-        && (props.bonusDie.show || Boolean(props.pendingBonusDiceSettlement));
-
-    // 调试日志：bonusDie prop
-    React.useEffect(() => {
-        boardOverlaysLogger.info('bonus-prop', {
-            show: props.bonusDie.show,
-            value: props.bonusDie.value,
-            face: props.bonusDie.face,
-            effectKey: props.bonusDie.effectKey,
-            characterId: props.bonusDie.characterId,
-        });
-    }, [props.bonusDie]);
-
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
     const playerBoardAspectRatio = getPlayerBoardAspectRatio(props.viewCharacterId);
@@ -238,60 +193,6 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         )}
                     </MagnifyOverlay>
                 )}
-
-                {/* 额外骰子特写 / 重掷交互 */}
-                {shouldShowBonusDieOverlay && (
-                    <BonusDieOverlay
-                        key="bonus-die"
-                        value={props.bonusDie.value}
-                        face={props.bonusDie.face}
-                        effectKey={props.bonusDie.effectKey}
-                        effectParams={props.bonusDie.effectParams}
-                        isVisible={shouldShowBonusDieOverlay}
-                        onClose={props.onBonusDieClose}
-                        locale={props.locale}
-                        bonusDice={props.pendingBonusDiceSettlement
-                            ? getPendingBonusSettlementDice(props.pendingBonusDiceSettlement)
-                            : props.bonusDie.bonusDice}
-                        presentationKey={
-                            props.pendingBonusDiceSettlement
-                                ? `${props.pendingBonusDiceSettlement.id}:reroll-${props.pendingBonusDiceSettlement.rerollCount}`
-                                : props.bonusDie.presentationKey
-                        }
-                        presentationKind={props.bonusDie.presentationKind}
-                        canReroll={props.canRerollBonusDie}
-                        rerollLimitReached={Boolean(
-                            props.pendingBonusDiceSettlement &&
-                            props.pendingBonusDiceSettlement.maxRerollCount !== undefined &&
-                            props.pendingBonusDiceSettlement.rerollCount >= props.pendingBonusDiceSettlement.maxRerollCount
-                        )}
-                        onReroll={props.onRerollBonusDie}
-                        onSkipReroll={props.onSkipBonusDiceReroll}
-                        showTotal={props.pendingBonusDiceSettlement?.showTotal ?? props.bonusDie.showTotal ?? !props.pendingBonusDiceSettlement?.displayOnly}
-                        rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
-                        rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
-                        displayOnly={props.pendingBonusDiceSettlement?.displayOnly ?? props.bonusDie.displayOnly}
-                        lastRerolledDieIndex={props.pendingBonusDiceSettlement?.lastRerolledDieIndex}
-                        rerollPresentationKey={
-                            props.pendingBonusDiceSettlement && props.pendingBonusDiceSettlement.rerollCount > 0
-                                ? `${props.pendingBonusDiceSettlement.id}:reroll-${props.pendingBonusDiceSettlement.rerollCount}`
-                                : undefined
-                        }
-                        summaryEffectKey={props.pendingBonusDiceSettlement?.summaryEffectKey ?? props.bonusDie.summaryEffectKey}
-                        summaryEffectParams={props.pendingBonusDiceSettlement?.summaryEffectParams ?? props.bonusDie.summaryEffectParams}
-                        characterId={
-                            props.pendingBonusDiceSettlement
-                                ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]
-                                : props.bonusDie.characterId
-                        }
-                        forceAutoCloseDelay={props.tutorialSpotlightAutoCloseDelayMs}
-                        manualCloseOnly={props.bonusDieManualCloseOnly && props.bonusDie.effectKey !== 'bonusDie.effect.samuraiBackStrikeDie'}
-                        // 当前奖励骰仍在结算时，手牌必须可以尝试出牌；是否合法由领域层当前骰区策略裁决。
-                        allowBackgroundInteraction={props.allowBonusDieBackgroundInteraction}
-                    />
-                )}
-
-
 
                 {/* 卡牌特写 */}
                 {props.cardSpotlightQueue.length > 0 && (

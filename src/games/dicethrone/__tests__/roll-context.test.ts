@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { execute } from '../domain/execute';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
 import { getCustomActionHandler, resolveEffectsToEvents } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
 import { validateCommand } from '../domain/commandValidation';
@@ -108,6 +109,40 @@ const createBonusSettlement = (): PendingBonusDiceSettlement => ({
 });
 
 describe('DiceThrone 单槽当前骰区', () => {
+    it('展示型临时骰确认时只按专属最终骰面收口，不生成默认伤害', () => {
+        const state = {
+            ...roll(createCore(), [1, 2, 3, 4, 5]),
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                damage: 5,
+                bonusDamage: 0,
+            },
+        } as DiceThroneCore;
+        const settlement: PendingBonusDiceSettlement = {
+            ...createBonusSettlement(),
+            sourceAbilityId: 'pyro-get-fired-up-roll',
+            displayOnly: true,
+            customResolutionId: 'pyro-get-fired-up-roll',
+            dice: [{ index: 0, value: 6, face: 'fire' }],
+        };
+
+        const events = buildBonusDiceSettlementEvents({
+            state,
+            settlement,
+            random: queuedRandom([1]),
+            timestamp: 10,
+            sourceCommandType: 'TEST_CONFIRM_TEMPORARY_DIE',
+        });
+
+        expect(events.filter(event => event.type === 'BONUS_DAMAGE_ADDED')).toHaveLength(1);
+        expect(events.find(event => event.type === 'BONUS_DAMAGE_ADDED')).toMatchObject({
+            payload: { amount: 3, playerId: '0' },
+        });
+        expect(events.filter(event => event.type === 'DAMAGE_DEALT')).toHaveLength(0);
+    });
+
     it('主骰投掷会创建当前骰区，再次投掷会覆盖旧骰区', () => {
         const first = roll(createCore(), [1, 2, 3, 4, 5]);
         const firstContext = first.currentRollContext;
@@ -298,6 +333,29 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.pendingBonusDiceSettlement?.dice[0]?.value).toBe(3);
         expect(modified.currentRollContext?.kind).toBe('offensive');
         expect(modified.currentRollContext?.dice[0]?.value).toBe(6);
+    });
+
+    it('奖励骰命令以当前骰区为准，不接受与当前骰区不一致的旧 settlement 骰面', () => {
+        const opened = reduce(roll(createCore(), [1, 2, 3, 4, 5]), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const staleCurrentRoll = {
+            ...opened,
+            currentRollContext: opened.currentRollContext
+                ? { ...opened.currentRollContext, dice: [] }
+                : undefined,
+        };
+
+        expect(validateCommand(staleCurrentRoll, {
+            type: 'REROLL_BONUS_DIE',
+            playerId: '0',
+            payload: { dieIndex: 0 },
+        } as any, 'main1')).toMatchObject({
+            valid: false,
+            error: 'invalid_die_index',
+        });
     });
 
     it('当前可改奖励骰不会放宽掷骰牌的主要阶段限制', () => {

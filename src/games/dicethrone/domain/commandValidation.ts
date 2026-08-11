@@ -57,7 +57,6 @@ import {
     getAvailableAbilityIds,
     getActiveDice,
     getAttackSnapshotDieIndex,
-    getPendingBonusSettlementDice,
     getSeatingOrder,
     isAttackSnapshotDieId,
 } from './rules';
@@ -233,8 +232,6 @@ const validateDieInteraction = (
     const allowedDieIds = interaction.allowedDieIds?.length
         ? interaction.allowedDieIds
         : getActiveDice(state).map(activeDie => activeDie.id);
-    const isPendingBonusDie = isCurrentBonusRollSettlement(state)
-        && getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).some(die => die.index === dieId);
     const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
     const isAttackSnapshotDie = phase === 'defensiveRoll'
         && isAttackSnapshotDieId(dieId)
@@ -245,7 +242,7 @@ const validateDieInteraction = (
         && attackSnapshotDieIndex < state.pendingAttack.attackDiceValues.length;
     const currentRollContext = resolveCurrentRollContext(state, phase);
     const die = findCurrentRollDie(state, dieId, phase)?.die;
-    if (!die && !isPendingBonusDie && !isAttackSnapshotDie) {
+    if (!die && !isAttackSnapshotDie) {
         return fail('die_not_found');
     }
     if (die && currentRollContext) {
@@ -263,7 +260,6 @@ const validateDieInteraction = (
         interaction.diceOwnerId
         && interaction.targetOpponentDice !== true
         && interaction.diceOwnerId !== playerId
-        && !isPendingBonusDie
         && !isAttackSnapshotDie
     ) {
         return fail('invalid_die_selection');
@@ -1494,6 +1490,10 @@ const validateRerollBonusDie = (
     if (!state.pendingBonusDiceSettlement || !isCurrentBonusRollSettlement(state)) {
         return fail('no_pending_bonus_dice');
     }
+    const currentRollContext = resolveCurrentRollContext(state);
+    if (currentRollContext?.kind !== 'bonus') {
+        return fail('no_pending_bonus_dice');
+    }
     if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
         return fail('player_mismatch');
     }
@@ -1511,7 +1511,7 @@ const validateRerollBonusDie = (
     }
     // 检查骰子索引是否有效
     const dieIndex = cmd.payload.dieIndex;
-    const die = getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).find(d => d.index === dieIndex);
+    const die = findCurrentRollDie(state, dieIndex)?.die;
     if (!die) {
         return fail('invalid_die_index');
     }

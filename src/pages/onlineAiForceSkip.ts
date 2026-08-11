@@ -211,7 +211,6 @@ function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): voi
                 } else {
                     client.resync();
                 }
-                scheduleRetry();
             }
             onRejected?.(reason);
         }) ?? null;

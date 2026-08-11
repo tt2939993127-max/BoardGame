@@ -2,7 +2,7 @@
  * 閲庤洰浜?(Barbarian) 涓撳睘 Custom Action 澶勭悊鍣?
  */
 
-import { getActiveDice, getAttackMaxDuplicateValueCount, getFaceCounts, getPlayerDieFace } from '../rules';
+import { getActiveDice, getAttackMaxDuplicateValueCount, getFaceCounts, getPendingBonusSettlementDice, getPlayerDieFace } from '../rules';
 import { STATUS_IDS, BARBARIAN_DICE_FACE_IDS as FACES } from '../ids';
 import type {
     DiceThroneEvent,
@@ -12,14 +12,21 @@ import type {
     DamageShieldGrantedEvent,
     BonusDamageAddedEvent,
     BonusDieInfo,
+    PendingBonusDiceSettlement,
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
 import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 import { isRemovableStatusId } from '../statusRemoval';
 
 // ============================================================================
+
+const BARBARIAN_SUPPRESS_SETTLEMENT_ID = 'barbarian-suppress-roll';
+const BARBARIAN_SUPPRESS_2_SETTLEMENT_ID = 'barbarian-suppress-2-roll';
+const BARBARIAN_LUCKY_SETTLEMENT_ID = 'barbarian-lucky-roll-heal';
+const BARBARIAN_MORE_PLEASE_SETTLEMENT_ID = 'barbarian-more-please-roll-damage';
 // 閲庤洰浜烘妧鑳藉鐞嗗櫒
 // 娉ㄦ剰锛氶闈互 diceConfig.ts 涓哄噯
 // ============================================================================
@@ -35,11 +42,9 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
     const opponentId = ctx.defenderId;
 
     // 鎶曟幏3涓瀛愶紝绱姞鐐规暟鎬诲拰
-    let total = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        total += value;
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -56,35 +61,9 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
         } as BonusDieRolledEvent);
     }
 
-    // 閫犳垚鐐规暟鎬诲拰鐨勪激瀹?
-    if (total > 0) {
-        const damageCalc = createDamageCalculation({
-            source: { playerId: attackerId, abilityId: sourceAbilityId },
-            target: { playerId: opponentId },
-            baseDamage: total,
-            state,
-            timestamp,
-        });
-        events.push(...damageCalc.toEvents());
-    }
-
-    // 鑻ユ€绘暟>14锛屾柦鍔犺剳闇囪崱
-    if (total > 14) {
-        const opponent = state.players[opponentId];
-        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-        const maxStacks = def?.stackLimit || 1;
-        const newTotal = Math.min(currentStacks + 1, maxStacks);
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as StatusAppliedEvent);
-    }
-
-    // 澶氶灞曠ず
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp, {
+        customResolutionId: BARBARIAN_SUPPRESS_SETTLEMENT_ID,
+    }));
 
     return events;
 }
@@ -99,11 +78,9 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
     // D10 淇锛氳繘鏀绘妧鑳戒激瀹?debuff 鐩爣蹇呴』鐢?ctx.defenderId锛堝鎵嬶級
     const opponentId = ctx.defenderId;
 
-    let total = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        total += value;
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -120,33 +97,9 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
         } as BonusDieRolledEvent);
     }
 
-    if (total > 0) {
-        const damageCalc = createDamageCalculation({
-            source: { playerId: attackerId, abilityId: sourceAbilityId },
-            target: { playerId: opponentId },
-            baseDamage: total,
-            state,
-            timestamp,
-        });
-        events.push(...damageCalc.toEvents());
-    }
-
-    // 鍗囩骇鐗堥槇鍊奸檷浣庡埌 >9
-    if (total > 9) {
-        const opponent = state.players[opponentId];
-        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-        const maxStacks = def?.stackLimit || 1;
-        const newTotal = Math.min(currentStacks + 1, maxStacks);
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as StatusAppliedEvent);
-    }
-
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp, {
+        customResolutionId: BARBARIAN_SUPPRESS_2_SETTLEMENT_ID,
+    }));
     return events;
 }
 
@@ -260,27 +213,11 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         } as BonusDieRolledEvent);
     }
 
-    const healAmount = 1 + 2 * heartCount;
-    events.push({
-        type: 'HEAL_APPLIED',
-        payload: { targetId: attackerId, amount: healAmount, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as HealAppliedEvent);
-
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: {
-            value: dice[0].value,
-            face: dice[0].face,
-            playerId: attackerId,
-            targetPlayerId: attackerId,
-            effectKey: 'bonusDie.effect.luckyRoll.result',
-            effectParams: { heartCount, healAmount },
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 3,
-    } as BonusDieRolledEvent);
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, dice, timestamp + 3, {
+        customResolutionId: BARBARIAN_LUCKY_SETTLEMENT_ID,
+        summaryEffectKey: 'bonusDie.effect.luckyRoll.result',
+        summaryEffectParams: { heartCount, healAmount: 1 + 2 * heartCount },
+    }));
 
     return events;
 }
@@ -296,13 +233,9 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
     const dice: BonusDieInfo[] = [];
     const opponentId = ctx.defenderId;
 
-    let swordCount = 0;
     for (let i = 0; i < 5; i++) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === FACES.SWORD) {
-            swordCount++;
-        }
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -318,45 +251,10 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         } as BonusDieRolledEvent);
     }
 
-    if (swordCount > 0) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: swordCount,
-                sourceCardId: sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as BonusDamageAddedEvent);
-    }
-
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: {
-            value: dice[0].value,
-            face: dice[0].face,
-            playerId: attackerId,
-            targetPlayerId: opponentId,
-            effectKey: 'bonusDie.effect.morePleaseRoll.result',
-            effectParams: { swordCount, damage: swordCount },
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 5,
-    } as BonusDieRolledEvent);
-
-    const opponent = state.players[opponentId];
-    const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-    const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-    const maxStacks = def?.stackLimit || 1;
-    const newTotal = Math.min(currentStacks + 1, maxStacks);
-
-    events.push({
-        type: 'STATUS_APPLIED',
-        payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as StatusAppliedEvent);
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp + 5, {
+        customResolutionId: BARBARIAN_MORE_PLEASE_SETTLEMENT_ID,
+        summaryEffectKey: 'bonusDie.effect.morePleaseRoll.result',
+    }));
 
     return events;
 }
@@ -417,6 +315,98 @@ function handleBarbarianSteadfastRemoveStatusIfThreeKind({ attackerId, sourceAbi
 // ============================================================================
 
 export function registerBarbarianCustomActions(): void {
+    const buildSuppressFollowup = (
+        threshold: number,
+        state: CustomActionContext['state'],
+        settlement: PendingBonusDiceSettlement,
+        timestamp: number,
+    ): DiceThroneEvent[] => {
+        const dice = getPendingBonusSettlementDice(settlement);
+        const total = dice.reduce((sum, die) => sum + die.value, 0);
+        const events = createDamageCalculation({
+            source: { playerId: settlement.attackerId, abilityId: settlement.sourceAbilityId },
+            target: { playerId: settlement.targetId },
+            baseDamage: total,
+            state,
+            timestamp,
+        }).toEvents();
+        if (total <= threshold) return events;
+
+        const target = state.players[settlement.targetId];
+        const currentStacks = target?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+        const maxStacks = state.tokenDefinitions.find(entry => entry.id === STATUS_IDS.CONCUSSION)?.stackLimit || 1;
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: {
+                targetId: settlement.targetId,
+                statusId: STATUS_IDS.CONCUSSION,
+                stacks: 1,
+                newTotal: Math.min(currentStacks + 1, maxStacks),
+                sourceAbilityId: settlement.sourceAbilityId,
+            },
+            sourceCommandType: 'BONUS_DICE_SETTLED',
+            timestamp: timestamp + 1,
+        } as StatusAppliedEvent);
+        return events;
+    };
+
+    registerBonusDiceSettlementHandler(BARBARIAN_SUPPRESS_SETTLEMENT_ID, ({ state, settlement, timestamp }) => ({
+        totalDamage: 0,
+        followupEvents: buildSuppressFollowup(14, state, settlement, timestamp),
+    }));
+    registerBonusDiceSettlementHandler(BARBARIAN_SUPPRESS_2_SETTLEMENT_ID, ({ state, settlement, timestamp }) => ({
+        totalDamage: 0,
+        followupEvents: buildSuppressFollowup(9, state, settlement, timestamp),
+    }));
+    registerBonusDiceSettlementHandler(BARBARIAN_LUCKY_SETTLEMENT_ID, ({ settlement, timestamp }) => {
+        const heartCount = getPendingBonusSettlementDice(settlement).filter(die => die.face === FACES.HEART).length;
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'HEAL_APPLIED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    amount: 1 + 2 * heartCount,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as HealAppliedEvent],
+        };
+    });
+    registerBonusDiceSettlementHandler(BARBARIAN_MORE_PLEASE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const swordCount = getPendingBonusSettlementDice(settlement).filter(die => die.face === FACES.SWORD).length;
+        const target = state.players[settlement.targetId];
+        const currentStacks = target?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+        const maxStacks = state.tokenDefinitions.find(entry => entry.id === STATUS_IDS.CONCUSSION)?.stackLimit || 1;
+        const followupEvents: DiceThroneEvent[] = [];
+        if (swordCount > 0) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    amount: swordCount,
+                    sourceCardId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDamageAddedEvent);
+        }
+        followupEvents.push({
+            type: 'STATUS_APPLIED',
+            payload: {
+                targetId: settlement.targetId,
+                statusId: STATUS_IDS.CONCUSSION,
+                stacks: 1,
+                newTotal: Math.min(currentStacks + 1, maxStacks),
+                sourceAbilityId: settlement.sourceAbilityId,
+            },
+            sourceCommandType: 'BONUS_DICE_SETTLED',
+            timestamp: timestamp + 1,
+        } as StatusAppliedEvent);
+        return { totalDamage: 0, followupEvents };
+    });
+
     registerCustomActionHandler('barbarian-suppress-roll', handleBarbarianSuppressRoll, {
         categories: ['dice', 'damage', 'status'],
     });

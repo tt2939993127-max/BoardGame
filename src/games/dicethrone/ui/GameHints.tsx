@@ -32,10 +32,12 @@ export interface GameHintsProps {
     /** 对手名称 */
     opponentName: string;
 
-    /** 是否为当前响应者 */
-    isResponder: boolean;
-    /** 响应跳过回调 */
-    onResponsePass: () => void;
+    /** 当前响应提示。卡牌与 Token 响应共用同一个手牌上方提示框。 */
+    responsePrompt?: {
+        onPass: () => void;
+        kind: 'card' | 'token';
+        passLabel?: string;
+    };
 
     /** 当前阶段 */
     currentPhase: TurnPhase;
@@ -158,7 +160,9 @@ const OpponentThinkingHint: React.FC<{ opponentName: string }> = ({ opponentName
  */
 const ResponseWindowHint: React.FC<{
     onResponsePass: () => void;
-}> = ({ onResponsePass }) => {
+    kind: 'card' | 'token';
+    passLabel?: string;
+}> = ({ onResponsePass, kind, passLabel }) => {
     const { t } = useTranslation('game-dicethrone');
     const pointerPassHandledRef = React.useRef(false);
     const [responseBottom, setResponseBottom] = React.useState<number | null>(null);
@@ -228,6 +232,7 @@ const ResponseWindowHint: React.FC<{
     return (
         <div
             data-testid="dicethrone-response-window-hint"
+            data-response-kind={kind}
             className="fixed left-1/2 -translate-x-1/2"
             style={{
                 zIndex: UI_Z_INDEX.hint,
@@ -295,7 +300,7 @@ const ResponseWindowHint: React.FC<{
                             pointerEvents: 'auto',
                         }}
                     >
-                        {t('response.pass')}
+                        {passLabel ?? t('response.pass')}
                     </button>
                 </div>
             </div>
@@ -334,8 +339,7 @@ export const GameHints: React.FC<GameHintsProps> = ({
     pendingInteraction,
     isWaitingOpponent,
     opponentName,
-    isResponder,
-    onResponsePass,
+    responsePrompt,
     isPassiveRerollSelecting,
 }) => {
     return (
@@ -361,9 +365,11 @@ export const GameHints: React.FC<GameHintsProps> = ({
             )}
 
             {/* 响应窗口：当前玩家可响应 */}
-            {isResponder && (
+            {responsePrompt && (
                 <ResponseWindowHint
-                    onResponsePass={onResponsePass}
+                    onResponsePass={responsePrompt.onPass}
+                    kind={responsePrompt.kind}
+                    passLabel={responsePrompt.passLabel}
                 />
             )}
         </HudPortal>

@@ -18,7 +18,7 @@ function createRegistry(): FxRegistry {
     });
 
     registry.register(MW_FX.ATTACK_IMPACT, AttackImpactRenderer, {
-        timeoutMs: 900,
+        timeoutMs: 1800,
         maxConcurrent: 2,
         debounceMs: 60,
         budget: {

@@ -16,7 +16,6 @@ import type {
     AttackInitiatedEvent,
     ResponseWindowOpenedEvent,
     DieModifiedEvent,
-    DieRerolledEvent,
     StatusRemovedEvent,
     CharacterSelectedEvent,
     HostStartedEvent,
@@ -38,7 +37,6 @@ import {
     getSeatingOrder,
     isTeamMode,
     getAttackSnapshotDieIndex,
-    getPendingBonusSettlementDice,
     isAttackSnapshotDieId,
     shouldOpenAfterRollConfirmedForBonusSettlement,
 } from './rules';
@@ -61,7 +59,8 @@ import {
     hasAfterRollConfirmedWindowBeenHandled,
     buildAfterRollConfirmedSignature,
 } from './responseWindowGuards';
-import { buildCompareRollChoiceEvent, findCurrentRollDie, getCurrentRollOwnerId, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
+import { buildCompareRollChoiceEvent, findCurrentRollDie, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
+import { buildCurrentRollRerollEvents } from './reroll';
 
 // ============================================================================
 // 辅助函数
@@ -711,9 +710,6 @@ export function execute(
             const currentRollDie = findCurrentRollDie(state, dieId, phase);
             const evasionDieActive = currentRollContext?.kind === 'evasion' && currentRollDie !== undefined;
             const die = currentRollDie?.die;
-            const pendingBonusDie = isCurrentBonusRollSettlement(state)
-                ? getPendingBonusSettlementDice(state.pendingBonusDiceSettlement).find(d => d.index === dieId)
-                : undefined;
             const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
             const attackSnapshotDieValue = isAttackSnapshotDieId(dieId)
                 && state.pendingAttack
@@ -721,10 +717,10 @@ export function execute(
                 && attackSnapshotDieIndex < (state.pendingAttack.attackDiceValues?.length ?? 0)
                 ? state.pendingAttack.attackDiceValues?.[attackSnapshotDieIndex]
                 : undefined;
-            if (die || pendingBonusDie || attackSnapshotDieValue !== undefined) {
+            if (die || attackSnapshotDieValue !== undefined) {
                 const dieTarget = evasionDieActive
                     ? 'evasionDie'
-                    : pendingBonusDie
+                    : currentRollContext?.kind === 'bonus'
                         ? 'pendingBonusDie'
                         : attackSnapshotDieValue !== undefined
                             ? 'attackSnapshot'
@@ -735,14 +731,14 @@ export function execute(
                         dieId,
                         oldValue: evasionDieActive
                             ? die?.value ?? newValue
-                            : pendingBonusDie?.value ?? die?.value ?? attackSnapshotDieValue ?? newValue,
+                            : die?.value ?? attackSnapshotDieValue ?? newValue,
                         newValue,
                         playerId: command.playerId,
                         ownerId: evasionDieActive
                             ? currentRollContext?.ownerPlayerId
-                            : pendingBonusDie
-                                ? state.pendingBonusDiceSettlement?.attackerId
-                                : die?.ownerId ?? (attackSnapshotDieValue !== undefined ? state.pendingAttack?.attackerId : undefined),
+                            : die?.ownerId
+                                ?? currentRollContext?.ownerPlayerId
+                                ?? (attackSnapshotDieValue !== undefined ? state.pendingAttack?.attackerId : undefined),
                         target: dieTarget,
                     },
                     sourceCommandType: command.type,
@@ -777,58 +773,22 @@ export function execute(
 
         case 'REROLL_DIE': {
             const { dieId } = command.payload as { dieId: number };
-            const currentRollContext = resolveCurrentRollContext(state, phase);
-            const currentDie = findCurrentRollDie(state, dieId, phase);
-            const die = currentDie?.die;
-            const newValue = random.d(6);
-            const rollerId = getRollerId(state, phase);
-            const event: DieRerolledEvent = {
-                type: 'DIE_REROLLED',
-                payload: {
-                    dieId,
-                    oldValue: die?.value ?? newValue,
-                    newValue,
-                    playerId: command.playerId,
-                    ownerId: die?.ownerId ?? rollerId,
-                    target: currentRollContext?.kind === 'evasion'
-                        ? 'evasionDie'
-                        : currentRollContext?.kind === 'bonus'
-                            ? 'pendingBonusDie'
-                            : currentRollContext?.kind === 'compare'
-                                ? 'activeDie'
-                                : undefined,
-                },
-                sourceCommandType: command.type,
-                timestamp,
-            };
-            events.push(event);
-            
-            // 规则 3.3 步骤 3：如果骰面被重掷且已选择技能，触发重选。
-            // 终极技能只有正式发动后才行动锁定；发动前仍可被重掷取消。
             const currentInteraction = matchState.sys?.interaction?.current;
             const interactionMeta = currentInteraction?.kind === 'multistep-choice'
                 ? (currentInteraction.data as { meta?: { dtType?: string; skipAbilityReselection?: boolean } } | undefined)?.meta
                 : undefined;
             const skipAbilityReselection = interactionMeta?.dtType === 'selectDie'
                 && interactionMeta?.skipAbilityReselection === true;
-
-            if (!skipAbilityReselection
-                && phase === 'offensiveRoll'
-                && state.pendingAttack) {
-                events.push({
-                    type: 'ABILITY_RESELECTION_REQUIRED',
-                    payload: {
-                        playerId: state.activePlayerId,
-                        previousAbilityId: state.pendingAttack.sourceAbilityId,
-                        reason: 'dieRerolled',
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as DiceThroneEvent);
-            }
-            
-            // 骰子交互完成由 systems.ts 自动处理：
-            // 当 DIE_REROLLED 事件数达到 selectCount 时自动生成 INTERACTION_COMPLETED
+            events.push(...buildCurrentRollRerollEvents({
+                state,
+                phase,
+                dieId,
+                playerId: command.playerId,
+                random,
+                timestamp,
+                sourceCommandType: command.type,
+                skipAbilityReselection,
+            }));
             break;
         }
 
@@ -1256,45 +1216,15 @@ export function execute(
 
             // 执行动作
             if (action.type === 'rerollDie') {
-                const currentDie = findCurrentRollDie(state, targetDieId, phase);
-                if (!currentDie) break;
-                const currentRollContext = resolveCurrentRollContext(state, phase);
-                const die = currentDie.die;
-                const newValue = random.d(6);
-                events.push({
-                    type: 'DIE_REROLLED',
-                    payload: {
-                        dieId: targetDieId,
-                        oldValue: die?.value ?? newValue,
-                        newValue,
-                        playerId: command.playerId,
-                        ownerId: die.ownerId ?? getCurrentRollOwnerId(state, phase),
-                        target: currentRollContext?.kind === 'evasion'
-                            ? 'evasionDie'
-                            : currentRollContext?.kind === 'bonus'
-                                ? 'pendingBonusDie'
-                                : undefined,
-                    },
-                    sourceCommandType: command.type,
+                events.push(...buildCurrentRollRerollEvents({
+                    state,
+                    phase,
+                    dieId: targetDieId,
+                    playerId: command.playerId,
+                    random,
                     timestamp: timestamp + 1,
-                } as DieRerolledEvent);
-
-                // 重掷后如果在进攻阶段且已选技能，触发重选。
-                // 终极技能只有正式发动后才行动锁定；发动前仍可被重掷取消。
-                if (phase === 'offensiveRoll'
-                    && state.pendingAttack
-                    && newValue !== die.value) {
-                    events.push({
-                        type: 'ABILITY_RESELECTION_REQUIRED',
-                        payload: {
-                            playerId: state.activePlayerId,
-                            previousAbilityId: state.pendingAttack.sourceAbilityId,
-                            reason: 'dieRerolled',
-                        },
-                        sourceCommandType: command.type,
-                        timestamp: timestamp + 2,
-                    } as DiceThroneEvent);
-                }
+                    sourceCommandType: command.type,
+                }));
             } else if (action.type === 'drawCard') {
                 events.push(
                     ...buildDrawEvents(state, command.playerId, 1, random, command.type, timestamp + 1, passiveId)

@@ -1,4 +1,4 @@
-import type { MatchState, PlayerId } from '../../../engine/types';
+import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import type { PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerAbilityProgram } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
@@ -8,6 +8,7 @@ import {
     buildAbilityFeedback,
     buildStandardDrawEvents,
     buildStandardDrawEventsFromRuntimeContext,
+    createSkipOption,
     grantContextualExtraAction,
     grantContextualExtraMinion,
     queueMinionPlayEffect,
@@ -22,13 +23,12 @@ import { registerActiveBaseAbility } from '../domain/baseAbilities';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { buildValidatedOngoingDetachEvents } from '../domain/ongoingDetach';
 import { registerTrigger } from '../domain/ongoingEffects';
+import { reduce } from '../domain/reduce';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import type { BaseMetadataUpdatedEvent, CardsDiscardedEvent, DeckInspectedEvent, DeckReorderedEvent, SmashUpCore, SmashUpEvent } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { getCardDef } from '../data/cards';
 import {
-    discardFirstHandAny,
-    firstOwnMinionAtBase,
     isMinionCard,
     ownMinionsAtBase,
     shuffleFirstDiscardCardsIntoDeck,
@@ -65,6 +65,35 @@ type PetalsContext = {
     now: number;
 };
 
+type BeautyDiscardEffect =
+    | 'beast'
+    | 'cogsworth'
+    | 'lumiere'
+    | 'mrs_potts'
+    | 'gaston'
+    | 'provincial_town'
+    | 'gaston_tavern'
+    | 'none';
+
+type BeautyDiscardPromptContext = {
+    matchState: MatchState<SmashUpCore>;
+    playerId: PlayerId;
+    now: number;
+    baseIndex: number;
+    cardUid?: string;
+    defId?: string;
+    discardCount: number;
+    optional: boolean;
+    excludeCardUid?: string;
+    effect: BeautyDiscardEffect;
+};
+
+type BeautyDiscardChoice = {
+    cardUid?: string;
+    defId?: string;
+    skip?: boolean;
+};
+
 function abilityFromRuntime(result: { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> }): AbilityResult {
     return result.matchState ? { events: result.events, matchState: result.matchState } : { events: result.events };
 }
@@ -79,26 +108,142 @@ function source(ctx: AbilityContext) {
     };
 }
 
-function discardCost(ctx: AbilityContext): SmashUpEvent[] | undefined {
-    const event = discardFirstHandAny(ctx);
-    return event ? [event] : undefined;
-}
-
 function hasDiscardedFromHandThisTurn(ctx: AbilityContext | BaseAbilityContext): boolean {
     return ((ctx.state.cardsDiscardedFromHandThisTurn ?? {})[ctx.playerId] ?? 0) > 0;
 }
 
-function discardFirstHandCards(ctx: AbilityContext | BaseAbilityContext, count: number): SmashUpEvent[] | undefined {
-    const cardUids = (ctx.state.players[ctx.playerId]?.hand ?? [])
-        .filter(card => ('cardUid' in ctx ? card.uid !== ctx.cardUid : true))
-        .slice(0, count)
-        .map(card => card.uid);
-    if (cardUids.length < count) return undefined;
-    return [{
-        type: SU_EVENTS.CARDS_DISCARDED,
-        payload: { playerId: ctx.playerId, cardUids },
-        timestamp: ctx.now,
-    } as SmashUpEvent];
+function buildBeautyDiscardOptions(context: BeautyDiscardPromptContext): PromptOption<BeautyDiscardChoice>[] {
+    const hand = context.matchState.core.players[context.playerId]?.hand ?? [];
+    const options = hand
+        .filter(card => card.uid !== context.excludeCardUid)
+        .map(card => ({
+            id: `discard:${card.uid}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
+            value: { cardUid: card.uid, defId: card.defId },
+            displayMode: 'card' as const,
+        }));
+    return context.optional ? [createSkipOption('不弃牌'), ...options] : options;
+}
+
+function resolveBeautyDiscardEffect(
+    context: BeautyDiscardPromptContext,
+    state: MatchState<SmashUpCore>,
+    random: RandomFn,
+    timestamp: number,
+): SmashUpEvent[] {
+    const sourceContext = {
+        state: state.core,
+        matchState: state,
+        playerId: context.playerId,
+        cardUid: context.cardUid ?? '',
+        defId: context.defId ?? '',
+        baseIndex: context.baseIndex,
+        random,
+        now: timestamp,
+    } satisfies AbilityContext;
+
+    switch (context.effect) {
+        case 'beast': {
+            const self = state.core.bases[context.baseIndex]?.minions.find(minion =>
+                minion.uid === context.cardUid && minion.controller === context.playerId,
+            );
+            return self ? [addPowerCounter(self.uid, context.baseIndex, 1, BEAST, timestamp, source(sourceContext))] : [];
+        }
+        case 'cogsworth':
+            return [grantContextualExtraAction(sourceContext, 'beauty_and_the_beast_cogsworth')];
+        case 'lumiere':
+            return [grantContextualExtraMinion(sourceContext, 'beauty_and_the_beast_lumiere', context.baseIndex, { powerMax: 3 })];
+        case 'mrs_potts':
+            return buildStandardDrawEvents(state.core, context.playerId, 1, random, timestamp);
+        case 'gaston':
+            return buildValidatedOngoingDetachEvents(state.core, {
+                cardUid: context.cardUid ?? '',
+                defId: context.defId ?? '',
+                ownerId: context.playerId,
+                reason: GASTON,
+                now: timestamp,
+                expectedLocation: 'base',
+                sourcePlayerId: context.playerId,
+                sourceCardUid: context.cardUid,
+                sourceDefId: context.defId,
+                sourceControllerId: context.playerId,
+                sourceBaseIndex: context.baseIndex,
+            });
+        case 'provincial_town':
+            return [queueMinionPlayEffect(context.playerId, 'addPowerCounter', 1, timestamp, 'beauty_and_the_beast_this_provincial_town')];
+        case 'gaston_tavern':
+            return [grantContextualExtraMinion(sourceContext, BASE_GASTONS_TAVERN, context.baseIndex, { powerMax: 3 })];
+        case 'none':
+            return [];
+    }
+}
+
+const beautyDiscardPromptProgram = createPromptProgram<BeautyDiscardPromptContext, SmashUpCore, SmashUpEvent>({
+    sourceId: 'beauty_and_the_beast_discard_hand',
+    buildInteraction: context => {
+        const options = buildBeautyDiscardOptions(context);
+        const availableCount = options.filter(option => !option.value.skip).length;
+        const requiredCount = Math.min(context.discardCount, availableCount);
+        return createAbilityRuntimeSimpleChoice(
+            `beauty_and_the_beast_discard_hand_${context.playerId}_${context.now}`,
+            context.playerId,
+            context.optional
+                ? `选择至多 ${context.discardCount} 张手牌弃掉，或跳过`
+                : `选择 ${context.discardCount} 张手牌弃掉`,
+            options,
+            {
+                sourceId: 'beauty_and_the_beast_discard_hand',
+                targetType: 'hand',
+                multi: context.discardCount > 1 ? { min: context.optional ? 0 : requiredCount, max: requiredCount } : undefined,
+                autoResolveIfSingle: !context.optional && requiredCount === 1,
+                responseValidationMode: 'live',
+                autoRefresh: 'hand',
+            },
+        );
+    },
+    onResolve: ({ context, state, random, value, timestamp }) => {
+        const choices = (Array.isArray(value) ? value : [value]) as BeautyDiscardChoice[];
+        if (choices.some(choice => choice?.skip)) return { events: [] };
+
+        const liveHand = state.core.players[context.playerId]?.hand ?? [];
+        const selectedUids = Array.from(new Set(
+            choices
+                .map(choice => choice?.cardUid)
+                .filter((uid): uid is string => !!uid)
+                .filter(uid => uid !== context.excludeCardUid && liveHand.some(card => card.uid === uid)),
+        )).slice(0, context.discardCount);
+        if (selectedUids.length !== context.discardCount) return { events: [] };
+
+        const discardEvent = {
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: context.playerId, cardUids: selectedUids },
+            timestamp,
+        } as CardsDiscardedEvent;
+        const afterDiscard: MatchState<SmashUpCore> = {
+            ...state,
+            core: reduce(state.core, discardEvent),
+        };
+        return {
+            events: [discardEvent, ...resolveBeautyDiscardEffect(context, afterDiscard, random, timestamp)],
+        };
+    },
+});
+
+function runBeautyDiscardPrompt(
+    context: Omit<BeautyDiscardPromptContext, 'matchState'> & { matchState?: MatchState<SmashUpCore> },
+): AbilityResult {
+    if (!context.matchState) return { events: [] };
+    const availableCount = (context.matchState.core.players[context.playerId]?.hand ?? [])
+        .filter(card => card.uid !== context.excludeCardUid).length;
+    if (availableCount < context.discardCount) {
+        return context.optional
+            ? { events: [] }
+            : { events: [buildAbilityFeedback(context.playerId, 'feedback.no_valid_target', context.now)] };
+    }
+    return abilityFromRuntime(executeAbilityProgram(beautyDiscardPromptProgram, {
+        ...context,
+        matchState: context.matchState,
+    }));
 }
 
 function belleOnPlay(ctx: AbilityContext): AbilityResult {
@@ -186,44 +331,47 @@ function beastOnPlay(ctx: AbilityContext): AbilityResult {
 }
 
 function beastTalent(ctx: AbilityContext): AbilityResult {
-    const self = firstOwnMinionAtBase(ctx.state, ctx.playerId, ctx.baseIndex);
-    if (!self || self.minion.uid !== ctx.cardUid) return { events: [] };
-    const cost = discardCost(ctx);
-    if (!cost) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_target', ctx.now)] };
-    return {
-        events: [
-            ...cost,
-            addPowerCounter(self.minion.uid, self.baseIndex, 1, BEAST, ctx.now, source(ctx)),
-        ],
-    };
+    const self = ctx.state.bases[ctx.baseIndex]?.minions.find(minion =>
+        minion.uid === ctx.cardUid && minion.controller === ctx.playerId,
+    );
+    if (!self) return { events: [] };
+    return runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 1,
+        optional: false,
+        excludeCardUid: ctx.cardUid,
+        effect: 'beast',
+    });
 }
 
 function cogsworthTalent(ctx: AbilityContext): AbilityResult {
-    const cost = discardCost(ctx);
-    if (!cost) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_target', ctx.now)] };
-    return { events: [...cost, grantContextualExtraAction(ctx, 'beauty_and_the_beast_cogsworth')] };
+    return runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 1,
+        optional: false,
+        excludeCardUid: ctx.cardUid,
+        effect: 'cogsworth',
+    });
 }
 
 function lumiereTalent(ctx: AbilityContext): AbilityResult {
-    const cost = discardCost(ctx);
-    if (!cost) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_target', ctx.now)] };
-    return {
-        events: [
-            ...cost,
-            grantContextualExtraMinion(ctx, 'beauty_and_the_beast_lumiere', ctx.baseIndex, { powerMax: 3 }),
-        ],
-    };
+    return runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 1,
+        optional: false,
+        excludeCardUid: ctx.cardUid,
+        effect: 'lumiere',
+    });
 }
 
 function mrsPottsTalent(ctx: AbilityContext): AbilityResult {
-    const cost = discardCost(ctx);
-    if (!cost) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_target', ctx.now)] };
-    return {
-        events: [
-            ...cost,
-            ...buildStandardDrawEvents(ctx.state, ctx.playerId, 1, ctx.random, ctx.now),
-        ],
-    };
+    return runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 1,
+        optional: false,
+        excludeCardUid: ctx.cardUid,
+        effect: 'mrs_potts',
+    });
 }
 
 function beOurGuestTalent(ctx: AbilityContext): AbilityResult {
@@ -236,26 +384,13 @@ function beOurGuestTalent(ctx: AbilityContext): AbilityResult {
 }
 
 function gastonTalent(ctx: AbilityContext): AbilityResult {
-    const cost = discardFirstHandCards(ctx, 2);
-    if (!cost) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_target', ctx.now)] };
-    return {
-        events: [
-            ...cost,
-            ...buildValidatedOngoingDetachEvents(ctx.state, {
-                cardUid: ctx.cardUid,
-                defId: ctx.defId,
-                ownerId: ctx.playerId,
-                reason: GASTON,
-                now: ctx.now,
-                expectedLocation: 'base',
-                sourcePlayerId: ctx.playerId,
-                sourceCardUid: ctx.cardUid,
-                sourceDefId: ctx.defId,
-                sourceControllerId: ctx.playerId,
-                sourceBaseIndex: ctx.baseIndex,
-            }),
-        ],
-    };
+    return runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 2,
+        optional: true,
+        excludeCardUid: ctx.cardUid,
+        effect: 'gaston',
+    });
 }
 
 function breakTheCurse(ctx: AbilityContext): AbilityResult {
@@ -267,13 +402,21 @@ function breakTheCurse(ctx: AbilityContext): AbilityResult {
 }
 
 function discoverTheLibrary(ctx: AbilityContext): AbilityResult {
-    const discard = discardFirstHandAny(ctx);
-    return {
-        events: [
-            ...buildStandardDrawEvents(ctx.state, ctx.playerId, 2, ctx.random, ctx.now),
-            ...(discard ? [discard] : []),
-        ],
-    };
+    const drawEvents = buildStandardDrawEvents(ctx.state, ctx.playerId, 2, ctx.random, ctx.now);
+    if (!ctx.matchState) return { events: drawEvents };
+    const drawnCore = drawEvents.reduce((state, event) => reduce(state, event), ctx.state);
+    const drawnMatchState: MatchState<SmashUpCore> = { ...ctx.matchState, core: drawnCore };
+    if ((drawnCore.players[ctx.playerId]?.hand.length ?? 0) === 0) return { events: drawEvents };
+    const prompt = runBeautyDiscardPrompt({
+        ...ctx,
+        state: drawnCore,
+        matchState: drawnMatchState,
+        discardCount: 1,
+        optional: false,
+        excludeCardUid: ctx.cardUid,
+        effect: 'none',
+    });
+    return { events: [...drawEvents, ...prompt.events], matchState: prompt.matchState };
 }
 
 function everASurprise(ctx: AbilityContext): AbilityResult {
@@ -283,13 +426,16 @@ function everASurprise(ctx: AbilityContext): AbilityResult {
 }
 
 function thisProvincialTown(ctx: AbilityContext): AbilityResult {
-    const cost = discardFirstHandAny(ctx);
-    return {
-        events: [
-            grantContextualExtraMinion(ctx, 'beauty_and_the_beast_this_provincial_town', ctx.baseIndex, { powerMax: 3 }),
-            ...(cost ? [cost, queueMinionPlayEffect(ctx.playerId, 'addPowerCounter', 1, ctx.now, 'beauty_and_the_beast_this_provincial_town')] : []),
-        ],
-    };
+    const extraMinion = grantContextualExtraMinion(ctx, 'beauty_and_the_beast_this_provincial_town', ctx.baseIndex, { powerMax: 3 });
+    if (!ctx.matchState || (ctx.state.players[ctx.playerId]?.hand.length ?? 0) === 0) return { events: [extraMinion] };
+    const prompt = runBeautyDiscardPrompt({
+        ...ctx,
+        discardCount: 1,
+        optional: true,
+        excludeCardUid: ctx.cardUid,
+        effect: 'provincial_town',
+    });
+    return { events: [extraMinion, ...prompt.events], matchState: prompt.matchState };
 }
 
 function playDiscardedEnchantedObject(ctx: TriggerContext): SmashUpEvent[] {
@@ -442,14 +588,15 @@ function enchantedCastle(ctx: TriggerContext): SmashUpEvent[] {
 }
 
 function gastonsTavern(ctx: BaseAbilityContext): AbilityResult {
-    const cost = discardFirstHandCards(ctx, 1);
-    if (!cost) return { events: [] };
-    return {
-        events: [
-            ...cost,
-            grantContextualExtraMinion({ playerId: ctx.playerId, now: ctx.now, matchState: ctx.matchState }, BASE_GASTONS_TAVERN, ctx.baseIndex, { powerMax: 3 }),
-        ],
-    };
+    return runBeautyDiscardPrompt({
+        matchState: ctx.matchState,
+        playerId: ctx.playerId,
+        now: ctx.now,
+        baseIndex: ctx.baseIndex,
+        discardCount: 1,
+        optional: false,
+        effect: 'gaston_tavern',
+    });
 }
 
 export function registerBeautyAndTheBeastAbilities(): void {

@@ -34,6 +34,7 @@ const ARMORY_DISCOVERY_SELF_CONFIRMED_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATIO
 const ARMORY_PLAYER_ONE_CONFIRM_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03b-器械库-玩家一确认砍刀.jpg`;
 const ARMORY_DISCOVERY_TWO_CONFIRMED_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03c-器械库-两人确认后等待其他玩家.jpg`;
 const ARMORY_PLAYER_TWO_CONFIRM_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03d-器械库-玩家二确认砍刀.jpg`;
+const ARMORY_DISCOVERY_GAIN_ANIMATION_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/03e-器械库-最终确认飞入持有区动画.jpg`;
 const ARMORY_INVENTORY_SCREENSHOT = `${ITEM_DISCOVERY_CONFIRMATION_EVIDENCE_DIR}/04-器械库-全员确认完毕回牌桌持有区.jpg`;
 const ORDINARY_ITEM_DISCOVERY_EVIDENCE_DIR = resolve(process.cwd(), 'evidence/betrayal-ordinary-item-discovery-confirmation');
 const ORDINARY_ITEM_PLACEMENT_SCREENSHOT = `${ORDINARY_ITEM_DISCOVERY_EVIDENCE_DIR}/01-金库-确认房间朝向.jpg`;
@@ -788,6 +789,12 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
         await expect(playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue')).not.toBeDisabled();
         await saveScreenshot(playerTwoPage, ARMORY_PLAYER_TWO_CONFIRM_SCREENSHOT);
         await playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue').click();
+        const gainTransitionBlocker = playerTwoPage.getByTestId('betrayal-visual-transition-blocker');
+        await expect(gainTransitionBlocker).toBeVisible();
+        await expect(playerTwoPage.getByTestId('betrayal-board')).toHaveAttribute('data-betrayal-visual-busy', 'true');
+        await expect(playerTwoPage.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toHaveCount(0);
+        await saveScreenshot(playerTwoPage, ARMORY_DISCOVERY_GAIN_ANIMATION_SCREENSHOT);
+        await expect(gainTransitionBlocker).toHaveCount(0);
 
         await syncCoreFromPage(playerTwoPage, page, playerOnePage);
         await expect(discoveryPanel).toHaveCount(0);

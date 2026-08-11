@@ -756,13 +756,13 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         });
         await setDiceThroneBonusDiceValues(page, [6, 1]);
 
-        const tokenResponseModal = page.getByTestId('token-response-modal');
-        await expect(tokenResponseModal).toBeVisible({ timeout: 10000 });
-        await expect(tokenResponseModal.getByTestId(`token-response-use-${TOKEN_IDS.FLIGHT}`)).toBeVisible({ timeout: 10000 });
-        await expect(tokenResponseModal.getByText('投 2 骰；任一骰为 6 时忽略本次即将受到的全部伤害')).toBeVisible();
-        await expect(tokenResponseModal.getByText('掷骰 1-2 完全闪避')).toBeHidden();
+        const tokenResponse = page.getByTestId('dicethrone-response-window-hint');
+        const flightToken = page.getByTestId(`dt-player-0-token-${TOKEN_IDS.FLIGHT}`);
+        await expect(tokenResponse).toBeVisible({ timeout: 10000 });
+        await expect(flightToken).toBeVisible({ timeout: 10000 });
+        await expect(flightToken).toHaveAttribute('data-token-clickable', 'true');
         await game.screenshot('tianshi-flight-token-response-ready', testInfo);
-        await tokenResponseModal.getByTestId(`token-response-use-${TOKEN_IDS.FLIGHT}`).click();
+        await flightToken.click();
 
         await expect.poll(async () => {
             const state = await readState(game);
@@ -780,7 +780,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             defensiveFlightActivated: true,
             dice: [6, 1],
         });
-        await expect(tokenResponseModal).toBeHidden({ timeout: 10000 });
+        await expect(tokenResponse).toBeHidden({ timeout: 10000 });
         await expect(page.getByTestId('bonus-die-overlay')).toBeHidden();
         await expect(page.getByTestId('card-spotlight-overlay')).toBeHidden();
         await expect(page.getByTestId('attack-showcase-overlay')).toHaveCount(0);

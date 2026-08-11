@@ -1801,7 +1801,10 @@ describe('Betrayal Board foundation', () => {
 
         fireEvent.click(screen.getByTestId(`betrayal-room-occupant-${core.currentExplorer.roomId}-1`));
         expect(screen.getByTestId('betrayal-explorer-detail-dialog-1')).toHaveTextContent('安妮塔·赫南德兹');
-        expect(screen.getByTestId('betrayal-explorer-detail-token-1')).toHaveAttribute('data-token-asset', anita.portraitAsset);
+        const missingAnitaToken = screen.getByTestId('betrayal-explorer-detail-token-1');
+        expect(missingAnitaToken).toHaveAttribute('data-token-state', 'missing-official-token');
+        expect(screen.getByTestId('betrayal-explorer-detail-token-missing-1')).toBeInTheDocument();
+        expect(missingAnitaToken.querySelector('img')).toBeNull();
     });
 
     it('牌堆区常驻显示预兆状态，并隐藏完整作祟检定规则说明', () => {
@@ -2134,6 +2137,18 @@ describe('Betrayal Board foundation', () => {
         core.currentExplorerInventory = core.currentExplorer.inventory.map((card) => ({ ...card }));
         core.turnStartInventoryCardIds = core.currentExplorer.inventory.map((card) => card.id);
         core.recommendedAction = 'use';
+        const completedMonsterIds = core.monsters.map((monster) => monster.id);
+        core.scenarioRuntime.monsterTurn = {
+            ...core.scenarioRuntime.monsterTurn,
+            resolvedStartMonsterIds: completedMonsterIds,
+            skippedMonsterIdsThisTurn: completedMonsterIds,
+            attackedMonsterIdsThisTurn: completedMonsterIds,
+            movedMonsterIdsThisTurn: completedMonsterIds,
+            movementRollsByGroupId: {},
+            moveRemainingById: Object.fromEntries(
+                completedMonsterIds.map((monsterId) => [monsterId, 0]),
+            ),
+        };
         dismissBlockingBoardOverlays(core);
         return { core, traitorRoomId };
     }
@@ -2157,7 +2172,11 @@ describe('Betrayal Board foundation', () => {
         const sarcophagusTokenId = `betrayal-room-haunt-token-${traitorRoomId}-mummy-sarcophagus`;
         expect(screen.getByTestId(sarcophagusTokenId)).toHaveTextContent('棺');
         expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-status', 'placed');
+        expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-placement', 'room');
+        expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-direct-target', 'true');
+        expect(screen.getByTestId(girlTokenId)).toHaveAccessibleName('女孩，可拾取');
         expect(screen.getByTestId('betrayal-action-use')).toHaveTextContent('拾起女孩');
+        expect(screen.queryByTestId('betrayal-room-focus-target')).not.toBeInTheDocument();
         expect(screen.getByTestId('betrayal-action-use')).toHaveAttribute(
             'data-haunt-primary-action-kind',
             'use',
@@ -2168,13 +2187,16 @@ describe('Betrayal Board foundation', () => {
         await waitFor(() => {
             expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-status', 'held-by-player');
             expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-owner-player-id', '2');
+            expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-placement', 'explorer');
             expect(screen.getByTestId('betrayal-action-use')).toHaveTextContent('交出女孩');
+            expect(screen.queryByTestId('betrayal-room-focus-target')).not.toBeInTheDocument();
         });
 
         fireEvent.click(screen.getByTestId('betrayal-action-use'));
 
         await waitFor(() => {
             expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-status', 'held-by-mummy');
+            expect(screen.getByTestId(girlTokenId)).toHaveAttribute('data-token-placement', 'mummy');
             expect(screen.getByTestId('betrayal-action-use')).toHaveTextContent('交出圣符');
         });
 

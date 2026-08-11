@@ -87,6 +87,8 @@ export const ULTIMATES_ACTIONS: ActionCardDef[] = [
         nameEn: 'Cosmic Knowledge',
         faction: FACTION,
         abilityTags: ['onPlay'],
+        playNeedsMinion: true,
+        playTargetMinionController: 'any',
         count: 1,
         previewRef: { type: 'atlas', atlasId: ATLAS, index: 48 },
     },

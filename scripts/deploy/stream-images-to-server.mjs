@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const rawArgs = process.argv.slice(2);
 
@@ -28,7 +29,7 @@ const helpText = `
 说明:
   1. 本脚本在网络更好的机器或 CI 上执行。
   2. 它会先在本地导出镜像 tar，再通过 scp 上传到生产机，最后在生产机本地执行 docker image load。
-  3. 若加 --deploy，会在远端执行:
+  3. 若加 --deploy，会先同步并校验宿主机 CPU 采集脚本，再在远端执行:
      bash scripts/deploy/deploy-image.sh update-local <tag>
 `.trim();
 
@@ -79,6 +80,21 @@ const imageRefs = [gameRef, webRef];
 const remoteDeployCommand = `cd ${shellQuote(remoteDir)} && bash scripts/deploy/deploy-image.sh update-local ${shellQuote(tag)}`;
 const localArchivePath = path.join(os.tmpdir(), `boardgame-images-${tag}-${process.pid}.tar`);
 const remoteArchivePath = `/tmp/boardgame-images-${tag}-${process.pid}.tar`;
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const localWatchdogScriptPath = path.join(scriptDir, 'watch-game-server-cpu.sh');
+const remoteWatchdogTempPath = `/tmp/boardgame-game-server-cpu-watch-${process.pid}.sh`;
+const remoteWatchdogPath = path.posix.join(remoteDir, 'scripts', 'deploy', 'watch-game-server-cpu.sh');
+const remoteWatchdogInstallCommand = [
+  'set -eu',
+  `source=${shellQuote(remoteWatchdogTempPath)}`,
+  `target=${shellQuote(remoteWatchdogPath)}`,
+  'staged="${target}.new.$$"',
+  'cleanup() { rm -f "$source" "$staged"; }',
+  'trap cleanup EXIT',
+  'bash -n "$source"',
+  'install -m 755 "$source" "$staged"',
+  'mv -f "$staged" "$target"',
+].join('; ');
 
 const runCommand = (command, args, label) => new Promise((resolve, reject) => {
   console.log(`[stream-images] 执行 ${label}: ${command} ${args.join(' ')}`);
@@ -114,6 +130,22 @@ const loadArchiveOnRemote = async () => {
   );
 };
 
+const uploadWatchdogToRemote = async () => {
+  await runCommand(
+    'scp',
+    [...sshClientArgs, localWatchdogScriptPath, `${host}:${remoteWatchdogTempPath}`],
+    '上传宿主 CPU 采集脚本',
+  );
+};
+
+const installWatchdogOnRemote = async () => {
+  await runCommand(
+    'ssh',
+    [...sshClientArgs, host, remoteWatchdogInstallCommand],
+    '校验并原子安装宿主 CPU 采集脚本',
+  );
+};
+
 const cleanupLocalArchive = async () => {
   await rm(localArchivePath, { force: true });
 };
@@ -123,6 +155,14 @@ const cleanupRemoteArchive = async () => {
     await runCommand('ssh', [...sshClientArgs, host, `rm -f ${shellQuote(remoteArchivePath)}`], '清理服务器镜像 tar');
   } catch (error) {
     console.warn(`[stream-images] 清理服务器镜像 tar 失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+const cleanupRemoteWatchdog = async () => {
+  try {
+    await runCommand('ssh', [...sshClientArgs, host, `rm -f ${shellQuote(remoteWatchdogTempPath)}`], '清理服务器临时 CPU 采集脚本');
+  } catch (error) {
+    console.warn(`[stream-images] 清理服务器临时 CPU 采集脚本失败: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -165,7 +205,9 @@ const main = async () => {
   console.log(`[stream-images] 本地临时 tar: ${localArchivePath}`);
   console.log(`[stream-images] 远端临时 tar: ${remoteArchivePath}`);
   if (shouldDeploy) {
-    console.log(`[stream-images] 输送完成后远端执行: ssh ${host} "${remoteDeployCommand}"`);
+    console.log(`[stream-images] 发布前上传宿主 CPU 采集脚本: scp ${localWatchdogScriptPath} ${host}:${remoteWatchdogTempPath}`);
+    console.log(`[stream-images] 发布前校验并原子安装宿主 CPU 采集脚本: ssh ${host} "${remoteWatchdogInstallCommand}"`);
+    console.log(`[stream-images] 输送完成后远端 update-local 部署: ssh ${host} "${remoteDeployCommand}"`);
   }
 
   if (dryRun) {
@@ -180,9 +222,14 @@ const main = async () => {
     await loadArchiveOnRemote();
 
     if (shouldDeploy) {
+      await uploadWatchdogToRemote();
+      await installWatchdogOnRemote();
       await runCommand('ssh', [...sshClientArgs, host, remoteDeployCommand], '远端 update-local 部署');
     }
   } finally {
+    if (shouldDeploy) {
+      await cleanupRemoteWatchdog();
+    }
     await cleanupRemoteArchive();
     await cleanupLocalArchive();
   }

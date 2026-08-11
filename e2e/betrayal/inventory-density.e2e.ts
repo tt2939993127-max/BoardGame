@@ -396,9 +396,17 @@ test.describe("山屋惊魂持有区高密度证据", () => {
     expect(closeButtonMetrics.right).toBeLessThan(
       closeButtonMetrics.overlayRight - 80,
     );
+    const previewCard = previewOverlay.getByTestId(
+      "betrayal-room-preview-card",
+    );
+    await expect(previewCard).toBeVisible();
+    await expect(previewCard).toHaveAttribute(
+      "aria-label",
+      "收起",
+    );
     await saveScreenshot(page, ROOM_PREVIEW_SCREENSHOT);
 
-    await closeButton.click();
+    await previewCard.click({ position: { x: 120, y: 120 } });
     await expect(previewOverlay).toBeHidden();
 
     assertNoFatalFrontendErrors([

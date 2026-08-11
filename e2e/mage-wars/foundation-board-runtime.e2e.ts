@@ -749,6 +749,10 @@ test.describe('Mage Wars foundation runtime board', () => {
         }), { timeout: 5_000 }).toBe(true);
         await expect(page.getByTestId('mage-wars-fx-attack-dice')).toBeVisible({ timeout: 5_000 });
         await expect(page.getByTestId('mage-wars-fx-attack-die-face').first()).toBeVisible();
+        await expect.poll(async () => page.evaluate(() => {
+            const dice = document.querySelector<HTMLElement>('[data-testid="mage-wars-fx-attack-dice"]');
+            return dice ? Number.parseFloat(getComputedStyle(dice).opacity) : 0;
+        }), { timeout: 5_000 }).toBeGreaterThanOrEqual(0.8);
         const settlementAudit = await page.evaluate(() => {
             const stage = document.querySelector<HTMLElement>('[data-testid="mage-wars-arena-stage"]')?.getBoundingClientRect();
             const dice = document.querySelector<HTMLElement>('[data-testid="mage-wars-fx-attack-dice"]')?.getBoundingClientRect();

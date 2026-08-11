@@ -53,6 +53,47 @@ describe('DiceThrone AI 主阶段候选门禁', () => {
         expect(actions).toEqual([]);
     });
 
+    it('奖励骰结算遇到响应窗口时，应先响应窗口，不得提前生成奖励骰确认', () => {
+        const state = createSetupWithHand([], {
+            playerId: '1',
+            cp: 5,
+            mutate: (core) => {
+                core.activePlayerId = '1';
+                core.pendingBonusDiceSettlement = {
+                    id: 'bonus-with-response-window',
+                    sourceAbilityId: 'card-one-throw-fortune',
+                    attackerId: '1',
+                    targetId: '1',
+                    dice: [{ index: 0, value: 3, face: 'katana' }],
+                    rerollCostTokenId: '',
+                    rerollCostAmount: 0,
+                    rerollCount: 0,
+                    maxRerollCount: 0,
+                    readyToSettle: false,
+                    displayOnly: true,
+                };
+            },
+        })(['0', '1'], fixedRandom);
+        state.sys.phase = 'main1';
+        state.sys.responseWindow = {
+            current: {
+                id: 'bonus-response-window',
+                windowType: 'afterRollConfirmed',
+                responderQueue: ['1'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        expect(actions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(actions.some((action) => action.kind === 'skip-bonus-dice-reroll')).toBe(false);
+    });
+
     it('未知阻塞交互属于 AI 时应紧急取消而不是继续走主阶段', () => {
         const state = createSetupWithHand(
             ['card-palm-strike', 'card-thrust-punch-2'],

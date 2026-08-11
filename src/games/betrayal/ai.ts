@@ -19,6 +19,7 @@ import {
     resolveInventoryEffectId,
     resolveUseEffect,
 } from './possessionEffects';
+import { BETRAYAL_AI_MINIMUM_VISIBLE_STEP_DELAY_MS } from './visualTiming';
 
 interface BetrayalAiInventoryCard {
     id: string;
@@ -1863,7 +1864,7 @@ export function createBetrayalAiRuntime(args: {
     return {
         gameId: 'betrayal',
         buildLegalActions: (buildArgs) => buildBetrayalAiLegalActions(args.validate, buildArgs),
-        defaultMinimumActionDelayMs: 700,
+        defaultMinimumActionDelayMs: BETRAYAL_AI_MINIMUM_VISIBLE_STEP_DELAY_MS,
         localVisibleStepDelayConfig: {
             mode: 'whitelist',
             actionKinds: [

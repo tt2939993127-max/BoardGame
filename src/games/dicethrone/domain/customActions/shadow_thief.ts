@@ -2,7 +2,7 @@
  * 影子盗贼 (Shadow Thief) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getAttackDiceFaceCounts, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getAttackDiceFaceCounts, getFaceCounts, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { SHADOW_THIEF_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
 import { CP_MAX } from '../types';
@@ -21,11 +21,15 @@ import type {
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 import { resolveDiceOwnerId, resolveTargetOpponentDice } from './common';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
+const SHADOW_DANCE_SETTLEMENT_ID = 'shadow-thief-shadow-dance';
+const SHADOW_DANCE_2_SETTLEMENT_ID = 'shadow-thief-shadow-dance-2';
+const SNEAK_ATTACK_SETTLEMENT_ID = 'shadow-thief-sneak-attack';
 
 function getOffensiveAttackFaceCounts(state: CustomActionContext['state']) {
     return getAttackDiceFaceCounts(state);
@@ -220,33 +224,22 @@ function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, time
 /** 暗影之舞：投掷1骰造成一半伤害 【已迁移到新伤害计算管线】 */
 function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, random, ctx }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
-    const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
     const face = getPlayerDieFace(state, ctx.attackerId, dieValue) ?? '';
-
-    // Emit Roll Event
     const damageAmt = Math.ceil(dieValue / 2);
-    events.push({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value: dieValue, face, playerId: ctx.attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent);
-
-    // Damage = ceil(value / 2)
-    if (damageAmt > 0) {
-        const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
-            target: { playerId: targetId },
-            baseDamage: damageAmt,
-            state,
-            timestamp: timestamp + 1,
-        });
-
-        events.push(...damageCalc.toEvents());
-    }
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        ctx.attackerId,
+        targetId,
+        [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
+        timestamp + 1,
+        { customResolutionId: SHADOW_DANCE_SETTLEMENT_ID },
+    )];
 }
 
 /** 聚宝盆 I：抽 Card 面数量牌。弃对手牌是 II 级效果。 */
@@ -457,50 +450,22 @@ function handleCardTrick({ targetId, attackerId, sourceAbilityId, state, timesta
 /** 暗影之舞 II：投掷1骰造成一半伤害(真实伤害)，获得SNEAK+SNEAK_ATTACK，抽1卡 【已迁移到新伤害计算管线】 */
 function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, random, ctx, attackerId }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
-    const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
     const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
-
-    // Emit Roll Event
     const damageAmt = Math.ceil(dieValue / 2);
-    events.push({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value: dieValue, face, playerId: ctx.attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent);
-
-    // Damage = ceil(value / 2) - True Damage (Undefendable)
-    // 不可防御通过 AbilityDef tags: ['unblockable'] 声明，isDefendableAttack() 会自动处理
-    if (damageAmt > 0) {
-        const damageCalc = createDamageCalculation({
-            source: { playerId: attackerId, abilityId: sourceAbilityId },
-            target: { playerId: targetId },
-            baseDamage: damageAmt,
-            state,
-            timestamp: timestamp + 1,
-        });
-
-        events.push(...damageCalc.toEvents());
-    }
-
-    // Gain Tokens
-    [TOKEN_IDS.SNEAK, TOKEN_IDS.SNEAK_ATTACK].forEach(tokenId => {
-        const currentAmount = state.players[attackerId]?.tokens[tokenId] ?? 0;
-        const limit = getTokenStackLimit(state, attackerId, tokenId);
-        const newTotal = Math.min(currentAmount + 1, limit);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId, amount: 1, newTotal, sourceAbilityId }, // target is SELF
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2,
-        } as TokenGrantedEvent);
-    });
-
-    // Draw 1 Card
-    events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 3, sourceAbilityId));
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        targetId,
+        [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
+        timestamp + 1,
+        { customResolutionId: SHADOW_DANCE_2_SETTLEMENT_ID },
+    )];
 }
 
 // Steal Helpers for Higher CP
@@ -699,9 +664,7 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
 
     const dieValue = random.d(6);
     const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
-    const events: DiceThroneEvent[] = [];
-
-    events.push({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: {
             value: dieValue,
@@ -714,9 +677,14 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp
-    } as BonusDieRolledEvent);
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        state.pendingAttack.defenderId ? 'shadow-thief-sneak-attack' : SNEAK_ATTACK_SETTLEMENT_ID,
+        attackerId,
+        state.pendingAttack.defenderId ?? attackerId,
+        [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.sneakAttack' }],
+        timestamp + 1,
+        { customResolutionId: SNEAK_ATTACK_SETTLEMENT_ID },
+    )];
 }
 
 // ============================================================================
@@ -747,6 +715,84 @@ const estimateCpPlus5Damage = (state: Record<string, unknown>, playerId: string)
 // ============================================================================
 
 export function registerShadowThiefCustomActions(): void {
+    registerBonusDiceSettlementHandler(SHADOW_DANCE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        const damage = die ? Math.ceil(die.value / 2) : 0;
+        return {
+            totalDamage: 0,
+            followupEvents: damage > 0
+                ? createDamageCalculation({
+                    source: { playerId: settlement.attackerId, abilityId: settlement.sourceAbilityId },
+                    target: { playerId: settlement.targetId },
+                    baseDamage: damage,
+                    state,
+                    timestamp,
+                }).toEvents()
+                : [],
+        };
+    });
+    registerBonusDiceSettlementHandler(SHADOW_DANCE_2_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        const damage = die ? Math.ceil(die.value / 2) : 0;
+        const followupEvents: DiceThroneEvent[] = damage > 0
+            ? createDamageCalculation({
+                source: { playerId: settlement.attackerId, abilityId: settlement.sourceAbilityId },
+                target: { playerId: settlement.targetId },
+                baseDamage: damage,
+                state,
+                timestamp,
+            }).toEvents()
+            : [];
+        for (const tokenId of [TOKEN_IDS.SNEAK, TOKEN_IDS.SNEAK_ATTACK]) {
+            const current = state.players[settlement.attackerId]?.tokens[tokenId] ?? 0;
+            const limit = getTokenStackLimit(state, settlement.attackerId, tokenId);
+            followupEvents.push({
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId,
+                    amount: Math.max(0, Math.min(current + 1, limit) - current),
+                    newTotal: Math.min(current + 1, limit),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp: timestamp + 1,
+            } as TokenGrantedEvent);
+        }
+        if (random) {
+            followupEvents.push(...buildDrawEvents(
+                state,
+                settlement.attackerId,
+                1,
+                random,
+                'BONUS_DICE_SETTLED',
+                timestamp + 2,
+                settlement.sourceAbilityId,
+            ));
+        }
+        return { totalDamage: 0, followupEvents };
+    });
+    registerBonusDiceSettlementHandler(SNEAK_ATTACK_SETTLEMENT_ID, ({ settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'BONUS_DIE_ROLLED',
+                payload: {
+                    value: die.value,
+                    face: die.face,
+                    playerId: settlement.attackerId,
+                    targetPlayerId: settlement.targetId,
+                    effectKey: 'bonusDie.effect.sneakAttack',
+                    pendingDamageBonus: die.value,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDieRolledEvent],
+        };
+    });
+
     registerCustomActionHandler('shadow_thief-dagger-strike-cp', handleDaggerStrikeCp, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-poison', handleDaggerStrikePoison, { categories: ['status'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-draw', handleDaggerStrikeDraw, { categories: ['resource'] });

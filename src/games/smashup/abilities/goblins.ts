@@ -11,6 +11,7 @@ import {
     buildStandardDrawEvents,
     buildValidatedDestroyEvents,
     buildValidatedMoveEvents,
+    emitSpecialLimitUsed,
     findMinionByAttachedCard,
     findMinionOnBases,
     grantExtraAction,
@@ -265,7 +266,8 @@ function blasterBeforeScoring(ctx: AbilityContext): AbilityResult {
     const source = findMinionOnBases(ctx.state, ctx.cardUid);
     if (!source) return { events: [] };
     const result = flipWithTriggers(ctx.state, ctx.playerId, ctx.random, ctx.now, 'goblins_blaster', ctx.targetBaseIndex !== undefined ? 'tails' : 'heads');
-    const events = [...result.events];
+    const limitEvent = emitSpecialLimitUsed(ctx.playerId, BLASTER, source.baseIndex, ctx.now);
+    const events = limitEvent ? [limitEvent, ...result.events] : [...result.events];
     if (result.heads) {
         events.push(addTempPower(source.minion.uid, source.baseIndex, 2, 'goblins_blaster_heads', ctx.now, {
             sourcePlayerId: ctx.playerId,

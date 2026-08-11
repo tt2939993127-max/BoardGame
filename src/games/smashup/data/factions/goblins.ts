@@ -58,6 +58,7 @@ export const GOBLINS_MINIONS: MinionCardDef[] = [
     minion('goblins_blaster', '爆破手', 'Blaster', 3, 3, 3, {
         abilityTags: ['special'],
         beforeScoringPlayable: false,
+        specialLimitGroup: 'goblins_blaster',
         activatableAbilities: [{ kind: 'special', zone: 'board', window: 'beforeScoring', sourceScope: 'scoringBase' }],
     }),
     minion('goblins_gobbo', 'Gobbo', 'Gobbo', 2, 4, 6, {

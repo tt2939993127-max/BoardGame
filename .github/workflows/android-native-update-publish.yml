@@ -88,8 +88,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          BOARDGAME_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.BOARDGAME_DEPLOY_SSH_PRIVATE_KEY }}
-          BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS }}
+          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL || 'https://assets-upload.easyboardgame.top/asset-publish' }}
+          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
           DRY_RUN: ${{ steps.params.outputs.dry_run }}
         run: |
           missing=()
@@ -101,8 +101,7 @@ jobs:
           [[ -n "${ANDROID_KEY_PASSWORD}" ]] || missing+=("ANDROID_KEY_PASSWORD")
 
           if [[ "${DRY_RUN}" != "true" ]]; then
-            [[ -n "${BOARDGAME_DEPLOY_SSH_PRIVATE_KEY}" ]] || missing+=("BOARDGAME_DEPLOY_SSH_PRIVATE_KEY")
-            [[ -n "${BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS}" ]] || missing+=("BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS")
+            [[ -n "${ASSET_SERVER_UPLOAD_TOKEN}" ]] || missing+=("ASSET_SERVER_UPLOAD_TOKEN")
           fi
 
           if [[ ${#missing[@]} -eq 0 ]]; then
@@ -196,25 +195,11 @@ jobs:
         if: steps.prereq.outputs.ready == 'true'
         run: npm run mobile:android:build:release
 
-      - name: Prepare asset publish SSH
-        if: steps.prereq.outputs.ready == 'true' && steps.params.outputs.dry_run != 'true'
-        env:
-          BOARDGAME_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.BOARDGAME_DEPLOY_SSH_PRIVATE_KEY }}
-          BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "${BOARDGAME_DEPLOY_SSH_PRIVATE_KEY}" > "${RUNNER_TEMP}/boardgame-asset-publish"
-          chmod 600 "${RUNNER_TEMP}/boardgame-asset-publish"
-          printf '%s\n' "${BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS}" > "${RUNNER_TEMP}/boardgame-known-hosts"
-
       - name: Publish native update package
         if: steps.prereq.outputs.ready == 'true'
         env:
-          ASSET_SERVER_UPLOAD_URL: ''
-          ASSET_SERVER_UPLOAD_TOKEN: ''
-          ASSET_SERVER_SSH_TARGET: admin@8.148.71.102
-          ASSET_SERVER_SSH_KEY_PATH: ${{ runner.temp }}/boardgame-asset-publish
-          ASSET_SERVER_SSH_KNOWN_HOSTS_PATH: ${{ runner.temp }}/boardgame-known-hosts
+          ASSET_SERVER_UPLOAD_URL: ${{ vars.ASSET_SERVER_UPLOAD_URL || secrets.ASSET_SERVER_UPLOAD_URL || 'https://assets-upload.easyboardgame.top/asset-publish' }}
+          ASSET_SERVER_UPLOAD_TOKEN: ${{ secrets.ASSET_SERVER_UPLOAD_TOKEN || secrets.BG_ASSET_PUBLISH_TOKEN }}
         run: |
           args=(--channel "${{ steps.params.outputs.channel }}")
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then

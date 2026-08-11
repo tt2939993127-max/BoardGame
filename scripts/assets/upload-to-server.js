@@ -17,7 +17,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { extname, join, relative, sep } from 'path';
 import { spawnSync } from 'child_process';
 import mime from 'mime-types';
-import { publishPrimaryAssetBatch } from './publish-primary-assets.mjs';
+import {
+  fetchAssetPublishInventory,
+  publishPrimaryAssetBatch,
+  resolveAssetUploadUrl,
+} from './publish-primary-assets.mjs';
 
 const COMPRESSED_EXTS = new Set(['.ogg', '.webp']);
 const COMPRESSED_DIR_NAME = 'compressed';
@@ -367,6 +371,10 @@ function computeMD5(buffer) {
   return createHash('md5').update(buffer).digest('hex');
 }
 
+function computeSHA256(buffer) {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
 async function main() {
   assertSafeNpmArgumentForwarding();
 
@@ -389,7 +397,20 @@ async function main() {
   const uploadedPackageManagedGames = new Set();
   let hasUploadedSharedAudioAssets = false;
 
+  const uploadUrl = resolveAssetUploadUrl();
+  const remoteInventory = uploadUrl
+    ? await fetchAssetPublishInventory({
+      uploadUrl,
+      allowUnauthenticated: process.env.ASSET_SERVER_UPLOAD_ALLOW_UNAUTHENTICATED === '1',
+    })
+    : null;
+
   console.log(`找到 ${files.length} 个符合条件的本地文件`);
+  if (remoteInventory) {
+    console.log(`已获取服务器对象清单：${remoteInventory.size} 个 official 对象`);
+  } else {
+    console.log('当前使用 SSH 发布，跳过远端差异查询；将发布扫描到的全部对象');
+  }
   if (forceUpload) {
     console.log('强制模式：计划发布所有本地文件');
   }
@@ -401,10 +422,22 @@ async function main() {
   }
 
   const uploadPlan = [];
+  let skippedUnchanged = 0;
   for (const file of files) {
     const relativePath = relative(assetsDir, file);
     const serverKey = `official/${relativePath.replace(/\\/g, '/')}`;
     const fileContent = readFileSync(file);
+    const sha256 = computeSHA256(fileContent);
+    const remoteObject = remoteInventory?.get(serverKey);
+    if (
+      !forceUpload
+      && remoteObject
+      && remoteObject.size === fileContent.length
+      && remoteObject.sha256 === sha256
+    ) {
+      skippedUnchanged += 1;
+      continue;
+    }
     uploadPlan.push({
       key: serverKey,
       body: fileContent,
@@ -413,6 +446,7 @@ async function main() {
       cacheControl: CACHE_CONTROL_MEDIA,
       relativePath,
       md5: computeMD5(fileContent),
+      sha256,
       packageManagedGameId: resolvePackageManagedGameId(relativePath, packageManagedGames),
     });
   }
@@ -453,9 +487,9 @@ async function main() {
   }
 
   if (checkOnly) {
-    console.log(`检查完成：待发布 ${uploadPlan.length} 个对象`);
+    console.log(`检查完成：待发布 ${uploadPlan.length} 个对象，跳过未变化 ${skippedUnchanged} 个`);
   } else {
-    console.log(`发布完成：服务器对象 ${uploadPlan.length} 个`);
+    console.log(`发布完成：服务器对象 ${uploadPlan.length} 个，跳过未变化 ${skippedUnchanged} 个`);
   }
 }
 

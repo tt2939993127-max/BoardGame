@@ -1,14 +1,48 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createReadStream, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+    fetchAssetPublishInventory,
     publishPrimaryAssetBatch,
     publishStagedAssetsToUploadEndpoint,
+    resolveAssetUploadUrl,
+    resolveAssetPublishSshConfig,
     stagePrimaryAssetUploads,
 } from './publish-primary-assets.mjs';
+
+test('服务器发布清单查询返回可比较的对象哈希', async () => {
+    const server = createServer((req, res) => {
+        assert.equal(req.method, 'GET');
+        assert.equal(req.url, '/asset-publish');
+        assert.equal(req.headers.authorization, 'Bearer inventory-token');
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+            ok: true,
+            releaseId: 'release-1',
+            objects: [
+                { key: 'official/common/test.webp', size: 4, sha256: 'abcd' },
+            ],
+        }));
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+
+    try {
+        const inventory = await fetchAssetPublishInventory({
+            uploadUrl: `http://127.0.0.1:${address.port}/asset-publish`,
+            token: 'inventory-token',
+        });
+        assert.deepEqual(inventory.get('official/common/test.webp'), {
+            size: 4,
+            sha256: 'abcd',
+        });
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
+});
 
 test('服务器发布成功即完成，不产生对象存储灾备状态', async () => {
     let publishedObjects = [];
@@ -94,6 +128,50 @@ test('拒绝越出 official 目录的对象 key', async () => {
     );
 });
 
+test('素材 SSH 发布使用显式 known_hosts，私钥文件可选', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'boardgame-asset-ssh-config-'));
+    const privateKeyPath = path.join(root, 'id_ed25519');
+    const knownHostsPath = path.join(root, 'known_hosts');
+    writeFileSync(privateKeyPath, 'test-private-key');
+    writeFileSync(
+        knownHostsPath,
+        '8.148.71.102 ssh-rsa test-public-key\n',
+    );
+
+    try {
+        const config = resolveAssetPublishSshConfig({ privateKeyPath, knownHostsPath });
+        assert.equal(config.privateKeyPath, privateKeyPath);
+        assert.equal(config.knownHostsPath, knownHostsPath);
+        const agentConfig = resolveAssetPublishSshConfig({
+            privateKeyPath: path.join(root, 'missing-id_ed25519'),
+            knownHostsPath,
+        });
+        assert.equal(agentConfig.privateKeyPath, '');
+        assert.throws(
+            () => resolveAssetPublishSshConfig({ privateKeyPath, knownHostsPath: path.join(root, 'wrong-known-hosts') }),
+            /缺少素材发布 known_hosts/,
+        );
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('无 SSH 的协作者只配置素材 token 即使用正式 HTTP 上传入口', () => {
+    assert.equal(
+        resolveAssetUploadUrl({ uploadUrl: '', uploadToken: 'asset-token' }),
+        'https://assets-upload.easyboardgame.top/asset-publish',
+    );
+    assert.equal(
+        resolveAssetUploadUrl({ uploadUrl: 'https://internal.example/asset-publish', uploadToken: 'asset-token' }),
+        'https://internal.example/asset-publish',
+    );
+    assert.equal(resolveAssetUploadUrl({ uploadUrl: '', uploadToken: '' }), '');
+    assert.equal(
+        resolveAssetUploadUrl({ uploadUrl: '', uploadToken: '', allowUnauthenticated: true }),
+        'https://assets-upload.easyboardgame.top/asset-publish',
+    );
+});
+
 test('通过专用 HTTP 上传入口分块提交 staging tar 后再完成发布', async () => {
     const receivedChunks = [];
     let receivedAuthorization = '';
@@ -149,6 +227,41 @@ test('通过专用 HTTP 上传入口分块提交 staging tar 后再完成发布'
         assert.ok(receivedChunks.every((chunk) => chunk.contentType === 'application/octet-stream'));
         assert.ok(receivedChunks.every((chunk) => chunk.bytes.length > 0 && chunk.bytes.length <= 128));
         assert.equal(completed, true);
+    } finally {
+        rmSync(staged.stagingRoot, { recursive: true, force: true });
+        await new Promise((resolve) => server.close(resolve));
+    }
+});
+
+test('匿名 HTTP 上传模式不发送 Authorization 头', async () => {
+    const receivedAuthorization = [];
+    const server = createServer((req, res) => {
+        receivedAuthorization.push(req.headers.authorization || '');
+        req.resume();
+        req.on('end', () => {
+            res.writeHead(req.url?.includes('/complete/') ? 200 : 204);
+            res.end(req.url?.includes('/complete/') ? '{"ok":true}' : '');
+        });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const staged = await stagePrimaryAssetUploads([
+        {
+            key: 'official/common/test/anonymous-http-upload.json',
+            body: '{}\n',
+            contentType: 'application/json',
+        },
+    ]);
+
+    try {
+        await publishStagedAssetsToUploadEndpoint({
+            stagingRoot: staged.stagingRoot,
+            uploadUrl: `http://127.0.0.1:${address.port}/asset-publish`,
+            token: '',
+            allowUnauthenticated: true,
+        });
+        assert.ok(receivedAuthorization.length > 0);
+        assert.ok(receivedAuthorization.every((value) => value === ''));
     } finally {
         rmSync(staged.stagingRoot, { recursive: true, force: true });
         await new Promise((resolve) => server.close(resolve));

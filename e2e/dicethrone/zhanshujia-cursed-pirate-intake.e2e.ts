@@ -855,7 +855,7 @@ const dismissCardSpotlightIfPresent = async (page: Page) => {
 };
 
 const dismissAttackShowcaseIfVisible = async (page: Page) => {
-    const foregroundModal = page.locator('#modal-root [role="dialog"], [data-testid="token-response-modal"]');
+    const foregroundModal = page.locator('#modal-root [role="dialog"]');
     const hasForegroundModal = await foregroundModal.first().isVisible({ timeout: 1000 }).catch(() => false);
     if (hasForegroundModal) return;
 

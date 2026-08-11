@@ -1,4 +1,5 @@
 import { createDisplayOnlySettlement, registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import type {
     BonusDamageAddedEvent,
     BonusDieRolledEvent,
@@ -9,11 +10,14 @@ import type {
     TokenGrantedEvent,
 } from '../events';
 import { SAMURAI_DICE_FACE_IDS, TOKEN_IDS } from '../ids';
-import { getActiveDice, getFaceCounts, getMaxDuplicateValueCount, getOpponents, getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getFaceCounts, getMaxDuplicateValueCount, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 import type { PendingInteraction } from '../core-types';
 
 const FACE = SAMURAI_DICE_FACE_IDS;
+const SAMURAI_BACK_STRIKE_SETTLEMENT_ID = 'samurai-back-strike-use';
+const SAMURAI_MASAMUNE_SETTLEMENT_ID = 'samurai-masamune';
+const SAMURAI_RIGHTEOUSNESS_SETTLEMENT_ID = 'samurai-righteousness';
 
 function createGrantTokenEvent(
     state: CustomActionContext['state'],
@@ -88,7 +92,7 @@ function handleBackStrikeUse({ ctx, state, random, timestamp }: CustomActionCont
     const face = getPlayerDieFace(state, ownerId, roll) ?? FACE.KATANA;
     const damage = Math.ceil(roll / 2);
 
-    const events: DiceThroneEvent[] = [{
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: {
             value: roll,
@@ -100,17 +104,14 @@ function handleBackStrikeUse({ ctx, state, random, timestamp }: CustomActionCont
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent];
-
-    const damageCalc = createDamageCalculation({
-        source: { playerId: ownerId, abilityId: 'samurai-back-strike-reflect' },
-        target: { playerId: originalAttackerId },
-        baseDamage: damage,
-        state,
-        timestamp: timestamp + 1,
-    });
-    events.push(...damageCalc.toEvents());
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        'samurai-back-strike-reflect',
+        ownerId,
+        originalAttackerId,
+        [{ index: 0, value: roll, face: face as any, effectKey: 'bonusDie.effect.samuraiBackStrikeDie', effectParams: { value: roll, damage } }],
+        timestamp + 1,
+        { customResolutionId: SAMURAI_BACK_STRIKE_SETTLEMENT_ID },
+    )];
 }
 
 function handleStandTall({ targetId, ctx, sourceAbilityId, state, timestamp }: CustomActionContext, suppressSelfShame: boolean): DiceThroneEvent[] {
@@ -229,6 +230,10 @@ function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, ra
         return { index, value, face };
     });
 
+    const katanaCount = dice.filter(die => die.face === FACE.KATANA).length;
+    const shameCount = dice.filter(die => die.face === FACE.HELM).length;
+    const retributionCount = dice.filter(die => die.face === FACE.RISING_SUN).length;
+
     const events: DiceThroneEvent[] = dice.map((die, index) => ({
         type: 'BONUS_DIE_ROLLED',
         payload: {
@@ -241,38 +246,6 @@ function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, ra
         timestamp: timestamp + index,
     } as BonusDieRolledEvent));
 
-    const katanaCount = dice.filter(die => die.face === FACE.KATANA).length;
-    const shameCount = dice.filter(die => die.face === FACE.HELM).length;
-    const retributionCount = dice.filter(die => die.face === FACE.RISING_SUN).length;
-
-    if (katanaCount > 0) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: katanaCount,
-                // 只有攻击修正卡牌才应计入 attackModifierBonusDamage。
-                // - `card-zanshin`：攻击修正卡，应该显示在“攻击修正”徽章/汇总里。
-                // - `masamune` / `masamune-2-*`：角色技能本体，不应被误归类为“攻击修正卡加伤”。
-                sourceCardId: sourceAbilityId.startsWith('card-') ? sourceAbilityId : undefined,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 11,
-        } as BonusDamageAddedEvent);
-    }
-
-    const shameEvent = createGrantTokenEvent(state, defenderId, TOKEN_IDS.SHAME, shameCount, sourceAbilityId, timestamp + 12);
-    const appliedShameCount = shameEvent?.payload.amount ?? 0;
-    if (shameEvent) {
-        events.push(shameEvent);
-    }
-
-    const retributionEvent = createGrantTokenEvent(state, attackerId, TOKEN_IDS.SAMURAI_RETRIBUTION, retributionCount, sourceAbilityId, timestamp + 13);
-    const grantedRetributionCount = retributionEvent?.payload.amount ?? 0;
-    if (retributionEvent) {
-        events.push(retributionEvent);
-    }
-
     events.push(createDisplayOnlySettlement(
         sourceAbilityId,
         attackerId,
@@ -280,14 +253,9 @@ function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, ra
         dice,
         timestamp + 10,
         {
+            customResolutionId: SAMURAI_MASAMUNE_SETTLEMENT_ID,
             summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
-            summaryEffectParams: {
-                katanaCount,
-                shameCount,
-                appliedShameCount,
-                retributionCount,
-                grantedRetributionCount,
-            },
+            summaryEffectParams: { katanaCount, shameCount, retributionCount },
         },
     ));
 
@@ -328,41 +296,8 @@ function handleRighteousness({ attackerId, ctx, sourceAbilityId, state, timestam
         defenderId,
         [{ index: 0, value, face, effectKey: effectKeyMap[face] ?? 'bonusDie.effect.default' }],
         timestamp + 1,
+        { customResolutionId: SAMURAI_RIGHTEOUSNESS_SETTLEMENT_ID },
     ));
-
-    if (face === FACE.KATANA) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: 2,
-                sourceCardId: sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2,
-        } as BonusDamageAddedEvent);
-        return events;
-    }
-
-    if (face === FACE.HELM) {
-        const shameEvent = createGrantTokenEvent(state, defenderId, TOKEN_IDS.SHAME, 2, sourceAbilityId, timestamp + 2);
-        if (shameEvent) {
-            events.push(shameEvent);
-        }
-        return events;
-    }
-
-    const retributionEvent = createGrantTokenEvent(
-        state,
-        attackerId,
-        TOKEN_IDS.SAMURAI_RETRIBUTION,
-        1,
-        sourceAbilityId,
-        timestamp + 2,
-    );
-    if (retributionEvent) {
-        events.push(retributionEvent);
-    }
 
     return events;
 }
@@ -393,6 +328,68 @@ function handleYouShouldBeAshamedResolve({ targetId, state, sourceAbilityId, tim
 }
 
 export function registerSamuraiCustomActions(): void {
+    registerBonusDiceSettlementHandler(SAMURAI_BACK_STRIKE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        const damage = die ? Math.ceil(die.value / 2) : 0;
+        return {
+            totalDamage: 0,
+            followupEvents: damage > 0
+                ? createDamageCalculation({
+                    source: { playerId: settlement.attackerId, abilityId: 'samurai-back-strike-reflect' },
+                    target: { playerId: settlement.targetId },
+                    baseDamage: damage,
+                    state,
+                    timestamp,
+                }).toEvents()
+                : [],
+        };
+    });
+    registerBonusDiceSettlementHandler(SAMURAI_MASAMUNE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const dice = getPendingBonusSettlementDice(settlement);
+        const katanaCount = dice.filter(die => die.face === FACE.KATANA).length;
+        const shameCount = dice.filter(die => die.face === FACE.HELM).length;
+        const retributionCount = dice.filter(die => die.face === FACE.RISING_SUN).length;
+        const followupEvents: DiceThroneEvent[] = [];
+        if (katanaCount > 0) {
+            followupEvents.push({
+                type: 'BONUS_DAMAGE_ADDED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    amount: katanaCount,
+                    sourceCardId: settlement.sourceAbilityId.startsWith('card-') ? settlement.sourceAbilityId : undefined,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as BonusDamageAddedEvent);
+        }
+        const shameEvent = createGrantTokenEvent(state, settlement.targetId, TOKEN_IDS.SHAME, shameCount, settlement.sourceAbilityId, timestamp + 1);
+        if (shameEvent) followupEvents.push(shameEvent);
+        const retributionEvent = createGrantTokenEvent(state, settlement.attackerId, TOKEN_IDS.SAMURAI_RETRIBUTION, retributionCount, settlement.sourceAbilityId, timestamp + 2);
+        if (retributionEvent) followupEvents.push(retributionEvent);
+        return { totalDamage: 0, followupEvents };
+    });
+    registerBonusDiceSettlementHandler(SAMURAI_RIGHTEOUSNESS_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === FACE.KATANA) {
+            return {
+                totalDamage: 0,
+                followupEvents: [{
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: { playerId: settlement.attackerId, amount: 2, sourceCardId: settlement.sourceAbilityId },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as BonusDamageAddedEvent],
+            };
+        }
+        if (die.face === FACE.HELM) {
+            const shameEvent = createGrantTokenEvent(state, settlement.targetId, TOKEN_IDS.SHAME, 2, settlement.sourceAbilityId, timestamp);
+            return { totalDamage: 0, followupEvents: shameEvent ? [shameEvent] : [] };
+        }
+        const retributionEvent = createGrantTokenEvent(state, settlement.attackerId, TOKEN_IDS.SAMURAI_RETRIBUTION, 1, settlement.sourceAbilityId, timestamp);
+        return { totalDamage: 0, followupEvents: retributionEvent ? [retributionEvent] : [] };
+    });
+
     registerCustomActionHandler('samurai-bushido-start-turn', handleBushidoStartTurn, {
         categories: ['passive', 'token'],
     });

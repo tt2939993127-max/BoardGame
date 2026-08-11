@@ -283,11 +283,81 @@ export function emitDestroyWithTriggers(
 // 事件后处理
 // ============================================================================
 
+function getDestroyedUnitFromEvent(
+  core: SummonerWarsCore,
+  event: GameEvent,
+): { unit: BoardUnit; position: CellCoord } | undefined {
+  const payload = event.payload as {
+    position?: CellCoord;
+    owner?: PlayerId;
+    instanceId?: string;
+    cardId?: string;
+  };
+  if (!payload.position) return undefined;
+
+  return findBoardUnitByInstanceId(core, payload.instanceId ?? '')
+    ?? (payload.cardId ? findBoardUnitByCardId(core, payload.cardId, payload.owner) : undefined)
+    ?? (() => {
+      const unit = core.board[payload.position!.row]?.[payload.position!.col]?.unit;
+      return unit ? { unit, position: payload.position! } : undefined;
+    })();
+}
+
+function getAbilityTriggerKey(sourceUnitId: string, abilityId: string): string {
+  return `${sourceUnitId}:${abilityId}`;
+}
+
+function addTriggeredAbilityKeys(keys: Set<string>, events: GameEvent[]): void {
+  for (const event of events) {
+    if (event.type !== SW_EVENTS.ABILITY_TRIGGERED) continue;
+    const payload = event.payload as { abilityId?: string; sourceUnitId?: string };
+    if (payload.abilityId && payload.sourceUnitId) {
+      keys.add(getAbilityTriggerKey(payload.sourceUnitId, payload.abilityId));
+    }
+  }
+}
+
+function collectTriggeredAbilityKeys(events: GameEvent[]): Set<string> {
+  const keys = new Set<string>();
+  addTriggeredAbilityKeys(keys, events);
+  return keys;
+}
+
+function getMissingDeathTriggerEvents(
+  core: SummonerWarsCore,
+  destroyEvent: GameEvent,
+  triggeredAbilityKeys: Set<string>,
+): GameEvent[] {
+  const destroyedUnit = getDestroyedUnitFromEvent(core, destroyEvent);
+  if (!destroyedUnit) return [];
+
+  const deathAbilities = getUnitAbilities(destroyedUnit.unit, core)
+    .map(abilityId => abilityRegistry.get(abilityId))
+    .filter((ability): ability is NonNullable<typeof ability> => ability?.trigger === 'onDeath');
+  const missingAbilities = deathAbilities.filter(ability => {
+    const key = getAbilityTriggerKey(destroyedUnit.unit.instanceId, ability.id);
+    if (triggeredAbilityKeys.has(key)) return false;
+    triggeredAbilityKeys.add(key);
+    return true;
+  });
+  if (missingAbilities.length === 0) return [];
+
+  const deathContext: AbilityContext = {
+    state: core,
+    sourceUnit: destroyedUnit.unit,
+    sourcePosition: destroyedUnit.position,
+    ownerId: destroyedUnit.unit.owner,
+    timestamp: destroyEvent.timestamp,
+  };
+  return triggerAbilities('onDeath', deathContext);
+}
+
 /**
  * 后处理：自动补全死亡检测（支持连锁）
  *
  * 遍历事件列表，对每个 UNIT_DAMAGED 模拟累计伤害，
- * 若致死且该单位尚无 UNIT_DESTROYED 事件，则自动注入完整触发链。
+ * 若致死且该单位尚无 UNIT_DESTROYED 事件，则自动注入完整触发链；
+ * 对直接产生的 UNIT_DESTROYED 事件，也补齐尚未发出的 onDeath 触发。
  * 注入的事件也会被后续迭代处理，因此支持连锁死亡。
  */
 export function postProcessDeathChecks(
@@ -311,12 +381,24 @@ export function postProcessDeathChecks(
   }
 
   const result: GameEvent[] = [...events];
+  const triggeredDeathAbilityKeys = collectTriggeredAbilityKeys(result);
   let workingState = originalCore;
   let idx = 0;
   const maxEvents = events.length + 200; // 安全上限
 
   while (idx < result.length && result.length < maxEvents) {
     const event = result[idx];
+
+    if (event.type === SW_EVENTS.UNIT_DESTROYED) {
+      const deathEvents = getMissingDeathTriggerEvents(
+        originalCore,
+        event,
+        triggeredDeathAbilityKeys,
+      );
+      if (deathEvents.length > 0) {
+        result.splice(idx + 1, 0, ...deathEvents);
+      }
+    }
 
     if (event.type === SW_EVENTS.UNIT_DAMAGED) {
       const { position, damage, sourcePlayerId, skipMagicReward } = event.payload as {
@@ -341,6 +423,7 @@ export function postProcessDeathChecks(
             triggerOnDeath: true,
           });
           result.splice(idx + 1, 0, ...destroyEvents);
+          addTriggeredAbilityKeys(triggeredDeathAbilityKeys, destroyEvents);
           destroyedUnitIds.add(unit.instanceId);
         }
       } else if (structure && !destroyedStructureIds.has(structure.cardId)) {

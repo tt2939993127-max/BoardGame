@@ -810,6 +810,7 @@ export const TokenBadge = ({
     atlas,
     onClick,
     clickable = false,
+    suppressTooltip = false,
     dataTestId,
 }: {
     tokenId: string;
@@ -821,6 +822,8 @@ export const TokenBadge = ({
     atlas?: StatusAtlases | null;
     onClick?: () => void;
     clickable?: boolean;
+    /** 需要持续露出临近操作条时，避免 hover 说明遮住该操作。 */
+    suppressTooltip?: boolean;
     dataTestId?: string;
 }) => {
     const { t } = useTranslation('game-dicethrone');
@@ -860,6 +863,7 @@ export const TokenBadge = ({
             data-token-id={tokenId}
             data-token-amount={amount}
             data-token-max={maxAmount}
+            data-token-clickable={isClickable ? 'true' : 'false'}
         >
             {isClickable && (
                 <button
@@ -897,12 +901,14 @@ export const TokenBadge = ({
                 </div>
             ) : null}
 
-            <InfoTooltip
-                title={`${info.name}${maxAmount != null && maxAmount > 1 ? ` ${amount}/${maxAmount}` : amount > 1 ? ` ×${amount}` : ''}`}
-                content={info.description}
-                isVisible={isHovered}
-                position="right"
-            />
+            {!suppressTooltip && (
+                <InfoTooltip
+                    title={`${info.name}${maxAmount != null && maxAmount > 1 ? ` ${amount}/${maxAmount}` : amount > 1 ? ` ×${amount}` : ''}`}
+                    content={info.description}
+                    isVisible={isHovered}
+                    position="right"
+                />
+            )}
         </div>
     );
 };
@@ -919,6 +925,7 @@ export const TokensContainer = ({
     clickableTokens,
     tokenDefinitions,
     tokenStackLimits,
+    suppressTooltips = false,
     testIdPrefix,
 }: {
     tokens: Record<string, number>;
@@ -935,6 +942,8 @@ export const TokensContainer = ({
     tokenDefinitions?: TokenDef[];
     /** 玩家级别的堆叠上限覆盖（技能可永久提高上限） */
     tokenStackLimits?: Record<string, number>;
+    /** 当前临近操作条需要保持可读时，收起 Token 的 hover 说明。 */
+    suppressTooltips?: boolean;
     /** E2E 可见性断言前缀，例如 dt-player-0-token */
     testIdPrefix?: string;
 }) => {
@@ -972,6 +981,7 @@ export const TokensContainer = ({
                         atlas={atlas}
                         onClick={isClickable ? () => onTokenClick?.(tokenId) : undefined}
                         clickable={isClickable}
+                        suppressTooltip={suppressTooltips}
                         dataTestId={testIdPrefix ? `${testIdPrefix}-${tokenId}` : undefined}
                     />
                 );

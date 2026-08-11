@@ -42,10 +42,6 @@ vi.mock('../../../components/common/media/OptimizedImage', () => ({
     OptimizedImage: ({ alt }: { alt?: string }) => <img alt={alt ?? ''} />,
 }));
 
-vi.mock('../BonusDieOverlay', () => ({
-    BonusDieOverlay: () => null,
-}));
-
 vi.mock('../CardSpotlightOverlay', () => ({
     CardSpotlightOverlay: () => null,
 }));
@@ -107,13 +103,6 @@ describe('BoardOverlays 放大预览', () => {
         cardSpotlightQueue: [],
         onCardSpotlightClose: vi.fn(),
         opponentHeaderRef: { current: null },
-        bonusDie: { show: false },
-        onBonusDieClose: vi.fn(),
-        suppressBonusDieOverlay: true,
-        pendingBonusDiceSettlement: undefined,
-        canRerollBonusDie: false,
-        onRerollBonusDie: undefined,
-        onSkipBonusDiceReroll: undefined,
         isGameOver: false,
         gameoverResult: null,
         playerID: '0',
@@ -126,7 +115,6 @@ describe('BoardOverlays 放大预览', () => {
         selectedCharacters: {} as BoardOverlaysProps['selectedCharacters'],
         hostPlayerId: '0',
         tutorialSpotlightAutoCloseDelayMs: undefined,
-        bonusDieManualCloseOnly: false,
         ...overrides,
     });
 

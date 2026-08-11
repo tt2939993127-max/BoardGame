@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initAllAbilities, resetAbilityInit } from '../../abilities';
 import { hasActiveBaseAbility, hasBaseAbility, triggerActiveBaseAbility } from '../../domain/baseAbilities';
+import { scoreOneBase } from '../../domain';
 import { getEffectiveBreakpoint, getEffectivePower } from '../../domain/ongoingModifiers';
 import { SU_COMMANDS, SU_EVENTS } from '../../domain/types';
 import {
@@ -18,6 +19,7 @@ import {
     makePlayer,
     makeState,
     respondToPrompt,
+    respondToPromptOptions,
     respondToPromptOption,
     triggerBaseAbilityWithMS,
 } from '../helpers';
@@ -59,6 +61,48 @@ describe('迪士尼四派系代表性玩法行为', () => {
         expect(hasBaseAbility('base_halloween_town', 'afterScoring')).toBe(true);
         expect(hasBaseAbility('base_spiral_hill', 'afterScoring')).toBe(true);
         expect(hasBaseAbility('base_the_dump', 'afterScoring')).toBe(true);
+    });
+
+    it('丛林乐园：计分弃牌后从真实反应选择进入 +1 力量标记', () => {
+        const core = makeState({
+            bases: [makeBase('base_jungle_paradise', [
+                makeMinion('discarded-minion', 'lion_king_simba', '0', 20),
+                makeMinion('target-minion', 'lion_king_zazu', '0', 2),
+            ])],
+        });
+        const result = scoreOneBase(
+            core,
+            0,
+            [],
+            '0',
+            1000,
+            FIXED_RANDOM,
+            makeMatchState(core),
+        );
+
+        expect(result.matchState).toBeDefined();
+        const reactionPrompt = getReactionPrompt(result.matchState!);
+        const jungleOption = getReactionPromptOptionBySourceDefId(
+            result.matchState!,
+            reactionPrompt,
+            'base_jungle_paradise',
+        );
+        const opened = respondToPrompt(result.matchState!, jungleOption.id, '0', FIXED_RANDOM);
+        const targetPrompt = getSimpleChoicePrompt(opened.finalState, 'disney_four_factions_prompt');
+        const resolved = respondToPromptOption(
+            opened.finalState,
+            option => option.value?.minionUid === 'target-minion',
+            '丛林乐园选择目标随从',
+            '0',
+            FIXED_RANDOM,
+        );
+
+        expect(targetPrompt).toBeTruthy();
+        expect(resolved.finalState.core.bases[0].minions.find(minion => minion.uid === 'target-minion')?.powerCounters).toBe(1);
+        expect(resolved.events).toContainEqual(expect.objectContaining({
+            type: SU_EVENTS.POWER_COUNTER_ADDED,
+            payload: expect.objectContaining({ minionUid: 'target-minion', amount: 1 }),
+        }));
     });
 
     it('从手牌弃牌会记录本回合弃牌次数，回合开始时清空', () => {
@@ -183,6 +227,48 @@ describe('迪士尼四派系代表性玩法行为', () => {
         expect(discarded.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(false);
     });
 
+    it('野兽：天赋按野兽自身选择弃牌并放置力量指示物，不受同基地其他随从顺序影响', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('keep-card', 'aladdin_wish', 'action', '0'),
+                        makeCard('cost-card', 'beauty_and_the_beast_discover_the_library', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase('test_base', [
+                makeMinion('other-minion', 'beauty_and_the_beast_belle', '0', 5),
+                makeMinion('beast', 'beauty_and_the_beast_beast', '0', 4),
+            ])],
+        });
+
+        const result = invokeRegisteredAbilityContract('beauty_and_the_beast_beast', 'talent', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            cardUid: 'beast',
+            defId: 'beauty_and_the_beast_beast',
+            baseIndex: 0,
+            random: FIXED_RANDOM,
+            now: 24,
+        });
+        const prompt = getSimpleChoicePrompt(result.matchState!, 'beauty_and_the_beast_discard_hand');
+        expect(getPromptOptions(prompt).map(option => option.value?.cardUid)).toEqual(['keep-card', 'cost-card']);
+
+        const resolved = respondToPromptOption(
+            result.matchState!,
+            option => option.value?.cardUid === 'cost-card',
+            '野兽选择弃掉指定手牌',
+            '0',
+            FIXED_RANDOM,
+        );
+        expect(resolved.finalState.core.players['0'].hand.map(card => card.uid)).toEqual(['keep-card']);
+        expect(resolved.finalState.core.players['0'].discard.map(card => card.uid)).toEqual(['cost-card']);
+        expect(resolved.finalState.core.bases[0].minions.find(minion => minion.uid === 'beast')?.powerCounters).toBe(1);
+    });
+
     it('加斯顿提升基地爆破点，并可弃两张牌后离场', () => {
         const core = makeState({
             players: {
@@ -214,9 +300,16 @@ describe('迪士尼四派系代表性玩法行为', () => {
             random: FIXED_RANDOM,
             now: 30,
         });
-        const afterTalent = applyEvents(core, talent.events);
-        expect(afterTalent.bases[0].ongoingActions).toEqual([]);
-        expect(afterTalent.players['0'].discard.map(card => card.uid).sort()).toEqual([
+        const prompt = getSimpleChoicePrompt(talent.matchState!, 'beauty_and_the_beast_discard_hand');
+        expect(getPromptOptions(prompt).map(option => option.value?.cardUid).filter(Boolean)).toEqual(['cost-a', 'cost-b']);
+        const resolved = respondToPromptOptions(
+            talent.matchState!,
+            ['discard:cost-a', 'discard:cost-b'],
+            '0',
+            FIXED_RANDOM,
+        );
+        expect(resolved.finalState.core.bases[0].ongoingActions).toEqual([]);
+        expect(resolved.finalState.core.players['0'].discard.map(card => card.uid).sort()).toEqual([
             'cost-a',
             'cost-b',
             'gaston-action',

@@ -6,6 +6,7 @@ import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore, Die } from './domain';
 import { getUsableTokenAmountForTiming, getUsableTokensForTiming } from './domain/tokenResponse';
+import { getTokenUseOptions } from './domain/tokenTypes';
 import {
     ATTACK_SNAPSHOT_DIE_ID_OFFSET,
     checkPlayCard,
@@ -66,11 +67,6 @@ import { useSpectatorMoves } from '../../engine';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useAnimationEffects } from './hooks/useAnimationEffects';
 import { useCardSpotlight } from './hooks/useCardSpotlight';
-import {
-    resolveInteractivePendingBonusDiceSettlement,
-    shouldSuppressPendingDisplayOnlyBonusOverlay,
-    shouldSuppressForegroundBonusDieOverlay,
-} from './ui/bonusDiceOverlayVisibility';
 import { useActiveModifiers } from './hooks/useActiveModifiers';
 import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
@@ -96,54 +92,20 @@ import { getAbilityChoiceText } from './ui/abilityChoiceText';
 import { canInteractDiceForCurrentBoard, getRailDiceForCurrentBoard, shouldShowRailDiceTray } from './ui/diceStagePolicy';
 import { canInteractHandForCurrentBoard, canPlayHandCardsForCurrentBoard } from './ui/handPlayPolicy';
 import { useSyncedModalStackEntry } from '../../hooks/ui/useSyncedModalStackEntry';
-import { TokenResponseModal } from './ui/TokenResponseModal';
 import { InteractionOverlay } from './ui/InteractionOverlay';
 import { ChoiceModal } from './ui/ChoiceModal';
 import { CompareRollOverlay } from './ui/CompareRollOverlay';
-import { BonusDieOverlay } from './ui/BonusDieOverlay';
 import { DefenderChoiceModal } from './ui/DefenderChoiceModal';
-import { createScopedLogger } from '../../lib/logger';
 import { findMatchPlayerInfo } from '../../engine/transport/matchPlayers';
 import { canRerollBonusDiceSettlement } from './domain/bonusDiceSettlement';
 
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
-const boardBonusDieLogger = createScopedLogger('DT_BOARD_BONUS_DIE');
 
 // 所有奖励骰都由右侧骰盘承接；是否允许重投或改骰由结算自身的规则决定，
 // 而不是由中央展示层决定。
 const shouldUseRightTrayForPendingBonusDice = (settlement?: PendingBonusDiceSettlement): boolean => (
     Boolean(settlement)
 );
-
-const createPendingBonusDiceTrayDice = (
-    G: DiceThroneCore,
-    settlement: PendingBonusDiceSettlement,
-    displayOnly: boolean,
-): Die[] => {
-    const attackerCharacterId = G.players[settlement.attackerId]?.characterId;
-    const definitionId = attackerCharacterId && attackerCharacterId !== 'unselected'
-        ? `${attackerCharacterId}-dice`
-        : undefined;
-
-    return getPendingBonusSettlementDice(settlement).map((bonusDie) => {
-        const existingDie = G.dice.find((die) => die.id === bonusDie.index) ?? G.dice[bonusDie.index];
-        return {
-            ...(existingDie ?? {
-                id: bonusDie.index,
-                value: bonusDie.value,
-                isKept: false,
-            }),
-            id: bonusDie.index,
-            definitionId: definitionId ?? existingDie?.definitionId,
-            value: bonusDie.value,
-            symbol: bonusDie.face ?? existingDie?.symbol ?? null,
-            symbols: bonusDie.face ? [bonusDie.face] : (existingDie?.symbols ?? []),
-            isKept: false,
-            ownerId: settlement.attackerId,
-            displayOnly,
-        } as Die;
-    });
-};
 
 /** 教程 targetId → 对应的命令类型映射（用于白名单放行） */
 const TUTORIAL_TARGET_COMMAND_MAP: Record<string, string[]> = {
@@ -263,8 +225,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 但 currentRollContext 仍保留最终骰面供回看，因此不能再以 pending
     // 是否存在来决定旧事件流特写是否应出现。
     const isRightTrayBonusDiceContext = G.currentRollContext?.kind === 'bonus';
-    const allowBonusDieBackgroundInteraction = G.currentRollContext?.kind === 'bonus'
-        && currentPendingBonusDiceSettlement !== undefined;
     const isDirectDiceActor = React.useMemo(
         () => isDirectDiceInterferenceActor(G, currentResponseWindow, rootPid),
         [G, currentResponseWindow, rootPid],
@@ -422,16 +382,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         setLastUndoCardId,
     } = useUIState();
 
-    // 防御方/观察者关闭 displayOnly 奖励骰面板后，不再重复弹出
-    const [dismissedBonusDiceId, setDismissedBonusDiceId] = React.useState<string | null>(null);
-    // settlement 变化时自动重置（新一轮奖励骰）
-    const currentSettlementId = currentPendingBonusDiceSettlement?.id;
-    React.useEffect(() => {
-        if (currentSettlementId && currentSettlementId !== dismissedBonusDiceId) {
-            setDismissedBonusDiceId(null);
-        }
-    }, [currentSettlementId, dismissedBonusDiceId]);
-
     // Atlas 配置（状态图标仍需异步加载）
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
 
@@ -439,8 +389,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const {
         cardSpotlightQueue,
         handleCardSpotlightClose,
-        bonusDie,
-        handleBonusDieClose,
     } = useCardSpotlight({
         eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
         currentPlayerId: rootPid,
@@ -452,59 +400,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 .map(([pid, characterId]) => `${pid}:${characterId}`)
                 .sort()
                 .join('|') || 'unselected'}`,
-        suppressStandaloneBonusDie: isRightTrayBonusDiceContext,
-        suppressBonusDiceInCardSpotlight: isRightTrayBonusDiceContext,
     });
-
-    const shouldHidePendingDisplayOnlyBonusOverlay = shouldSuppressPendingDisplayOnlyBonusOverlay({
-        settlement: currentPendingBonusDiceSettlement,
-        cardSpotlightQueue,
-        viewerPlayerId: rootPid,
-    });
-    const displayOnlyBonusDiceSettlement = React.useMemo(() => {
-        const settlement = currentPendingBonusDiceSettlement;
-        if (!settlement) {
-            return undefined;
-        }
-        if (dismissedBonusDiceId === settlement.id) {
-            return undefined;
-        }
-        if (shouldUseRightTrayForPendingBonusDice(settlement)) {
-            return undefined;
-        }
-        if (settlement.displayOnly) {
-            if (shouldHidePendingDisplayOnlyBonusOverlay) {
-                return undefined;
-            }
-            return settlement;
-        }
-        if (settlement.attackerId === rootPid) {
-            return undefined;
-        }
-        if (shouldHidePendingDisplayOnlyBonusOverlay) {
-            return undefined;
-        }
-        return { ...settlement, displayOnly: true };
-    }, [currentPendingBonusDiceSettlement, dismissedBonusDiceId, rootPid, shouldHidePendingDisplayOnlyBonusOverlay]);
-    const foregroundBonusDiceSettlement = React.useMemo(() => {
-        if (displayOnlyBonusDiceSettlement) {
-            return displayOnlyBonusDiceSettlement;
-        }
-
-        const settlement = currentPendingBonusDiceSettlement;
-        if (!settlement?.displayOnly || dismissedBonusDiceId === settlement.id || shouldUseRightTrayForPendingBonusDice(settlement)) {
-            return undefined;
-        }
-        return settlement;
-    }, [currentPendingBonusDiceSettlement, dismissedBonusDiceId, displayOnlyBonusDiceSettlement]);
-    const interactiveBonusDiceSettlement = React.useMemo(() => (
-        resolveInteractivePendingBonusDiceSettlement({
-            settlement: currentPendingBonusDiceSettlement,
-            viewerPlayerId: rootPid,
-            interactionState: rawG.sys.interaction,
-            responseWindowState: rawG.sys.responseWindow,
-        })
-    ), [currentPendingBonusDiceSettlement, rawG.sys.interaction, rawG.sys.responseWindow, rootPid]);
 
     useDieRerollAnimationConsumer({
         eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
@@ -649,6 +545,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // Token 响应状态
     const pendingDamage = G.pendingDamage;
     const isTokenResponseInteraction = sysInteraction?.kind === 'dt:token-response';
+    // 进攻特写只是进入防御的阅读层。一旦已恢复到 Token 响应，响应本体优先，
+    // 否则本地重新挂载的特写遮罩会把可用 Token 留在画面里却无法点击。
+    const hasBlockingAttackShowcase = isAttackShowcaseVisible && !isTokenResponseInteraction;
     const tokenResponsePhase: TokenResponsePhase | null = pendingDamage
         ? (pendingDamage.responderId === pendingDamage.sourcePlayerId ? 'attackerBoost' : 'defenderMitigation')
         : null;
@@ -659,22 +558,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         if (!pendingDamage) return [];
         return getUsableTokensForTiming(G, pendingDamage.responderId, pendingDamage.responseType);
     }, [G, pendingDamage]);
-
-    const tokenUsableOverrides = React.useMemo(() => {
-        if (!pendingDamage) return undefined;
-        const pid = pendingDamage.responderId;
-        const overrides: Record<string, number> = {};
-
-        for (const tokenDef of usableTokens) {
-            const total = G.players[pid]?.tokens[tokenDef.id] ?? 0;
-            const usable = getUsableTokenAmountForTiming(G, pid, tokenDef.id, pendingDamage.responseType);
-            if (usable < total) {
-                overrides[tokenDef.id] = usable;
-            }
-        }
-
-        return Object.keys(overrides).length > 0 ? overrides : undefined;
-    }, [G, pendingDamage, usableTokens]);
 
     const isActivePlayer = G.activePlayerId === rootPid;
 
@@ -803,8 +686,111 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const _hasPendingInteraction = Boolean(pendingInteraction);
     // 阶段推进权限：从 useDiceThroneState 获取（领域校验 + 交互判断），叠加焦点玩家判断
     // 进攻技能特写期间阻止所有操作
-    const canAdvancePhase = isFocusPlayer && access.canAdvancePhase && !isAttackShowcaseVisible;
+    const canAdvancePhase = isFocusPlayer && access.canAdvancePhase && !hasBlockingAttackShowcase;
     const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
+
+    const directTokenResponseIds = React.useMemo(() => {
+        if (!isTokenResponseInteraction || !pendingDamage || !isTokenResponder) return [];
+
+        return usableTokens
+            .filter((tokenDef) => {
+                const available = getUsableTokenAmountForTiming(
+                    G,
+                    pendingDamage.responderId,
+                    tokenDef.id,
+                    pendingDamage.responseType,
+                );
+                return getTokenUseOptions(tokenDef, available).length > 0;
+            })
+            .map((tokenDef) => tokenDef.id);
+    }, [G, isTokenResponder, isTokenResponseInteraction, pendingDamage, usableTokens]);
+
+    const directTokenChoiceOptions = React.useMemo(() => {
+        if (!canResolveChoice || !choice.hasChoice || choice.options.length === 0) return [];
+
+        const tokenOptions = choice.options.filter(option => option.tokenId && !option.disabled);
+        const hasOnlyTokenChoices = choice.options.every(option => (
+            (option.tokenId && !option.disabled) || option.customId === 'skip'
+        ));
+
+        return tokenOptions.length > 0 && hasOnlyTokenChoices ? tokenOptions : [];
+    }, [canResolveChoice, choice]);
+
+    const directTokenChoiceSkip = React.useMemo(
+        () => choice.options.find(option => !option.tokenId && option.customId === 'skip'),
+        [choice.options],
+    );
+
+    const handleDirectTokenResponse = React.useCallback((tokenId: string) => {
+        if (!isTokenResponseInteraction || !pendingDamage || !isTokenResponder) return;
+
+        const tokenDef = usableTokens.find(def => def.id === tokenId);
+        if (!tokenDef) return;
+
+        const available = getUsableTokenAmountForTiming(
+            G,
+            pendingDamage.responderId,
+            tokenId,
+            pendingDamage.responseType,
+        );
+        const amount = getTokenUseOptions(tokenDef, available)[0];
+        if (!amount) return;
+
+        engineMoves.useToken(tokenId, amount);
+    }, [G, engineMoves, isTokenResponder, isTokenResponseInteraction, pendingDamage, usableTokens]);
+
+    const handleDirectTokenChoice = React.useCallback((tokenId: string) => {
+        if (!canResolveChoice) return;
+        const option = directTokenChoiceOptions.find(candidate => candidate.tokenId === tokenId);
+        if (!option) return;
+
+        dispatch(INTERACTION_COMMANDS.RESPOND, {
+            optionId: option.id,
+            interactionId: sysInteraction?.id,
+        });
+    }, [canResolveChoice, directTokenChoiceOptions, dispatch, sysInteraction?.id]);
+
+    const tokenInteraction = React.useMemo(() => {
+        if (isTokenResponseInteraction && pendingDamage && isTokenResponder) {
+            return {
+                tokenIds: directTokenResponseIds,
+                onTokenClick: handleDirectTokenResponse,
+                onSkip: engineMoves.skipTokenResponse,
+                passLabel: t(pendingDamage.isFullyEvaded ? 'tokenResponse.confirm' : 'tokenResponse.skip'),
+            };
+        }
+
+        if (directTokenChoiceOptions.length > 0) {
+            return {
+                tokenIds: directTokenChoiceOptions.map(option => option.tokenId!).filter(Boolean),
+                onTokenClick: handleDirectTokenChoice,
+                onSkip: directTokenChoiceSkip
+                    ? () => dispatch(INTERACTION_COMMANDS.RESPOND, {
+                        optionId: directTokenChoiceSkip.id,
+                        interactionId: sysInteraction?.id,
+                    })
+                    : undefined,
+                passLabel: directTokenChoiceSkip
+                    ? t(directTokenChoiceSkip.label, directTokenChoiceSkip.labelParams)
+                    : undefined,
+            };
+        }
+
+        return undefined;
+    }, [
+        directTokenChoiceOptions,
+        directTokenChoiceSkip,
+        directTokenResponseIds,
+        dispatch,
+        engineMoves.skipTokenResponse,
+        handleDirectTokenChoice,
+        handleDirectTokenResponse,
+        isTokenResponder,
+        isTokenResponseInteraction,
+        pendingDamage,
+        sysInteraction?.id,
+        t,
+    ]);
     const isDuelDirectDefenseOnly = false;
     const diceInteractionPlayerId = diceMultistepInteraction?.playerId != null
         ? String(diceMultistepInteraction.playerId)
@@ -813,7 +799,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         isSpectator,
         isSelfView,
         isViewRolling,
-        isAttackShowcaseVisible,
+        isAttackShowcaseVisible: hasBlockingAttackShowcase,
         isDuelDirectDefenseOnly,
         isManualSelfResponseWindow,
         isDirectDiceActor,
@@ -832,11 +818,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const canHighlightAbility = (
         (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' || hasRolled))
         || isManualSelfResponseWindow
-    ) && !isAttackShowcaseVisible;
+    ) && !hasBlockingAttackShowcase;
     const canSelectAbility = (
         (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed))
         || isManualSelfResponseWindow
-    ) && !isAttackShowcaseVisible;
+    ) && !hasBlockingAttackShowcase;
 
     // 同一 slot 多 variant 选择：玩家点击 slot 时，如果该 slot 有多个 variant 同时满足，弹窗让玩家选
     const [abilityChoiceOptions, setAbilityChoiceOptions] = React.useState<AbilityChoiceOption[]>([]);
@@ -844,6 +830,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 响应窗口状态已在上方声明（380-381行），这里直接使用
     const responseWindow = access.responseWindow;
     const isResponder = isManualSelfResponseWindow;
+    const sharedResponsePrompt = tokenInteraction
+        ? { onPass: tokenInteraction.onSkip, kind: 'token' as const, passLabel: tokenInteraction.passLabel }
+        : isResponder
+            ? { onPass: () => engineMoves.responsePass(currentResponderId), kind: 'card' as const }
+            : undefined;
     const canPlayHandCards = canPlayHandCardsForCurrentBoard({
         isSpectator,
         isActivePlayer,
@@ -922,40 +913,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         // 使用 InteractionSystem 的 CANCEL 命令取消当前交互
         dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: pendingInteraction?.id });
     }, [dispatch, pendingInteraction, setLastUndoCardId]);
-    const handlePendingBonusSettlementClose = React.useCallback((settlement?: PendingBonusDiceSettlement) => {
-        boardBonusDieLogger.info('overlay-close-request', {
-            hasSettlement: !!settlement,
-            settlementId: settlement?.id,
-            settlementAttackerId: settlement?.attackerId,
-            settlementDisplayOnly: settlement?.displayOnly,
-            currentPlayerId: rootPid,
-            rerollCount: settlement?.rerollCount,
-            maxRerollCount: settlement?.maxRerollCount,
-            diceValues: settlement ? getPendingBonusSettlementDice(settlement).map(die => die.value) : undefined,
-        });
-        handleBonusDieClose();
-
-        if (!settlement) {
-            boardBonusDieLogger.info('overlay-close-no-settlement');
-            return;
-        }
-
-        const canSettleFromCurrentView = String(settlement.attackerId) === String(rootPid);
-        if (canSettleFromCurrentView) {
-            boardBonusDieLogger.info('overlay-close-settle-dispatch', {
-                settlementId: settlement.id,
-                reason: settlement.displayOnly ? 'attacker-display-only-close' : 'attacker-close',
-            });
-            engineMoves.skipBonusDiceReroll();
-            return;
-        }
-
-        boardBonusDieLogger.info('overlay-close-local-only', {
-            settlementId: settlement.id,
-            reason: settlement.displayOnly ? 'display-only-close' : 'non-attacker-close',
-        });
-        setDismissedBonusDiceId(settlement.id);
-    }, [engineMoves, handleBonusDieClose, rootPid]);
+    const settleRightTrayBonusDice = React.useCallback(() => {
+        engineMoves.skipBonusDiceReroll();
+    }, [engineMoves]);
 
     // 骰子交互配置（需要在 waitingReason 之前定义）
     // 骰子交互现在走 multistep-choice，不再走 dt:card-interaction
@@ -1183,8 +1143,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             return null;
         }
 
-        return createPendingBonusDiceTrayDice(G, settlement, !diceMultistepInteraction);
-    }, [G, currentPendingBonusDiceSettlement, diceMultistepInteraction, pendingBonusDiceRoutedToRightTray]);
+        // currentRollDice 是当前唯一骰槽的领域投影。不要从 pending settlement
+        // 和 G.dice 再拼第二份骰子，否则新投掷覆盖后 UI 可能继续显示旧骰面或错误骰子皮肤。
+        return currentRollDice.map((die) => ({
+            ...die,
+            displayOnly: !diceMultistepInteraction || die.displayOnly === true,
+        }));
+    }, [currentPendingBonusDiceSettlement, currentRollDice, diceMultistepInteraction, pendingBonusDiceRoutedToRightTray]);
     const attackSnapshotInteractionDice = React.useMemo(() => {
         if (!diceMultistepInteraction || currentPhase !== 'defensiveRoll') return null;
         const data = diceMultistepInteraction.data as { allowedDieIds?: number[] } | undefined;
@@ -1256,8 +1221,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         if (!isRightTrayBonusDiceSettlementActive || !rightTrayBonusDiceSettlement) {
             return;
         }
-        handlePendingBonusSettlementClose(rightTrayBonusDiceSettlement);
-    }, [handlePendingBonusSettlementClose, isRightTrayBonusDiceSettlementActive, rightTrayBonusDiceSettlement]);
+        settleRightTrayBonusDice();
+    }, [isRightTrayBonusDiceSettlementActive, rightTrayBonusDiceSettlement, settleRightTrayBonusDice]);
     const handleRerollBonusDiceFromRightTray = React.useCallback((dieIndex: number) => {
         if (!canRerollBonusDiceFromRightTray) {
             return;
@@ -1375,37 +1340,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         pendingInteraction,
         statusInteraction,
     ]);
-
-    const tokenResponseModalEntry = React.useMemo(() => ({
-        owner: {
-            system: currentResponseWindow?.id ? 'response-window' : 'interaction',
-            id: currentResponseWindow?.id ?? sysInteraction?.id ?? 'dicethrone_token_response',
-            kind: currentResponseWindow?.windowType ?? sysInteraction?.kind,
-            gameId: 'dicethrone',
-            namespace: 'dicethrone',
-            resolutionFrameId: currentResponseWindow?.resolutionFrameId ?? sysInteraction?.resolutionFrameId ?? activeResolutionFrameId,
-            blocksProgress: true,
-        },
-        closeOnBackdrop: false,
-        closeOnEsc: false,
-        allowPointerThrough: G.currentRollContext?.kind === 'evasion',
-        onClose: () => undefined,
-        render: () => (
-            <TokenResponseModal
-                pendingDamage={pendingDamage!}
-                responsePhase={tokenResponsePhase!}
-                responderState={G.players[pendingDamage!.responderId]}
-                usableTokens={usableTokens}
-                tokenUsableOverrides={tokenUsableOverrides}
-                onUseToken={(tokenId, amount) => engineMoves.useToken(tokenId, amount)}
-                onSkip={() => engineMoves.skipTokenResponse()}
-                locale={locale}
-                lastEvasionRoll={pendingDamage!.lastEvasionRoll}
-                statusIconAtlas={statusIconAtlas}
-                allowBackgroundInteraction={G.currentRollContext?.kind === 'evasion'}
-            />
-        ),
-    }), [G.currentRollContext?.kind, G.players, activeResolutionFrameId, currentResponseWindow?.id, currentResponseWindow?.resolutionFrameId, currentResponseWindow?.windowType, engineMoves, locale, pendingDamage, statusIconAtlas, sysInteraction?.id, sysInteraction?.kind, sysInteraction?.resolutionFrameId, tokenResponsePhase, tokenUsableOverrides, usableTokens]);
 
     const statusInteractionModalEntry = React.useMemo(() => ({
         owner: statusInteraction ? {
@@ -1556,95 +1490,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         ),
     }), [activeResolutionFrameId, compareRollInteraction, dispatch, isSpectator, locale, rootPid, sysInteraction]);
 
-    const bonusDiceModalEntry = React.useMemo(() => ({
-        owner: interactiveBonusDiceSettlement ? {
-            system: 'interaction',
-            id: sysInteraction?.kind === 'dt:bonus-dice' ? sysInteraction.id : `dt-bonus-dice-${interactiveBonusDiceSettlement.id}`,
-            kind: 'dt:bonus-dice',
-            gameId: 'dicethrone',
-            namespace: 'dicethrone',
-            resolutionFrameId: sysInteraction?.kind === 'dt:bonus-dice'
-                ? (sysInteraction.resolutionFrameId ?? activeResolutionFrameId)
-                : activeResolutionFrameId,
-            blocksProgress: true,
-        } : undefined,
-        closeOnBackdrop: false,
-        closeOnEsc: false,
-        allowPointerThrough: allowBonusDieBackgroundInteraction,
-        onClose: () => undefined,
-        render: () => (
-            <BonusDieOverlay
-                isVisible={true}
-                onClose={() => handlePendingBonusSettlementClose(interactiveBonusDiceSettlement)}
-                locale={locale}
-                bonusDice={interactiveBonusDiceSettlement ? getPendingBonusSettlementDice(interactiveBonusDiceSettlement) : undefined}
-                canReroll={canRerollBonusDiceSettlement(interactiveBonusDiceSettlement, player.tokens)}
-                rerollLimitReached={Boolean(
-                    interactiveBonusDiceSettlement &&
-                    interactiveBonusDiceSettlement.maxRerollCount !== undefined &&
-                    interactiveBonusDiceSettlement.rerollCount >= interactiveBonusDiceSettlement.maxRerollCount
-                )}
-                onReroll={interactiveBonusDiceSettlement
-                    ? (dieIndex) => {
-                        boardBonusDieLogger.info('reroll-dispatch', {
-                            settlementId: interactiveBonusDiceSettlement.id,
-                            dieIndex,
-                            rerollCount: interactiveBonusDiceSettlement.rerollCount,
-                            maxRerollCount: interactiveBonusDiceSettlement.maxRerollCount,
-                        });
-                        engineMoves.rerollBonusDie(dieIndex);
-                    }
-                    : undefined}
-                onSkipReroll={interactiveBonusDiceSettlement
-                    ? () => {
-                        boardBonusDieLogger.info('skip-reroll-dispatch', {
-                            settlementId: interactiveBonusDiceSettlement.id,
-                            rerollCount: interactiveBonusDiceSettlement.rerollCount,
-                            maxRerollCount: interactiveBonusDiceSettlement.maxRerollCount,
-                        });
-                        engineMoves.skipBonusDiceReroll();
-                    }
-                    : undefined}
-                showTotal={interactiveBonusDiceSettlement?.showTotal ?? !interactiveBonusDiceSettlement?.displayOnly}
-                rerollCostAmount={interactiveBonusDiceSettlement?.rerollCostAmount}
-                rerollCostTokenId={interactiveBonusDiceSettlement?.rerollCostTokenId}
-                displayOnly={interactiveBonusDiceSettlement?.displayOnly}
-                presentationKey={interactiveBonusDiceSettlement
-                    ? `${interactiveBonusDiceSettlement.id}:reroll-${interactiveBonusDiceSettlement.rerollCount}`
-                    : undefined}
-                lastRerolledDieIndex={interactiveBonusDiceSettlement?.lastRerolledDieIndex}
-                rerollPresentationKey={
-                    interactiveBonusDiceSettlement && interactiveBonusDiceSettlement.rerollCount > 0
-                        ? `${interactiveBonusDiceSettlement.id}:reroll-${interactiveBonusDiceSettlement.rerollCount}`
-                        : undefined
-                }
-                summaryEffectKey={interactiveBonusDiceSettlement?.summaryEffectKey}
-                summaryEffectParams={interactiveBonusDiceSettlement?.summaryEffectParams}
-                characterId={interactiveBonusDiceSettlement ? G.selectedCharacters[interactiveBonusDiceSettlement.attackerId] : undefined}
-                forceAutoCloseDelay={isTutorialMode ? 3000 : undefined}
-                manualCloseOnly={!isTutorialMode}
-                allowBackgroundInteraction={allowBonusDieBackgroundInteraction}
-                usePortal={false}
-            />
-        ),
-    }), [G.selectedCharacters, activeResolutionFrameId, allowBonusDieBackgroundInteraction, engineMoves, handlePendingBonusSettlementClose, interactiveBonusDiceSettlement, isTutorialMode, locale, player.tokens, sysInteraction]);
-
-    useSyncedModalStackEntry({
-        enabled: Boolean(
-            isTokenResponseInteraction
-            && pendingDamage
-            && tokenResponsePhase
-            && isTokenResponder
-            && (
-                usableTokens.length > 0
-                || !!pendingDamage.lastEvasionRoll
-                || Object.keys(pendingDamage.tokenUsageTotals ?? {}).length > 0
-            ),
-        ),
-        entryId: 'dicethrone_token_response',
-        entry: tokenResponseModalEntry,
-    });
-
     useSyncedModalStackEntry({
         enabled: Boolean(isStatusInteraction && statusInteraction && (
             statusInteraction?.type !== 'selectHandCard' || isInteractionOwner
@@ -1660,22 +1505,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     });
 
     useSyncedModalStackEntry({
-        enabled: Boolean(
-            interactiveBonusDiceSettlement
-            && !shouldUseRightTrayForPendingBonusDice(interactiveBonusDiceSettlement)
-        ),
-        entryId: 'dicethrone_bonus_dice',
-        entry: bonusDiceModalEntry,
-    });
-
-    useSyncedModalStackEntry({
         enabled: Boolean(defenderChoice),
         entryId: 'dicethrone_defender_choice',
         entry: defenderChoiceModalEntry,
     });
 
     useSyncedModalStackEntry({
-        enabled: Boolean(choice.hasChoice),
+        enabled: Boolean(choice.hasChoice && directTokenChoiceOptions.length === 0),
         entryId: 'dicethrone_choice',
         entry: choiceModalEntry,
     });
@@ -2122,6 +1958,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         onFlightClick={() => engineMoves.useToken(TOKEN_IDS.FLIGHT, 1)}
                         canUseFlight={canUseFlight}
                         tokenDefinitions={G.tokenDefinitions}
+                        responseTokenIds={tokenInteraction?.tokenIds}
+                        onResponseTokenClick={tokenInteraction?.onTokenClick}
                         onKnockdownClick={() => openUiModal('removeKnockdown')}
                         canRemoveKnockdown={canRemoveKnockdown}
                         isSelfShaking={selfImpact.shake.isShaking}
@@ -2249,8 +2087,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 pendingInteraction={pendingInteraction}
                                 isWaitingOpponent={isWaitingOpponent}
                                 opponentName={opponentName}
-                                isResponder={isResponder}
-                                onResponsePass={() => engineMoves.responsePass(currentResponderId)}
+                                responsePrompt={sharedResponsePrompt}
                                 currentPhase={currentPhase}
                                 isPassiveRerollSelecting={!!rerollSelectingAction}
                             />
@@ -2318,7 +2155,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 })()}
 
                 {/* 进攻技能特写（防御阶段入口） */}
-                {isAttackShowcaseVisible && attackShowcaseData && (
+                {hasBlockingAttackShowcase && attackShowcaseData && (
                     <AttackShowcaseOverlay
                         data={attackShowcaseData}
                         mode={attackShowcaseMode}
@@ -2352,28 +2189,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     onCardSpotlightClose={handleCardSpotlightClose}
                     opponentHeaderRef={opponentHeaderRef}
 
-                    // 额外骰子
-                    bonusDie={bonusDie}
-                    onBonusDieClose={() => handlePendingBonusSettlementClose(foregroundBonusDiceSettlement)}
-                    suppressBonusDieOverlay={shouldSuppressForegroundBonusDieOverlay({
-                        hasChoice: choice.hasChoice,
-                        interactiveSettlement: interactiveBonusDiceSettlement,
-                        bonusDie,
-                    })}
-
-                    // 奖励骰展示态只留在 overlay，阻塞式重投交互改走 modal stack
-                    pendingBonusDiceSettlement={displayOnlyBonusDiceSettlement}
-                    allowBonusDieBackgroundInteraction={allowBonusDieBackgroundInteraction}
-                    canRerollBonusDie={false}
-                    onRerollBonusDie={undefined}
-                    onSkipBonusDiceReroll={
-                        foregroundBonusDiceSettlement
-                        && String(foregroundBonusDiceSettlement.attackerId) === String(rootPid)
-                            ? () => handlePendingBonusSettlementClose(foregroundBonusDiceSettlement)
-                            : undefined
-                    }
-
-                    // Token 响应
                     // 游戏结束
                     isGameOver={!!isGameOver}
                     gameoverResult={isGameOver}
@@ -2396,7 +2211,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     selectedCharacters={G.selectedCharacters}
                     hostPlayerId={G.hostPlayerId}
                     tutorialSpotlightAutoCloseDelayMs={isTutorialMode ? 3000 : undefined}
-                    bonusDieManualCloseOnly={!isTutorialMode}
                 />
             </div>
         </UndoProvider>

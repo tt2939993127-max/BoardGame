@@ -168,7 +168,14 @@ export const DiceTray = ({
             };
 
     const handleRailDieClick = (dieId: number) => {
-        if (isRolling && !isInteractionMode && rollCount === 0) return;
+        if (isRolling && !isInteractionMode && !isPassiveRerollMode && rollCount === 0) return;
+
+        if (isPassiveRerollMode) {
+            if (canInteract) {
+                onToggleLock(dieId);
+            }
+            return;
+        }
 
         if (isBonusRerollMode) {
             if (canRerollBonusDie) {
@@ -239,7 +246,11 @@ export const DiceTray = ({
                     const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
-                        : (isBonusRerollMode ? canRerollBonusDie : canToggleDieLock);
+                        : (isPassiveRerollMode
+                            ? canInteract && !die.isKept
+                            : isBonusRerollMode
+                                ? canRerollBonusDie
+                                : canToggleDieLock);
                     const isReadOnlyDisplayDie = !isInteractionMode
                         && Boolean(die.displayOnly)
                         && !isBonusRerollMode;

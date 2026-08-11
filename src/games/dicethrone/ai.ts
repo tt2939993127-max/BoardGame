@@ -53,7 +53,7 @@ import { hasDebuffs, hasPurifyToken, getUsableTokensForTiming } from './domain/t
 import { getTokenEffectValue, type EffectAction, type RollDieConditionalEffect, type RollDieDefaultEffect } from './domain/tokenTypes';
 import { getDieFaceByValue } from './domain/diceRegistry';
 import { getCustomActionMeta } from './domain/effects';
-import { isCurrentBonusRollSettlement } from './domain/rollContext';
+import { isCurrentBonusRollSettlement, resolveCurrentRollContext } from './domain/rollContext';
 import type { AbilityEffect, TriggerCondition } from './domain/combat';
 import type {
     AbilityCard,
@@ -2197,11 +2197,22 @@ const buildPurifyActions = (state: DiceThroneState, playerId: PlayerId): AiLegal
 const buildPassiveActions = (state: DiceThroneState, playerId: PlayerId, phase: TurnPhase): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
     const passiveAbilities = getPlayerPassiveAbilities(state.core, playerId);
-    const activeDice = getActiveDice(state.core);
+    const currentRollContext = resolveCurrentRollContext(state.core, phase);
+    const activeDice = currentRollContext?.dice ?? getActiveDice(state.core);
 
     for (const passive of passiveAbilities) {
         passive.actions.forEach((passiveAction, actionIndex) => {
             if (!isPassiveActionUsable(state.core, playerId, passive.id, actionIndex, phase)) {
+                return;
+            }
+
+            // 玩家仍可在规则允许的窗口内手动干预已确认的骰面；AI 不应在主进攻骰
+            // 已确认、且没有新的临时骰上下文时自行重掷，避免把确认后的流程重新打开。
+            if (
+                passiveAction.type === 'rerollDie'
+                && state.core.rollConfirmed
+                && currentRollContext?.kind === 'offensive'
+            ) {
                 return;
             }
 
@@ -2560,13 +2571,13 @@ export function buildDiceThroneAiLegalActions(args: {
         return buildSetupActions(state, args.playerId);
     }
 
+    if (state.sys.responseWindow?.current || hasPendingTokenResponseForPlayer(state, args.playerId)) {
+        return buildResponseActions(state, args.playerId, phase);
+    }
+
     const bonusDiceActions = buildBonusDiceActions(state, args.playerId);
     if (bonusDiceActions.length > 0) {
         return bonusDiceActions;
-    }
-
-    if (state.sys.responseWindow?.current || hasPendingTokenResponseForPlayer(state, args.playerId)) {
-        return buildResponseActions(state, args.playerId, phase);
     }
 
     return [

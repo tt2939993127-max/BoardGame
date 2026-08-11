@@ -30,6 +30,8 @@ import type { BonusDieInfo } from '../types';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 const MOON_ELF_VOLLEY_SETTLEMENT_ID = 'moon-elf-volley';
+const MOON_ELF_SHADOW_STRIKE_SETTLEMENT_ID = 'moon-elf-shadow-strike';
+const MOON_ELF_WATCH_OUT_SETTLEMENT_ID = 'moon-elf-watch-out';
 
 // ============================================================================
 // 杈呭姪鍑芥暟
@@ -438,8 +440,6 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
         console.warn('[moon_elf] handleMoonShadowStrike: No defenderId in context');
         return [];
     }
-    const events: DiceThroneEvent[] = [];
-
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
     
@@ -449,24 +449,19 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
         ? 'bonusDie.effect.moonShadowStrike.moon'  // 鏈堥潰锛氭柦鍔燿ebuff
         : 'bonusDie.effect.moonShadowStrike.other'; // 鍏朵粬锛氭娊鐗?
     
-    events.push({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey, effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent);
-
-    if (isMoon) {
-        // 鏈堬細鏂藉姞鑷寸洸 + 缂犵粫 + 閿佸畾锛堢粰瀵规墜锛?
-        events.push(applyStatus(opponentId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
-        events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-        events.push(applyStatus(opponentId, STATUS_IDS.TARGETED, 1, sourceAbilityId, state, timestamp));
-    } else {
-        // 闈炴湀锛氭娊1寮犵墝锛堢粰鑷繁锛?
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
-    }
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        opponentId,
+        [{ index: 0, value, face: face as any, effectKey }],
+        timestamp + 1,
+        { customResolutionId: MOON_ELF_SHADOW_STRIKE_SETTLEMENT_ID },
+    )];
 }
 
 /**
@@ -528,7 +523,6 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
 function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, random, ctx } = context;
     if (!random) return [];
-    const events: DiceThroneEvent[] = [];
     const opponentId = ctx.defenderId;
 
     const value = random.d(6);
@@ -540,34 +534,19 @@ function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
             : face === FACE.MOON
                 ? 'bonusDie.effect.watchOut.moon'
                 : 'bonusDie.effect.watchOut';
-    events.push({
+    return [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey, effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as BonusDieRolledEvent);
-
-    if (face === FACE.BOW) {
-        // 弓：增加 2 伤害（统一交给 reducer 决定是直接加到当前攻击，还是排队到 pendingBonusDamage）。
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: 2,
-                sourceCardId: 'watch-out',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as DiceThroneEvent);
-    } else if (face === FACE.FOOT) {
-        // 瓒筹細鏂藉姞缂犵粫
-        events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-    } else if (face === FACE.MOON) {
-        // 鏈堬細鏂藉姞鑷寸洸
-        events.push(applyStatus(opponentId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
-    }
-
-    return events;
+    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        opponentId,
+        [{ index: 0, value, face: face as any, effectKey }],
+        timestamp + 1,
+        { customResolutionId: MOON_ELF_WATCH_OUT_SETTLEMENT_ID },
+    )];
 }
 
 // ============================================================================
@@ -668,6 +647,54 @@ function handleEntangleEffect(context: CustomActionContext): DiceThroneEvent[] {
 // ============================================================================
 
 export function registerMoonElfCustomActions(): void {
+    registerBonusDiceSettlementHandler(MOON_ELF_SHADOW_STRIKE_SETTLEMENT_ID, ({ state, settlement, timestamp, random }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === FACE.MOON) {
+            return {
+                totalDamage: 0,
+                followupEvents: [
+                    applyStatus(settlement.targetId, STATUS_IDS.BLINDED, 1, settlement.sourceAbilityId, state, timestamp),
+                    applyStatus(settlement.targetId, STATUS_IDS.ENTANGLE, 1, settlement.sourceAbilityId, state, timestamp + 0.01),
+                    applyStatus(settlement.targetId, STATUS_IDS.TARGETED, 1, settlement.sourceAbilityId, state, timestamp + 0.02),
+                ],
+            };
+        }
+        return {
+            totalDamage: 0,
+            followupEvents: buildDrawEvents(state, settlement.attackerId, 1, random, 'BONUS_DICE_SETTLED', timestamp, settlement.sourceAbilityId),
+        };
+    });
+    registerBonusDiceSettlementHandler(MOON_ELF_WATCH_OUT_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === FACE.BOW) {
+            return {
+                totalDamage: 0,
+                followupEvents: [{
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: { playerId: settlement.attackerId, amount: 2, sourceCardId: 'watch-out' },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                }],
+            };
+        }
+        if (die.face === FACE.FOOT || die.face === FACE.MOON) {
+            return {
+                totalDamage: 0,
+                followupEvents: [applyStatus(
+                    settlement.targetId,
+                    die.face === FACE.FOOT ? STATUS_IDS.ENTANGLE : STATUS_IDS.BLINDED,
+                    1,
+                    settlement.sourceAbilityId,
+                    state,
+                    timestamp,
+                )],
+            };
+        }
+        return { totalDamage: 0, followupEvents: [] };
+    });
+
     registerBonusDiceSettlementHandler(MOON_ELF_VOLLEY_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
         const bowCount = getPendingBonusSettlementDice(settlement)
             .filter(die => die.face === FACE.BOW).length;

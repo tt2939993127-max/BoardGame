@@ -583,7 +583,7 @@ describe('能力效果双重授予检测', () => {
 // ============================================================================
 
 /**
- * 验证领域层 getUsableTokensForTiming 与 UI 层 TokenResponseModal 的分类逻辑一致。
+ * 验证领域层 getUsableTokensForTiming 与 UI 层 Token 本体响应入口的分类逻辑一致。
  *
  * 背景：曾因 UI 层硬编码太极特征（同时有两个 timing）导致火焰精通触发了太极弹窗。
  * 重构后 UI 直接消费领域层输出，此测试确保：
@@ -596,7 +596,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import { TOKEN_IDS } from '../domain/ids';
 
 describe('Token 响应窗口契约完整性', () => {
-    // UI 层已知的 activeUse effect type（TokenResponseModal 能处理的类型）
+    // UI 层已知的 activeUse effect type（Token 本体响应入口能处理的类型）
     const UI_KNOWN_EFFECT_TYPES = new Set([
         'modifyDamageDealt',
         'modifyDamageReceived',
@@ -613,7 +613,7 @@ describe('Token 响应窗口契约完整性', () => {
 
     const consumableTokens = ALL_TOKEN_DEFINITIONS.filter(d => d.category === 'consumable' && d.activeUse);
 
-    // 自动消耗的 token（由 custom actions 消耗，不通过弹窗交互）
+    // 自动消耗的 token（由 custom actions 消耗，不通过玩家点击交互）
     // 这些 token 不应该有 activeUse 配置
     const AUTO_CONSUMED_TOKEN_IDS = new Set([
         TOKEN_IDS.FIRE_MASTERY, // 由 resolveBurnDown / resolveDmgPerFM 等 custom actions 自动消耗
@@ -630,7 +630,7 @@ describe('Token 响应窗口契约完整性', () => {
         for (const def of ALL_TOKEN_DEFINITIONS) {
             if (AUTO_CONSUMED_TOKEN_IDS.has(def.id) && def.activeUse) {
                 violations.push(
-                    `[${def.id}] 是自动消耗的 token，不应该有 activeUse 配置（会错误触发 Token 响应弹窗）`
+                    `[${def.id}] 是自动消耗的 token，不应该有 activeUse 配置（会错误触发 Token 响应入口）`
                 );
             }
         }

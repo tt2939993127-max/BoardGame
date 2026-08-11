@@ -10,7 +10,7 @@
 
 | 对象 | 中文对象 | 已锁合同摘要 | 实现入口 | 证明/测试入口 | 对照结论 | 后续边界 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `sacrifice` | 地狱火教徒「献祭」 | 本单位被摧毁后，对每个死亡前相邻敌方单位加 1 伤害；不影响友方或非相邻单位 | `abilities.ts` 定义 `onDeath`；`execute/helpers.ts` 的 `emitDestroyWithTriggers` 把死亡前位置传入触发上下文；`abilityTargets.ts` 解析死亡前相邻敌方；`execute.ts` / 后处理链注入死亡触发；`postProcessDeathChecks` 用已摧毁单位集合阻止同一单位重复注入死亡链 | `entity-chain-integrity.test.ts` 覆盖死亡前相邻敌方受伤、相邻友方和非相邻敌方不受伤；`abilities-frost.test.ts` 覆盖践踏致死后触发献祭后续；新增 `[sacrifice/L4]` 覆盖重复致死伤害后处理只注入一次献祭连锁、旁观者只被伤害/摧毁一次、血腥狂怒只充能一次；B8 目标测试命中 `sacrifice/献祭` | `match-with-L4-proof` | 已补连锁死亡重复消费断言；不改机制 |
+| `sacrifice` | 地狱火教徒「献祭」 | 本单位被摧毁后，对每个死亡前相邻敌方单位加 1 伤害；不影响友方或非相邻单位 | `abilities.ts` 定义 `onDeath`；`execute/helpers.ts` 的 `emitDestroyWithTriggers` 把死亡前位置传入触发上下文；`abilityTargets.ts` 解析死亡前相邻敌方；`execute.ts` / 后处理链注入死亡触发；`postProcessDeathChecks` 用已摧毁单位集合阻止同一单位重复注入死亡链 | `entity-chain-integrity.test.ts` 覆盖死亡前相邻敌方受伤、相邻友方和非相邻敌方不受伤；`abilities-frost.test.ts` 覆盖践踏致死后触发献祭后续；新增 `[sacrifice/L4]` 覆盖重复致死伤害后处理只注入一次献祭连锁、旁观者只被伤害/摧毁一次、血腥狂怒只充能一次；B8 目标测试命中 `sacrifice/献祭` | `historical_passed_invalid` | 2026-08-10 复盘发现旧证据未覆盖直接消灭来源；见下方失效回写 |
 | `cold_snap` | 奥莱格「寒流」 | 友方建筑 +1 生命；官方原文没有范围限制 | `abilities-frost.ts` 定义 `passive auraStructureLife value=1`；`abilityResolver.ts` / 结构有效生命计算按当前棋盘动态消费友方建筑生命光环；先前实现对照已移除旧 3 格范围限制 | `implementation-audit-first-pass-findings-2026-07-02.md` 记录 cold_snap 先红后绿最小修复；`entity-chain-integrity.test.ts` 覆盖友方建筑有效生命 +1、移除奥莱格后回到基础生命；新增 `[cold_snap/L4]` 覆盖新建筑进场、建筑离场、建筑归属变化、奥莱格离场后的动态重算；B8 目标测试命中 `cold_snap/寒流` | `fixed-with-L4-proof` | 已修复范围冲突并补动态重算断言；不改机制 |
 | `fire_sacrifice_summon` | 伊路特-巴尔「火祀召唤」 | 支付召唤费用时必须额外摧毁一个友方单位，并用本单位替换被摧毁单位位置 | `abilities.ts` 定义 `onSummon`；`validate.ts` / `execute.ts` 在 `SUMMON_UNIT` 中识别 `fire_sacrifice_summon`、要求 `sacrificeUnitId`、拒绝敌方/召唤师等非法牺牲品，并把召唤位置替换为牺牲品位置 | `abilities-advanced.test.ts` 覆盖召唤时消灭友方单位并放置到牺牲品位置；`implementation-audit-first-pass-findings-2026-07-02.md` 记录缺少牺牲品、牺牲敌方单位等负向补证；新增 `[fire_sacrifice_summon/L4]` 覆盖系统交互只列己方非召唤师、确认后只扣费/牺牲/召唤一次、重复响应不二次结算；B8 目标测试命中 `fire_sacrifice_summon/火祀召唤` | `match-with-L4-proof` | 已补真实交互候选过滤、最终状态和重复响应边界；不改机制 |
 | `living_gate` | 寒冰魔像「活体传送门」 | 本卡是传送门；应作为召唤入口/传送门语义被消费者识别 | `abilities-frost.ts` 定义 `living_gate`；`helpers.ts:getValidSummonPositions` 把己方活体传送门单位加入召唤位置来源，敌方活体传送门不为己方提供位置 | `abilities-frost.test.ts` 覆盖己方活体传送门相邻空格可作为召唤位置、敌方活体传送门不提供己方召唤位置；新增 `[gather_power/living_gate/L4]` 覆盖己方活体传送门召唤位、敌方活体传送门不提供己方召唤位，以及该入口召唤祖灵法师后只给被召唤单位充能；B8 目标测试命中 `living_gate/活体传送门` | `match-with-L4-proof` | 已补活体传送门作为特殊召唤入口时的归属边界；不改机制 |
@@ -35,3 +35,18 @@
 - `sacrifice`、`fire_sacrifice_summon`、`living_gate`、`mobile_structure`、`soulless` 已升级为 `match-with-L4-proof`。
 - 本轮没有重新读图/OCR，没有新增机制修复；只消费 B8 locked 合同并汇总既有补证与目标测试结果。
 - B8 首轮实现对照不代表全量补审完成；下一步继续后续 locked 对象或更高层 L3/L4 补证，不回录入层。
+
+## 2026-08-10 旧结论失效回写
+
+- **失效对象**：`sacrifice` 的旧结论 `match-with-L4-proof`。
+- **失效原因**：旧证据验证了能力定义、普通伤害致死和重复死亡链，但没有列出所有“单位被消灭”的事件生产者，也没有验证火祀召唤直接消灭地狱火教徒后相邻敌方的最终生命值。原实现中，直接 `UNIT_DESTROYED` 事件可以绕过 `onDeath`，因此旧结论把单一来源证据外推成了共享死亡链收口。
+- **通用规则回代**：D6 现在要求“触发语义 × 事件生产者/入口 × 后处理/共享消费者 × 最终权威状态”矩阵；L2-L4 门禁同步禁止只凭 `UNIT_DESTROYED`、`ABILITY_TRIGGERED` 或 `sourceAbilityId` 等中间事件判定玩法收口。
+- **当前替代证据**：`src/games/summonerwars/domain/execute/helpers.ts:393` 已统一补直接消灭缺失的 `onDeath` 触发；`src/games/summonerwars/__tests__/abilities-necromancer-execute.test.ts:384` 已补火祀召唤后相邻敌方受到 1 点伤害的最终状态断言；`npm run test:summonerwars` 通过 68 个测试文件、1449 个测试。
+- **当前边界**：本节只证明原始反馈点已修复，并记录旧结论失效；其它 `onDeath` 能力与各类直接消灭来源仍需按新 D6 矩阵逐项扩审，不能据此宣称整个死亡被动家族已完成 L4 收口。
+
+### 同类扩审范围
+
+- **搜索范围**：按 `onDeath`、`UNIT_DESTROYED`、`emitDestroyWithTriggers`、`postProcessDeathChecks`、死亡后处理和直接消灭入口，横向检查能力定义、共享后处理、命令执行器、事件卡、自定义 action、测试和既有 evidence。
+- **命中项**：当前 `onDeath` 能力族包含 `sacrifice`、`mogu_fungal_mutation`、`shadow_death_pact`；直接消灭生产点包含 `abilityResolver.ts` 的 `destroyUnit`、`customActionHandlers.ts` 的直接消灭、`executors/goblin.ts` 的自毁/友军消灭，以及 `execute.ts`、`eventCards.ts`、`executors/necromancer.ts`、`executors/trickster.ts` 中的统一消灭 helper 调用。
+- **已处理**：共享 `postProcessDeathChecks` 现在消费直接 `UNIT_DESTROYED` 并补发缺失的 `onDeath`，同时登记已触发能力，避免死亡连锁重复结算；召唤师战争完整测试已通过。
+- **残余扩审范围**：`mogu_fungal_mutation`、`shadow_death_pact` 以及上述各直接消灭来源的对象级最终状态矩阵尚未逐项补齐；当前只能收口地狱火教徒的原始反馈点，不能宣称整个 `onDeath` 家族已完成 L4。

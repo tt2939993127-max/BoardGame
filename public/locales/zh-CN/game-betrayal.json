@@ -867,6 +867,10 @@
       "sarcophagusShort": "棺",
       "girl": "女孩",
       "girlShort": "女",
+      "girlPlaced": "可拾取",
+      "girlHeldByMummy": "由木乃伊携带",
+      "girlHeldByPlayer": "由{{player}}持有",
+      "officialTokenMissing": "缺正式 token",
       "essence": "本质"
     },
     "players": {

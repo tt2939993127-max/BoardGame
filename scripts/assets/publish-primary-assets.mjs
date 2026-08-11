@@ -5,20 +5,32 @@ import https from 'node:https';
 import {
     createReadStream,
     createWriteStream,
+    existsSync,
     mkdirSync,
     mkdtempSync,
     rmSync,
     statSync,
     writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { URL } from 'node:url';
 
 export const SERVER_PUBLISH_MANIFEST_FILE = '.boardgame-publish-manifest.json';
+export const SERVER_PUBLISH_INDEX_FILE = '.boardgame-asset-index.json';
 const DEFAULT_SSH_TARGET = 'admin@8.148.71.102';
+const DEFAULT_ASSET_UPLOAD_URL = 'https://assets-upload.easyboardgame.top/asset-publish';
+const DEFAULT_SSH_KNOWN_HOSTS_PATH = path.join(
+    process.cwd(),
+    'infra',
+    'server',
+    'asset-origin',
+    'asset-publish.known_hosts',
+);
+const DEFAULT_SSH_KEY_PATH = path.join(homedir(), '.ssh', 'id_ed25519');
+const DEFAULT_USER_SSH_KNOWN_HOSTS_PATH = path.join(homedir(), '.ssh', 'known_hosts');
 const MAX_PROCESS_OUTPUT_CHARS = 256 * 1024;
 const DEFAULT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 
@@ -183,7 +195,7 @@ const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body }) => n
     const request = client.request(endpointUrl, {
         method: 'POST',
         headers: {
-            Authorization: `Bearer ${token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...headers,
         },
     }, (response) => {
@@ -209,6 +221,39 @@ const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body }) => n
         return;
     }
     pipeline(body, request).catch(fail);
+});
+
+const requestAssetPublishJson = ({ endpointUrl, token, method = 'GET' }) => new Promise((resolve, reject) => {
+    const client = endpointUrl.protocol === 'https:' ? https : http;
+    const request = client.request(endpointUrl, {
+        method,
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: 'application/json',
+        },
+    }, (response) => {
+        let responseBody = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+            responseBody = appendProcessOutput(responseBody, chunk);
+        });
+        response.on('end', () => {
+            if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+                reject(new Error(
+                    `素材发布清单查询失败，status=${response.statusCode}: `
+                    + `${responseBody.trim() || response.statusMessage || ''}`,
+                ));
+                return;
+            }
+            try {
+                resolve(JSON.parse(responseBody));
+            } catch {
+                reject(new Error('素材发布清单查询返回了无效 JSON'));
+            }
+        });
+    });
+    request.on('error', reject);
+    request.end();
 });
 
 const createAssetUploadArchive = async (stagingRoot) => {
@@ -240,6 +285,7 @@ export const publishStagedAssetsToUploadEndpoint = async ({
     stagingRoot,
     uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim() || '',
     token = resolveAssetUploadToken(),
+    allowUnauthenticated = process.env.ASSET_SERVER_UPLOAD_ALLOW_UNAUTHENTICATED === '1',
     chunkSizeBytes = resolvePositiveInteger(
         process.env.ASSET_SERVER_UPLOAD_CHUNK_BYTES,
         DEFAULT_UPLOAD_CHUNK_BYTES,
@@ -249,7 +295,7 @@ export const publishStagedAssetsToUploadEndpoint = async ({
     if (!uploadUrl) {
         throw new Error('缺少素材上传入口 ASSET_SERVER_UPLOAD_URL');
     }
-    if (!token) {
+    if (!token && !allowUnauthenticated) {
         throw new Error('缺少素材上传 token：请配置 ASSET_SERVER_UPLOAD_TOKEN 或 BG_ASSET_PUBLISH_TOKEN');
     }
 
@@ -295,22 +341,89 @@ export const publishStagedAssetsToUploadEndpoint = async ({
     }
 };
 
+export const fetchAssetPublishInventory = async ({
+    uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim() || '',
+    token = resolveAssetUploadToken(),
+    allowUnauthenticated = process.env.ASSET_SERVER_UPLOAD_ALLOW_UNAUTHENTICATED === '1',
+} = {}) => {
+    if (!uploadUrl) {
+        throw new Error('缺少素材上传入口 ASSET_SERVER_UPLOAD_URL');
+    }
+    if (!token && !allowUnauthenticated) {
+        throw new Error('缺少素材上传 token：请配置 ASSET_SERVER_UPLOAD_TOKEN 或 BG_ASSET_PUBLISH_TOKEN');
+    }
+
+    let endpointUrl;
+    try {
+        endpointUrl = new URL(uploadUrl);
+    } catch {
+        throw new Error(`素材上传入口 URL 无效: ${uploadUrl}`);
+    }
+    if (endpointUrl.protocol !== 'http:' && endpointUrl.protocol !== 'https:') {
+        throw new Error(`素材上传入口协议无效: ${uploadUrl}`);
+    }
+
+    const payload = await requestAssetPublishJson({ endpointUrl, token });
+    if (!payload?.ok || !Array.isArray(payload.objects)) {
+        throw new Error('素材发布清单响应缺少 objects');
+    }
+
+    return new Map(payload.objects.map((object) => [
+        object.key,
+        {
+            size: object.size,
+            sha256: object.sha256,
+        },
+    ]));
+};
+
+export const resolveAssetUploadUrl = ({
+    uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim(),
+    uploadToken = process.env.ASSET_SERVER_UPLOAD_TOKEN?.trim()
+        || process.env.BG_ASSET_PUBLISH_TOKEN?.trim(),
+    allowUnauthenticated = process.env.ASSET_SERVER_UPLOAD_ALLOW_UNAUTHENTICATED === '1',
+} = {}) => uploadUrl || (uploadToken || allowUnauthenticated ? DEFAULT_ASSET_UPLOAD_URL : '');
+
+export const resolveAssetPublishSshConfig = ({
+    sshTarget = process.env.ASSET_SERVER_SSH_TARGET?.trim() || DEFAULT_SSH_TARGET,
+    privateKeyPath,
+    knownHostsPath,
+} = {}) => {
+    const requestedPrivateKeyPath = privateKeyPath === undefined
+        ? process.env.ASSET_SERVER_SSH_KEY_PATH?.trim()
+        : privateKeyPath;
+    const resolvedPrivateKeyPath = requestedPrivateKeyPath
+        ? (existsSync(requestedPrivateKeyPath) ? requestedPrivateKeyPath : '')
+        : (existsSync(DEFAULT_SSH_KEY_PATH) ? DEFAULT_SSH_KEY_PATH : '');
+
+    const requestedKnownHostsPath = knownHostsPath === undefined
+        ? process.env.ASSET_SERVER_SSH_KNOWN_HOSTS_PATH?.trim()
+        : knownHostsPath;
+    const resolvedKnownHostsPath = requestedKnownHostsPath
+        || [DEFAULT_SSH_KNOWN_HOSTS_PATH, DEFAULT_USER_SSH_KNOWN_HOSTS_PATH].find((candidate) => existsSync(candidate));
+    if (!resolvedKnownHostsPath || !existsSync(resolvedKnownHostsPath)) {
+        throw new Error(`缺少素材发布 known_hosts: ${requestedKnownHostsPath || '(未配置)'}`);
+    }
+
+    return {
+        sshTarget,
+        privateKeyPath: resolvedPrivateKeyPath,
+        knownHostsPath: resolvedKnownHostsPath,
+    };
+};
+
 export const publishStagedAssetsBySsh = async ({ stagingRoot }) => {
-    const sshTarget = process.env.ASSET_SERVER_SSH_TARGET?.trim() || DEFAULT_SSH_TARGET;
+    const { sshTarget, privateKeyPath, knownHostsPath } = resolveAssetPublishSshConfig();
     const sshArgs = [
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=20',
         '-o', 'ServerAliveInterval=20',
         '-o', 'ServerAliveCountMax=3',
         '-o', 'StrictHostKeyChecking=yes',
+        '-o', `UserKnownHostsFile=${knownHostsPath}`,
     ];
-    const privateKeyPath = process.env.ASSET_SERVER_SSH_KEY_PATH?.trim();
-    const knownHostsPath = process.env.ASSET_SERVER_SSH_KNOWN_HOSTS_PATH?.trim();
     if (privateKeyPath) {
         sshArgs.push('-o', 'IdentitiesOnly=yes', '-i', privateKeyPath);
-    }
-    if (knownHostsPath) {
-        sshArgs.push('-o', `UserKnownHostsFile=${knownHostsPath}`);
     }
     sshArgs.push(sshTarget, 'boardgame-asset-publish');
 
@@ -343,11 +456,12 @@ export const publishStagedAssetsBySsh = async ({ stagingRoot }) => {
 };
 
 export const publishStagedAssetsToServer = async (staged) => {
-    const uploadUrl = process.env.ASSET_SERVER_UPLOAD_URL?.trim();
+    const uploadUrl = resolveAssetUploadUrl();
     if (uploadUrl) {
         await publishStagedAssetsToUploadEndpoint({
             stagingRoot: staged.stagingRoot,
             uploadUrl,
+            allowUnauthenticated: process.env.ASSET_SERVER_UPLOAD_ALLOW_UNAUTHENTICATED === '1',
         });
         return;
     }

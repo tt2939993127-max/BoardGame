@@ -855,6 +855,7 @@
     "boostHint": "花费标记来提高伤害",
     "reduceHint": "花费标记来减少伤害",
     "useToken": "使用",
+    "clickTokenHint": "点击高亮 Token 使用",
     "evasiveHint": "花费闪避尝试完全躲避",
     "evasiveDesc": "花费 1 个闪避并掷 1 骰；成功则本次伤害变为 0。",
     "useEvasive": "使用闪避",

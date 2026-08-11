@@ -347,7 +347,8 @@ test.describe('DiceThrone 核心 E2E', () => {
             payload: {},
         });
 
-        await expect(page.getByTestId('token-response-modal')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId(`dt-player-0-token-${TOKEN_IDS.TAIJI}`)).toHaveAttribute('data-token-clickable', 'true');
 
         const bonusDiceResponseState = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
         expect(bonusDiceResponseState.core.pendingDamage?.responderId).toBe('0');

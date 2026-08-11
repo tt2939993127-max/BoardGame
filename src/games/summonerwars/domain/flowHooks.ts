@@ -12,14 +12,12 @@ import { getSummoner, HAND_SIZE, getUnitAbilities as getUnitAbilityIds } from '.
 import type { AbilityContext, AbilityTrigger } from './abilityResolver';
 import { triggerAllUnitsAbilities, resolveAbilityEffects, triggerAbilities } from './abilityResolver';
 import { abilityRegistry } from './abilities';
-import { getUnitAbilities, getUnitAt } from './helpers';
+import { getUnitAbilities } from './helpers';
 import { getBaseCardId, CARD_IDS } from './ids';
 import { canActivateAbility } from './abilityHelpers';
 import { reduceEvent } from './reduce';
 import {
   applyHuijinPhoenixSoulBonus,
-  findBoardUnitByCardId,
-  findBoardUnitByInstanceId,
   postProcessDeathChecks,
 } from './execute/helpers';
 import { getYonghengPostProcessEvents } from './yonghengMechanics';
@@ -81,44 +79,6 @@ export const PHASE_END_ABILITIES: Record<GamePhase, string[]> = {
   magic: ['mogu_burst'],
   draw: [],
 };
-
-function appendDirectDestroyDeathTriggers(
-  events: GameEvent[],
-  core: SummonerWarsCore,
-  timestamp: number,
-): void {
-  for (const destroyEvent of events.filter(e => e.type === SW_EVENTS.UNIT_DESTROYED)) {
-    const destroyPayload = destroyEvent.payload as {
-      position: { row: number; col: number };
-      owner?: PlayerId;
-      instanceId?: string;
-      cardId?: string;
-    };
-    const destroyedUnit = findBoardUnitByInstanceId(core, destroyPayload.instanceId ?? '')
-      ?? (destroyPayload.cardId ? findBoardUnitByCardId(core, destroyPayload.cardId, destroyPayload.owner) : undefined)
-      ?? (() => {
-        const unit = getUnitAt(core, destroyPayload.position);
-        return unit ? { unit, position: destroyPayload.position } : undefined;
-      })();
-    if (!destroyedUnit) continue;
-    if (!getUnitAbilities(destroyedUnit.unit, core).includes('mogu_fungal_mutation')) continue;
-    const alreadySummoned = events.some(e => {
-      if (e.type !== SW_EVENTS.UNIT_SUMMONED) return false;
-      const p = e.payload as { position?: { row: number; col: number }; sourceAbilityId?: string };
-      return p.sourceAbilityId === 'mogu_fungal_mutation'
-        && p.position?.row === destroyedUnit.position.row
-        && p.position?.col === destroyedUnit.position.col;
-    });
-    if (alreadySummoned) continue;
-    events.push(...triggerAbilities('onDeath', {
-      state: core,
-      sourceUnit: destroyedUnit.unit,
-      sourcePosition: destroyedUnit.position,
-      ownerId: destroyedUnit.unit.owner,
-      timestamp,
-    }));
-  }
-}
 
 function triggerPhaseAbilities(
   core: SummonerWarsCore,
@@ -307,7 +267,6 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
     if (processedPhaseExitEvents.length !== events.length) {
       events.splice(0, events.length, ...processedPhaseExitEvents);
     }
-    appendDirectDestroyDeathTriggers(events, core, timestamp);
 
     // 有需要玩家确认的阶段结束技能时，halt 阶段推进
     // 即使 flowHalted 已为 true，仍需检查是否还有技能需要确认

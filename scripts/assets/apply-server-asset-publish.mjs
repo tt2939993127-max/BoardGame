@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+    appendFileSync,
     copyFileSync,
     createReadStream,
     existsSync,
@@ -18,7 +19,10 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { SERVER_PUBLISH_MANIFEST_FILE } from './publish-primary-assets.mjs';
+import {
+    SERVER_PUBLISH_INDEX_FILE,
+    SERVER_PUBLISH_MANIFEST_FILE,
+} from './publish-primary-assets.mjs';
 import { resolveActiveAssetSet } from './active-server-assets.mjs';
 import { selectRetainedReleaseIds } from './release-retention.mjs';
 
@@ -41,6 +45,13 @@ if (!stagingArg || !assetsRootArg) {
 }
 const stagingRoot = path.resolve(stagingArg);
 const assetsRoot = path.resolve(assetsRootArg);
+const preserveExistingAssets = args.includes('--preserve-existing-assets');
+const publishSource = {
+    ip: process.env.ASSET_PUBLISH_SOURCE_IP || 'unknown',
+    id: process.env.ASSET_PUBLISH_SOURCE_ID || '',
+    requestId: process.env.ASSET_PUBLISH_REQUEST_ID || '',
+    anonymous: process.env.ASSET_PUBLISH_ANONYMOUS === '1',
+};
 
 const resolveWithin = (root, relativePath) => {
     const resolved = path.resolve(root, relativePath);
@@ -73,6 +84,43 @@ const walkFiles = (root, relativePath = '', output = []) => {
         }
     }
     return output;
+};
+
+const buildAssetIndex = async (releaseDir) => {
+    const index = {};
+    for (const key of walkFiles(releaseDir, 'official')) {
+        const filePath = resolveWithin(releaseDir, key);
+        index[key] = {
+            size: statSync(filePath).size,
+            sha256: await hashFile(filePath),
+        };
+    }
+    return index;
+};
+
+const readAssetIndex = (releaseDir) => {
+    const indexPath = path.join(releaseDir, SERVER_PUBLISH_INDEX_FILE);
+    if (!existsSync(indexPath)) return null;
+    try {
+        const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+        if (!index || index.schemaVersion !== 1 || !index.objects || typeof index.objects !== 'object') {
+            return null;
+        }
+        return index.objects;
+    } catch {
+        return null;
+    }
+};
+
+const writeAssetIndex = (releaseDir, objects) => {
+    const indexPath = path.join(releaseDir, SERVER_PUBLISH_INDEX_FILE);
+    const tempPath = `${indexPath}.tmp-${process.pid}`;
+    writeFileSync(tempPath, `${JSON.stringify({
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        objects,
+    })}\n`, { encoding: 'utf8', mode: 0o644 });
+    renameSync(tempPath, indexPath);
 };
 
 const pruneInactiveManagedObjects = async (releaseDir, publishedKeys) => {
@@ -175,15 +223,57 @@ for (const object of manifest.objects) {
     copyFileSync(sourcePath, destinationPath);
 }
 
-await pruneInactiveManagedObjects(
-    releaseDir,
-    new Set(manifest.objects.map((object) => object.key)),
-);
+if (!preserveExistingAssets) {
+    await pruneInactiveManagedObjects(
+        releaseDir,
+        new Set(manifest.objects.map((object) => object.key)),
+    );
+}
+
+let assetIndex = readAssetIndex(releaseDir);
+if (!assetIndex) {
+    assetIndex = await buildAssetIndex(releaseDir);
+}
+for (const object of manifest.objects) {
+    assetIndex[object.key] = {
+        size: object.size,
+        sha256: object.sha256,
+    };
+}
+for (const key of Object.keys(assetIndex)) {
+    if (!existsSync(resolveWithin(releaseDir, key))) {
+        delete assetIndex[key];
+    }
+}
+writeAssetIndex(releaseDir, assetIndex);
 rmSync(path.join(releaseDir, '.active-release.json'), { force: true });
 
 const nextLink = path.join(assetsRoot, `.current-${releaseId}-${process.pid}`);
 symlinkSync(releaseDir, nextLink, 'dir');
 renameSync(nextLink, currentLink);
+
+const auditRoot = path.join(assetsRoot, 'control', 'publish-audit');
+mkdirSync(auditRoot, { recursive: true });
+const auditEntry = {
+    schemaVersion: 1,
+    event: 'asset-publish',
+    status: 'published',
+    publishedAt: new Date().toISOString(),
+    releaseId,
+    source: publishSource,
+    preserveExistingAssets,
+    bytes: publishBytes,
+    objects: manifest.objects.map((object) => ({
+        key: object.key,
+        size: object.size,
+        sha256: object.sha256,
+    })),
+};
+appendFileSync(
+    path.join(auditRoot, 'publish.jsonl'),
+    `${JSON.stringify(auditEntry)}\n`,
+    { encoding: 'utf8', mode: 0o600 },
+);
 
 const releaseIds = readdirSync(releasesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && /^\d{17}$/.test(entry.name))
@@ -195,14 +285,17 @@ const retainedReleaseIds = selectRetainedReleaseIds(
     RELEASE_RETENTION_COUNT,
 );
 const deletedReleaseIds = [];
-for (const oldReleaseId of releaseIds) {
-    if (retainedReleaseIds.has(oldReleaseId)) continue;
-    const oldReleaseDir = resolveWithin(releasesRoot, oldReleaseId);
-    rmSync(oldReleaseDir, { recursive: true, force: true });
-    deletedReleaseIds.push(oldReleaseId);
+if (!preserveExistingAssets) {
+    for (const oldReleaseId of releaseIds) {
+        if (retainedReleaseIds.has(oldReleaseId)) continue;
+        const oldReleaseDir = resolveWithin(releasesRoot, oldReleaseId);
+        rmSync(oldReleaseDir, { recursive: true, force: true });
+        deletedReleaseIds.push(oldReleaseId);
+    }
 }
 
 console.log(`serverPrimaryRelease=${releaseId}`);
 console.log(`serverPrimaryObjects=${manifest.objects.length}`);
+console.log(`serverPrimaryIndexObjects=${Object.keys(assetIndex).length}`);
 console.log(`serverPrimaryReleaseRetention=retained=${retainedReleaseIds.size} deleted=${deletedReleaseIds.length}`);
 console.log('assetBackupQueue=disabled');

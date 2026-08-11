@@ -353,6 +353,11 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
       card: makeCultist('test-victim'),
       owner: '0',
     });
+    const adjacentEnemy = placeUnit(state, { row: 3, col: 3 }, {
+      cardId: 'test-adjacent-enemy',
+      card: makeEnemy('test-adjacent-enemy', { life: 3 }),
+      owner: '1',
+    });
 
     state.phase = 'summon';
     state.currentPlayer = '0';
@@ -375,6 +380,16 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
     );
     expect(summonEvents.length).toBe(1);
     expect((summonEvents[0].payload as any).position).toEqual({ row: 3, col: 2 });
+
+    const sacrificeDamage = events.filter(
+      e => e.type === SW_EVENTS.UNIT_DAMAGED
+        && (e.payload as any).sourceAbilityId === 'sacrifice'
+        && (e.payload as any).position.row === adjacentEnemy.position.row
+        && (e.payload as any).position.col === adjacentEnemy.position.col,
+    );
+    expect(sacrificeDamage).toHaveLength(1);
+    expect((sacrificeDamage[0].payload as any).damage).toBe(1);
+    expect(newState.board[3][3].unit?.damage).toBe(1);
 
     // 伊路特-巴尔应在牺牲品位置
     expect(newState.board[3][2].unit?.cardId).toBe('test-elut-bar');

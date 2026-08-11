@@ -1013,7 +1013,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.sys.phase).toBe('defensiveRoll');
+            expect(result.finalState.sys.phase).toBe('offensiveRoll');
             expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
@@ -1069,7 +1069,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 1, discardSize: 1 },
                         '1': { hp: 50 },
@@ -1716,7 +1715,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'main1',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -1759,7 +1757,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'main1',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -1849,7 +1846,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'main1',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -1891,6 +1887,7 @@ describe('cross hero battles', () => {
                 name: 'gunslinger high-noon bullet branch opens protect response',
                 commands: [
                     cmd('PLAY_CARD', '0', { cardId: 'card-high-noon' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
             });
 
@@ -1908,7 +1905,7 @@ describe('cross hero battles', () => {
                 kind: 'dt:token-response',
                 playerId: '1',
             });
-            expect(responseResult.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+            expect(responseResult.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(49);
 
             const settledResult = runner.run({
                 name: 'gunslinger high-noon bullet branch skips protect response',
@@ -1918,10 +1915,9 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'main1',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
-                        '1': { hp: 48 },
+                        '1': { hp: 47 },
                     },
                 },
             });
@@ -2017,7 +2013,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'main1',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -2372,7 +2367,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.sys.interaction.current).toBeUndefined();
+            expect(result.finalState.sys.interaction.current?.kind).toBe('dt:bonus-dice');
             expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
@@ -2736,7 +2731,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 1, discardSize: 1 },
                         '1': { hp: 50 },
@@ -2791,7 +2785,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -2846,7 +2839,6 @@ describe('cross hero battles', () => {
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
-                    pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
                         '1': { hp: 50 },
@@ -2917,8 +2909,7 @@ describe('cross hero battles', () => {
                     cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {
-                    turnPhase: 'main2',
-                    pendingInteraction: null,
+                    turnPhase: 'defensiveRoll',
                     players: {
                         '0': { cp: 0, discardSize: 0 },
                         '1': {},
@@ -2937,7 +2928,11 @@ describe('cross hero battles', () => {
                 retributionCount: expect.any(Number),
                 grantedRetributionCount: expect.any(Number),
             });
-            expect(result.finalState.core.pendingAttack).toBeNull();
+            expect(result.finalState.core.pendingAttack).toMatchObject({
+                sourceAbilityId: 'masamune-2-large-straight',
+                damageResolved: true,
+                defenseResolved: true,
+            });
             expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
             expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] ?? 0).toBe(0);
         });
@@ -2994,10 +2989,10 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
         });
 
-        it('upgrade-wakizashi-2 costs 1 CP and replaces runtime definition with level II', () => {
+        it('upgrade-wakizashi-2 costs 2 CP and replaces runtime definition with level II', () => {
             const upgradeCard = SAMURAI_CARDS.find(card => card.id === 'upgrade-wakizashi-2');
             expect(upgradeCard).toBeDefined();
-            expect(upgradeCard!.cpCost).toBe(1);
+            expect(upgradeCard!.cpCost).toBe(2);
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
@@ -3010,7 +3005,7 @@ describe('cross hero battles', () => {
                         random,
                         { '0': 'samurai', '1': 'monk' }
                     );
-                    state.core.players['0'].resources.cp = 1;
+                    state.core.players['0'].resources.cp = 2;
                     state.core.players['0'].hand = [{ ...upgradeCard! }];
                     state.core.players['0'].deck = [];
                     return state;

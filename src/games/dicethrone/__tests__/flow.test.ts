@@ -2860,7 +2860,7 @@ describe('王权骰铸流程测试', () => {
         it.each([
             { attackerId: '0' as PlayerId, responderId: '1' as PlayerId },
             { attackerId: '1' as PlayerId, responderId: '0' as PlayerId },
-        ])('一掷千金奖励骰结算前，玩家 $attackerId 使用时不应打开 afterRollConfirmed，且对手不能绕过结算直接改骰', ({ attackerId, responderId }) => {
+        ])('一掷千金奖励骰结算前，统一打开 afterRollConfirmed 供响应者修改当前临时骰', ({ attackerId, responderId }) => {
             const runner = createRunner(createQueuedRandom([3]));
             const attackerStartingCp = 5;
             const responderStartingCp = 10;
@@ -2894,14 +2894,16 @@ describe('王权骰铸流程测试', () => {
                 allowDiceModification: true,
             });
             expect(rolled.finalState.core.pendingBonusDiceSettlement?.dice[0]?.value).toBe(3);
-            expect(rolled.finalState.sys.responseWindow?.current).toBeUndefined();
+            expect(rolled.finalState.sys.responseWindow?.current).toMatchObject({
+                windowType: 'afterRollConfirmed',
+                responderQueue: [responderId],
+            });
 
             runner.setState(rolled.finalState);
-            const blockedFlick = runner.dispatch('PLAY_CARD', { playerId: responderId, cardId: 'card-flick' });
-            expect(blockedFlick.success).toBe(false);
-            expect(blockedFlick.finalState.core.players[responderId].discard.some((card) => card.id === 'card-flick')).toBe(false);
+            const passed = runner.dispatch('RESPONSE_PASS', { playerId: responderId });
+            expect(passed.success).toBe(true);
 
-            runner.setState(rolled.finalState);
+            runner.setState(passed.finalState);
             const settled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: attackerId });
             expect(settled.success).toBe(true);
             expect(settled.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
@@ -5535,7 +5537,7 @@ describe('王权骰铸流程测试', () => {
 
             expect(rerollResult.success).toBe(false);
             if (!rerollResult.success) {
-                expect(rerollResult.error).toBe('invalid_die_index');
+                expect(rerollResult.error).toBe('no_pending_bonus_dice');
             }
         });
 
@@ -5624,7 +5626,21 @@ describe('王权骰铸流程测试', () => {
                 expect(result.error?.message).not.toContain('dice.map');
                 return;
             }
-            expect(result.state.core.pendingAttack).toBeNull();
+            expect(result.state.sys.phase).toBe('defensiveRoll');
+            expect(result.state.core.pendingAttack).not.toBeNull();
+            const settled = executePipeline(
+                { domain: DiceThroneDomain, systems: testSystems },
+                result.state,
+                { ...cmd('SKIP_BONUS_DICE_REROLL', '1'), timestamp: Date.now() } as any,
+                random,
+                playerIds,
+            );
+            expect(settled.success).toBe(true);
+            if (settled.success) {
+                expect(settled.state.sys.phase).toBe('main2');
+                expect(settled.state.core.pendingAttack).toBeNull();
+                expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+            }
         });
 
         it('线上反馈 6a1d5440：defensiveRoll 下 SYS_INTERACTION_RESPOND 处理忍术选择时不应再抛出 dice.map 异常', () => {
@@ -5730,12 +5746,21 @@ describe('王权骰铸流程测试', () => {
                 expect(result.error?.message).not.toContain('dice.map');
                 return;
             }
-            expect(result.state.sys.phase).toBe('main2');
-            expect(result.state.core.pendingAttack).toBeNull();
-            expect(result.state.core.pendingBonusDiceSettlement).toMatchObject({
-                id: 'slash-2-4-display-1780306943159',
-                displayOnly: true,
-            });
+            expect(result.state.sys.phase).toBe('defensiveRoll');
+            expect(result.state.core.pendingAttack).not.toBeNull();
+            const settled = executePipeline(
+                { domain: DiceThroneDomain, systems: testSystems },
+                result.state,
+                { ...cmd('SKIP_BONUS_DICE_REROLL', '1'), timestamp: Date.now() } as any,
+                random,
+                playerIds,
+            );
+            expect(settled.success).toBe(true);
+            if (settled.success) {
+                expect(settled.state.sys.phase).toBe('main2');
+                expect(settled.state.core.pendingAttack).toBeNull();
+                expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+            }
         });
 
         it('main1 阶段 BONUS_DICE_SETTLED 不触发阶段推进', () => {

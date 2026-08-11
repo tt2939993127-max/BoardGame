@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
 
@@ -90,5 +93,107 @@ test('分块上传要求专用令牌，并在完成时交给归档校验', async
         assert.match(result.error, /list asset archive failed/);
     } finally {
         await stopRunner(child);
+    }
+});
+
+test('匿名素材入口只放开素材路由并按来源额度限制', async () => {
+    const port = await reservePort();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, ['scripts/deploy/deploy-runner.mjs'], {
+        cwd: rootDir,
+        env: {
+            ...process.env,
+            BG_DEPLOY_RUNNER_HOST: '127.0.0.1',
+            BG_DEPLOY_RUNNER_PORT: String(port),
+            BG_DEPLOY_RUNNER_TOKEN: 'deploy-runner-test-token',
+            BG_ASSET_PUBLISH_TOKEN: 'asset-upload-test-token',
+            BG_ASSET_PUBLISH_ALLOW_UNAUTHENTICATED: '1',
+            BG_ASSET_PUBLISH_MAX_SOURCE_BYTES: '4',
+            BG_ASSET_PUBLISH_PORT: '',
+        },
+        stdio: 'ignore',
+    });
+
+    try {
+        await waitForReady(baseUrl, child);
+        const firstUploadId = randomUUID();
+        const firstBody = Buffer.from('abc');
+        const firstHeaders = {
+            'Content-Range': `bytes 0-${firstBody.length - 1}/${firstBody.length}`,
+            'Content-Type': 'application/octet-stream',
+        };
+
+        const firstChunk = await fetch(`${baseUrl}/asset-publish/chunks/${firstUploadId}`, {
+            method: 'POST',
+            headers: firstHeaders,
+            body: firstBody,
+        });
+        assert.equal(firstChunk.status, 204);
+        const firstComplete = await fetch(`${baseUrl}/asset-publish/complete/${firstUploadId}`, {
+            method: 'POST',
+        });
+        assert.equal(firstComplete.status, 503);
+
+        const secondUploadId = randomUUID();
+        const body = Buffer.from('12');
+        const headers = {
+            'Content-Range': `bytes 0-${body.length - 1}/${body.length}`,
+            'Content-Type': 'application/octet-stream',
+        };
+
+        const chunk = await fetch(`${baseUrl}/asset-publish/chunks/${secondUploadId}`, {
+            method: 'POST',
+            headers,
+            body,
+        });
+        assert.equal(chunk.status, 400);
+        const quotaResult = await chunk.json();
+        assert.match(quotaResult.error, /source quota exceeded/);
+
+        const deployPreview = await fetch(`${baseUrl}/deploy/update/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        assert.equal(deployPreview.status, 401);
+    } finally {
+        await stopRunner(child);
+    }
+});
+
+test('匿名素材入口可读取当前对象清单用于自动增量上传', async () => {
+    const port = await reservePort();
+    const assetsRoot = mkdtempSync(path.join(tmpdir(), 'boardgame-asset-inventory-'));
+    const currentRoot = path.join(assetsRoot, 'current', 'official', 'common');
+    mkdirSync(currentRoot, { recursive: true });
+    writeFileSync(path.join(currentRoot, 'test.webp'), 'same');
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, ['scripts/deploy/deploy-runner.mjs'], {
+        cwd: rootDir,
+        env: {
+            ...process.env,
+            BG_DEPLOY_RUNNER_HOST: '127.0.0.1',
+            BG_DEPLOY_RUNNER_PORT: String(port),
+            BG_DEPLOY_RUNNER_TOKEN: 'deploy-runner-test-token',
+            BG_ASSET_PUBLISH_ALLOW_UNAUTHENTICATED: '1',
+            BG_ASSET_PUBLISH_ASSETS_ROOT: assetsRoot,
+            BG_ASSET_PUBLISH_PORT: '',
+        },
+        stdio: 'ignore',
+    });
+
+    try {
+        await waitForReady(baseUrl, child);
+        const response = await fetch(`${baseUrl}/asset-publish`);
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.equal(result.ok, true);
+        assert.deepEqual(result.objects.map(({ key, size }) => ({ key, size })), [
+            { key: 'official/common/test.webp', size: 4 },
+        ]);
+        assert.match(result.objects[0].sha256, /^[a-f0-9]{64}$/);
+    } finally {
+        await stopRunner(child);
+        rmSync(assetsRoot, { recursive: true, force: true });
     }
 });

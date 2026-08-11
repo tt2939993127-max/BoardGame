@@ -41,6 +41,7 @@ import type { InteractionDescriptor } from '../domain/core-types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { diceThroneCheatModifier } from '../domain/cheatModifier';
 import { createMainRollContext, getCurrentRollDice } from '../domain/rollContext';
+import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../heroes/zhanshujia/tokens';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -384,7 +385,7 @@ describe('AI legal actions', () => {
         )).toBe(false);
     });
 
-    it('displayOnly 奖励骰结算不应给 AI 生成重掷/确认动作', () => {
+    it('displayOnly 奖励骰结算只给 AI 生成一次确认动作，不生成重掷动作', () => {
         const state = createInitializedState(['0', '1'], fixedRandom);
         state.core.activePlayerId = '0';
         state.sys.phase = 'main2';
@@ -402,9 +403,8 @@ describe('AI legal actions', () => {
             state,
         });
 
-        expect(actions.some((action) =>
-            action.kind === 'bonus-die-reroll' || action.kind === 'skip-bonus-dice-reroll'
-        )).toBe(false);
+        expect(actions.filter((action) => action.kind === 'bonus-die-reroll')).toHaveLength(0);
+        expect(actions.filter((action) => action.kind === 'skip-bonus-dice-reroll')).toHaveLength(1);
     });
 
     it('旧 pendingBonusDiceSettlement 脏 dice shape 不应让 AI 构建奖励骰动作时崩溃', () => {
@@ -4255,6 +4255,44 @@ describe('本地 AI setup 视角切换', () => {
 // ============================================================================
 
 describe('REROLL_DIE 交互中重掷骰子', () => {
+    it('普通重投与战术优势重投共享同一颗当前骰的重投事件结果', () => {
+        const random = createQueuedRandom([6]);
+        const state = createHeroMatchup('zhanshujia', 'barbarian')(['0', '1'], random);
+        state.sys.phase = 'offensiveRoll';
+        state.core.activePlayerId = '0';
+        state.core.rollCount = 1;
+        state.core.rollConfirmed = false;
+        state.core.dice = state.core.dice.map((die, index) => ({
+            ...die,
+            id: index,
+            value: 3,
+            isKept: false,
+            ownerId: '0',
+        }));
+        state.core.players['0'].passiveAbilities = ZHANSHUJIA_PASSIVE_ABILITIES;
+        state.core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] = 1;
+
+        const normalEvents = DiceThroneDomain.execute(
+            state,
+            cmd('REROLL_DIE', '0', { dieId: 0 }),
+            createQueuedRandom([6]),
+        );
+        const passiveEvents = DiceThroneDomain.execute(
+            state,
+            cmd('USE_PASSIVE_ABILITY', '0', {
+                passiveId: 'zhanshujia-tactical-advantage',
+                actionIndex: 1,
+                targetDieId: 0,
+            }),
+            createQueuedRandom([6]),
+        );
+        const normalReroll = normalEvents.find((event) => event.type === 'DIE_REROLLED');
+        const passiveReroll = passiveEvents.find((event) => event.type === 'DIE_REROLLED');
+
+        expect(passiveReroll?.payload).toMatchObject(normalReroll?.payload ?? {});
+        expect(passiveEvents.some((event) => event.type === 'TOKEN_CONSUMED')).toBe(true);
+    });
+
     it('有 pendingInteraction 时重掷骰子成功', () => {
         const diceValues = [3, 3, 3, 3, 3, 5]; // 第 6 个值用于重掷
         const random = createQueuedRandom(diceValues);

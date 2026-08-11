@@ -3965,7 +3965,7 @@ describe('submitOnlineAiResolution', () => {
         expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
-    it('单命令收到 stale_state 后应立即结束当前尝试，避免把重同步误认成命令确认', () => {
+    it('单命令收到 stale_state 后应结束当前尝试并等待新的权威状态，避免重复提交旧动作', () => {
         const retry = vi.fn();
         const onWillResync = vi.fn();
         const onConfirmed = vi.fn();
@@ -4010,7 +4010,7 @@ describe('submitOnlineAiResolution', () => {
 
         expect(lastAiAttemptKeyRef.current).toBeNull();
         expect(onWillResync).toHaveBeenCalledWith('stale_state');
-        expect(retry).toHaveBeenCalledTimes(1);
+        expect(retry).not.toHaveBeenCalled();
         expect(onRejected).toHaveBeenCalledWith('stale_state');
         expect(onConfirmed).not.toHaveBeenCalled();
         expect(unsubscribeState).toHaveBeenCalledTimes(1);

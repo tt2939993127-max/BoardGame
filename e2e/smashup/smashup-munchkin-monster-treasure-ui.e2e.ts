@@ -4987,7 +4987,9 @@ const buildMunchkinOrcsPitsProtectionScene = (): SmashUpSceneConfig => ({
     },
 });
 
-const buildMunchkinOrcsHammerSlammerScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsHammerSlammerScene = (options: { includeLegalTarget?: boolean } = {}): SmashUpSceneConfig => {
+    const includeLegalTarget = options.includeLegalTarget ?? true;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5031,7 +5033,7 @@ const buildMunchkinOrcsHammerSlammerScene = (): SmashUpSceneConfig => ({
                 {
                     defId: 'base_treasure_bath',
                     minions: [
-                        minion('orcs-hammer-weak-0', 'alien_invader', '1', 2),
+                        ...(includeLegalTarget ? [minion('orcs-hammer-weak-0', 'alien_invader', '1', 2)] : []),
                         minion('orcs-hammer-strong-0', 'alien_scout', '1', 3),
                     ],
                     ongoingActions: [],
@@ -5039,14 +5041,15 @@ const buildMunchkinOrcsHammerSlammerScene = (): SmashUpSceneConfig => ({
                 },
                 {
                     defId: 'base_the_homeworld',
-                    minions: [minion('orcs-hammer-weak-1', 'pirate_first_mate', '1', 2)],
+                    minions: includeLegalTarget ? [minion('orcs-hammer-weak-1', 'pirate_first_mate', '1', 2)] : [],
                     ongoingActions: [],
                     monsters: [],
                 },
             ],
         },
     },
-});
+    });
+};
 
 const buildMunchkinOrcsTopperChopperScene = (): SmashUpSceneConfig => ({
     gameId: 'smashup',
@@ -5167,7 +5170,10 @@ const buildMunchkinOrcsGimmeScene = (): SmashUpSceneConfig => ({
     },
 });
 
-const buildMunchkinOrcsAndStayDownScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsAndStayDownScene = (options: { ownPower?: number; opponentPower?: number } = {}): SmashUpSceneConfig => {
+    const ownPower = options.ownPower ?? 8;
+    const opponentPower = options.opponentPower ?? 5;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5209,8 +5215,8 @@ const buildMunchkinOrcsAndStayDownScene = (): SmashUpSceneConfig => ({
                 {
                     defId: 'base_garrison',
                     minions: [
-                        minion('orcs-stay-down-own', 'alien_invader', '0', 8),
-                        minion('orcs-stay-down-enemy', 'pirate_first_mate', '1', 5),
+                        minion('orcs-stay-down-own', 'alien_invader', '0', ownPower),
+                        minion('orcs-stay-down-enemy', 'pirate_first_mate', '1', opponentPower),
                     ],
                     ongoingActions: [],
                     monsters: [],
@@ -5219,9 +5225,13 @@ const buildMunchkinOrcsAndStayDownScene = (): SmashUpSceneConfig => ({
             ],
         },
     },
-});
+    });
+};
 
-const buildMunchkinOrcsAngryPillagersScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsAngryPillagersScene = (options: { ownPower?: number; opponentPower?: number } = {}): SmashUpSceneConfig => {
+    const ownPower = options.ownPower ?? 8;
+    const opponentPower = options.opponentPower ?? 5;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5263,8 +5273,8 @@ const buildMunchkinOrcsAngryPillagersScene = (): SmashUpSceneConfig => ({
                 {
                     defId: 'base_garrison',
                     minions: [
-                        minion('orcs-angry-own', 'alien_invader', '0', 8),
-                        minion('orcs-angry-enemy', 'pirate_first_mate', '1', 5),
+                        minion('orcs-angry-own', 'alien_invader', '0', ownPower),
+                        minion('orcs-angry-enemy', 'pirate_first_mate', '1', opponentPower),
                     ],
                     ongoingActions: [],
                     monsters: [],
@@ -5273,7 +5283,8 @@ const buildMunchkinOrcsAngryPillagersScene = (): SmashUpSceneConfig => ({
             ],
         },
     },
-});
+    });
+};
 
 const buildMunchkinOrcsBaseScoringScene = (options: {
     baseDefId: 'base_garrison' | 'base_the_pits';
@@ -5334,7 +5345,9 @@ const buildMunchkinOrcsBaseScoringScene = (options: {
     },
 });
 
-const buildMunchkinOrcsDogpileSpecialScene = (): SmashUpSceneConfig => ({
+const buildMunchkinOrcsDogpileSpecialScene = (options: { includeTargetBaseMinions?: boolean } = {}): SmashUpSceneConfig => {
+    const includeTargetBaseMinions = options.includeTargetBaseMinions ?? true;
+    return ({
     gameId: 'smashup',
     currentPlayer: '0',
     phase: 'playCards',
@@ -5385,17 +5398,20 @@ const buildMunchkinOrcsDogpileSpecialScene = (): SmashUpSceneConfig => ({
                 },
                 {
                     defId: 'base_the_homeworld',
-                    minions: [
-                        minion('orcs-dogpile-target-a', 'alien_invader', '0', 3),
-                        minion('orcs-dogpile-target-b', 'alien_scout', '0', 2),
-                    ],
+                    minions: includeTargetBaseMinions
+                        ? [
+                            minion('orcs-dogpile-target-a', 'alien_invader', '0', 3),
+                            minion('orcs-dogpile-target-b', 'alien_scout', '0', 2),
+                        ]
+                        : [],
                     ongoingActions: [],
                     monsters: [],
                 },
             ],
         },
     },
-});
+    });
+};
 
 const buildMunchkinOrcsStallingScene = (): SmashUpSceneConfig => ({
     gameId: 'smashup',
@@ -8188,6 +8204,82 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-剑王-同基地己方获得加成且自身对手与其他基地不加成', testInfo);
     });
 
+    test('兽人剑王移动端横屏显示同基地加成并保留原版布局', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsSwordLordScene());
+        await waitForSmashUpFxToSettle(page);
+
+        await expect(page.locator('[data-minion-uid="orcs-sword-lord-a"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-sword-ally"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-sword-enemy"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-minion-power-badge-orcs-sword-ally')).toHaveText('+1');
+        await expect(page.getByTestId('su-minion-power-badge-orcs-sword-lord-a')).toHaveCount(0);
+        await expect(page.getByTestId('su-minion-power-badge-orcs-sword-enemy')).toHaveCount(0);
+        await expect(page.getByTestId('su-minion-power-badge-orcs-sword-other-base')).toHaveCount(0);
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+
+        const state = await game.getState();
+        const bases = state.core.bases as Array<{ minions: Array<{ uid: string; basePower?: number }> }>;
+        expect(bases[0]?.minions.find(minion => minion.uid === 'orcs-sword-ally')?.basePower).toBe(2);
+        expect(bases[1]?.minions.find(minion => minion.uid === 'orcs-sword-other-base')?.basePower).toBe(2);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端剑王图面应显示两座基地、力量标记、公共小牌和原版操作入口且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人剑王-同基地加成与原版布局', testInfo);
+    });
+
     test('兽人呆瓜兽人真实入口排除对手行动目标但保留同基地普通随从', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -8227,6 +8319,118 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         expect(targetBase.minions.some((minion: any) => minion.uid === 'orcs-dork-free')).toBe(false);
         expect(finalState.core.players?.['0']?.discard?.some((card: any) => card.uid === 'orcs-dork-crush-1')).toBe(true);
         await game.screenshot('兽人-呆瓜兽人-普通随从被摧毁而呆瓜兽人保留', testInfo);
+    });
+
+    test('兽人呆瓜兽人移动端横屏过滤保护目标并手动收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsDorkOrcProtectionScene());
+
+        await expect(page.locator('[data-card-uid="orcs-dork-crush-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-dork-protected"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-dork-free"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人呆瓜兽人-手牌与保护目标', testInfo);
+
+        await game.playCard('munchkin_orcs_crush');
+        await game.waitForInteraction('munchkin_orcs_crush_base', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端呆瓜兽人第一步选择基地');
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="0"]',
+            '移动端呆瓜兽人第一步必须显示基地本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await clickManualBaseChoice(page, 0, '移动端呆瓜兽人选择目标基地');
+
+        await game.waitForInteraction('munchkin_orcs_crush_player', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端呆瓜兽人第二步选择玩家');
+        const playerOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(playerOptions).toHaveLength(1);
+        expect(playerOptions[0]?.value?.targetPlayerId).toBe('1');
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            option => option.value?.targetPlayerId === '1',
+            '移动端呆瓜兽人选择目标玩家',
+        );
+
+        await game.waitForInteraction('munchkin_orcs_crush_minion', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端呆瓜兽人第三步选择随从');
+        const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-dork-free')).toBe(true);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-dork-protected')).toBe(false);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-dork-free',
+            '移动端呆瓜兽人必须显示未保护的普通随从本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人呆瓜兽人-过滤保护目标', testInfo);
+        await clickManualMinionChoice(page, 'orcs-dork-free', '移动端呆瓜兽人选择普通随从');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            return {
+                protectedVisible: await page.locator('[data-minion-uid="orcs-dork-protected"]').count() > 0,
+                freeVisible: await page.locator('[data-minion-uid="orcs-dork-free"]').count() > 0,
+                freeInDiscard: core.players?.['1']?.discard?.some(card => card.uid === 'orcs-dork-free') ?? false,
+                actionInDiscard: core.players?.['0']?.discard?.some(card => card.uid === 'orcs-dork-crush-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            protectedVisible: true,
+            freeVisible: false,
+            freeInDiscard: true,
+            actionInDiscard: true,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                otherBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端呆瓜兽人收口后基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            otherBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人呆瓜兽人-保护目标保留并收口', testInfo);
     });
 
     test('兽人坑洞真实入口只保护坑洞内随从不受对手行动', async ({ page, game }, testInfo) => {
@@ -8419,6 +8623,123 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-给我-转移后行动保留在新宿主', testInfo);
     });
 
+    test('兽人给我！移动端横屏先选附着行动再选己方新宿主并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsGimmeScene());
+
+        const host = page.locator('[data-minion-uid="orcs-gimme-host"]').first();
+        const target = page.locator('[data-minion-uid="orcs-gimme-target"]').first();
+        const attachedAction = page.locator('[data-attached-action-uid="orcs-gimme-attached"]').first();
+        await expect(page.locator('[data-card-uid="orcs-gimme-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(host).toBeVisible({ timeout: 15000 });
+        await expect(target).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人给我-手牌与两个宿主', testInfo);
+
+        await host.click({ force: true });
+        await expect(host).toHaveAttribute('data-attached-overlay-visible', 'true');
+        await expect(attachedAction).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人给我-展开附着行动', testInfo);
+
+        const gimmeCard = page.locator('[data-card-uid="orcs-gimme-1"]').first();
+        await gimmeCard.click({ force: true });
+        await page.waitForTimeout(300);
+        await expect(gimmeCard, '移动端给我第一次点击后应保留待确认的手牌卡本体').toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人给我-手牌卡待确认', testInfo);
+        await gimmeCard.click({ force: true });
+        await game.waitForInteraction('munchkin_orcs_gimme_action', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端给我第一步选择附着行动');
+        await expectManualChoiceVisible(
+            page,
+            '[data-attached-action-uid="orcs-gimme-attached"]',
+            '移动端给我第一步必须显示附着行动本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人给我-手动选择附着行动', testInfo);
+        await attachedAction.click({ force: true });
+
+        await game.waitForInteraction('munchkin_orcs_gimme_minion', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端给我第二步选择己方新宿主');
+        const minionOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(minionOptions.some(option => option.value?.minionUid === 'orcs-gimme-target')).toBe(true);
+        expect(minionOptions.some(option => option.value?.minionUid === 'orcs-gimme-host')).toBe(false);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-gimme-target',
+            '移动端给我第二步必须显示己方新宿主本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人给我-手动选择己方新宿主', testInfo);
+        await clickManualMinionChoice(page, 'orcs-gimme-target', '移动端给我选择己方新宿主');
+
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            const sourceHost = core.bases[0].minions.find(minion => minion.uid === 'orcs-gimme-host');
+            const newHost = core.bases[1].minions.find(minion => minion.uid === 'orcs-gimme-target');
+            const player1 = core.players?.['1'] as SmashUpPlayerCoreSlice | undefined;
+            return {
+                sourceHostPresent: Boolean(sourceHost),
+                targetAttachedUids: newHost?.attachedActions?.map(action => action.uid) ?? [],
+                player1DiscardDefIds: player1?.discard?.map(card => card.defId) ?? [],
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            sourceHostPresent: false,
+            targetAttachedUids: ['orcs-gimme-attached'],
+            player1DiscardDefIds: ['alien_invader'],
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                sourceBaseVisible: inViewport('[data-base-index="0"]'),
+                targetBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端给我收口后两个基地、宿主、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            sourceBaseVisible: true,
+            targetBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await target.click({ force: true });
+        await expect(target).toHaveAttribute('data-attached-overlay-visible', 'true');
+        await expect(attachedAction).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人给我-转移后行动保留在新宿主', testInfo);
+    });
+
     test('兽人洗手间从真实手牌入口手动选择附着基地', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -8456,6 +8777,107 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-洗手间-已附着到目标基地', testInfo);
     });
 
+    test('兽人洗手间移动端横屏手动选择附着基地并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsStallingPlacementScene());
+
+        const action = page.locator('[data-card-uid="orcs-stalling-placement-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人洗手间-手牌与两个候选基地', testInfo);
+
+        await action.click({ force: true });
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.locator('[data-base-index="0"] > div').first()).toHaveClass(/ring-(green|emerald)-400/);
+        await expect(page.locator('[data-base-index="1"] > div').first()).toHaveClass(/ring-(green|emerald)-400/);
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="0"]',
+            '移动端洗手间必须显示附着基地本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人洗手间-手动选择附着基地', testInfo);
+        await clickManualBaseChoice(page, 0, '移动端洗手间选择附着基地');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            return {
+                targetBaseHasStalling: core.bases[0].ongoingActions?.some(actionCard => actionCard.uid === 'orcs-stalling-placement-1') ?? false,
+                otherBaseHasStalling: core.bases[1].ongoingActions?.some(actionCard => actionCard.uid === 'orcs-stalling-placement-1') ?? false,
+                handHasAction: core.players?.['0']?.hand?.some(card => card.uid === 'orcs-stalling-placement-1') ?? false,
+                actionsPlayed: core.players?.['0']?.actionsPlayed ?? null,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            targetBaseHasStalling: true,
+            otherBaseHasStalling: false,
+            handHasAction: false,
+            actionsPlayed: 1,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                sourceBaseVisible: inViewport('[data-base-index="0"]'),
+                otherBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端洗手间收口后两座基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            sourceBaseVisible: true,
+            otherBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人洗手间-附着后收口', testInfo);
+    });
+
     test('兽人太难了从真实手牌入口手动选择附着随从', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
         await page.setViewportSize({ width: 1440, height: 900 });
@@ -8489,6 +8911,89 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         expect(player0?.actionsPlayed).toBe(1);
         expect(state.sys?.interaction?.current ?? null).toBeNull();
         await game.screenshot('兽人-太难了-已附着到目标随从', testInfo);
+    });
+
+    test('兽人太难了移动端横屏手动选择附着随从并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsTooToughPlacementScene());
+
+        const action = page.locator('[data-card-uid="orcs-too-tough-placement-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-too-tough-placement-target"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-too-tough-placement-other"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人太难了-手牌与两个候选随从', testInfo);
+
+        await action.click({ force: true });
+        await waitForSmashUpFxToSettle(page);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-too-tough-placement-target',
+            '移动端太难了必须显示附着随从本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人太难了-手动选择附着随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-too-tough-placement-target', '移动端太难了选择附着宿主');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            const target = core.bases[0].minions.find(minion => minion.uid === 'orcs-too-tough-placement-target');
+            return {
+                targetAttached: target?.attachedActions?.some(card => card.uid === 'orcs-too-tough-placement-1') ?? false,
+                otherAttached: core.bases[0].minions.find(minion => minion.uid === 'orcs-too-tough-placement-other')?.attachedActions?.length ?? 0,
+                handHasAction: core.players?.['0']?.hand?.some(card => card.uid === 'orcs-too-tough-placement-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            targetAttached: true,
+            otherAttached: 0,
+            handHasAction: false,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端太难了收口后基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await page.locator('[data-minion-uid="orcs-too-tough-placement-target"]').first().click({ force: true });
+        await expect(page.locator('[data-attached-action-uid="orcs-too-tough-placement-1"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人太难了-附着后收口', testInfo);
     });
 
     test('兽人挤碎真实入口按基地、玩家、随从三步手动选择', async ({ page, game }, testInfo) => {
@@ -8542,6 +9047,109 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         };
         expect(finalState.core?.players?.['1']?.discard?.some(card => card.uid === 'orcs-crush-defender')).toBe(true);
         await game.screenshot('兽人-挤碎-目标随从被摧毁后', testInfo);
+    });
+
+    test('兽人挤碎移动端横屏按基地、玩家、随从三步手动选择并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsCrushScene());
+
+        await expect(page.locator('[data-card-uid="orcs-crush-action-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-crush-defender"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人挤碎-手牌与两座基地', testInfo);
+
+        await game.playCard('munchkin_orcs_crush');
+        await game.waitForInteraction('munchkin_orcs_crush_base', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端挤碎第一步选择基地');
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="0"]',
+            '移动端挤碎第一步必须显示基地本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人挤碎-手动选择基地', testInfo);
+        await clickManualBaseChoice(page, 0, '移动端挤碎选择目标基地');
+
+        await game.waitForInteraction('munchkin_orcs_crush_player', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端挤碎第二步选择玩家');
+        const playerOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(playerOptions).toHaveLength(1);
+        expect(playerOptions[0]?.value?.targetPlayerId).toBe('1');
+        await game.screenshot('移动端-兽人挤碎-手动选择目标玩家', testInfo);
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) => option.value?.targetPlayerId === '1',
+            '移动端挤碎选择仆从更少的玩家',
+        );
+
+        await game.waitForInteraction('munchkin_orcs_crush_minion', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端挤碎第三步选择随从');
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-crush-defender',
+            '移动端挤碎第三步必须显示目标随从本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人挤碎-手动选择目标随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-crush-defender', '移动端挤碎选择要摧毁的随从');
+
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.locator('[data-minion-uid="orcs-crush-defender"]')).toHaveCount(0);
+        const finalState = await game.getState() as {
+            core?: {
+                bases?: Array<{ minions?: Array<{ uid?: string }> }>;
+                players?: Record<string, { discard?: Array<{ uid?: string }> }>;
+            };
+        };
+        expect(finalState.core?.bases?.[0]?.minions?.some(minion => minion.uid === 'orcs-crush-defender')).toBe(false);
+        expect(finalState.core?.players?.['1']?.discard?.some(card => card.uid === 'orcs-crush-defender')).toBe(true);
+        expect(finalState.core?.players?.['0']?.discard?.some(card => card.uid === 'orcs-crush-action-1')).toBe(true);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                targetBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端挤碎收口后基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            targetBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人挤碎-目标随从被摧毁后', testInfo);
     });
 
     test('兽人躺下！计分前真实响应先手动选择行动并压制其他玩家特殊能力', async ({ page, game }, testInfo) => {
@@ -8712,6 +9320,215 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-要塞-达到22后两名玩家获得额外VP', testInfo);
     });
 
+    test('兽人要塞移动端横屏真实计分后保留额外VP与公共小牌入口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsBaseScoringScene({
+            baseDefId: 'base_garrison',
+            ownPower: 12,
+            opponentPower: 10,
+            turnNumber: 34,
+        }));
+
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-own"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-opponent"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人要塞-计分前总力量达到22', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases' || state?.sys?.phase === 'playCards';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const state = await game.getState();
+            if (state.sys?.phase === 'playCards' && !state.sys?.interaction?.current) break;
+            const didPass = await passOpenReactionOrResponseWindow(page, game, '移动端要塞计分前让过响应 ' + (attempt + 1));
+            if (!didPass) await page.waitForTimeout(300);
+        }
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                scoredBaseLeftBoard: !state.core.bases?.some((base: { defId?: string }) => base.defId === 'base_garrison'),
+                scoredBaseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            phase: 'playCards',
+            ownVp: 8,
+            opponentVp: 7,
+            scoredBaseLeftBoard: true,
+            scoredBaseCleared: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        await expect(page.locator('[data-testid="su-special-supply-row"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-count"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-count"]:visible')).toHaveCount(1);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端要塞计分收口后额外VP、基地、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人要塞-计分后额外VP与公共小牌入口', testInfo);
+    });
+
+    test('兽人要塞移动端总力量低于22时不奖励额外VP并清场', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsBaseScoringScene({
+            baseDefId: 'base_garrison',
+            ownPower: 11,
+            opponentPower: 10,
+            turnNumber: 35,
+        }));
+
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-own"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-opponent"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人要塞-总力量21计分前不触发额外VP', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases' || state?.sys?.phase === 'playCards';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const state = await game.getState();
+            if (state.sys?.phase === 'playCards' && !state.sys?.interaction?.current) break;
+            const didPass = await passOpenReactionOrResponseWindow(page, game, '移动端要塞低于22计分前让过响应 ' + (attempt + 1));
+            if (!didPass) await page.waitForTimeout(300);
+        }
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                scoredBaseLeftBoard: !state.core.bases?.some((base: { defId?: string }) => base.defId === 'base_garrison'),
+                scoredBaseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            phase: 'playCards',
+            ownVp: 7,
+            opponentVp: 6,
+            scoredBaseLeftBoard: true,
+            scoredBaseCleared: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端要塞低于22收口后不得新增弃牌堆或挤压原版操作入口').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人要塞-总力量21计分后仅基础VP并清场', testInfo);
+    });
+
     test('兽人坑洞真实计分达到16后清场并保留原版计分布局', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -8771,6 +9588,110 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('兽人-坑洞-计分清场后保留原版布局', testInfo);
     });
 
+    test('兽人坑洞移动端横屏真实计分后保留公共小牌与原版操作入口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsBaseScoringScene({
+            baseDefId: 'base_the_pits',
+            ownPower: 9,
+            opponentPower: 7,
+            turnNumber: 33,
+        }));
+
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-own"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-opponent"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人坑洞-计分前基地与公共小牌', testInfo);
+
+        await page.evaluate(() => {
+            const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+            if (state?.sys?.phase !== 'playCards') throw new Error('兽人坑洞移动端测试必须从 playCards 真实入口开始');
+        });
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases' || state?.sys?.phase === 'playCards';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const state = await game.getState();
+            if (state.sys?.phase === 'playCards' && !state.sys?.interaction?.current) break;
+            const didPass = await passOpenReactionOrResponseWindow(page, game, `移动端坑洞计分前让过响应 ${attempt + 1}`);
+            if (!didPass) await page.waitForTimeout(300);
+        }
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                scoredBaseLeftBoard: !state.core.bases?.some((base: { defId?: string }) => base.defId === 'base_the_pits'),
+                scoredBaseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            phase: 'playCards',
+            ownVp: 8,
+            opponentVp: 6,
+            scoredBaseLeftBoard: true,
+            scoredBaseCleared: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        await expect(page.locator('[data-testid="su-special-supply-row"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-count"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-count"]:visible')).toHaveCount(1);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端坑洞计分收口后基地、手牌、公共小牌数量、回合入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人坑洞-计分清场后保留公共小牌与操作入口', testInfo);
+    });
+
     test('兽人狗堆在计分前真实响应仍按随从再基地手动选择', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -8824,6 +9745,205 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         }, { timeout: 15000 }).toEqual({ sourcePresent: false, targetPresent: true, hasCardInDiscard: true });
         await waitForSmashUpFxToSettle(page);
         await game.screenshot('兽人-狗堆-计分前移动结算后', testInfo);
+    });
+
+    test('兽人狗堆移动端横屏仍按随从再基地手动选择并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsDogpileSpecialScene());
+
+        await expect(page.locator('[data-card-uid="orcs-dogpile-special-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人狗堆-计分前手牌与两座基地', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases'
+                    && state?.sys?.responseWindow?.current?.windowType === 'meFirst'
+                    && state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose';
+            },
+            { timeout: 20000, polling: 200 },
+        );
+        await expect(page.locator('[data-testid="smashup-docked-prompt"]')).toBeVisible({ timeout: 10000 });
+        await game.screenshot('移动端-兽人狗堆-beforeScoring响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            (option: InteractionOption) =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-dogpile-special-1'
+                && option.value?.targetBaseIndex === 0,
+            '移动端狗堆计分前手动选择行动',
+        );
+        await game.waitForInteraction('munchkin_orcs_dogpile_minion', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-dogpile-source',
+            '移动端狗堆必须显示待移动随从本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人狗堆-手动选择随从', testInfo);
+        await clickManualMinionChoice(page, 'orcs-dogpile-source', '移动端狗堆选择待移动随从');
+
+        await game.waitForInteraction('munchkin_orcs_dogpile_base', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端狗堆选择目标基地');
+        await expectManualChoiceVisible(
+            page,
+            '[data-base-index="1"]',
+            '移动端狗堆必须显示目标基地本体供玩家手动选择',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人狗堆-手动选择目标基地', testInfo);
+        await clickManualBaseChoice(page, 1, '移动端狗堆选择目标基地');
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const interactionSourceId = state.sys?.interaction?.current?.data?.sourceId ?? '';
+            return {
+                sourcePresent: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-dogpile-source'),
+                targetPresent: state.core.bases[1].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-dogpile-source'),
+                hasCardInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-dogpile-special-1') ?? false,
+                dogpileInteractionClosed: !interactionSourceId.includes('munchkin_orcs_dogpile'),
+            };
+        }, { timeout: 15000 }).toEqual({
+            sourcePresent: false,
+            targetPresent: true,
+            hasCardInDiscard: true,
+            dogpileInteractionClosed: true,
+        });
+
+        await expect(page.locator('[data-testid="su-special-supply-row"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-monster-supply-count"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-card"]:visible')).toHaveCount(1);
+        await expect(page.locator('[data-testid="su-munchkin-treasure-supply-count"]:visible')).toHaveCount(1);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                sourceBaseVisible: inViewport('[data-base-index="0"]'),
+                targetBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端狗堆结算后两座基地、公共小牌、手牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            sourceBaseVisible: true,
+            targetBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人狗堆-随从移动后流程收口', testInfo);
+    });
+
+    test('兽人狗堆移动端无合法目标时不生成隐藏基地交互并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsDogpileSpecialScene({ includeTargetBaseMinions: false }));
+
+        const action = page.locator('[data-card-uid="orcs-dogpile-special-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-dogpile-source"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人狗堆-无合法目标前手牌与两座基地', testInfo);
+
+        await action.click({ force: true });
+        await waitForSmashUpFxToSettle(page);
+        await game.waitForNoInteraction(10000);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                actionInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-dogpile-special-1') ?? false,
+                actionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-dogpile-special-1') ?? false,
+                sourcePresent: state.core.bases[0]?.minions.some((entry: { uid?: string }) => entry.uid === 'orcs-dogpile-source') ?? false,
+                targetBaseOwnMinionCount: state.core.bases[1]?.minions.filter((entry: { controller?: string }) => entry.controller === '0').length ?? 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            phase: 'playCards',
+            actionInHand: false,
+            actionInDiscard: true,
+            sourcePresent: true,
+            targetBaseOwnMinionCount: 0,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await expect(page.locator('[data-testid="smashup-docked-prompt"]')).toHaveCount(0);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                sourceBaseVisible: inViewport('[data-base-index="0"]'),
+                targetBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端狗堆无合法目标收口后两座基地、公共小牌、手牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            sourceBaseVisible: true,
+            targetBaseVisible: true,
+            handVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await game.screenshot('移动端-兽人狗堆-无合法目标不生成隐藏交互并收口', testInfo);
     });
 
     test('兽人洗手间在对手行动后把手动保护选择交给行动卡控制者', async ({ page, game }, _testInfo) => {
@@ -8907,6 +10027,171 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         }
     });
 
+    test('兽人洗手间移动端明确跳过保护后继续结算并清理', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true, seat1: 'human', playerID: '0' }, 20000);
+        await game.setupScene(buildMunchkinOrcsStallingScene());
+        const targetPage = await openSmashUpPlayerView(page, '1');
+        await targetPage.setViewportSize({ width: 844, height: 390 });
+
+        try {
+            await expect(page.locator('[data-card-uid="orcs-stalling-action-1"]').first()).toBeVisible({ timeout: 15000 });
+            await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+            await expect(page.locator('[data-minion-uid="orcs-stalling-defender"]').first()).toBeVisible({ timeout: 15000 });
+            await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+            await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+            await game.screenshot('移动端-兽人洗手间-跳过保护前手牌与基地', testInfo);
+
+            const actionCard = page.locator('[data-card-uid="orcs-stalling-action-1"]').first();
+            await actionCard.click({ force: true });
+            await page.waitForTimeout(300);
+            await actionCard.click({ force: true });
+            await game.waitForInteraction('munchkin_orcs_crush_base', 10000);
+            await clickManualBaseChoice(page, 0, '移动端洗手间跳过链选择行动目标基地');
+
+            const reactionState = await game.getState();
+            await mirrorSmashUpHarnessState(targetPage, reactionState);
+            await targetPage.waitForFunction(
+                () => (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.data?.sourceId
+                    === 'munchkin_orcs_stalling_minion',
+                { timeout: 10000, polling: 200 },
+            );
+            await waitForSmashUpFxToSettle(targetPage);
+            await expectManualMinionChoiceVisible(
+                targetPage,
+                'orcs-stalling-defender',
+                '移动端洗手间跳过前必须显示可保护的随从本体',
+                { forbidPromptContext: true },
+            );
+            await expect(targetPage.getByRole('button', { name: /不保护|跳过|让过|Skip|Pass/i }).first()).toBeVisible({ timeout: 10000 });
+            await targetPage.waitForFunction(() => {
+                const baseFrames = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index] [data-card-atlas-frame]'));
+                return baseFrames.length >= 2 && baseFrames.every((frame) => {
+                    const image = frame.querySelector<HTMLImageElement>('[data-card-atlas-img]');
+                    return !frame.classList.contains('atlas-shimmer')
+                        && !!image
+                        && image.complete
+                        && image.naturalWidth > 0
+                        && image.naturalHeight > 0;
+                });
+            }, { timeout: 15000, polling: 200 });
+            await saveMunchkinEvidenceScreenshot(targetPage, '兽人-洗手间-移动端-保护选择与明确跳过.png');
+            await clickVisibleInteractionOptionBy(
+                targetPage,
+                game,
+                option => option.value?.skip === true,
+                '移动端洗手间明确跳过保护',
+            );
+
+            const skippedState = await targetPage.evaluate(() => (
+                (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.()
+            )) as {
+                core?: {
+                    bases?: Array<{
+                        minions?: Array<{
+                            uid?: string;
+                            metadata?: {
+                                stallingProtectedActionDefId?: string;
+                            };
+                        }>;
+                    }>;
+                };
+                sys?: {
+                    interaction?: {
+                        current?: {
+                            data?: {
+                                sourceId?: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            const skippedMinion = skippedState.core?.bases?.[0]?.minions?.find(
+                (entry: { uid?: string }) => entry.uid === 'orcs-stalling-defender',
+            );
+            expect(skippedMinion?.metadata?.stallingProtectedActionDefId ?? null).toBeNull();
+            expect(skippedState.sys?.interaction?.current?.data?.sourceId).toBe('munchkin_orcs_crush_player');
+            await mirrorSmashUpHarnessState(page, skippedState);
+
+            await game.waitForInteraction('munchkin_orcs_crush_player', 10000);
+            await clickVisibleInteractionOptionBy(
+                page,
+                game,
+                option => option.value?.targetPlayerId === '1',
+                '移动端洗手间跳过后选择目标玩家',
+            );
+            await game.waitForInteraction('munchkin_orcs_crush_minion', 10000);
+            await expectManualMinionChoiceVisible(
+                page,
+                'orcs-stalling-defender',
+                '移动端洗手间跳过后仍必须显示原目标随从',
+                { forbidPromptContext: true },
+            );
+            await clickManualMinionChoice(page, 'orcs-stalling-defender', '移动端洗手间跳过后选择目标随从');
+
+            await expect.poll(async () => {
+                const state = await game.getState();
+                const targetMinion = state.core.bases[0].minions.find((entry: { uid?: string }) => entry.uid === 'orcs-stalling-defender');
+                return {
+                    targetOnBase: Boolean(targetMinion),
+                    targetInDiscard: state.core.players?.['1']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-stalling-defender') ?? false,
+                    actionInDiscard: state.core.players?.['0']?.discard?.some((card: { uid?: string }) => card.uid === 'orcs-stalling-action-1') ?? false,
+                    protectedAction: targetMinion?.metadata?.stallingProtectedActionDefId ?? null,
+                    interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                    responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                };
+            }, { timeout: 15000 }).toEqual({
+                targetOnBase: false,
+                targetInDiscard: true,
+                actionInDiscard: true,
+                protectedAction: null,
+                interactionSourceId: null,
+                responseWindowType: null,
+            });
+            await waitForSmashUpFxToSettle(page);
+
+            const mobileResolutionEvidence = await page.evaluate(() => {
+                const inViewport = (selector: string) => {
+                    const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                    return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+                };
+                const supplyBadgeInViewport = (selector: string) => {
+                    const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                    return !!rect && rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+                };
+                return {
+                    noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                    firstBaseVisible: inViewport('[data-base-index="0"]'),
+                    secondBaseVisible: inViewport('[data-base-index="1"]'),
+                    handVisible: inViewport('[data-testid="su-hand-area"]'),
+                    supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                        && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                    turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                    endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                };
+            });
+            expect(mobileResolutionEvidence, '移动端洗手间跳过后应保留原版牌桌布局并收口').toEqual({
+                noUnexpectedOverflow: true,
+                firstBaseVisible: true,
+                secondBaseVisible: true,
+                handVisible: true,
+                supplyVisible: true,
+                turnTrackerVisible: true,
+                endTurnVisible: true,
+            });
+            await game.screenshot('移动端-兽人洗手间-跳过保护后目标被摧毁并收口', testInfo);
+        } finally {
+            await targetPage.close();
+        }
+    });
+
     test('兽人死亡之息真实入口排除附着太难了的受保护随从', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
@@ -8940,6 +10225,732 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         const state = await game.getState();
         expect(state.core.players?.['1']?.deck?.some((card: any) => card.uid === 'orcs-death-breath-free')).toBe(true);
         await game.screenshot('兽人-死亡之息-受保护随从保留', testInfo);
+    });
+
+    test('兽人死亡之息移动端横屏过滤太难了保护目标并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsDeathBreathProtectionScene());
+
+        const action = page.locator('[data-card-uid="orcs-death-breath-action-1"]').first();
+        await expect(action).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-death-breath-protected"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-death-breath-free"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人死亡之息-手牌与受保护/未保护随从', testInfo);
+
+        await game.playCard('munchkin_orcs_death_breath');
+        await game.waitForInteraction('munchkin_orcs_death_breath_target', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端死亡之息目标随从选择');
+        const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-death-breath-free')).toBe(true);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-death-breath-protected')).toBe(false);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-death-breath-free',
+            '移动端死亡之息必须只显示未受太难了保护的随从本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人死亡之息-过滤太难了保护目标', testInfo);
+        await clickManualMinionChoice(page, 'orcs-death-breath-free', '移动端死亡之息选择未受保护随从');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            return {
+                protectedVisible: await page.locator('[data-minion-uid="orcs-death-breath-protected"]').count() > 0,
+                freeVisible: await page.locator('[data-minion-uid="orcs-death-breath-free"]').count() > 0,
+                freeInOwnerDeck: core.players?.['1']?.deck?.some(card => card.uid === 'orcs-death-breath-free') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            protectedVisible: true,
+            freeVisible: false,
+            freeInOwnerDeck: true,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端死亡之息收口后基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人死亡之息-受保护随从保留并收口', testInfo);
+    });
+
+    test('兽人重击者移动端横屏手动选择低力量目标并收口', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsHammerSlammerScene());
+
+        await expect(page.locator('[data-card-uid="orcs-hammer-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-hammer-weak-0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-hammer-strong-0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人重击者-手牌与低力量目标', testInfo);
+
+        await game.playCard('munchkin_orcs_hammer_slammer', { targetBaseIndex: 0 });
+        await game.waitForInteraction('munchkin_orcs_hammer_slammer_target', 10000);
+        await waitForSmashUpFxToSettle(page);
+        await expectCurrentInteractionManual(game, '移动端重击者目标选择');
+        const targetOptions = await game.getInteractionOptions() as InteractionOption[];
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-hammer-weak-0')).toBe(true);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-hammer-weak-1')).toBe(true);
+        expect(targetOptions.some(option => option.value?.minionUid === 'orcs-hammer-strong-0')).toBe(false);
+        await expectManualMinionChoiceVisible(
+            page,
+            'orcs-hammer-weak-0',
+            '移动端重击者必须显示力量 2 或更少的随从本体',
+            { forbidPromptContext: true },
+        );
+        await game.screenshot('移动端-兽人重击者-手动选择低力量目标', testInfo);
+        await clickManualMinionChoice(page, 'orcs-hammer-weak-0', '移动端重击者选择低力量目标');
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const core = state.core as RocketBootsCoreState;
+            return {
+                sourceMinionPresent: core.bases[0].minions.some(minion => minion.uid === 'orcs-hammer-1'),
+                destroyedTargetPresent: core.bases[0].minions.some(minion => minion.uid === 'orcs-hammer-weak-0'),
+                otherLowTargetPresent: core.bases[1].minions.some(minion => minion.uid === 'orcs-hammer-weak-1'),
+                strongTargetPresent: core.bases[0].minions.some(minion => minion.uid === 'orcs-hammer-strong-0'),
+                targetInOwnerDiscard: core.players?.['1']?.discard?.some(card => card.uid === 'orcs-hammer-weak-0') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            sourceMinionPresent: true,
+            destroyedTargetPresent: false,
+            otherLowTargetPresent: true,
+            strongTargetPresent: true,
+            targetInOwnerDiscard: true,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端重击者收口后两座基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人重击者-低力量目标被摧毁并收口', testInfo);
+    });
+
+    test('兽人粉碎者移动端横屏手动激活天赋并显示已使用状态', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsTopperChopperScene());
+
+        const card = page.locator('[data-card-uid="orcs-topper-1"]').first();
+        const minion = page.locator('[data-minion-uid="orcs-topper-1"]').first();
+        await expect(card).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人粉碎者-手牌与空基地', testInfo);
+
+        await game.playCard('munchkin_orcs_topper_chopper', { targetBaseIndex: 0 });
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+        await expect(minion).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-minion-used-badge-orcs-topper-1')).toHaveCount(0);
+        await game.screenshot('移动端-兽人粉碎者-天赋可用', testInfo);
+
+        await minion.click({ force: true });
+        await expect(minion).toHaveAttribute('data-activation-armed', 'true');
+        await expect(page.getByTestId('su-minion-activation-hint-orcs-topper-1')).toBeVisible({ timeout: 10000 });
+        await game.screenshot('移动端-兽人粉碎者-第一次点击待确认', testInfo);
+
+        await minion.click({ force: true });
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+        await expect(page.getByTestId('su-minion-used-badge-orcs-topper-1')).toBeVisible({ timeout: 15000 });
+        await expect(minion).toHaveAttribute('data-activation-armed', 'false');
+
+        const state = await game.getState();
+        const core = state.core as { bases: Array<{ minions: Array<{ uid: string; talentUsed?: boolean }> }> };
+        expect(core.bases.flatMap(base => base.minions).find(entry => entry.uid === 'orcs-topper-1')?.talentUsed).toBe(true);
+        expect(state.sys?.interaction?.current?.data?.sourceId ?? null).toBe(null);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const badgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                usedBadgeVisible: badgeInViewport('[data-testid="su-minion-used-badge-orcs-topper-1"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端粉碎者天赋收口后应显示已使用状态并保留原版布局与公共小牌').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            usedBadgeVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人粉碎者-天赋已使用并收口', testInfo);
+    });
+
+    test('兽人躺下！移动端横屏计分前手动选择响应并保留压制状态', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsAndStayDownScene());
+
+        await expect(page.locator('[data-card-uid="orcs-stay-down-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人躺下-计分前手牌与要塞', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases'
+                    && state?.sys?.responseWindow?.current?.windowType === 'meFirst'
+                    && state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose';
+            },
+            { timeout: 20000, polling: 200 },
+        );
+        await expectCurrentInteractionManual(game, '移动端躺下计分前响应');
+        await expect.poll(async () => {
+            const options = await game.getInteractionOptions() as InteractionOption[];
+            return options.some(option =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-stay-down-1'
+                && option.value?.targetBaseIndex === 0,
+            );
+        }, { timeout: 10000 }).toBe(true);
+
+        const responsePromptLayout = await page.evaluate(() => {
+            const prompt = document.querySelector<HTMLElement>('[data-testid="smashup-docked-prompt"]');
+            const turnTracker = document.querySelector<HTMLElement>('[data-testid="su-turn-tracker"]');
+            const promptRect = prompt?.getBoundingClientRect();
+            const baseRects = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index]'))
+                .map(element => element.getBoundingClientRect());
+            const overlapsBase = promptRect
+                ? baseRects.some(rect => promptRect.left < rect.right && promptRect.right > rect.left && promptRect.top < rect.bottom && promptRect.bottom > rect.top)
+                : true;
+            const turnRect = turnTracker?.getBoundingClientRect();
+            const overlapsTurnTracker = promptRect && turnRect
+                ? promptRect.left < turnRect.right && promptRect.right > turnRect.left && promptRect.top < turnRect.bottom && promptRect.bottom > turnRect.top
+                : true;
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                promptVisible: Boolean(promptRect && promptRect.width > 24 && promptRect.height > 24),
+                noBaseOverlap: !overlapsBase,
+                noTurnTrackerOverlap: !overlapsTurnTracker,
+            };
+        });
+        expect(responsePromptLayout, '移动端躺下计分前提示必须可见且不遮挡基地或回合信息').toEqual({
+            noUnexpectedOverflow: true,
+            promptVisible: true,
+            noBaseOverlap: true,
+            noTurnTrackerOverlap: true,
+        });
+        await game.screenshot('移动端-兽人躺下-beforeScoring响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            option => option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-stay-down-1'
+                && option.value?.targetBaseIndex === 0,
+            '移动端躺下选择计分前响应',
+        );
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const events = (state.sys?.eventStream?.entries ?? []).map((entry: EventStreamEntry) => entry.event);
+            return {
+                suppressorPlayerId: state.core.bases[0]?.metadata?.andStayDownSuppressorPlayerId ?? null,
+                hasSuppressionEvent: events.some((event: any) =>
+                    event?.type === 'su:base_metadata_updated'
+                    && event.payload?.baseIndex === 0
+                    && event.payload?.metadataUpdate?.andStayDownSuppressorPlayerId === '0',
+                ),
+                hasCardInDiscard: state.core.players?.['0']?.discard?.some((card: any) => card.uid === 'orcs-stay-down-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            suppressorPlayerId: '0',
+            hasSuppressionEvent: true,
+            hasCardInDiscard: true,
+            interactionSourceId: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端躺下收口后压制状态、基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人躺下-压制状态结算后', testInfo);
+    });
+
+    test('兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得 VP', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsAngryPillagersScene());
+
+        await expect(page.locator('[data-card-uid="orcs-angry-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人愤怒的掠夺者-计分前手牌与要塞', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases'
+                    && state?.sys?.responseWindow?.current?.windowType === 'meFirst'
+                    && state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose';
+            },
+            { timeout: 20000, polling: 200 },
+        );
+        await expectCurrentInteractionManual(game, '移动端愤怒的掠夺者计分前响应');
+        await expect.poll(async () => {
+            const options = await game.getInteractionOptions() as InteractionOption[];
+            return options.some(option =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-angry-1'
+                && option.value?.targetBaseIndex === 0,
+            );
+        }, { timeout: 10000 }).toBe(true);
+
+        const responsePromptLayout = await page.evaluate(() => {
+            const prompt = document.querySelector<HTMLElement>('[data-testid="smashup-docked-prompt"]');
+            const turnTracker = document.querySelector<HTMLElement>('[data-testid="su-turn-tracker"]');
+            const promptRect = prompt?.getBoundingClientRect();
+            const baseRects = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index]'))
+                .map(element => element.getBoundingClientRect());
+            const overlapsBase = promptRect
+                ? baseRects.some(rect => promptRect.left < rect.right && promptRect.right > rect.left && promptRect.top < rect.bottom && promptRect.bottom > rect.top)
+                : true;
+            const turnRect = turnTracker?.getBoundingClientRect();
+            const overlapsTurnTracker = promptRect && turnRect
+                ? promptRect.left < turnRect.right && promptRect.right > turnRect.left && promptRect.top < turnRect.bottom && promptRect.bottom > turnRect.top
+                : true;
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                promptVisible: Boolean(promptRect && promptRect.width > 24 && promptRect.height > 24),
+                noBaseOverlap: !overlapsBase,
+                noTurnTrackerOverlap: !overlapsTurnTracker,
+            };
+        });
+        expect(responsePromptLayout, '移动端愤怒的掠夺者计分前提示必须可见且不遮挡基地或回合信息').toEqual({
+            noUnexpectedOverflow: true,
+            promptVisible: true,
+            noBaseOverlap: true,
+            noTurnTrackerOverlap: true,
+        });
+        await game.screenshot('移动端-兽人愤怒的掠夺者-beforeScoring响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            option => option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-angry-1'
+                && option.value?.targetBaseIndex === 0,
+            '移动端愤怒的掠夺者选择计分前响应',
+        );
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const events = (state.sys?.eventStream?.entries ?? []).map((entry: EventStreamEntry) => entry.event);
+            return {
+                vp: state.core.players?.['0']?.vp ?? 0,
+                hasCardInDiscard: state.core.players?.['0']?.discard?.some((card: any) => card.uid === 'orcs-angry-1') ?? false,
+                hasAngryBonus: events.some((event: any) =>
+                    event?.type === 'su:vp_awarded'
+                    && event.payload?.playerId === '0'
+                    && event.payload?.amount === 1
+                    && event.payload?.reason === 'munchkin_orcs_angry_pillagers',
+                ),
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            vp: 8,
+            hasCardInDiscard: true,
+            hasAngryBonus: true,
+            interactionSourceId: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端愤怒的掠夺者收口后 VP、基地、手牌、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人愤怒的掠夺者-获得VP并收口', testInfo);
+    });
+
+    test('兽人重击者移动端无合法目标时不生成隐藏目标或假结算', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsHammerSlammerScene({ includeLegalTarget: false }));
+
+        await expect(page.locator('[data-card-uid="orcs-hammer-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-hammer-strong-0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人重击者-无合法目标前', testInfo);
+
+        await game.playCard('munchkin_orcs_hammer_slammer', { targetBaseIndex: 0 });
+        await game.waitForNoInteraction(10000);
+        await waitForSmashUpFxToSettle(page);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                sourceMinionPresent: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-hammer-1'),
+                onlyStrongTargetPresent: state.core.bases[0].minions.some((entry: { uid?: string }) => entry.uid === 'orcs-hammer-strong-0'),
+                hiddenTargetAbsent: state.core.bases.some((base: { minions?: Array<{ uid?: string }> }) => base.minions?.some(entry => entry.uid === 'orcs-hammer-weak-0' || entry.uid === 'orcs-hammer-weak-1')) === false,
+                sourceStillInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-hammer-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+            };
+        }, { timeout: 15000 }).toEqual({
+            sourceMinionPresent: true,
+            onlyStrongTargetPresent: true,
+            hiddenTargetAbsent: true,
+            sourceStillInHand: false,
+            interactionSourceId: null,
+        });
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端重击者无合法目标收口后仍应保留原版牌桌布局').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+        });
+        await game.screenshot('移动端-兽人重击者-无合法目标收口', testInfo);
+    });
+
+    test('兽人躺下移动端落后时不进入计分前响应', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsAndStayDownScene({ ownPower: 4, opponentPower: 9 }));
+
+        await expect(page.locator('[data-card-uid="orcs-stay-down-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人躺下-落后时计分前', testInfo);
+
+        await game.advancePhase();
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const base = state.core.bases[0];
+            return {
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                baseCleared: base?.minions?.length === 0,
+                sourceStillInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-stay-down-1') ?? false,
+                suppressorPlayerId: base?.metadata?.andStayDownSuppressorPlayerId ?? null,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            ownVp: 6,
+            opponentVp: 7,
+            baseCleared: true,
+            sourceStillInHand: true,
+            suppressorPlayerId: null,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人躺下-落后时无响应直接计分收口', testInfo);
+    });
+
+    test('兽人愤怒的掠夺者移动端领先不足三点时不进入响应也不奖励VP', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsAngryPillagersScene({ ownPower: 7, opponentPower: 5 }));
+
+        await expect(page.locator('[data-card-uid="orcs-angry-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await game.screenshot('移动端-兽人愤怒的掠夺者-领先不足三点计分前', testInfo);
+
+        await game.advancePhase();
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const events = (state.sys?.eventStream?.entries ?? []).map((entry: EventStreamEntry) => entry.event);
+            return {
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                baseCleared: state.core.bases[0]?.minions?.length === 0,
+                sourceStillInHand: state.core.players?.['0']?.hand?.some((card: { uid?: string }) => card.uid === 'orcs-angry-1') ?? false,
+                hasAngryBonus: events.some((event: any) =>
+                    event?.type === 'su:vp_awarded'
+                    && event.payload?.reason === 'munchkin_orcs_angry_pillagers'
+                    && event.payload?.amount === 1,
+                ),
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            ownVp: 7,
+            opponentVp: 6,
+            baseCleared: true,
+            sourceStillInHand: true,
+            hasAngryBonus: false,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人愤怒的掠夺者-领先不足三点无响应且不奖励VP', testInfo);
     });
 
     test('法师快速攻击先手动选弃牌成本，再手动选力量目标', async ({ page, game }, testInfo) => {

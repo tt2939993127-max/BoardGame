@@ -21,7 +21,7 @@
 ## 共享根因与残余范围
 
 - 共享根因：当前收口缺口不是单个 UI 位置问题，而是“规则对象全集、逐卡实现、分支 / 清理生命周期、真实入口证据、移动端图面”没有全部完成闭环。
-- 残余范围：C2、C4、C5、C6、C7 仍未全部通过；缺口包括未覆盖派系 / 宝藏对象的 L2-L4、负向路径与清理状态、逐对象移动端审计，以及完整批次矩阵的最终裁决。
+- 残余范围：C4、C5、C7 仍未全部通过；C6 只代表当前已实现链路的真实入口覆盖，不代表整批对象完成。缺口包括未覆盖派系 / 宝藏对象的 L2-L4、负向路径与清理状态、逐对象移动端审计，以及完整批次矩阵的最终裁决。
 
 ## 基本信息
 
@@ -95,7 +95,7 @@
 | `munchkin_mages` 法师：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `blocked: 行动牌和随从能力未建模` | `blocked` | `pending` | `in_progress` |
 | `munchkin_elves` 木精灵：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `blocked: 行动牌和随从能力未建模` | `blocked` | `pending` | `in_progress` |
 | `munchkin_clerics` 牧师：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `passed: 12 张卡牌 + 2 个基地均有对象级 L2；9 个玩家决策交互均明确关闭单候选自动结算` | `representative_only: 解除诅咒桌面选择态/结算态逐图 PASS / 92；其余对象尚未逐图审计` | `representative_only: 解除诅咒真实入口 1 条 E2E 通过` | `in_progress` |
-| `munchkin_orcs` 兽人：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `blocked: 行动牌和随从能力未建模` | `blocked` | `pending` | `in_progress` |
+| `munchkin_orcs` 兽人：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `in_progress: 12 张卡牌 + 2 个基地已有能力实现与对象级 L2；真实入口已覆盖 16 条用例，仍有移动端逐对象和负向/清理矩阵残余` | `in_progress: 当前对象矩阵已逐项登记 L2/L3/L4；移动端逐对象证据仍在补` | `in_progress: 已有真实手牌、天赋、响应窗和计分链；不能外推为整派系完成` | `in_progress` |
 | `munchkin_warriors` 勇士：12 唯一卡 / 20 实体 + 2 基地 | `passed` | `passed` | `blocked: 行动牌和随从能力未建模` | `blocked` | `pending` | `in_progress` |
 | `munchkin_treasure_deck` 宝藏公共牌堆：22 张 | `passed` | `passed` | `in_progress: 击败怪物奖励进入玩家手牌已有 reducer/命令 L2 + 真实点击 L3；宝藏混合牌种、宝藏仆从普通打出、宝藏附着行动基础打出已有 L2；半身人雇佣兵、愚蠢勇气药水、5 张宝藏持续力量牌、怯懦药水失去能力、摆动的盾牌防摧毁、时间错乱的喷气背包回手牌触发、火箭靴附着行动天赋移动宿主、魔法导弹附着行动天赋回公共宝藏牌库底并摧毁低力量仆从、许愿指环获得 1VP 并回公共宝藏牌库底、探宝棒抽两张宝藏并重洗公共宝藏牌库、十字弓选择基地和派系批量 +2、半身人雇佣兵手牌打出后开放第二个随从额度并允许第二张宝藏随从继续打出、一袋铁蒺藜对方低力触发并摧毁自身和目标、对方高力/己方低力不触发、地牢规则书普通打出和计分前打出均可摧毁场上行动、口臭药水普通打出和计分前打出均可让被选玩家移动自己的仆从、直线跑路药水计分后展示待分发宝藏并可在计分后响应窗拿走其中 1 张、麻痹药水计分前取消正在计分基地上所有牌和仆从能力直到回合结束、复制药水让宿主使用另一个仆从天赋已有 L2；火箭靴、复制药水、魔法导弹、地牢规则书、口臭药水已有真实入口 L3，直线跑路药水已有真实计分后响应入口 L3/L4，麻痹药水已有真实计分前响应入口 L3/L4；许愿指环、探宝棒和十字弓真实入口使用链已补 L3；一袋铁蒺藜、愚蠢勇气药水、矮人雇佣兵、半身人雇佣兵、尖刺靴、血腥肢解电锯、大量宝藏、诱惑护膝、怯懦药水和摆动的盾牌真实入口使用链已补 L3；仍不升级为全部宝藏真实入口完成口径，因逐卡完整流程矩阵、可选/跳过和计分前后组合尚未审完；时间错乱的喷气背包真实队列 L4 已补代表链` | `blocked` | `representative_only: 小牌堆数量可见；真实点击后数量从 x22 到 x19 已通过 E2E；火箭靴附着行动卡本体点击与移动宿主、复制药水附着行动卡本体点击、魔法导弹附着行动卡本体点击并摧毁同基地低力仆从、地牢规则书手牌打出摧毁场上行动、口臭药水手牌打出后点击被选玩家仆从移动、直线跑路药水计分后响应窗选择已展示宝藏进手牌、麻痹药水计分前响应窗打出并压制当前计分基地能力已通过 E2E；时间错乱的喷气背包真实计分清场队列回手牌已通过 E2E；许愿指环、探宝棒和十字弓已补真实入口 E2E；一袋铁蒺藜、愚蠢勇气药水、矮人雇佣兵、半身人雇佣兵、尖刺靴、血腥肢解电锯、大量宝藏、诱惑护膝、怯懦药水和摆动的盾牌已补真实入口 E2E；仍不升级为全部宝藏真实入口完成口径，因逐卡完整流程矩阵、可选/跳过和计分前后组合尚未审完` | `in_progress` |
 | `munchkin_monster_deck` 怪物公共牌堆：20 实体 / 8 唯一 | `passed` | `passed` | `in_progress: 入基地、未受控怪物提高破坏门槛、受控怪物计入控制者力量、清场移走、击败奖励已有 reducer/命令 L2；UI 本体点击已有 L3` | `blocked` | `representative_only: 小牌堆数量、基地怪物行、点击宝藏龙后移除并发宝藏已通过 E2E` | `in_progress` |
@@ -182,7 +182,7 @@
 | 法师 | 爆破大师、快乐小法师、魔杖天才、勤读者、魅力、大上一倍、大召唤、通往次元之门、恢复奥术智慧、神奇的夜晚、快速阅读、快速攻击！；基地：次元之门、法师之塔 | `locked_rules / implementation_blocked`：2026-08-02 09:14 已按完整单卡和基地图锁规则原文与 C 子句 | L0/L1 静态定义和双语 locale 已接；能力标签、handler、L2/L3/L4 尚未实现/验证 | 先按下方法师矩阵实现弃牌成本、摧毁低力、控制怪物、打怪物、抽牌直到 5 张、额外随从和基地每回合一次链 |
 | 木精灵 | 精灵斗士、优雅贵族、花之子、精灵帮助大师、在你之后、舞动之根、援手、力量训练、逃跑吧！、赶紧逃跑吧！、贸易、旅行精灵；基地：援助山谷、树屋 | `locked_rules / representative_paths_passed / scoped_debt`：2026-08-02 09:19 已按完整单卡和基地图锁规则原文与 C 子句；2026-08-04 已完成花之子、力量训练、赶紧逃跑吧、树屋四条代表链的真实入口 E2E 与逐图审计 | L0/L1 静态定义和双语 locale 已接；上述四条链已覆盖跨玩家手动选择、随从本体选择、多选/空选、目标玩家手动抽牌或跳过；其余木精灵卡牌与援助山谷仍未逐卡完成 L2/L3/L4 | 继续按木精灵对象矩阵补剩余卡牌与基地链；不得把四条代表链升级为木精灵整派系或 Munchkin 新派系完成 |
 | 牧师 | 红衣主教、资深修士、特纳、圣临者、垃圾处理、光盘、监禁诅咒、无用诅咒、好习惯、加入团队、解除诅咒、回忆祷词；基地：圣洁酒店、抓鬼 | `locked_rules / object_l2_passed / representative_l3_l4_passed / scoped_debt`：2026-08-02 09:26 已按完整单卡和基地图锁规则原文与 C 子句；2026-08-04 已完成 12 张卡牌 + 2 个基地对象级 L2，并补解除诅咒真实入口代表链 | L0/L1 静态定义、双语 locale、能力标签、handler 和对象级 L2 已接；桌面端解除诅咒选择态/结算态 L3/L4 已通过，牧师其余对象及移动端仍待逐图审计 | 继续按对象矩阵补牧师其余真实交互链和图面证据；不得把解除诅咒代表链外推为牧师整派系 L3/L4 完成 |
-| 兽人 | 剑王、粉碎者、重击者、呆瓜兽人、躺下！、愤怒的掠夺者、挤碎、死亡之息、狗堆、给我！、洗手间、太难了；基地：要塞、坑洞 | `locked_rules / implementation_blocked`：2026-08-02 09:34 已按完整单卡和基地图锁规则原文与 C 子句 | L0/L1 静态定义和双语 locale 已接；能力标签、handler、L2/L3/L4 尚未实现/验证 | 先按下方兽人矩阵实现其他玩家行动保护、低力摧毁/回牌库底、计分前特殊压制、计分 VP 奖励、转移动作和基地总力量奖励链 |
+| 兽人 | 剑王、粉碎者、重击者、呆瓜兽人、躺下！、愤怒的掠夺者、挤碎、死亡之息、狗堆、给我！、洗手间、太难了；基地：要塞、坑洞 | `locked_rules / object_progress / scoped_debt`：2026-08-02 09:34 已按完整单卡和基地图锁规则原文与 C 子句；2026-08-10 已补多条对象级桌面与移动端真实入口证据 | L0/L1 静态定义、双语 locale、能力标签和 handler 已接；对象级 L2/L3/L4 已按下方矩阵逐项推进，部分对象的无合法目标、阈值失败、平手和清理边界仍待补 | 继续补对象级负向 / 跳过 / 清理生命周期与 C7 批次矩阵；在这些缺口收口前不解除兽人派系的“实施中” |
 | 勇士 | 大英雄、明星勇士、狂战士、嘲讽者、领导运动、斩杀、哑铃、地牢诱饵、永恒的英雄、骚乱、无处不在之盾、战争怒吼；基地：堡垒、锦标赛 | `locked_rules / implementation_blocked`：2026-08-02 09:40 已按完整单卡和基地图锁规则原文与 C 子句 | L0/L1 静态定义和双语 locale 已接；能力标签、handler、L2/L3/L4 尚未实现/验证 | 先按下方勇士矩阵实现怪物打出/摧毁、击败奖励宝藏额外打出、+1 指示物、附着替代回手、按怪物数量力量修正和基地触发链 |
 
 ### 矮人规则原文与子句锁定（2026-08-02 08:43）
@@ -317,20 +317,21 @@
 
 | 对象 | 原文 / 基地图文字 | 子句拆分 | 当前实现状态 |
 | --- | --- | --- | --- |
-| 剑王 | `持续：每个你的其他仆从获得+1力量。` | C1 持续力量修正；C2 只影响你的其他仆从；C3 不影响剑王自身；C4 每个符合条件的仆从 +1 | `blocked`: 只有 locale 文本；缺同控制者其他仆从持续力量 handler 和自身排除验证 |
-| 粉碎者 | `天赋：什么都不做。` | C1 天赋入口；C2 使用后无游戏状态变化；C3 仍需符合天赋按钮 / 可用性合同 | `blocked`: 缺天赋入口登记和无状态变化验证 |
-| 重击者 | `摧毁一个力量2或更少的仆从。` | C1 入场 / 结算效果；C2 选择力量 2 或更少的仆从；C3 摧毁该仆从；C4 无合法目标时需阻塞或跳过按实现合同裁定 | `blocked`: 缺低力目标筛选、摧毁链和无合法目标负向路径 |
-| 呆瓜兽人 | `持续：这个仆从不受其他玩家的行动影响。` | C1 持续保护；C2 只保护这个仆从；C3 只防其他玩家的行动；C4 不防你的行动、基地效果、怪物效果或非行动影响 | `blocked`: 缺行动影响过滤 / protection 合同和边界测试 |
-| 躺下！ | `特殊：一个基地计分前打出。如果你在这里有总计最高力量，其他玩家不能打出或使用特殊能力。` | C1 beforeScoring 特殊入口；C2 检查你在正在计分基地是否拥有总计最高力量；C3 若满足，其他玩家不能打出特殊牌；C4 其他玩家不能使用特殊能力；C5 平手最高是否满足需实现时按规则裁定 | `blocked`: 缺计分前响应、力量排名检查、特殊响应/特殊能力压制和边界验证 |
-| 愤怒的掠夺者 | `特殊：当一个基地计分时打出。如果你比第二名多至少3力量，获得1VP。` | C1 计分期间特殊入口；C2 检查你比第二名多至少 3 力量；C3 满足时获得 1VP；C4 未满足时不应获得 VP | `blocked`: 缺计分时响应、排名差检查、VP 奖励和负向路径 |
-| 挤碎 | `选择一个基地和一个在那里拥有比你更少仆从的玩家。摧毁那个玩家那里一个仆从。` | C1 选择基地；C2 选择该基地上仆从数量少于你的玩家；C3 选择那个玩家在那里 1 个仆从；C4 摧毁目标仆从 | `blocked`: 缺基地选择、玩家合法性筛选、目标仆从选择和摧毁链 |
-| 死亡之息 | `放置一个力量4或更少的仆从到它拥有者的牌库底。` | C1 选择力量 4 或更少的仆从；C2 将目标放到它拥有者的牌库底；C3 不是摧毁 / 弃牌；C4 附着牌去向需实现时按附着清理合同裁定 | `blocked`: 缺低力目标筛选、按拥有者牌库底转移和附着清理边界 |
-| 狗堆 | `移动一个你的仆从到一个你至少有两个仆从的基地。特殊：你可以在一个基地计分前打出这张牌。` | C1 普通打出或 beforeScoring 特殊打出；C2 选择 1 个你的仆从；C3 目标基地必须已有至少 2 个你的仆从；C4 移动目标仆从到该基地；C5 计分前响应需限制时机 | `blocked`: 缺计分前响应、己方仆从选择、目标基地数量筛选和移动收口 |
-| 给我！ | `选择一个仆从身上的行动。摧毁那个仆从然后转移那个行动到你的一个仆从身上。` | C1 选择附着在仆从身上的 1 张行动；C2 摧毁该行动当前宿主；C3 选择你的 1 个仆从作为新宿主；C4 将该行动转移到新宿主；C5 需要处理宿主被摧毁时附着行动不进弃牌堆的特例 | `blocked`: 缺附着行动选择、宿主摧毁与行动保留转移、己方新宿主筛选 |
-| 洗手间 | `打出到一个基地上。持续：每当另一个玩家打出一张牌时，你可以选择你在这里的仆从不受它的影响。` | C1 打到基地上；C2 持续监听另一个玩家打出牌；C3 你可以选择保护你在这里的仆从；C4 保护范围是“不受该牌影响”；C5 需要可拒绝和逐次触发清理 | `blocked`: 缺基地持续行动、他人打牌监听、可选 protection 和本次影响过滤 |
-| 太难了 | `打出到一个仆从身上。持续：这个仆从不受其他玩家的行动影响。` | C1 附着到 1 个仆从；C2 宿主持续不受其他玩家行动影响；C3 不防控制者自己的行动、基地效果、怪物效果或非行动影响；C4 附着移除后恢复 | `blocked`: 缺附着行动、行动影响过滤 / protection 合同和恢复边界 |
-| 要塞 | `12 / 3-2-1 / 2怪物。当这个基地计分时，如果所有玩家在这里的总力量为22或更多，力量最高的三个玩家各自获得1VP。` | C1 基地破坏点 12；C2 VP 3/2/1；C3 初始/补充 2 怪物；C4 计分时检查所有玩家在这里的总力量是否 22+；C5 若满足，力量最高的三个玩家各得 1VP；C6 并列排名 / 少于三名有力玩家需实现时裁定 | `blocked`: 静态 breakpoint/VP/monsterCount 已接；缺计分时总力量门槛、前三名 VP 奖励和并列边界 |
-| 坑洞 | `16 / 4-2-1 / 2怪物。这里的仆从不会受到其他玩家的行动影响。` | C1 基地破坏点 16；C2 VP 4/2/1；C3 初始/补充 2 怪物；C4 这里所有仆从持续不受其他玩家行动影响；C5 不防控制者自己的行动、非行动效果或离开这里后的仆从 | `blocked`: 静态 breakpoint/VP/monsterCount 已接；缺基地范围 protection、离开基地后的恢复和边界测试 |
+| 剑王 | `持续：每个你的其他仆从获得+1力量。` | C1 持续力量修正；C2 只影响你的其他仆从；C3 不影响剑王自身；C4 每个符合条件的仆从 +1 | `历史占位：已被 2026-08-05 当前对象矩阵、桌面真实入口和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
+| 粉碎者 | `天赋：什么都不做。` | C1 天赋入口；C2 使用后无游戏状态变化；C3 仍需符合天赋按钮 / 可用性合同 | `implemented / L2_passed / L3/L4_passed`：天赋真实入口、两次点击确认、已使用标记和无额外游戏状态变化已验证 |
+| 重击者 | `摧毁一个力量2或更少的仆从。` | C1 入场 / 结算效果；C2 选择力量 2 或更少的仆从；C3 摧毁该仆从；C4 无合法目标时需阻塞或跳过按实现合同裁定 | `implemented / L2_passed / L3/L4_passed`：力量 2 或更少筛选、随从本体手动选择和摧毁收口已通过；无合法目标时移动端没有隐藏交互或假结算，负向图面已补 |
+| 呆瓜兽人 | `持续：这个仆从不受其他玩家的行动影响。` | C1 持续保护；C2 只保护这个仆从；C3 只防其他玩家的行动；C4 不防你的行动、基地效果、怪物效果或非行动影响 | `历史占位：已被 2026-08-05 当前对象矩阵、桌面真实入口和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
+| 躺下！ | `特殊：一个基地计分前打出。如果你在这里有总计最高力量，其他玩家不能打出或使用特殊能力。` | C1 beforeScoring 特殊入口；C2 检查你在正在计分基地是否拥有总计最高力量；C3 若满足，其他玩家不能打出特殊牌；C4 其他玩家不能使用特殊能力；C5 平手最高是否满足需实现时按规则裁定 | `implemented / L2_passed / L3/L4_passed`：计分前响应、最高力量压制和移动端手动选择/收口已通过；落后时响应候选不再显示，平手最高边界仍保留在后续负向矩阵 |
+| 愤怒的掠夺者 | `特殊：当一个基地计分时打出。如果你比第二名多至少3力量，获得1VP。` | C1 计分期间特殊入口；C2 检查你比第二名多至少 3 力量；C3 满足时获得 1VP；C4 未满足时不应获得 VP | `implemented / L2_passed / L3/L4_passed`：计分前响应、领先阈值、VP 奖励和移动端手动选择/收口已通过；领先不足 3 点时响应不显示且不产生额外 VP，负向图面已补 |
+| 挤碎 | `选择一个基地和一个在那里拥有比你更少仆从的玩家。摧毁那个玩家那里一个仆从。` | C1 选择基地；C2 选择该基地上仆从数量少于你的玩家；C3 选择那个玩家在那里 1 个仆从；C4 摧毁目标仆从 | `implemented / L2_passed / L3/L4_passed`：移动端补齐基地本体、可见玩家选项、目标随从本体三步手动选择和摧毁收口 |
+
+| 死亡之息 | `放置一个力量4或更少的仆从到它拥有者的牌库底。` | C1 选择力量 4 或更少的仆从；C2 将目标放到它拥有者的牌库底；C3 不是摧毁 / 弃牌；C4 附着牌去向需实现时按附着清理合同裁定 | `历史占位：已被 2026-08-05 当前对象矩阵、桌面真实入口和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
+| 狗堆 | `移动一个你的仆从到一个你至少有两个仆从的基地。特殊：你可以在一个基地计分前打出这张牌。` | C1 普通打出或 beforeScoring 特殊打出；C2 选择 1 个你的仆从；C3 目标基地必须已有至少 2 个你的仆从；C4 移动目标仆从到该基地；C5 计分前响应需限制时机 | `implemented / L2_passed / L3/L4_passed`：普通与计分前真实入口均已验证，且移动端补齐“随从本体→基地本体”的手动选择和收口 |
+| 给我！ | `选择一个仆从身上的行动。摧毁那个仆从然后转移那个行动到你的一个仆从身上。` | C1 选择附着在仆从身上的 1 张行动；C2 摧毁该行动当前宿主；C3 选择你的 1 个仆从作为新宿主；C4 将该行动转移到新宿主；C5 需要处理宿主被摧毁时附着行动不进弃牌堆的特例 | `implemented / L2_passed / L3/L4_passed`：移动端补齐宿主展开、手牌二次确认、附着行动本体和新宿主本体手动选择，以及转移收口 |
+| 洗手间 | `打出到一个基地上。持续：每当另一个玩家打出一张牌时，你可以选择你在这里的仆从不受它的影响。` | C1 打到基地上；C2 持续监听另一个玩家打出牌；C3 你可以选择保护你在这里的仆从；C4 保护范围是“不受该牌影响”；C5 需要可拒绝和逐次触发清理 | `历史占位：已被 2026-08-05 当前对象矩阵、桌面真实入口和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
+| 太难了 | `打出到一个仆从身上。持续：这个仆从不受其他玩家的行动影响。` | C1 附着到 1 个仆从；C2 宿主持续不受其他玩家行动影响；C3 不防控制者自己的行动、基地效果、怪物效果或非行动影响；C4 附着移除后恢复 | `历史占位：已被 2026-08-05 当前对象矩阵和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
+| 要塞 | `12 / 3-2-1 / 2怪物。当这个基地计分时，如果所有玩家在这里的总力量为22或更多，力量最高的三个玩家各自获得1VP。` | C1 基地破坏点 12；C2 VP 3/2/1；C3 初始/补充 2 怪物；C4 计分时检查所有玩家在这里的总力量是否 22+；C5 若满足，力量最高的三个玩家各得 1VP；C6 并列排名 / 少于三名有力玩家需实现时裁定 | `implemented / L2_passed / L3/L4_passed`：22 总力量正向门槛、总力量 21 的不奖励额外 VP 负向分支、清场和移动端收口均已验证；并列 / 少于三名有力玩家的边界仍按对象矩阵保留为后续负向审计项 |
+| 坑洞 | `16 / 4-2-1 / 2怪物。这里的仆从不会受到其他玩家的行动影响。` | C1 基地破坏点 16；C2 VP 4/2/1；C3 初始/补充 2 怪物；C4 这里所有仆从持续不受其他玩家行动影响；C5 不防控制者自己的行动、非行动效果或离开基地后的仆从 | `implemented / L2_passed / L3/L4_passed`：基地保护边界、另一基地手动目标、计分清场和移动端收口已验证；离开基地后的恢复边界仍按对象矩阵保留为后续负向审计项 |
 
 ### 勇士规则原文与子句锁定（2026-08-02 09:40）
 
@@ -1157,24 +1158,24 @@
 
 | 对象 | L2 领域结论 | L3/L4 真实入口 | 当前状态 |
 | --- | --- | --- | --- |
-| 剑王 | 持续力量、自身排除、同控制者边界 | 真实入口显示同基地己方 `+1`，自身、对手和另一基地无加成标记 | `L2 + L3 passed` |
-| 粉碎者 | 天赋入口与使用状态 | 真实入口点击天赋，已使用标记可见 | `L2 + L3 passed` |
-| 重击者 | 力量 2 或更少筛选、摧毁、单候选不自动结算 | 真实随从本体高亮并完成摧毁 | `L2 + L3 passed` |
-| 呆瓜兽人 | 只防其他玩家行动的保护边界 | 真实入口排除受保护目标，普通随从仍可手动选择并被摧毁 | `L2 + L3 passed` |
-| 躺下！ | 最高力量门槛、特殊牌与特殊能力压制、平手边界 | 计分前真实响应手动选择，压制状态收口 | `L2 + L3/L4 passed` |
-| 愤怒的掠夺者 | 领先第二名至少 3 点才奖励 VP | 计分前真实响应手动选择，VP 结算 | `L2 + L3/L4 passed` |
+| 剑王 | 持续力量、自身排除、同控制者边界 | 桌面真实入口显示同基地己方 `+1`，自身、对手和另一基地无加成；移动端横屏复核同一力量标记和布局 | `L2 + 桌面 L3 + 移动端 L4 passed` |
+| 粉碎者 | 天赋入口与使用状态 | 桌面真实入口点击天赋，已使用标记可见；移动端横屏复核第一次点击待确认、第二次点击生效和已使用标记 | `L2 + 桌面 L3 + 移动端 L4 passed` |
+| 重击者 | 力量 2 或更少筛选、摧毁、单候选不自动结算 | 桌面真实随从本体高亮并完成摧毁；移动端横屏复核低力量候选、力量 3 排除、随从本体点击和布局收口 | `L2 + 桌面 L3 + 移动端 L4 passed` |
+| 呆瓜兽人 | 只防其他玩家行动的保护边界 | 桌面真实入口排除受保护目标，普通随从仍可手动选择并被摧毁；移动端三步选择复核同一候选过滤和收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
+| 躺下！ | 最高力量门槛、特殊牌与特殊能力压制、平手边界 | 桌面计分前真实响应手动选择与压制状态收口；移动端横屏复核响应入口、提示避让和压制收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
+| 愤怒的掠夺者 | 领先第二名至少 3 点才奖励 VP | 桌面计分前真实响应手动选择与 VP 结算；移动端横屏复核响应入口、提示避让和 VP 收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
 | 挤碎 | 基地→玩家→随从三段选择、摧毁和单候选手选 | 三张选择态截图与结算图 | `L2 + L3/L4 passed` |
-| 死亡之息 | 力量 4 或更少、按拥有者牌库底转移 | 真实过滤保护目标并完成牌库底转移 | `L2 + L3/L4 passed` |
+| 死亡之息 | 力量 4 或更少、按拥有者牌库底转移，且不选择受“太难了”保护的目标 | 桌面真实过滤保护目标并完成牌库底转移；移动端横屏只高亮未保护随从本体并验证收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
 | 狗堆 | 普通 / 计分前入口、随从→基地移动 | 计分前真实响应两段手选与移动收口 | `L2 + L3/L4 passed` |
 | 给我！ | 附着行动选择、原宿主摧毁、行动保留转移 | 真实先选附着行动、再选新宿主 | `L2 + L3/L4 passed` |
-| 洗手间 | 手牌附着基地、逐次保护、可拒绝和来源玩家边界 | 手动附着基地、手动保护随从、保护后流程收口 | `L2 + L3/L4 passed` |
-| 太难了 | 手牌附着随从、保护过滤与受保护目标保留 | 手动附着随从，死亡之息真实过滤保护目标 | `L2 + L3/L4 passed` |
-| 要塞 | 22 总力量门槛、前三名额外 VP、计分清场 | 真实计分前后图与 VP 收口 | `L2 + L3/L4 passed` |
-| 坑洞 | 16 总力量计分、基地保护边界、清场恢复 | 真实入口验证坑洞保护、另一基地手动目标和计分清场 | `L2 + L3 passed` |
+| 洗手间 | 手牌附着基地、逐次保护、可拒绝和来源玩家边界 | 桌面手动附着基地与对手行动后的保护选择；移动端横屏手动点击基地本体、在保护随从与“不保护”之间手动选择，并验证跳过后继续结算与收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
+| 太难了 | 手牌附着随从、保护过滤与受保护目标保留；移动端单候选也必须手动选择 | 桌面手动附着随从、死亡之息真实过滤保护目标；移动端横屏手动点击随从本体并验证收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
+| 要塞 | 22 总力量门槛、前三名额外 VP、计分清场 | 桌面真实计分前后图与 VP 收口；移动端横屏真实计分、额外 VP、清场和公共小牌/操作入口核验 | `L2 + L3/L4 passed` |
+| 坑洞 | 16 总力量计分、基地保护边界、清场恢复 | 桌面真实入口验证坑洞保护、另一基地手动目标和计分清场；移动端横屏真实计分清场与公共小牌/操作入口核验 | `L2 + L3/L4 passed` |
 
 ### 聚合验证口径
 
-- 兽人真实入口对象用例聚合结果：当前整组筛选 `16/16 passed`。最初的 `11 passed / 2 failed` 只对应两条 E2E 断言问题；修正后粉碎者与给我！均单独重跑通过。
+- 兽人真实入口对象用例聚合结果：2026-08-05 历史整组筛选为 `16/16 passed`。最初的 `11 passed / 2 failed` 只对应两条 E2E 断言问题；修正后粉碎者与给我！均单独重跑通过。2026-08-10 又单独补过太难了与洗手间两条移动端用例，不能把它们改写成同一次历史整组运行。
 - 兽人领域测试：`19/19`；`npm run typecheck` 通过；定向 ESLint 为 0 errors；`git diff --check` 无内容错误；OpenSpec 严格校验通过。
 - 当前不能把“兽人对象级交互收口”升级为“Munchkin 全部派系完成”；移动端逐对象和其它派系全量真实入口仍未完成。
 
@@ -1189,8 +1190,8 @@
 | 坑洞保护真实入口 | `e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts`：`兽人坑洞真实入口只保护坑洞内随从不受对手行动`；现有四张真实入口截图与最终断言链 | `passed`：已有成功运行证据；第一张行动针对坑洞时坑洞内随从保留，第二张行动仍要求玩家手动选择另一基地的普通随从并完成摧毁，坑洞内随从继续保留。 |
 | 坑洞保护截图 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人坑洞真实入口只保护坑洞内随从不受对手行动/` 下的四张截图 | `PASS / 92`：两座基地并排可比较；坑洞随从排在基地下方并保留，另一基地目标高亮仍落在真实随从本体上，提示条、牌库数量、弃牌区、记分板和结束回合入口均保持可读。 |
 | 当前复核结果 | 剑王、呆瓜兽人、坑洞保护单用例本次各 `1 passed`；坑洞保护运行耗时约 34.8 秒 | 三条真实入口均在当前工作区独立运行环境通过；坑洞四张截图已按本次成功运行重新复核。 |
-| 兽人整组真实入口回归 | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人"` | `passed`：16/16，约 2.9 分钟；当前整组包含剑王、呆瓜兽人、坑洞保护、两座基地计分、8 张行动和附着保护链。 |
-| 聚合结果 | 兽人真实入口对象用例当前工作区整组运行 | `16 passed`：本次整组运行直接覆盖全部 16 条兽人真实入口用例。 |
+| 兽人整组真实入口回归 | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人"` | `历史证据 passed`：2026-08-05 为 16/16，约 2.9 分钟；当前整组包含剑王、呆瓜兽人、坑洞保护、两座基地计分、8 张行动和附着保护链。2026-08-10 新增的太难了 / 洗手间移动端用例另行单条运行并在后文登记。 |
+| 聚合结果 | 兽人真实入口对象当前已登记的运行证据 | `历史整组16 passed + 2026-08-10两条移动端 E2E 用例各1 passed`；未把分开的运行外推成新的整组 18/18 结果。 |
 | 当前范围裁决 | 本节与兽人 OpenSpec tasks | `representative_only / scoped_debt`：剑王、呆瓜兽人和坑洞保护的代表性真实入口证据已补齐，但移动端逐对象审计、其余派系全量真实入口与全派系收口仍未完成；不能宣称兽人整派系或 Munchkin 新派系完成。 |
 
 ## 2026-08-05 续审记录：法师相关真实入口整组回归
@@ -1294,7 +1295,7 @@
 | Munchkin 机制与录入回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/munchkinMechanics.test.ts src/games/smashup/__tests__/munchkinIntake.test.ts --configLoader native` | `passed`：2 个测试文件、119/119；包含怪物基础机制、宝藏混合牌种和已录入规则合同。测试中的预期命令失败日志属于“无公共宝藏可选”负向断言，测试本身通过。 |
 | 已建模派系能力回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/abilities/munchkin-clerics.test.ts src/games/smashup/__tests__/abilities/munchkin-elves.test.ts src/games/smashup/__tests__/abilities/munchkin-mages.test.ts src/games/smashup/__tests__/abilities/munchkin-orcs.test.ts src/games/smashup/__tests__/abilities/munchkin-warriors.test.ts --configLoader native` | `passed`：5 个测试文件、66/66；只覆盖当前已有能力测试文件，不外推到没有对应能力测试文件的派系。 |
 | 静态与证据门禁 | `npm run typecheck`；定向 ESLint；`npm run audit:interactions`；`npm run audit:evidence:selfcheck`；目标文件 `git diff --check` | `passed`：类型检查通过、ESLint 0 errors、交互审计 OK、证据自检 OK、差异无内容错误；ESLint warnings 仍为既有大型 E2E / PromptOverlay 警告。 |
-| 当前范围裁决 | `temp/smashup-munchkin-new-faction-flow.json` C1/C3 已通过，C2/C4/C5/C6/C7 仍未全部通过 | `in_progress`：当前核验收口了选择态 UI 单测和已实现能力的静态证据，但仍缺 8 个派系、22 张宝藏、怪物牌堆的逐卡 L2-L4、否定/清理分支、完整对象级审计和移动端逐对象验收；不能宣称 Munchkin 新派系整体完成。 |
+| 当前范围裁决 | `temp/smashup-munchkin-new-faction-flow.json` C1/C2/C3 已通过；C4/C5/C7 仍未全部通过，C6 为当前已实现链路的代表性真实入口通过 | `in_progress`：当前核验收口了选择态 UI 单测和已实现能力的静态证据，但仍缺 8 个派系、22 张宝藏、怪物牌堆的逐卡 L2-L4、否定/清理分支、完整对象级审计和移动端逐对象验收；不能宣称 Munchkin 新派系整体完成。 |
 
 ## 2026-08-06 续审记录：全量真实入口 132 条回归
 
@@ -1350,3 +1351,197 @@
 | 短响应提示修正 | `src/games/smashup/ui/PromptOverlay.tsx`、`src/index.css`、`src/games/smashup/Board.tsx`；同一 E2E 内的 `smashup-docked-prompt`、基地牌和回合 / 阶段便签几何断言 | `fixed_scoped`：afterScoring 短响应提示改为移动横屏左侧停靠，不再压住中央基地或左上回合 / 阶段便签；提示层只承接响应按钮，不重复显示源卡。 |
 | 收口状态 | 同一测试断言公共宝藏牌堆从 `x4` 到 `x1`，交互与响应窗口清空，玩家手牌新增被选择的已展示宝藏 | `passed_object_mobile_visual`：直线跑路药水计分后展示宝藏的移动端对象级链路已完成真实点击、状态断言和图面核销。 |
 | 当前范围裁决 | 直线跑路药水对象行与本节四张当前工作区截图 | `直线跑路药水移动端对象级 L4 已通过`；本条只覆盖《直线跑路药水》移动端 afterScoring 链路，不外推为其它宝藏、8 个派系、怪物对象或 Munchkin 新派系整体完成，整体仍保持 `in_progress / scoped_debt`。 |
+
+## 2026-08-10 续审记录：兽人坑洞移动端对象级真实计分
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人坑洞移动端横屏真实计分后保留公共小牌与原版操作入口" --project=chromium` | `passed`：1/1，25.9 秒；从真实 `playCards` 入口进入 844×390 横屏计分，手动让过计分前响应，最终回到 `playCards`。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：双方 VP 为 8/6；`base_the_pits` 已离场，原基地槽位清空；`interactionSourceId` 与 `responseWindowType` 均为 `null`，没有残留交互或响应窗。 |
+| 计分前截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞移动端横屏真实计分后保留公共小牌与原版操作入口\移动端-兽人坑洞-计分前基地与公共小牌.jpg` | `PASS / 92`：坑洞基地、16 临界点、双方随从与力量可读；公共怪物 / 宝藏小牌及 `x20 / x22` 位于左下牌库旁，未与手牌、回合信息和结束回合入口重叠。 |
+| 计分后截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞移动端横屏真实计分后保留公共小牌与原版操作入口\移动端-兽人坑洞-计分清场后保留公共小牌与操作入口.jpg` | `PASS / 92`：计分后基地槽位、VP 8/6、手牌区、回合信息和结束回合入口仍可读；公共两张小牌和数量继续留在左下，未出现新增弃牌堆、重叠或横向裁切。 |
+| 当前范围裁决 | 本节仅覆盖兽人基地“坑洞”的移动端 L4 真实计分链 | `passed_object_mobile_visual / scoped_debt`：坑洞对象的 L2、桌面 L3/L4 与移动端 L4 已补齐；兽人其它对象的移动端逐对象审计仍未全部完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人要塞移动端对象级真实计分
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人要塞移动端横屏真实计分后保留额外VP与公共小牌入口" --project=chromium` | `passed`：1/1，27.0 秒；从真实 `playCards` 入口进入 844×390 横屏计分，计分前响应按流程让过，最终回到 `playCards`。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：双方 VP 为 8/7；`base_garrison` 已离场，原基地槽位清空；`interactionSourceId` 与 `responseWindowType` 均为 `null`，没有残留交互或响应窗。 |
+| 计分前截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞移动端横屏真实计分后保留额外VP与公共小牌入口\移动端-兽人要塞-计分前总力量达到22.jpg` | `PASS / 92`：要塞本体显示 22 临界点，双方力量 12/10 和玩家 VP 可读；公共怪物 / 宝藏小牌及 `x20 / x22` 位于左下牌库旁，手牌、回合信息和结束回合入口未被遮挡。 |
+| 计分后截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞移动端横屏真实计分后保留额外VP与公共小牌入口\移动端-兽人要塞-计分后额外VP与公共小牌入口.jpg` | `PASS / 92`：要塞清场后 VP 8/7 可见，替换基地槽位、手牌区、回合信息和结束回合入口保持可读；公共两张小牌和数量仍在左下，没有新增弃牌堆、重叠或横向裁切。 |
+| 当前范围裁决 | 本节仅覆盖兽人基地“要塞”的移动端 L4 真实计分链 | `passed_object_mobile_visual / scoped_debt`：要塞对象的 L2、桌面 L3/L4 与移动端 L4 已补齐；兽人其它对象的移动端逐对象审计仍未全部完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-11 续审记录：兽人要塞移动端低于22阈值负向计分
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人要塞移动端总力量低于22时不奖励额外VP并清场" --project=chromium` | `passed`：1/1，28.5 秒；真实 `844x390` 横屏从 `playCards` 入口进入计分，计分前响应按流程让过，最终回到 `playCards`。 |
+| 阈值负向与权威状态收口 | 同一测试的最终状态断言 | `passed`：双方总力量为 21（11+10），双方 VP 为 7/6，仅获得要塞基础 3/2 VP，没有额外 VP；`base_garrison` 已离场，原基地槽位清空，`interactionSourceId` 与 `responseWindowType` 均为 `null`。 |
+| 计分前截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞移动端总力量低于22时不奖励额外VP并清场\移动端-兽人要塞-总力量21计分前不触发额外VP.jpg` | `PASS / 92`：要塞计分前和双方 11 / 10 力量可读；公共怪物 / 宝藏小牌及 `x20 / x22` 位于左下牌库旁，回合信息、记分板和结束回合入口均在原布局内。 |
+| 计分后截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞移动端总力量低于22时不奖励额外VP并清场\移动端-兽人要塞-总力量21计分后仅基础VP并清场.jpg` | `PASS / 92`：要塞清场后 VP 7/6 可读且没有额外 VP；公共两张小牌和数量仍在左下，原版手牌 / 操作区、回合信息和结束回合入口保持可见，没有新增弃牌堆、遮挡或横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人基地“要塞”总力量低于 22 的移动端负向 L4 链 | `passed_object_mobile_visual / scoped_debt`：本条补齐要塞阈值失败分支的真实入口、最终 VP、清场、交互收口和两张移动端原图；并列 / 少于三名有力玩家及兽人其它对象仍未全部审计，因此不解除兽人派系或 Munchkin 整体的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人狗堆移动端逐步手动选择与收口
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人狗堆移动端横屏仍按随从再基地手动选择并收口" --project=chromium` | `passed`：1/1，28.2 秒；`844x390` 横屏从真实计分前响应入口开始，先手动选择狗堆行动，再手动选择待移动随从，最后点击目标基地本体，未使用隐藏交互提交。 |
+| 手动选择合同 | 同一测试的 `autoResolveIfSingle=false` 断言、随从本体选择和基地本体选择 | `passed`：即使目标候选只有一个，页面仍保留真实手动选择；顶部提示条只提示当前步骤，随从卡 / 基地卡才是实际点击载体。 |
+| 截图 1-2：入口与行动响应 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人狗堆移动端横屏仍按随从再基地手动选择并收口/移动端-兽人狗堆-计分前手牌与两座基地.jpg`；`移动端-兽人狗堆-beforeScoring响应入口.jpg` | `PASS`：两座基地、手牌、记分板、公共怪物 / 宝藏小牌和响应入口均可读；没有新增怪物 / 宝藏弃牌堆，也没有把响应提示重复渲染成源卡。 |
+| 截图 3-4：两段目标选择 | `.../移动端-兽人狗堆-手动选择随从.jpg`；`.../移动端-兽人狗堆-手动选择目标基地.jpg` | `PASS`：随从选择态高亮随从本体；基地选择态高亮目标基地本体并压低非法基地；提示条不承接目标，也没有残留旧 prompt 覆盖第二步。 |
+| 截图 5：流程收口 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人狗堆移动端横屏仍按随从再基地手动选择并收口/移动端-兽人狗堆-随从移动后流程收口.jpg` | `PASS`：随从从源基地移动到目标基地，狗堆进弃牌堆；VP、基地、手牌、结束回合入口和公共小牌保持原版位置，无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“狗堆”的移动端 L4 手动选择链 | `passed_object_mobile_visual / scoped_debt`：狗堆的移动端逐步选择和收口已补齐；兽人其它对象及其完整负向 / 清理矩阵仍未全部完成，因此不解除兽人派系的“实施中”。 |
+
+> 路径对账：上表“截图 3-4”对应当前工作区同目录下的 `移动端-兽人狗堆-手动选择随从.jpg` 与 `移动端-兽人狗堆-手动选择目标基地.jpg`；第 5 张图只表示狗堆自身交互收口，页面随后仍进入计分强制效果选择，不表示整段计分流程自动完成。
+
+## 2026-08-10 续审记录：兽人挤碎移动端三级手动选择
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人挤碎移动端横屏按基地、玩家、随从三步手动选择并收口" --project=chromium` | `passed`：1/1，24.0 秒；`844x390` 横屏真实手牌入口，依次手动选择基地、玩家和目标随从，未使用隐藏交互提交。 |
+| 三段交互载体 | 同一测试的 `autoResolveIfSingle=false` 断言、基地本体点击、可见玩家选项按钮、随从本体点击 | `passed`：提示条只说明当前步骤；基地、玩家按钮、随从分别承担真实点击，唯一玩家候选也没有自动派发。 |
+| 截图 1-2：基地选择 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人挤碎移动端横屏按基地、玩家、随从三步手动选择并收口/移动端-兽人挤碎-手牌与两座基地.jpg`；`移动端-兽人挤碎-手动选择基地.jpg` | `PASS`：初始手牌、两座基地、怪物 / 宝藏小牌可读；基地选择态只高亮合法基地，另一基地降噪。 |
+| 截图 3：玩家选择 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人挤碎移动端横屏按基地、玩家、随从三步手动选择并收口/移动端-兽人挤碎-手动选择目标玩家.jpg` | `PASS`：页面显示“玩家 2”可见按钮作为实际玩家载体；没有把提示文字或记分板当成已确认目标。 |
+| 截图 4-5：随从选择与收口 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人挤碎移动端横屏按基地、玩家、随从三步手动选择并收口/移动端-兽人挤碎-手动选择目标随从.jpg`；`移动端-兽人挤碎-目标随从被摧毁后.jpg` | `PASS`：目标随从本体高亮并手动点击；结算后目标随从进入对手弃牌，挤碎进入己方弃牌，页面无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“挤碎”的移动端 L4 三级选择链 | `passed_object_mobile_visual / scoped_debt`：挤碎移动端三级选择和收口已补齐；兽人其它对象及完整负向 / 清理矩阵仍未全部完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人给我！移动端附着行动转移
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人给我！移动端横屏先选附着行动再选己方新宿主并收口" --project=chromium` | `passed`：1/1，24.1 秒；真实 `844x390` 横屏先点击源宿主展开附着行动，再完成手牌二次确认、附着行动选择和新宿主选择。 |
+| 手动确认与目标载体 | 同一测试的两次手牌点击、`autoResolveIfSingle=false`、附着行动本体点击和新宿主随从本体点击 | `passed`：第一次手牌点击只进入可见待确认态，第二次才打出；之后附着行动和新宿主均由玩家手动选择，没有自动派发。 |
+| 截图 1-3：进入与二次确认 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人给我！移动端横屏先选附着行动再选己方新宿主并收口/移动端-兽人给我-手牌与两个宿主.jpg`；`移动端-兽人给我-展开附着行动.jpg`；`移动端-兽人给我-手牌卡待确认.jpg` | `PASS`：源宿主展开附着行动卡；手牌卡待确认态清楚可见，未把一次点击误报成自动打出。 |
+| 截图 4-5：两段目标选择 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人给我！移动端横屏先选附着行动再选己方新宿主并收口/移动端-兽人给我-手动选择附着行动.jpg`；`移动端-兽人给我-手动选择己方新宿主.jpg` | `PASS`：附着行动本体和新宿主本体分别高亮，提示条只说明步骤，不重复承载源卡或目标。 |
+| 截图 6：转移收口 | `test-results/evidence-screenshots/smashup/smashup-munchkin-monster-treasure-ui.e2e/兽人给我！移动端横屏先选附着行动再选己方新宿主并收口/移动端-兽人给我-转移后行动保留在新宿主.jpg` | `PASS`：源宿主消失，目标宿主展开显示转移后的附着行动；原宿主进入对手弃牌，给我！进入己方弃牌，公共小牌、手牌和原版操作入口保持可见。 |
+| 当前范围裁决 | 本节仅覆盖兽人“给我！”移动端 L4 附着转移链 | `passed_object_mobile_visual / scoped_debt`：给我！移动端二次确认、两段手动选择和转移后展开图面已补齐；兽人其它对象及完整负向 / 清理矩阵仍未全部完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人太难了移动端附着随从与保护过滤
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人太难了移动端横屏手动选择附着随从并收口" --project=chromium` | `passed`：1/1，27.3 秒；真实 `844x390` 横屏从手牌打出进入附着目标选择，玩家手动点击随从本体完成附着。 |
+| 手动选择合同 | 同一测试的 `autoResolveIfSingle=false` 断言、两个候选随从本体和实际点击 | `passed`：即使后续候选可收敛，页面仍保留玩家手动选择；提示条只说明步骤，随从本体承担真实点击，不使用隐藏交互选项提交。 |
+| 截图 1：进入状态 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人太难了移动端横屏手动选择附着随从并收口\移动端-兽人太难了-手牌与两个候选随从.jpg` | `PASS / 92`：两个候选随从、手牌、公共怪物 / 宝藏小牌、回合信息和原版操作入口可读，没有新增弃牌堆或横向裁切。 |
+| 截图 2：目标选择 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人太难了移动端横屏手动选择附着随从并收口\移动端-兽人太难了-手动选择附着随从.jpg` | `PASS / 92`：高亮落在随从本体；提示层没有重复显示源卡，也没有遮住候选随从或基地。 |
+| 截图 3：流程收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人太难了移动端横屏手动选择附着随从并收口\移动端-兽人太难了-附着后收口.jpg` | `PASS / 92`：附着行动留在目标随从身上；手牌、基地、公共小牌、回合信息和结束回合入口保持可读，无怪物 / 宝藏弃牌堆。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：目标随从带有“太难了”，另一随从没有该附着，行动牌不在手牌，`interactionSourceId` 为 `null`，页面无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“太难了”的移动端 L4 附着选择与收口 | `passed_object_mobile_visual / scoped_debt`：太难了的附着入口、保护目标载体和移动端图面已补齐；兽人“洗手间”移动端基地附着与其余派系逐对象移动端审计仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人洗手间移动端附着基地与布局收口
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人洗手间移动端横屏手动选择附着基地并收口" --project=chromium` | `passed`：1/1，28.1 秒；真实 `844x390` 横屏从手牌打出《洗手间》，进入普通附着基地选择态并由玩家点击基地本体完成附着。 |
+| 手动选择载体 | 同一测试的两个基地高亮、`expectManualChoiceVisible`、基地本体点击 | `passed`：普通行动牌附着选择由牌桌选中态承接，不创建 `sys.interaction`；两个合法基地本体都高亮，提示层没有承担目标点击。 |
+| 截图 1：入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人洗手间移动端横屏手动选择附着基地并收口\移动端-兽人洗手间-手牌与两个候选基地.jpg` | `PASS / 92`：两座基地、手牌中的《洗手间》、公共怪物 / 宝藏小牌、记分板和结束回合入口可读，没有新增弃牌堆。 |
+| 截图 2：基地选择 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人洗手间移动端横屏手动选择附着基地并收口\移动端-兽人洗手间-手动选择附着基地.jpg` | `PASS / 92`：两个基地本体高亮，《洗手间》仍在牌桌选中态；没有中央重复源卡、隐藏选项或提示层遮挡基地。 |
+| 截图 3：流程收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人洗手间移动端横屏手动选择附着基地并收口\移动端-兽人洗手间-附着后收口.jpg` | `PASS / 92`：目标基地上方保留《洗手间》附着行动，手牌中的源牌消失；公共小牌、基地、记分板和原版操作入口仍在原位，无横向溢出。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：目标基地存在该行动、另一基地不存在同一实例、手牌不再持有该牌、行动次数为 1、`interactionSourceId` 为 `null`；怪物 / 宝藏弃牌堆未新增。 |
+| 当前范围裁决 | 本节仅覆盖兽人“洗手间”的移动端 L4 附着基地链 | `passed_object_mobile_visual / scoped_debt`：洗手间的手牌附着入口、基地本体手动选择和移动端图面已补齐；兽人其余完整负向 / 清理矩阵与其他派系逐对象移动端审计仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人死亡之息移动端过滤保护目标
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人死亡之息移动端横屏过滤太难了保护目标并收口" --project=chromium` | `passed`：1/1，22.6 秒；真实 `844x390` 横屏从手牌打出《死亡之息》，进入目标随从交互并由玩家点击未受保护的随从本体。 |
+| 候选过滤与手动选择 | 同一测试的 `autoResolveIfSingle=false`、交互选项和随从本体可点击断言 | `passed`：未受“太难了”保护的随从是合法候选，受保护随从不在候选中；即使只剩一个合法目标，仍保留玩家手动选择，提示层不承接目标。 |
+| 截图 1：入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人死亡之息移动端横屏过滤太难了保护目标并收口\移动端-兽人死亡之息-手牌与受保护-未保护随从.jpg` | `PASS / 92`：两座基地、受保护随从、未保护随从、手牌和公共怪物 / 宝藏小牌可读，未新增弃牌堆。 |
+| 截图 2：过滤选择态 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人死亡之息移动端横屏过滤太难了保护目标并收口\移动端-兽人死亡之息-过滤太难了保护目标.jpg` | `PASS / 92`：只有未保护随从本体高亮；受保护随从仍在基地，顶部只是短提示，没有重复显示源卡或遮挡目标。 |
+| 截图 3：流程收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人死亡之息移动端横屏过滤太难了保护目标并收口\移动端-兽人死亡之息-受保护随从保留并收口.jpg` | `PASS / 92`：受保护随从留在原基地，未保护随从离场；《死亡之息》进入弃牌区，公共小牌、手牌、基地和结束回合入口保持原版位置。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：受保护随从仍可见，未保护随从不在场上且进入其拥有者牌库，`interactionSourceId` 为 `null`，页面无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“死亡之息”的移动端 L4 保护过滤与牌库底收口 | `passed_object_mobile_visual / scoped_debt`：死亡之息的候选过滤、保护边界和移动端图面已补齐；兽人其余对象的移动端逐对象审计及完整负向 / 清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人剑王移动端持续力量图面
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人剑王移动端横屏显示同基地加成并保留原版布局" --project=chromium` | `passed`：1/1，21.7 秒；真实 `844x390` 横屏载入含剑王、同基地己方随从、对手随从和另一基地随从的牌桌。 |
+| 力量范围断言 | 同一测试的力量标记、tooltip、基础力量和四个随从对象断言 | `passed`：只有同基地己方随从显示 `+1`；剑王自身、对手随从和另一基地己方随从均没有力量加成标记，状态基础力量保持不变。 |
+| 移动端截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人剑王移动端横屏显示同基地加成并保留原版布局\移动端-兽人剑王-同基地加成与原版布局.jpg` | `PASS / 92`：`+1` 贴在真实同基地己方随从本体；两个基地、手牌、公共怪物 / 宝藏小牌、记分板和结束回合入口均可读，没有重复源卡或横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“剑王”的移动端 L4 持续力量图面 | `passed_object_mobile_visual / scoped_debt`：剑王的移动端力量范围与布局已补齐；兽人其余对象的移动端逐对象审计及完整负向 / 清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人呆瓜兽人移动端保护过滤
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人呆瓜兽人移动端横屏过滤保护目标并手动收口" --project=chromium` | `passed`：1/1，29.0 秒；真实 `844x390` 横屏依次手动选择基地、玩家和目标随从本体。 |
+| 候选过滤与三步载体 | 同一测试的三段 `autoResolveIfSingle=false`、基地本体、可见玩家选项和随从本体断言 | `passed`：呆瓜兽人不在对手行动的目标候选中，普通随从是唯一合法目标；三步均由玩家可见载体完成，没有隐藏选项提交或单候选自动结算。 |
+| 截图 1：入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人呆瓜兽人移动端横屏过滤保护目标并手动收口\移动端-兽人呆瓜兽人-手牌与保护目标.jpg` | `PASS / 92`：基地、呆瓜兽人、普通随从、手牌、公共怪物 / 宝藏小牌和原版操作入口可读。 |
+| 截图 2：过滤选择态 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人呆瓜兽人移动端横屏过滤保护目标并手动收口\移动端-兽人呆瓜兽人-过滤保护目标.jpg` | `PASS / 92`：普通随从本体高亮，呆瓜兽人保留在基地且未高亮；顶部只显示当前步骤，不重复显示源卡。 |
+| 截图 3：流程收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人呆瓜兽人移动端横屏过滤保护目标并手动收口\移动端-兽人呆瓜兽人-保护目标保留并收口.jpg` | `PASS / 92`：普通随从离场，呆瓜兽人仍在基地；手牌、公共小牌、记分板和结束回合入口保持原位，无横向溢出。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：保护目标仍在基地，普通随从进入对手弃牌，行动牌进入己方弃牌，`interactionSourceId` 为 `null`；页面没有新增怪物 / 宝藏弃牌堆。 |
+| 当前范围裁决 | 本节仅覆盖兽人“呆瓜兽人”的移动端 L4 保护过滤与挤碎三步收口 | `passed_object_mobile_visual / scoped_debt`：呆瓜兽人的移动端候选过滤、真实三步选择和图面已补齐；兽人其余对象的移动端逐对象审计及完整负向 / 清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人重击者移动端低力量目标过滤
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人重击者移动端横屏手动选择低力量目标并收口" --project=chromium` | `passed`：1/1，25.4 秒；真实 `844x390` 横屏从手牌入口打出重击者，进入目标随从选择并由玩家点击低力量随从本体完成摧毁。 |
+| 候选过滤与手动选择 | 同一测试的 `autoResolveIfSingle=false`、力量 2 或更少候选、力量 3 排除和随从本体点击断言 | `passed`：力量 2 的两个随从保留为手动候选，力量 3 随从不在候选中；顶部提示只说明步骤，实际点击载体是随从本体。 |
+| 截图 1：入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人重击者移动端横屏手动选择低力量目标并收口\移动端-兽人重击者-手牌与低力量目标.jpg` | `PASS / 92`：重击者手牌、两座基地、低力量与高力量随从、公共怪物 / 宝藏小牌、记分板和结束回合入口可见，没有横向裁切。 |
+| 截图 2：低力量选择态 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人重击者移动端横屏手动选择低力量目标并收口\移动端-兽人重击者-手动选择低力量目标.jpg` | `PASS / 92`：提示条位于顶部且不遮挡基地或目标；低力量随从本体高亮，力量 3 随从未高亮，公共小牌和原版操作槽位仍可见。 |
+| 截图 3：流程收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人重击者移动端横屏手动选择低力量目标并收口\移动端-兽人重击者-低力量目标被摧毁并收口.jpg` | `PASS / 92`：被选低力量随从离场，其他低力量随从和力量 3 随从保留；公共宝藏数量变化、手牌区、基地、回合信息和结束回合入口仍可读，无新增怪物 / 宝藏弃牌堆。 |
+| 权威状态收口 | 同一测试的最终状态断言 | `passed`：源重击者仍在场，被选目标进入拥有者弃牌，另一基地目标和力量 3 随从保留，`interactionSourceId` 为 `null`，页面无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“重击者”的移动端 L4 低力量目标链 | `passed_object_mobile_visual / scoped_debt`：重击者的移动端候选过滤、随从本体手动选择、摧毁收口和图面已补齐；兽人其它对象及完整无合法目标负向 / 清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人粉碎者移动端天赋二次确认与已使用状态
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人粉碎者移动端横屏手动激活天赋并显示已使用状态" --project=chromium` | `passed`：1/1，21.3 秒；真实 `844x390` 横屏先打出粉碎者，再通过两次玩家点击完成天赋使用。 |
+| 二次确认与状态合同 | 同一测试的第一次点击待确认、第二次点击生效、`talentUsed=true`、已使用标记和交互收口断言 | `passed`：第一次点击只进入待确认态，第二次才使用天赋；天赋本身不产生额外游戏状态变化，已使用标记由真实随从本体承载。 |
+| 截图 1：入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人粉碎者移动端横屏手动激活天赋并显示已使用状态\移动端-兽人粉碎者-手牌与空基地.jpg` | `PASS / 92`：粉碎者手牌、两座基地、公共怪物 / 宝藏小牌、记分板和结束回合入口可读，没有新增弃牌堆或横向裁切。 |
+| 截图 2：天赋可用 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人粉碎者移动端横屏手动激活天赋并显示已使用状态\移动端-兽人粉碎者-天赋可用.jpg` | `PASS / 92`：粉碎者进入基地后仍是可操作的真实随从本体，未提前显示已使用状态；公共小牌、手牌、基地和操作槽位保持可见。 |
+| 截图 3：第一次点击待确认 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人粉碎者移动端横屏手动激活天赋并显示已使用状态\移动端-兽人粉碎者-第一次点击待确认.jpg` | `PASS / 92`：第一次点击后的待确认高亮落在粉碎者本体，提示/反馈不遮挡基地、手牌或公共小牌。 |
+| 截图 4：天赋已使用收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人粉碎者移动端横屏手动激活天赋并显示已使用状态\移动端-兽人粉碎者-天赋已使用并收口.jpg` | `PASS / 92`：已使用标记稳定贴在粉碎者本体，待确认态退场；公共怪物 / 宝藏小牌、手牌、基地、回合信息和结束回合入口仍可读，无横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“粉碎者”的移动端 L4 天赋入口与二次确认链 | `passed_object_mobile_visual / scoped_debt`：粉碎者移动端的可用态、二次确认、已使用状态和图面已补齐；兽人其它对象及完整负向 / 清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人躺下移动端计分前响应与压制收口
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人躺下！移动端横屏计分前手动选择响应并保留压制状态" --project=chromium` | `passed`：1/1，23.9 秒；真实 `844x390` 横屏从计分前响应窗口进入，玩家手动选择《躺下！》并完成压制收口。 |
+| 响应选择与状态收口 | 同一测试的响应入口、`autoResolveIfSingle=false`、手牌行动本体点击、压制元数据、行动弃牌和交互收口断言 | `passed`：计分前行动必须由玩家手动选择；压制状态写入要塞，其他玩家特殊牌 / 特殊能力受到限制，响应层随后清空。 |
+| 截图 1：计分前入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人躺下！移动端横屏计分前手动选择响应并保留压制状态\移动端-兽人躺下-计分前手牌与要塞.jpg` | `PASS / 92`：要塞、双方力量、手牌中的《躺下！》、公共怪物 / 宝藏小牌、记分板和结束回合入口可读，没有横向裁切。 |
+| 截图 2：beforeScoring 响应 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人躺下！移动端横屏计分前手动选择响应并保留压制状态\移动端-兽人躺下-beforeScoring响应入口.jpg` | `PASS / 92`：响应按钮位于左上并与要塞、记分板、手牌和公共小牌错开；提示文字只说明当前步骤，手牌行动仍是实际选择入口。 |
+| 截图 3：压制收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人躺下！移动端横屏计分前手动选择响应并保留压制状态\移动端-兽人躺下-压制状态结算后.jpg` | `PASS / 92`：响应层退场，计分后 VP 与替代基地可读；手牌、公共小牌、回合信息和结束回合入口保持原版槽位，无新增弃牌堆或横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“躺下！”的移动端 L4 计分前响应链 | `passed_object_mobile_visual / scoped_debt`：躺下的移动端响应入口、手动选择、压制状态和收口图面已补齐；兽人其它对象及完整平手/无合法目标负向矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人愤怒的掠夺者移动端计分前 VP 响应
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得 VP" --project=chromium` | `passed`：本轮 2026-08-10 21:56 复跑 1/1，28.0 秒；真实 `844x390` 横屏从计分前响应窗口进入，玩家手动选择《愤怒的掠夺者》并完成 VP 收口。 |
+| 领先条件与手动选择 | 同一测试的计分前响应入口、`autoResolveIfSingle=false`、手牌行动本体点击和 VP 断言 | `passed`：响应必须由玩家手动选择；当前玩家领先第二名至少 3 点时获得 1 VP，响应和交互收口。 |
+| 截图 1：计分前入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得-VP\移动端-兽人愤怒的掠夺者-计分前手牌与要塞.jpg` | `PASS / 92`：要塞、双方力量、手牌中的《愤怒的掠夺者》、公共怪物 / 宝藏小牌、记分板和结束回合入口清楚可见。 |
+| 截图 2：beforeScoring 响应 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得-VP\移动端-兽人愤怒的掠夺者-beforeScoring响应入口.jpg` | `PASS / 92`：响应入口位于左上，与要塞、记分板、手牌和公共小牌错开；提示只说明当前动作，手牌行动是实际选择载体。 |
+| 截图 3：获得 VP 收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得-VP\移动端-兽人愤怒的掠夺者-获得VP并收口.jpg` | `PASS / 92`：VP 8/6 与计分后基地可读，响应层退场；公共小牌、手牌、回合信息和结束回合入口保持原版槽位，无新增弃牌堆或横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“愤怒的掠夺者”的移动端 L4 计分前 VP 链 | `passed_object_mobile_visual / scoped_debt`：愤怒的掠夺者移动端的计分前响应、领先阈值、VP 收口和图面已补齐；不满足阈值负向路径及兽人其它对象完整清理矩阵仍未完成，因此不解除兽人派系的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人负向响应与无目标边界
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 原始负向发现 | 真实移动端场景 `兽人躺下移动端落后时不进入计分前响应`；力量 4 对 9 时页面曾显示《躺下！ -> 基地 1》 | `confirmed_validation_gap`：领域层的 `andStayDownValidateUse` 已返回“你不是该基地的最高力量玩家”，但计分前响应候选仍把该牌展示为可打出选项。现实影响是玩家会看到并尝试一张规则上不合法的响应牌。 |
+| 直接触发条件 | `src/games/smashup/domain/reactionSession.ts` 的响应候选通过 `validate(SU_COMMANDS.PLAY_ACTION)` 判断；响应分支原先只检查响应时机、基地和通用行动语义 | `confirmed_trigger`：通用行动验证能确认“可在计分前打出”，但没有继续消费该特殊行动卡自己的发动前校验，因此没有过滤力量排名不满足的《躺下！》或领先不足 3 点的《愤怒的掠夺者》。 |
+| 根本机制 | `src/games/smashup/domain/commands.ts` 的响应窗口 `PLAY_ACTION` 分支原先没有调用 `validateSpecialUse`；普通 `ACTIVATE_SPECIAL` / 手牌特殊能力路径已经调用同一校验 | `root_cause_confirmed`：响应窗口与手动特殊能力路径使用了两套不同的能力发动校验链。响应候选可通过通用命令验证进入 UI，导致特殊能力的来源条件只在另一条入口生效。 |
+| 修复 | `src/games/smashup/domain/commands.ts:815`：响应窗口命令在目标合法性检查后，对有特殊执行器的响应牌调用 `validateSpecialUse`，共享当前基地、目标和回合上下文 | `fixed_scoped`：候选生成和最终命令都回到同一响应命令验证入口；未满足能力自身规则时不生成响应候选，也不能靠伪造命令绕过。未改动普通行动、特殊能力定义或计分排名实现。 |
+| 重击者无合法目标 | 规则原文：`摧毁一个力量2或更少的仆从。`；E2E：`兽人重击者移动端无合法目标时不生成隐藏目标或假结算` | `passed`：真实 `844x390` 横屏只有力量 3 目标时，打出重击者后不生成隐藏目标、不残留交互，重击者正常留在基地。 |
+| 躺下落后边界 | 规则原文：`如果你在这里有总计最高力量，其他玩家不能打出或使用特殊能力。`；E2E：`兽人躺下移动端落后时不进入计分前响应` | `passed`：力量 4 对 9 时不进入计分前响应，卡仍在手牌，不写入压制状态，基地按正常 VP 计分为 6/7，交互和响应窗清空。 |
+| 愤怒的掠夺者阈值边界 | 规则原文：`如果你比第二名多至少3力量，获得1VP。`；E2E：`兽人愤怒的掠夺者移动端领先不足三点时不进入响应也不奖励VP` | `passed`：力量 7 对 5 时不进入响应、不产生额外 `1VP`；正常基地计分后 VP 为 7/6，卡仍在手牌，交互和响应窗清空。 |
+| 领域与静态回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/abilities/munchkin-orcs.test.ts --configLoader native`；`npm run typecheck`；定向 ESLint；`git diff --check` | `passed`：兽人领域 19/19，类型检查通过，ESLint 0 errors，差异无内容错误；E2E 文件保留大型文件既有 `any` warnings。 |
+| 当前截图图面 | 本次运行生成的 6 张移动端原图，分别位于三个负向场景目录；已按“前态 / 收口态”逐张核验 | `PASS / 92`：基地、力量 / VP、手牌、公共怪物 / 宝藏小牌、牌库 / 弃牌区、结束回合入口均可读；没有目标遮挡、横向溢出、重复源卡或响应残留。最终原图已按用户要求用 PureRef 打开。 |
+| 当前范围裁决 | 本节只覆盖兽人三条负向边界和响应验证共用链 | `passed_negative_scope / scoped_debt`：三条负向证据已回写；兽人其它跳过 / 清理生命周期，以及其它派系和 Munchkin 扩展的完整对象矩阵仍未完成，不能解除兽人或 Munchkin 的“实施中”。 |
+
+## 2026-08-10 续审记录：兽人洗手间移动端明确跳过保护
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 移动端真实入口 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人洗手间移动端明确跳过保护后继续结算并清理" --project=chromium` | `passed`：本轮 2026-08-10 22:26 复跑 1/1；真实 `844x390` 横屏从《挤碎》手牌本体两次点击确认打出，手动点击目标基地本体，切换到 P2 视角后手动点击“不保护”，再回到 P1 手动选择目标玩家和目标随从。 |
+| 跳过后的权威状态 | 同一测试的 `game.getState()` 与目标页面 TestHarness 状态 | `passed`：明确“不保护”后没有写入 `stallingProtectedActionDefId`；《挤碎》仍继续进入目标玩家 / 目标随从选择，目标随从进入拥有者弃牌堆，行动卡进入 P1 弃牌堆，`sys.interaction.current` 和响应窗口均清空。 |
+| 截图 1：打出前 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人洗手间移动端明确跳过保护后继续结算并清理\移动端-兽人洗手间-跳过保护前手牌与基地.jpg` | `PASS / 92`：手牌中的《挤碎》、洗手间、要塞、双方随从、公共怪物 / 宝藏 `x20 / x22`、回合信息和结束回合入口均可见，未发生横向溢出。 |
+| 截图 2：P2 保护选择与不保护 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\munchkin-new-faction-flow\兽人-洗手间-移动端-保护选择与明确跳过.png` | `PASS / 92`：P2 视角显示洗手间的短提示、真实目标随从本体和“不保护”按钮；基地图集已等待真实解码后截图，提示未遮挡目标随从、公共小牌或右侧操作区。 |
+| 截图 3：跳过后收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人洗手间移动端明确跳过保护后继续结算并清理\移动端-兽人洗手间-跳过保护后目标被摧毁并收口.jpg` | `PASS / 92`：目标随从已离开基地并进入弃牌，响应层清空，公共小牌、两座基地、回合信息、结束回合和原版弃牌槽位保持可读，无新增竞争面。 |
+| 当前范围裁决 | 本节只覆盖兽人“洗手间”的移动端明确跳过分支和本次行动清理 | `passed_object_mobile_visual / scoped_debt`：洗手间的移动端保护选择与明确“不保护”分支已补齐；兽人其它未覆盖的跳过 / 无合法目标 / 清理生命周期，以及其它派系和 Munchkin 扩展的完整对象矩阵仍未完成，不解除兽人派系或 Munchkin 整体的“实施中”。 |

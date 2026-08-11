@@ -3,6 +3,7 @@ import { resolveNextLocalAiAction } from '../../../engine/ai/localRunner';
 import { createReplayAdapter } from '../../../engine/adapter';
 import { createInitialSystemState, createSeededRandom, executePipeline } from '../../../engine/pipeline';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { resolveForceEndTurnForStalledAi } from '../../../engine/transport/onlineAiRecovery';
 import {
     BETRAYAL_AI_ACTION_KINDS,
 } from '../ai';
@@ -16,6 +17,10 @@ import {
 } from '../game';
 import { BETRAYAL_MANIFEST } from '../manifest';
 import { BETRAYAL_DISCOVERY_POOLS } from '../scenarioConfig';
+import {
+    BETRAYAL_AI_MINIMUM_VISIBLE_STEP_DELAY_MS,
+    BETRAYAL_VISUAL_TRANSITION_DURATION_MS,
+} from '../visualTiming';
 import {
     applyBetrayalCommand,
     createBetrayalScriptedRandom,
@@ -203,6 +208,21 @@ function createHelpingHandsAiCore(playerIds: string[] = ['0', '1', '2']): Betray
     );
 }
 
+test('Betrayal 本地 AI 的可见动作等待覆盖对象过渡动画', () => {
+    expect(betrayalAiRuntime.defaultMinimumActionDelayMs).toBe(
+        BETRAYAL_AI_MINIMUM_VISIBLE_STEP_DELAY_MS,
+    );
+    expect(BETRAYAL_AI_MINIMUM_VISIBLE_STEP_DELAY_MS).toBeGreaterThanOrEqual(
+        BETRAYAL_VISUAL_TRANSITION_DURATION_MS,
+    );
+    expect(betrayalAiRuntime.localVisibleStepDelayConfig?.actionKinds).toEqual(
+        expect.arrayContaining([
+            BETRAYAL_AI_ACTION_KINDS.MOVE_TO_ROOM,
+            BETRAYAL_AI_ACTION_KINDS.ACKNOWLEDGE_CARD_RESOLUTION,
+        ]),
+    );
+});
+
 function startHelpingHandsMonsterTurn(core: BetrayalCore): BetrayalCore {
     activateTestExplorer(core, '0');
     return applyBetrayalCommand(
@@ -280,6 +300,79 @@ describe('小黑屋本地 AI', () => {
         const state = stateOf(createStartedFirstScenarioCore());
 
         expect(buildActions(state, '1')).toEqual([]);
+    });
+
+    test('翻牌确认缺少非当前 AI 座位时，watchdog 应代该座位确认而不是推进当前 AI 阶段', () => {
+        const core = createStartedFirstScenarioCore();
+        core.pendingCardResolutionQueue = [{
+            id: 'ai-card-resolution',
+            playerId: '2',
+            requiredPlayerIds: ['0', '1', '2'],
+            acknowledgedPlayerIds: ['1', '2'],
+            deckKind: 'item',
+            cardId: 'lucky-coin-2',
+            cardName: '幸运硬币',
+            discoveryTitle: '幸运硬币',
+            stepKind: 'drawn-card',
+            text: '已加入持有区：幸运硬币（按卡面规则持有）',
+            index: 1,
+            total: 1,
+        }];
+        const state = stateOf(core, 'betrayal-ai-pending-card-recovery');
+        state.sys.phase = 'preHaunt';
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: state,
+            seatControllers: {
+                '0': { type: 'local-ai' },
+                '1': { type: 'local-ai' },
+                '2': { type: 'local-ai' },
+            },
+            seatStates: {},
+            engineConfig,
+            gameId: 'betrayal',
+        });
+
+        expect(candidate?.reason).toBe('seat-legal-only');
+        expect(candidate?.playerId).toBe('0');
+        expect(candidate?.resolution.action.commands).toEqual([{
+            type: BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION,
+            payload: { resolutionId: 'ai-card-resolution' },
+        }]);
+    });
+
+    test('翻牌确认缺少真人座位时，watchdog 不应替当前 AI 强推阶段', () => {
+        const core = createStartedFirstScenarioCore();
+        core.pendingCardResolutionQueue = [{
+            id: 'human-card-resolution',
+            playerId: '0',
+            requiredPlayerIds: ['0', '1', '2'],
+            acknowledgedPlayerIds: ['1', '2'],
+            deckKind: 'item',
+            cardId: 'lucky-coin-2',
+            cardName: '幸运硬币',
+            discoveryTitle: '幸运硬币',
+            stepKind: 'drawn-card',
+            text: '已加入持有区：幸运硬币（按卡面规则持有）',
+            index: 1,
+            total: 1,
+        }];
+        const state = stateOf(core, 'betrayal-human-card-recovery');
+        state.sys.phase = 'preHaunt';
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: state,
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+                '2': { type: 'local-ai' },
+            },
+            seatStates: {},
+            engineConfig,
+            gameId: 'betrayal',
+        });
+
+        expect(candidate).toBeNull();
     });
 
     test('AI 会先确认翻牌结算，避免在线 watchdog 裸过阶段被拒', async () => {

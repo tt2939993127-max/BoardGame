@@ -3,7 +3,7 @@ import { registerChoiceEffectHandler } from '../choiceEffects';
 import { registerChoiceResolvedEventHandler } from '../choiceResolvedEvents';
 import { ARTIFICER_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
 import { RESOURCE_IDS } from '../resources';
-import { getActiveDice, getFaceCounts, getOpponents, getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getFaceCounts, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { MAX_HEALTH, type DiceThroneCore } from '../types';
 import { updatePendingAttackSettlementStage } from '../utils';
 import type {
@@ -18,7 +18,8 @@ import type {
     TokenLimitChangedEvent,
     TokenUsedEvent,
 } from '../events';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import {
     ADVANCED_ARTIFICER_BOT_LIMIT as ADVANCED_ROBOT_LIMIT,
     ARTIFICER_BOT_IDS as ARTIFICER_ROBOT_IDS,
@@ -36,6 +37,9 @@ const WRENCH_STRIKE_ROLL_CHOICE_ID = 'artificer-wrench-strike-roll';
 const WRENCH_STRIKE_SPEND_WRENCH_CHOICE_ID = 'artificer-wrench-strike-spend-wrench';
 const WRENCH_STRIKE_SPEND_GEAR_CHOICE_ID = 'artificer-wrench-strike-spend-gear';
 const WRENCH_STRIKE_SPEND_ELECTRICITY_CHOICE_ID = 'artificer-wrench-strike-spend-electricity';
+const ARTIFICER_HEAL_BOT_SETTLEMENT_ID = 'artificer-heal-bot-use';
+const ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID = 'artificer-wrench-strike-branch';
+const ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID = 'artificer-perfectly-calibrated-roll';
 const BUILD_FROM_SCRATCH_CHOICE_ID = 'artificer-build-from-scratch-resolve';
 const ACTIVATE_BOT_CHOICE_ID = 'artificer-activate-bot-resolve';
 const SYNTH_INFLICT_NANOBOMB_SELECTED_ACTION_ID = 'artificer-synth-inflict-nanobomb-selected';
@@ -519,11 +523,6 @@ function handleHealBotUse({ targetId, state, timestamp, random }: CustomActionCo
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, targetId, value) ?? ARTIFICER_DICE_FACE_IDS.WRENCH;
-    const healAmount = face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2;
-    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
-    const maxHp = MAX_HEALTH;
-    const actualHeal = Math.max(0, Math.min(healAmount, maxHp - currentHp));
-
     return [
         {
             type: 'BONUS_DIE_ROLLED',
@@ -538,16 +537,14 @@ function handleHealBotUse({ targetId, state, timestamp, random }: CustomActionCo
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as BonusDieRolledEvent,
-        {
-            type: 'HEAL_APPLIED',
-            payload: {
-                targetId,
-                amount: actualHeal,
-                sourceAbilityId: 'artificer-heal-bot-use',
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 0.001,
-        } as HealAppliedEvent,
+        createDisplayOnlySettlement(
+            'artificer-heal-bot-use',
+            targetId,
+            targetId,
+            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerHealBot', effectParams: { value, heal: face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2 } }],
+            timestamp + 0.001,
+            { customResolutionId: ARTIFICER_HEAL_BOT_SETTLEMENT_ID },
+        ),
     ];
 }
 
@@ -659,37 +656,14 @@ function buildWrenchStrikeBonusEvents(
         timestamp,
     } as BonusDieRolledEvent];
 
-    if (face === ARTIFICER_DICE_FACE_IDS.WRENCH || face === ARTIFICER_DICE_FACE_IDS.GEAR) {
-        events.push({
-            type: 'BONUS_DAMAGE_ADDED',
-            payload: {
-                playerId: attackerId,
-                amount: face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2,
-                sourceCardId: sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 0.001,
-        } as DiceThroneEvent);
-        return events;
-    }
-
-    const player = state.players[attackerId];
-    if (!player) return events;
-    const currentSynth = player.tokens[TOKEN_IDS.SYNTH] ?? 0;
-    const maxSynth = getTokenStackLimit(state, attackerId, TOKEN_IDS.SYNTH);
-    const newTotal = Math.min(currentSynth + 1, maxSynth);
-    events.push({
-        type: 'TOKEN_GRANTED',
-        payload: {
-            targetId: attackerId,
-            tokenId: TOKEN_IDS.SYNTH,
-            amount: Math.max(0, newTotal - currentSynth),
-            newTotal,
-            sourceAbilityId,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 0.001,
-    } as TokenGrantedEvent);
+    events.push(createDisplayOnlySettlement(
+        sourceAbilityId ?? ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID,
+        attackerId,
+        state.pendingAttack?.defenderId ?? attackerId,
+        [{ index: 0, value, face: face as any, effectKey: faceToEffectKey[face] ?? 'bonusDie.effect.artificerWrenchStrikeWrench', presentationKind }],
+        timestamp + 0.001,
+        { customResolutionId: ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID },
+    ));
     return events;
 }
 
@@ -765,12 +739,6 @@ function handlePerfectlyCalibratedRoll({ attackerId, sourceAbilityId, state, tim
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? ARTIFICER_DICE_FACE_IDS.WRENCH;
-    const synthGain = Math.ceil(value / 2);
-    const currentSynth = player.tokens[TOKEN_IDS.SYNTH] ?? 0;
-    const maxSynth = getTokenStackLimit(state, attackerId, TOKEN_IDS.SYNTH);
-    const newTotal = Math.min(currentSynth + synthGain, maxSynth);
-    const grantedAmount = Math.max(0, newTotal - currentSynth);
-
     return [
         {
             type: 'BONUS_DIE_ROLLED',
@@ -785,18 +753,14 @@ function handlePerfectlyCalibratedRoll({ attackerId, sourceAbilityId, state, tim
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as BonusDieRolledEvent,
-        {
-            type: 'TOKEN_GRANTED',
-            payload: {
-                targetId: attackerId,
-                tokenId: TOKEN_IDS.SYNTH,
-                amount: grantedAmount,
-                newTotal,
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 0.001,
-        } as TokenGrantedEvent,
+        createDisplayOnlySettlement(
+            sourceAbilityId,
+            attackerId,
+            attackerId,
+            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated', effectParams: { value } }],
+            timestamp + 0.001,
+            { customResolutionId: ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID },
+        ),
     ];
 }
 
@@ -1153,6 +1117,85 @@ registerChoiceEffectHandler(BUILD_FROM_SCRATCH_CHOICE_ID, ({ state, playerId, so
 });
 
 export function registerArtificerCustomActions(): void {
+    registerBonusDiceSettlementHandler(ARTIFICER_HEAL_BOT_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        const healAmount = die.face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2;
+        const currentHp = state.players[settlement.attackerId]?.resources[RESOURCE_IDS.HP] ?? 0;
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'HEAL_APPLIED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    amount: Math.max(0, Math.min(healAmount, MAX_HEALTH - currentHp)),
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as HealAppliedEvent],
+        };
+    });
+    registerBonusDiceSettlementHandler(ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        if (die.face === ARTIFICER_DICE_FACE_IDS.WRENCH || die.face === ARTIFICER_DICE_FACE_IDS.GEAR) {
+            return {
+                totalDamage: 0,
+                followupEvents: [{
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        amount: die.face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2,
+                        sourceCardId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as DiceThroneEvent],
+            };
+        }
+        const currentSynth = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.SYNTH] ?? 0;
+        const maxSynth = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.SYNTH);
+        const newTotal = Math.min(currentSynth + 1, maxSynth);
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.SYNTH,
+                    amount: Math.max(0, newTotal - currentSynth),
+                    newTotal,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as TokenGrantedEvent],
+        };
+    });
+    registerBonusDiceSettlementHandler(ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        const currentSynth = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.SYNTH] ?? 0;
+        const maxSynth = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.SYNTH);
+        const newTotal = Math.min(currentSynth + Math.ceil(die.value / 2), maxSynth);
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.SYNTH,
+                    amount: Math.max(0, newTotal - currentSynth),
+                    newTotal,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as TokenGrantedEvent],
+        };
+    });
+
     registerCustomActionHandler('artificer-activate-bots', handleArtificerActivateBots, {
         categories: ['choice', 'damage', 'defense', 'dice', 'status', 'token'],
         requiresInteraction: true,

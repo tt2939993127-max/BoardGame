@@ -190,6 +190,42 @@ describe('base_rhodes_plaza: 计分时每个随从 1VP', () => {
 // ============================================================================
 
 describe('base_the_factory: 冠军每5力量1VP', () => {
+    it('使用计分链锁定的冠军和力量，不重新读取已变化的基地状态', () => {
+        const ctx: BaseAbilityContext = {
+            state: {
+                bases: [{
+                    defId: 'base_the_factory',
+                    minions: [
+                        { uid: 'm1', defId: 'd1', controller: '0', owner: '0', basePower: 1, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'm2', defId: 'd2', controller: '1', owner: '1', basePower: 12, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [],
+                }],
+                players: {},
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 100,
+            } as SmashUpCore,
+            baseIndex: 0,
+            baseDefId: 'base_the_factory',
+            playerId: '0',
+            rankings: [
+                { playerId: '0', power: 17, vp: 5 },
+                { playerId: '1', power: 12, vp: 3 },
+            ],
+            now: 1000,
+        };
+
+        const { events } = triggerBaseAbility('base_the_factory', 'whenScoring' as any, ctx);
+
+        expect(events).toHaveLength(1);
+        expect((events[0] as any).payload.playerId).toBe('0');
+        expect((events[0] as any).payload.amount).toBe(3);
+        expect((events[0] as any).payload.reason).toBe('工厂：每5力量1VP（17力量=3VP）');
+    });
+
     it('冠军 10 力量获得 2VP', () => {
         const ctx: BaseAbilityContext = {
             state: {

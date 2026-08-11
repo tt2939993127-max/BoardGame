@@ -14,10 +14,11 @@ import type {
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { createDisplayOnlySettlement, createDTPassiveTriggerHandler, registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerBonusDiceSettlementHandler } from '../bonusDiceSettlement';
 import { STATUS_IDS, TOKEN_IDS, ZHANSHUJIA_DICE_FACE_IDS } from '../ids';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
-import { getActiveDice, getMaxDuplicateValueCount, getOpponents, getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getMaxDuplicateValueCount, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 function gainCpWithTacticalAdvantage({
@@ -185,6 +186,7 @@ function triggerWarMongerExtraOffensiveRoll({
 }
 
 type WarMongerRollConfig = {
+    settlementId: string;
     sabreDamage: number;
     bannerTokenGain: number;
     sabreEffectKey: string;
@@ -229,69 +231,20 @@ function resolveWarMongerRollByConfig(
         timestamp,
     } as BonusDieRolledEvent];
 
-    if (face === ZHANSHUJIA_DICE_FACE_IDS.SABRE) {
-        const amount = config.sabreDamage;
-        events.push({
-            type: 'PENDING_ATTACK_UPDATED',
-            payload: {
-                attackerId,
-                patch: { damage: amount },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 1,
-        } as PendingAttackUpdatedEvent);
-    } else if (face === ZHANSHUJIA_DICE_FACE_IDS.BANNER) {
-        const currentAmount = state.players[attackerId]?.tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? 0;
-        const maxStacks = getTokenStackLimit(state, attackerId, TOKEN_IDS.TACTICAL_ADVANTAGE);
-        const newTotal = Math.min(currentAmount + config.bannerTokenGain, maxStacks);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: {
-                targetId: attackerId,
-                tokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
-                amount: Math.max(0, newTotal - currentAmount),
-                newTotal,
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 1,
-        } as TokenGrantedEvent);
-    } else if (face === ZHANSHUJIA_DICE_FACE_IDS.MEDAL) {
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 1, sourceAbilityId));
-        events.push({
-            type: 'PENDING_ATTACK_UPDATED',
-            payload: {
-                attackerId,
-                patch: { damage: 0, isDefendable: false },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 1.5,
-        } as PendingAttackUpdatedEvent);
-        events.push(...triggerWarMongerExtraOffensiveRoll({
-            attackerId,
-            targetId,
-            sourceAbilityId,
-            state,
-            timestamp: timestamp + 2,
-            random,
-            action,
-            ctx: {
-                attackerId,
-                defenderId: targetId,
-                sourceAbilityId,
-                state,
-                damageDealt: 0,
-                timestamp,
-            },
-        }));
-    }
-
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, [{ index: 0, value, face, effectKey }], timestamp));
+    events.push(createDisplayOnlySettlement(
+        sourceAbilityId,
+        attackerId,
+        targetId,
+        [{ index: 0, value, face, effectKey }],
+        timestamp,
+        { customResolutionId: config.settlementId },
+    ));
     return events;
 }
 
 function resolveWarMongerRoll(ctx: CustomActionContext): DiceThroneEvent[] {
     return resolveWarMongerRollByConfig(ctx, {
+        settlementId: 'zhanshujia-war-monger-roll',
         sabreDamage: 5,
         bannerTokenGain: 4,
         sabreEffectKey: 'bonusDie.effect.zhanshujiaWarMongerSabre',
@@ -380,6 +333,7 @@ function applyBindIfThreeOfAKind({
 
 function resolveWarMonger2Roll(ctx: CustomActionContext): DiceThroneEvent[] {
     return resolveWarMongerRollByConfig(ctx, {
+        settlementId: 'zhanshujia-war-monger-2-roll',
         sabreDamage: 6,
         bannerTokenGain: 3,
         sabreEffectKey: 'bonusDie.effect.zhanshujiaWarMonger2Sabre',
@@ -401,10 +355,6 @@ function resolveWarRoomRoll({
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
     const amount = Math.ceil(value / 2);
-    const currentAmount = state.players[attackerId]?.tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? 0;
-    const maxStacks = getTokenStackLimit(state, attackerId, TOKEN_IDS.TACTICAL_ADVANTAGE);
-    const newTotal = Math.min(currentAmount + amount, maxStacks);
-    const grantedAmount = Math.max(0, newTotal - currentAmount);
     const effectKey = 'bonusDie.effect.zhanshujiaWarRoom';
     const effectParams = { value, amount };
 
@@ -422,27 +372,13 @@ function resolveWarRoomRoll({
         timestamp,
     } as BonusDieRolledEvent];
 
-    if (grantedAmount > 0) {
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: {
-                targetId: attackerId,
-                tokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
-                amount: grantedAmount,
-                newTotal,
-                sourceAbilityId,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 1,
-        } as TokenGrantedEvent);
-    }
-
     events.push(createDisplayOnlySettlement(
         sourceAbilityId,
         attackerId,
         attackerId,
         [{ index: 0, value, face, effectKey, effectParams }],
         timestamp + 2,
+        { customResolutionId: 'zhanshujia-war-room-roll' },
     ));
     return events;
 }
@@ -615,6 +551,88 @@ function resolveCountermeasuresDefense({
 }
 
 export function registerZhanshujiaCustomActions(): void {
+    const registerWarMongerSettlement = (settlementId: string, sabreDamage: number, bannerTokenGain: number) => {
+        registerBonusDiceSettlementHandler(settlementId, ({ state, settlement, timestamp, random }) => {
+            const die = getPendingBonusSettlementDice(settlement)[0];
+            if (!die) return { totalDamage: 0, followupEvents: [] };
+            const followupEvents: DiceThroneEvent[] = [];
+            if (die.face === ZHANSHUJIA_DICE_FACE_IDS.SABRE) {
+                followupEvents.push({
+                    type: 'PENDING_ATTACK_UPDATED',
+                    payload: { attackerId: settlement.attackerId, patch: { damage: sabreDamage } },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as PendingAttackUpdatedEvent);
+            } else if (die.face === ZHANSHUJIA_DICE_FACE_IDS.BANNER) {
+                const current = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? 0;
+                const max = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.TACTICAL_ADVANTAGE);
+                const newTotal = Math.min(current + bannerTokenGain, max);
+                followupEvents.push({
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: settlement.attackerId,
+                        tokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+                        amount: Math.max(0, newTotal - current),
+                        newTotal,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp,
+                } as TokenGrantedEvent);
+            } else if (die.face === ZHANSHUJIA_DICE_FACE_IDS.MEDAL) {
+                if (random) {
+                    followupEvents.push(...buildDrawEvents(
+                        state,
+                        settlement.attackerId,
+                        1,
+                        random,
+                        'BONUS_DICE_SETTLED',
+                        timestamp,
+                        settlement.sourceAbilityId,
+                    ));
+                }
+                followupEvents.push({
+                    type: 'PENDING_ATTACK_UPDATED',
+                    payload: { attackerId: settlement.attackerId, patch: { damage: 0, isDefendable: false } },
+                    sourceCommandType: 'BONUS_DICE_SETTLED',
+                    timestamp: timestamp + 1,
+                } as PendingAttackUpdatedEvent);
+                followupEvents.push(...triggerWarMongerExtraOffensiveRoll({
+                    attackerId: settlement.attackerId,
+                    targetId: settlement.targetId,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                    state,
+                    timestamp: timestamp + 2,
+                }));
+            }
+            return { totalDamage: 0, followupEvents };
+        });
+    };
+    registerWarMongerSettlement('zhanshujia-war-monger-roll', 5, 4);
+    registerWarMongerSettlement('zhanshujia-war-monger-2-roll', 6, 3);
+    registerBonusDiceSettlementHandler('zhanshujia-war-room-roll', ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0, followupEvents: [] };
+        const current = state.players[settlement.attackerId]?.tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? 0;
+        const max = getTokenStackLimit(state, settlement.attackerId, TOKEN_IDS.TACTICAL_ADVANTAGE);
+        const newTotal = Math.min(current + Math.ceil(die.value / 2), max);
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId: settlement.attackerId,
+                    tokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+                    amount: Math.max(0, newTotal - current),
+                    newTotal,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as TokenGrantedEvent],
+        };
+    });
+
     registerCustomActionHandler('zhanshujia-tactical-advantage-gain-cp', gainCpWithTacticalAdvantage, {
         categories: ['resource', 'passive'],
     });

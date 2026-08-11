@@ -170,29 +170,39 @@ async function setupTokenResponseWindow(game: GameTestContext): Promise<void> {
     }, TOKEN_IDS.HEAL_BOT);
 
     await game.waitForPhase('defensiveRoll', 10000);
-    await expect(game.page.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+    await expect(game.page.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
+    await expect(game.page.getByTestId(`dt-player-0-token-${TOKEN_IDS.HEAL_BOT}`)).toHaveAttribute('data-token-clickable', 'true');
 }
 
-async function readTokenModalMetrics(page: import('@playwright/test').Page) {
+async function readTokenResponseMetrics(page: import('@playwright/test').Page) {
     return page.evaluate(() => {
-        const modal = document.querySelector('[data-testid="token-response-modal"]');
-        const shell = modal?.closest('.relative.bg-slate-950');
-        const shellRect = shell?.getBoundingClientRect();
-        const useButton = Array.from(document.querySelectorAll('[data-testid="token-response-modal"] button'))
-            .find((button) => button.textContent?.trim() === '使用');
-        const useButtonRect = useButton?.getBoundingClientRect();
+        const prompt = document.querySelector<HTMLElement>('[data-testid="dicethrone-response-window-hint"]');
+        const token = document.querySelector('[data-token-clickable="true"]');
+        const handArea = document.querySelector<HTMLElement>('[data-testid="hand-area"]');
+        const card = handArea?.querySelector<HTMLElement>('[data-testid="hand-card-visual"]');
+        const promptRect = prompt?.getBoundingClientRect();
+        const tokenRect = token?.getBoundingClientRect();
+        const handRect = handArea?.getBoundingClientRect();
+        const cardRect = card?.getBoundingClientRect();
         return {
             viewport: { width: window.innerWidth, height: window.innerHeight },
-            shell: shellRect ? {
-                width: Math.round(shellRect.width),
-                height: Math.round(shellRect.height),
-                x: Math.round(shellRect.x),
-                y: Math.round(shellRect.y),
-                bottom: Math.round(shellRect.bottom),
+            prompt: promptRect ? {
+                width: Math.round(promptRect.width),
+                height: Math.round(promptRect.height),
+                x: Math.round(promptRect.x),
+                y: Math.round(promptRect.y),
+                bottom: Math.round(promptRect.bottom),
+                position: window.getComputedStyle(prompt).position,
+                centeredOnHand: handRect
+                    ? Math.abs((promptRect.x + promptRect.width / 2) - (handRect.x + handRect.width / 2)) < 2
+                    : false,
+                aboveHand: cardRect ? promptRect.bottom <= cardRect.top - 8 : false,
             } : null,
-            useButton: useButtonRect ? {
-                width: Math.round(useButtonRect.width),
-                height: Math.round(useButtonRect.height),
+            token: tokenRect ? {
+                x: Math.round(tokenRect.x),
+                y: Math.round(tokenRect.y),
+                bottom: Math.round(tokenRect.bottom),
+                clickable: token.getAttribute('data-token-clickable'),
             } : null,
         };
     });
@@ -239,16 +249,20 @@ test('DiceThrone UI 收窄修复取证：防御选中态与 Token 面板完整�
     await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
     await setupTokenResponseWindow(game);
     await game.screenshot('PC-Token响应窗口-按钮原尺寸', testInfo);
-    const desktopMetrics = await readTokenModalMetrics(page);
+    const desktopMetrics = await readTokenResponseMetrics(page);
 
     await page.setViewportSize(MOBILE_LANDSCAPE_REFERENCE_VIEWPORT);
     await page.waitForTimeout(800);
-    await expect(page.getByTestId('token-response-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 5000 });
     await game.screenshot('手机横屏-Token响应窗口完整显示', testInfo);
-    const mobileMetrics = await readTokenModalMetrics(page);
+    const mobileMetrics = await readTokenResponseMetrics(page);
 
-    expect(mobileMetrics.shell?.y ?? -1).toBeGreaterThanOrEqual(0);
-    expect(mobileMetrics.shell?.bottom ?? 9999).toBeLessThanOrEqual(MOBILE_LANDSCAPE_REFERENCE_VIEWPORT.height);
+    expect(mobileMetrics.prompt?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect(mobileMetrics.prompt?.bottom ?? 9999).toBeLessThanOrEqual(MOBILE_LANDSCAPE_REFERENCE_VIEWPORT.height);
+    expect(mobileMetrics.prompt?.position).toBe('fixed');
+    expect(mobileMetrics.prompt?.centeredOnHand).toBe(true);
+    expect(mobileMetrics.prompt?.aboveHand).toBe(true);
+    expect(mobileMetrics.token?.clickable).toBe('true');
 
     console.log('[DT_UI_SCOPE_REGRESSION]', JSON.stringify({
         selectedMetrics,

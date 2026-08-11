@@ -374,7 +374,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 ### 服务器主源（强制）
 
 1. **公开资源域名和协作者入口保持不变**：正式资源仍通过现有命令发布，运行时仍使用 `https://assets.easyboardgame.top/official/...`。不得要求协作者改成服务器 IP、隐藏源域名或另一套上传命令。
-2. **服务器是发布与在线下载主源**：发布脚本优先通过专用素材上传入口（`ASSET_SERVER_UPLOAD_URL` + `ASSET_SERVER_UPLOAD_TOKEN`）把本批对象交给服务器 runner；runner 写入新 release，完成路径、大小和哈希校验后原子切换 `/home/admin/storage/assets/current`。受限 SSH 只保留为管理员应急 fallback，不再作为协作者默认发布前提。所有 `official/**` 公网读取首先使用该活动版本。
+2. **服务器是发布与在线下载主源**：发布脚本默认扫描完整 `public/assets`，先从专用素材上传入口读取服务器对象清单，再按 SHA-256 和大小只把新增或内容变化的对象交给 runner；未变化对象必须自动跳过，不要求协作者手工选择路径。`--asset-prefix` 只允许作为明确的定向检查/调试覆盖，`--force-upload` 才是强制重传全部可发布对象。runner 写入新 release，完成路径、大小和哈希校验后原子切换 `/home/admin/storage/assets/current`。受限 SSH 只保留为管理员应急 fallback，不再作为协作者默认发布前提。所有 `official/**` 公网读取首先使用该活动版本。
 3. **禁止对象存储回退和灾备队列**：服务器切换成功后不再生成对象存储灾备队列；对象存储不可用、凭据缺失或容量问题不得参与正式发布判断，也不得把服务器回滚到旧远端对象状态。
 4. **发布完成必须验证本次服务器对象**：大型 bundle / APK / 游戏包必须返回 `X-Asset-Source: server`，且 `Content-Length` 与本次产物一致；file-index / latest manifest 等小型 JSON 必须从服务器读取正文并校验本次 SHA-256。旧同路径对象、旧缓存或 `server-error` 都不能作为本次发布成功证据。
 5. **服务器活动集合只闭合“已发布到服务器的活动根”**：已经存在于服务器 `current` 的 `official/**/assets-manifest.json`、OTA/latest manifest、移动包 manifest 和 file-index 都必须按自身合同展开到真实运行时对象；但不能反向推断“本地每个 `assets-manifest.json` 都必须上传到服务器”。如果清单只随 Web / OTA / App 包交付，就按包内清单验收；服务器侧只验对应 `compressed/*.webp` / `compressed/*.ogg` / 远端运行时对象。

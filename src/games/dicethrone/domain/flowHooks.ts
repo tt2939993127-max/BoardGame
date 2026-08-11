@@ -1098,7 +1098,7 @@ function resolveDazzleCheckExitResult(
         showTotal: false,
         resolutionMode: 'none',
         customResolutionId: TIANSHi_DAZZLE_CHECK_SETTLEMENT_ID,
-        allowDiceModification: false,
+        allowDiceModification: true,
     };
 
     return {

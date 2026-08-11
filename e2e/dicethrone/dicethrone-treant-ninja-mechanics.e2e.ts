@@ -177,13 +177,15 @@ const clickAdvancePhase = async (page: Page, playerId: string) => {
 };
 
 const clickTokenUseButton = async (page: Page) => {
-    await page.getByTestId('token-response-modal').getByRole('button', { name: /^使用/i }).first().click();
+    const token = page.locator('[data-token-clickable="true"]').first();
+    await expect(token).toBeVisible({ timeout: 10000 });
+    await token.click();
 };
 
 const closeTokenResponseIfOpen = async (page: Page) => {
-    const modal = page.getByTestId('token-response-modal');
-    if (!await modal.isVisible({ timeout: 1000 }).catch(() => false)) return;
-    const closeButton = modal.getByRole('button', { name: /跳过|Skip|确认|Confirm/i }).last();
+    const inline = page.getByTestId('dicethrone-response-window-hint');
+    if (!await inline.isVisible({ timeout: 1000 }).catch(() => false)) return;
+    const closeButton = page.getByTestId('dicethrone-response-pass-button');
     await closeButton.click();
 };
 
@@ -663,7 +665,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.hostPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.hostPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.hostPage, testName, '01-divine-token-response-before-use.png');
 
             await clickTokenUseButton(match.hostPage);
@@ -2956,10 +2958,10 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.guestPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.guestPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '01-ninjutsu-token-response-before-use.png');
 
-            await match.guestPage.getByTestId('token-response-modal').getByRole('button', { name: /^使用/i }).first().click();
+            await clickTokenUseButton(match.guestPage);
             await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
             await expect(match.guestPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '02-ninjutsu-bonus-die-overlay.png');
@@ -3038,10 +3040,10 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.guestPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.guestPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '01-ninjutsu-6-token-response-before-use.png');
 
-            await match.guestPage.getByTestId('token-response-modal').getByRole('button', { name: /^使用/i }).first().click();
+            await clickTokenUseButton(match.guestPage);
             await expect(match.guestPage.getByText('忍术 6 点效果')).toBeVisible({ timeout: 10000 });
             await expect(match.guestPage.getByRole('button', { name: /慢性中毒/ })).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '02-ninjutsu-6-choice-modal.png');
@@ -3127,7 +3129,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.guestPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.guestPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '01-smoke-bomb-token-response-before-use.png');
 
             await clickTokenUseButton(match.guestPage);
@@ -3215,7 +3217,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.guestPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.guestPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '01-smoke-bomb-failure-token-response-before-use.png');
 
             await clickTokenUseButton(match.guestPage);
@@ -3321,7 +3323,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return state;
             });
 
-            await expect(match.guestPage.getByTestId('token-response-modal')).toBeVisible({ timeout: 10000 });
+            await expect(match.guestPage.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 10000 });
             await screenshot(match.guestPage, testName, '01-ninjutsu-6-undefendable-before-use.png');
 
             await clickTokenUseButton(match.guestPage);

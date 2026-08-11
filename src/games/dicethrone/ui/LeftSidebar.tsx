@@ -37,6 +37,8 @@ export const LeftSidebar = ({
     overrideHp,
     onAutoResponseToggle,
     onBonusDiceResponseToggle,
+    responseTokenIds,
+    onResponseTokenClick,
 }: {
     currentPhase: TurnPhase;
     viewPlayer: HeroState;
@@ -75,6 +77,9 @@ export const LeftSidebar = ({
     onAutoResponseToggle?: (enabled: boolean) => void;
     /** 奖励骰响应开关回调 */
     onBonusDiceResponseToggle?: (enabled: boolean) => void;
+    /** 当前响应中可直接点击使用的 Token。提示与跳过由手牌上方的共享响应框承接。 */
+    responseTokenIds?: string[];
+    onResponseTokenClick?: (tokenId: string) => void;
 }) => {
     return (
         <div
@@ -90,7 +95,7 @@ export const LeftSidebar = ({
                  * Use a small offset above the HP container so the effect doesn't land too low.
                  */}
                 <div
-                    className="w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]"
+                    className="relative w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]"
                     ref={selfBuffRef}
                     data-tutorial-id="status-tokens"
                 >
@@ -103,8 +108,13 @@ export const LeftSidebar = ({
                         atlas={statusIconAtlas}
                         tokenDefinitions={tokenDefinitions}
                         tokenStackLimits={viewPlayer.tokenStackLimits}
+                        suppressTooltips={Boolean(responseTokenIds?.length)}
                         testIdPrefix={playerId ? `dt-player-${playerId}-token` : undefined}
                         onTokenClick={(tokenId) => {
+                            if (responseTokenIds?.includes(tokenId)) {
+                                onResponseTokenClick?.(tokenId);
+                                return;
+                            }
                             if (tokenId === TOKEN_IDS.FLIGHT && onFlightClick) {
                                 onFlightClick();
                                 return;
@@ -116,6 +126,7 @@ export const LeftSidebar = ({
                             }
                         }}
                         clickableTokens={[
+                            ...(responseTokenIds ?? []),
                             ...(canUsePurify
                                 ? (tokenDefinitions ?? []).filter(def => def.activeUse?.effect.type === 'removeDebuff').map(def => def.id)
                                 : []),

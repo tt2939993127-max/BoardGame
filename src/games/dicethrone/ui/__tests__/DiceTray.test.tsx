@@ -162,6 +162,27 @@ describe('DiceTray', () => {
         expect(onToggleLock).toHaveBeenCalledWith(0);
     });
 
+    it('主动重掷模式不依赖主骰投掷次数，并把奖励骰点击交给上层', () => {
+        const onToggleLock = vi.fn();
+        render(
+            <DiceTray
+                dice={[{ ...dice[0], value: 3, displayOnly: true }]}
+                rollCount={0}
+                onToggleLock={onToggleLock}
+                currentPhase="main1"
+                canInteract
+                isRolling
+                isPassiveRerollMode
+                bonusDiceReroll={{ canReroll: false, onReroll: vi.fn() }}
+            />,
+        );
+
+        const die = screen.getByTestId('die-button-0');
+        expect(die).toHaveAttribute('data-clickable', 'true');
+        fireEvent.click(die);
+        expect(onToggleLock).toHaveBeenCalledWith(0);
+    });
+
     it('右侧骰盘的调整模式使用骰子本体旁的加减按钮', () => {
         const step = vi.fn();
         render(

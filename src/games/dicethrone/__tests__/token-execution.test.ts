@@ -37,7 +37,7 @@ import { validateCommand } from '../domain/commandValidation';
 import { processTokenUsage, shouldOpenTokenResponse, getUsableTokensForTiming, finalizeTokenResponse } from '../domain/tokenResponse';
 import { initializeCustomActions } from '../domain/customActions';
 import { reduce } from '../domain/reducer';
-import { executeTokenCommand } from '../domain/executeTokens';
+import { buildBonusDiceSettlementEvents, executeTokenCommand } from '../domain/executeTokens';
 import { applyEvents } from '../domain/utils';
 import { BARBARIAN_TOKENS } from '../heroes/barbarian/tokens';
 import { PALADIN_TOKENS } from '../heroes/paladin/tokens';
@@ -163,7 +163,7 @@ describe('武士反击 (Samurai Retribution) custom action', () => {
         expect(handler).toBeDefined();
     });
 
-    it('使用后会掷 1 颗骰并对攻击者造成向上取整的一半反伤', () => {
+    it('使用后先建立奖励骰结算，再按最终骰面反伤攻击者', () => {
         const handler = getCustomActionHandler('samurai-back-strike-use')!;
         const state = {
             players: {
@@ -211,12 +211,26 @@ describe('武士反击 (Samurai Retribution) custom action', () => {
         });
 
         const bonusEvents = events.filter((event: any) => event.type === 'BONUS_DIE_ROLLED');
-        const damageEvents = events.filter((event: any) => event.type === 'DAMAGE_DEALT');
-
         expect(bonusEvents).toHaveLength(1);
         expect((bonusEvents[0] as any).payload.value).toBe(5);
         expect((bonusEvents[0] as any).payload.playerId).toBe('1');
+        expect(events.map((event) => event.type)).toEqual([
+            'BONUS_DIE_ROLLED',
+            'BONUS_DICE_REROLL_REQUESTED',
+        ]);
 
+        const afterRoll = applyEvents(state, events, reduce);
+        const settlement = afterRoll.pendingBonusDiceSettlement;
+        expect(settlement?.customResolutionId).toBe('samurai-back-strike-use');
+
+        const settlementEvents = buildBonusDiceSettlementEvents({
+            state: afterRoll,
+            settlement: settlement!,
+            random: fixedRandom,
+            timestamp: 2,
+            sourceCommandType: 'SKIP_BONUS_DICE_REROLL',
+        });
+        const damageEvents = settlementEvents.filter((event: any) => event.type === 'DAMAGE_DEALT');
         expect(damageEvents).toHaveLength(1);
         expect((damageEvents[0] as any).payload.targetId).toBe('0');
         expect((damageEvents[0] as any).payload.amount).toBe(3);
@@ -278,10 +292,14 @@ describe('武士反击 (Samurai Retribution) custom action', () => {
             100,
         );
 
-        expect(useEvents.map((event) => event.type)).toEqual(['TOKEN_USED', 'BONUS_DIE_ROLLED']);
+        expect(useEvents.map((event) => event.type)).toEqual([
+            'TOKEN_USED',
+            'BONUS_DIE_ROLLED',
+            'BONUS_DICE_REROLL_REQUESTED',
+        ]);
         const afterUse = applyEvents(baseState, useEvents, reduce);
-        expect(afterUse.pendingDamage?.deferredDamageEvents).toHaveLength(1);
-        expect(afterUse.pendingDamage?.deferredDamageEvents?.[0]?.targetId).toBe('0');
+        expect(afterUse.pendingDamage?.deferredDamageEvents ?? []).toHaveLength(0);
+        expect(afterUse.pendingBonusDiceSettlement?.customResolutionId).toBe('samurai-back-strike-use');
 
         const closeEvents = executeTokenCommand(
             afterUse,
@@ -294,19 +312,33 @@ describe('武士反击 (Samurai Retribution) custom action', () => {
             101,
         );
 
-        expect(closeEvents.map((event) => event.type)).toEqual([
-            'TOKEN_RESPONSE_CLOSED',
-            'DAMAGE_DEALT',
-            'DAMAGE_DEALT',
-        ]);
+        expect(closeEvents.map((event) => event.type)).toEqual(['TOKEN_RESPONSE_CLOSED', 'DAMAGE_DEALT']);
         expect((closeEvents[1] as any).payload.targetId).toBe('1');
         expect((closeEvents[1] as any).payload.amount).toBe(5);
-        expect((closeEvents[2] as any).payload.targetId).toBe('0');
-        expect((closeEvents[2] as any).payload.amount).toBe(1);
 
         const afterClose = applyEvents(afterUse, closeEvents, reduce);
         expect(afterClose.players['1'].resources[RESOURCE_IDS.HP]).toBe(45);
-        expect(afterClose.players['0'].resources[RESOURCE_IDS.HP]).toBe(49);
+        expect(afterClose.players['0'].resources[RESOURCE_IDS.HP]).toBe(50);
+
+        const bonusSettlementEvents = executeTokenCommand(
+            afterClose,
+            {
+                type: 'SKIP_BONUS_DICE_REROLL',
+                playerId: '1',
+                payload: {},
+            } as any,
+            fixedRandom,
+            102,
+            'defensiveRoll',
+        );
+        expect(bonusSettlementEvents.map((event) => event.type)).toEqual([
+            'BONUS_DICE_SETTLED',
+            'DAMAGE_DEALT',
+        ]);
+
+        const afterBonusSettlement = applyEvents(afterClose, bonusSettlementEvents, reduce);
+        expect(afterBonusSettlement.pendingBonusDiceSettlement).toBeUndefined();
+        expect(afterBonusSettlement.players['0'].resources[RESOURCE_IDS.HP]).toBe(49);
     });
 });
 

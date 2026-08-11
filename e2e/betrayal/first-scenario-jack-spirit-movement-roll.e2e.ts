@@ -35,7 +35,7 @@ test.describe('山屋惊魂第一剧本杰克之灵移动骰边界', () => {
 
         await injectCore(page, createJackSpiritMovementRollReadyRuntimeCore());
         await expect(page.getByTestId('betrayal-board')).toBeVisible({ timeout: 30000 });
-        await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/恶兆后|Haunt/i);
+        await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/作祟中|恶兆后|Haunt/i);
         await expect.poll(async () => page.evaluate(() => {
             const state = (window as typeof window & {
                 __BG_TEST_HARNESS__?: {
@@ -66,10 +66,10 @@ test.describe('山屋惊魂第一剧本杰克之灵移动骰边界', () => {
         });
         await expect(page.getByTestId('betrayal-status-chip')).toContainText(/当前回合|剩余移动 2/);
         await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText(/杰克之灵速度 3 投出 2|本回合可移动 2 间/);
-        await expect(page.getByTestId('betrayal-action-move')).toBeEnabled();
+        await expect(page.getByTestId('betrayal-action-monsterMove')).toBeEnabled();
         await saveScreenshot(page, ROLL_READY_SCREENSHOT);
 
-        await page.getByTestId('betrayal-action-move').click();
+        await page.getByTestId('betrayal-action-monsterMove').click();
         await expect(page.getByTestId('betrayal-room-basement-landing')).toBeVisible();
         await page.getByTestId('betrayal-room-basement-landing').click();
         await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('杰克之灵游荡到了地下室起始点');

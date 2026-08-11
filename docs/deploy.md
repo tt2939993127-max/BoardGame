@@ -155,12 +155,13 @@ BG_DEPLOY_RUNNER_TOKEN=安装脚本输出的token
 安装脚本还会输出一串独立素材发布 token。协作者或 CI 发布素材时使用：
 
 ```bash
-# 协作者 / CI 使用对外开放或反代后的专用素材上传入口，例如：
-ASSET_SERVER_UPLOAD_URL=https://assets-upload.easyboardgame.top/asset-publish
+# 协作者 / CI 使用专用素材发布 token；脚本会默认使用正式入口：
 ASSET_SERVER_UPLOAD_TOKEN=安装脚本输出的素材发布token
+# 也可覆盖入口地址（例如内网反代）：
+# ASSET_SERVER_UPLOAD_URL=https://assets-upload.easyboardgame.top/asset-publish
 ```
 
-上传脚本会把 tar 自动拆成 8MiB 请求块，全部接收后才触发服务器校验和原子发布；协作者只需配置上面的 URL 与 token，不需要 SSH 私钥或 known-hosts。若只给服务器 `web` 容器内部调用，也可以使用 `http://host.docker.internal:18761/asset-publish`。若要开放独立端口，安装 runner 时设置 `ASSET_PUBLISH_HOST=0.0.0.0 ASSET_PUBLISH_PORT=<port>`，再用防火墙或 Nginx/TLS 只暴露 `/asset-publish`。`ASSET_SERVER_UPLOAD_TOKEN` 只允许向 runner 的 `/asset-publish` 入口提交素材发布包；它不是生产 SSH 私钥，也不授予部署 /回滚权限。
+上传脚本默认扫描整个 `public/assets`，先从同一素材入口读取服务器对象清单，再按 SHA-256 和大小只提交新增或内容变化的对象；未变化对象自动跳过，不需要手工选择路径。`--asset-prefix` 仅用于明确的定向检查或调试，`--force-upload` 才会强制重传全部可发布对象。选中的对象会把 tar 自动拆成 8MiB 请求块，全部接收后才触发服务器校验和原子发布。Android workflow 从 GitHub Actions secret 注入 URL/token，协作者不需要知道 token，也不需要 SSH 私钥或 known-hosts。显式设置 `ASSET_SERVER_UPLOAD_URL` 时使用指定入口；只设置 `ASSET_SERVER_UPLOAD_TOKEN` / `BG_ASSET_PUBLISH_TOKEN` 时自动使用正式入口。没有 HTTP 入口或素材 token 时才回退 SSH。若只给服务器 `web` 容器内部调用，也可以使用 `http://host.docker.internal:18761/asset-publish`。正式匿名素材入口可通过 `BG_ASSET_PUBLISH_ALLOW_UNAUTHENTICATED=1` 开启，但只影响素材上传路由，不影响部署/回滚鉴权；默认单次归档上限 20GiB，按入口来源 IP 默认限制 24 小时 2GiB，并把来源 IP、来源标识、请求 ID、对象 key、大小、SHA-256 和 release 写入服务器 `assets/control/publish-audit/publish.jsonl`。匿名发布只允许新增/覆盖，不执行旧对象清理。若要开放独立端口，安装 runner 时设置 `ASSET_PUBLISH_HOST=0.0.0.0 ASSET_PUBLISH_PORT=<port>`，再用防火墙或 TLS 只暴露素材路由；已有 `assets-upload.easyboardgame.top` HTTPS 入口时不需要裸端口。素材发布 token 只允许向 runner 的 `/asset-publish` 入口提交素材发布包；它不是生产 SSH 私钥，也不授予部署/回滚权限。
 
 > **部署总超时口径**：直接执行 `deploy-image.sh deploy/update/deploy-local/update-local/rollback/rollback-last` 时，`DEPLOY_TOTAL_TIMEOUT_SECONDS=1800` 会为整次变更操作提供 30 分钟总时限；`DEPLOY_IMAGE_PULL_TIMEOUT_SECONDS=1800` 只是单个镜像拉取的次级保护，不能替代整次部署总时限。`boardgame-deploy-runner` 安装脚本会把脚本内层总时限和单镜像时限都设为 `0`，统一由 `BG_DEPLOY_RUNNER_DEPLOY_STEP_TIMEOUT_SECONDS=1800` 提供唯一的 30 分钟整步保护，避免重复计时。超过总时限必须失败，不得继续后台假卡死；重新执行前先检查当前容器状态，确认旧版本仍在运行或完成必要回退。
 >
@@ -219,7 +220,9 @@ node scripts/deploy/stream-images-to-server.mjs --tag v1.2.3 --host admin@8.148.
 - **部署注意**：上面的版本标签以 CI 实际输出和 GHCR 实际存在为准；日常生产“最新”部署不需要也不应指定 commit tag，默认通过 `deploy-and-ota` 触发 CI 直传 `latest` 镜像并在服务器执行 `update-local`。
 - **部署 SSH secrets**：
   - `BOARDGAME_DEPLOY_SSH_PRIVATE_KEY`：能以 `admin@8.148.71.102` 执行 `docker image load` 与 `/home/admin/BoardGame/scripts/deploy/deploy-image.sh` 的私钥
-  - `BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS`：生产机 known_hosts 记录
+  - `BOARDGAME_DEPLOY_SSH_KNOWN_HOSTS`：生产机 known_hosts 记录；可选覆盖。若未设置，Android 发布 workflow 使用仓库内的 `infra/server/asset-origin/asset-publish.known_hosts`。
+
+素材发布脚本同样默认使用这份受控主机记录；若仓库文件不存在则使用用户默认 `~/.ssh/known_hosts`。本机存在 `~/.ssh/id_ed25519` 或通过 `ASSET_SERVER_SSH_KEY_PATH` 指定时会显式使用该私钥；否则保留 SSH agent / SSH 客户端默认密钥选择。也可通过 `ASSET_SERVER_SSH_KNOWN_HOSTS_PATH` 显式指定 known_hosts。始终保持 `StrictHostKeyChecking=yes`，不关闭主机校验。
 
 手动只更新服务器、不发 OTA：
 

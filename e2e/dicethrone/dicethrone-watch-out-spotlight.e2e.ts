@@ -3754,7 +3754,7 @@ test('online ninja knife fan should not open samurai retribution response window
         expect(guestFinalState.discardIds).toContain('ninja-card-knife-fan');
 
         await hostPage.waitForTimeout(1000);
-        await expect(hostPage.getByTestId('token-response-modal')).toBeHidden({ timeout: 5000 });
+        await expect(hostPage.getByTestId('dicethrone-token-response-inline')).toHaveCount(0);
         await savePageEvidenceScreenshot(
             hostPage,
             testInfo,

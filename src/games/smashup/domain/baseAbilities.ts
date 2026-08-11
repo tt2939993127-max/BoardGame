@@ -837,6 +837,24 @@ export function registerBaseAbilities(): void {
     registerBaseAbility('base_the_factory', 'whenScoring', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return { events: [] };
+
+        // 计分链传入的 rankings 是本次计分已经锁定的冠军与力量。
+        // 不能在 whenScoring 中重新读取可能已变化的基地状态，否则额外 VP
+        // 可能落到错误的玩家或使用错误的力量值。
+        const lockedWinner = ctx.rankings?.[0];
+        if (lockedWinner) {
+            const bonusVp = Math.floor(lockedWinner.power / 5);
+            if (bonusVp <= 0) return { events: [] };
+            return {
+                events: [{
+                    type: SU_EVENTS.VP_AWARDED,
+                    payload: {
+                        playerId: lockedWinner.playerId,
+                        amount: bonusVp,
+                        reason: `工厂：每5力量1VP（${lockedWinner.power}力量=${bonusVp}VP）` },
+                    timestamp: ctx.now } as VpAwardedEvent] };
+        }
+
         const playerPowers = new Map<PlayerId, number>();
         for (const m of base.minions) {
             const prev = playerPowers.get(m.controller) ?? 0;

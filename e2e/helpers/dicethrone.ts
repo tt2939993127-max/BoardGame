@@ -10,6 +10,10 @@ import {
     initContext,
     waitForFrontendAssets,
 } from './common';
+import { getMatchState, injectMatchState } from './state-injection';
+import { getDieFaceByDefinition, getHeroDieFace } from '../../src/games/dicethrone/domain/rules';
+import type { SelectableCharacterId } from '../../src/games/dicethrone/domain/types';
+import '../../src/games/dicethrone/domain';
 
 const GAME_NAME = 'dicethrone';
 
@@ -1015,23 +1019,179 @@ export const setPlayerToken = async (page: Page, playerId: string, tokenId: stri
     await applyCoreStateDirect(page, state);
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const applyDieValues = (
+    dice: unknown,
+    values: number[],
+    characterId?: string,
+): Array<Record<string, unknown>> => {
+    if (!Array.isArray(dice) || dice.length !== values.length) {
+        throw new Error(`Current roll has ${Array.isArray(dice) ? dice.length : 0} dice, expected ${values.length}`);
+    }
+
+    return dice.map((die, index) => {
+        if (!isRecord(die) || typeof die.definitionId !== 'string') {
+            throw new Error(`Die ${index} is missing a definition ID`);
+        }
+
+        const value = values[index];
+        const definitionCharacterId = die.definitionId.endsWith('-dice')
+            ? die.definitionId.slice(0, -'-dice'.length)
+            : undefined;
+        const resolvedCharacterId = characterId ?? definitionCharacterId;
+        const symbol = resolvedCharacterId && resolvedCharacterId !== 'unselected'
+            ? getHeroDieFace(resolvedCharacterId as SelectableCharacterId, value)
+            : getDieFaceByDefinition(die.definitionId, value);
+        if (!symbol) {
+            throw new Error(`Die ${index} has no face for ${die.definitionId} value ${value}`);
+        }
+
+        return {
+            ...die,
+            value,
+            symbol,
+            symbols: [symbol],
+        };
+    });
+};
+
 /**
- * 设置骰子值（通过调试面板）
+ * 设置骰子值。在线对局必须写入服务器权威状态；本地代表态可直接写 TestHarness。
  */
 export const applyDiceValues = async (page: Page, values: number[]) => {
-    const state = await readCoreState(page);
-    if (!state.dice || state.dice.length === 0) {
-        throw new Error('No dice found in state');
+    const onlineMatchId = await page.evaluate(() => {
+        const match = window.location.pathname.match(/\/match\/([^/?#]+)/);
+        return match?.[1] ?? null;
+    });
+
+    if (onlineMatchId) {
+        const currentState = await getMatchState(onlineMatchId, page) as Record<string, unknown>;
+        const nextState = structuredClone(currentState) as Record<string, unknown>;
+        const root = isRecord(nextState.G) ? nextState.G : nextState;
+        const core = isRecord(root.core) ? root.core : undefined;
+        if (!core) {
+            throw new Error('Online DiceThrone match is missing core state');
+        }
+
+        const currentRollContext = isRecord(core.currentRollContext)
+            ? core.currentRollContext
+            : undefined;
+        const ownerPlayerId = typeof currentRollContext?.ownerPlayerId === 'string'
+            ? currentRollContext.ownerPlayerId
+            : typeof core.activePlayerId === 'string'
+                ? core.activePlayerId
+                : undefined;
+        const players = isRecord(core.players) ? core.players : undefined;
+        const owner = ownerPlayerId && players && isRecord(players[ownerPlayerId])
+            ? players[ownerPlayerId]
+            : undefined;
+        const selectedCharacters = isRecord(core.selectedCharacters) ? core.selectedCharacters : undefined;
+        const characterId = typeof owner?.characterId === 'string'
+            ? owner.characterId
+            : ownerPlayerId && selectedCharacters && typeof selectedCharacters[ownerPlayerId] === 'string'
+                ? selectedCharacters[ownerPlayerId]
+                : undefined;
+        const shouldUpdateCoreDice = Array.isArray(core.dice) && core.dice.length === values.length;
+        if (!currentRollContext && !shouldUpdateCoreDice) {
+            throw new Error(`Current roll has ${Array.isArray(core.dice) ? core.dice.length : 0} dice, expected ${values.length}`);
+        }
+        const nextDice = shouldUpdateCoreDice
+            ? applyDieValues(core.dice, values, characterId)
+            : core.dice;
+        const nextRollDice = currentRollContext
+            ? applyDieValues(currentRollContext.dice, values, characterId)
+            : undefined;
+
+        root.core = {
+            ...core,
+            dice: nextDice,
+            ...(currentRollContext ? {
+                currentRollContext: {
+                    ...currentRollContext,
+                    dice: nextRollDice,
+                },
+            } : {}),
+            rollConfirmed: false,
+        };
+        const sys = isRecord(root.sys) ? root.sys : {};
+        const turnOrder = Array.isArray(sys.turnOrder)
+            ? sys.turnOrder
+            : Array.isArray(core.turnOrder)
+                ? core.turnOrder
+                : Object.keys(players ?? {});
+        root.sys = {
+            ...sys,
+            turnOrder,
+            currentPlayerIndex: typeof sys.currentPlayerIndex === 'number'
+                ? sys.currentPlayerIndex
+                : Math.max(0, turnOrder.indexOf(core.activePlayerId ?? '0')),
+        };
+        if (typeof core.phase !== 'string' && typeof sys.phase === 'string') {
+            root.core = {
+                ...root.core,
+                phase: sys.phase,
+            };
+        }
+
+        await injectMatchState(onlineMatchId, root as never, page);
+        await page.waitForFunction((expectedValues) => {
+            const state = (window as Window).__BG_TEST_HARNESS__?.state?.get?.();
+            const dice = state?.core?.currentRollContext?.dice ?? state?.core?.dice;
+            return Array.isArray(dice)
+                && dice.length === expectedValues.length
+                && dice.every((die, index) => die?.value === expectedValues[index]);
+        }, values, { timeout: 10000, polling: 100 });
+        return;
     }
-    // 更新骰子值
-    state.dice = state.dice.map((die: { value?: number } & Record<string, unknown>, i: number) => ({
-        ...die,
-        value: values[i] ?? die.value,
-        symbol: values[i] ?? die.value, // 简化处理，实际应该根据 definitionId 查找 face
-        symbols: [values[i] ?? die.value],
-    }));
-    state.rollConfirmed = false; // 允许用户重新确认
-    await applyCoreStateDirect(page, state);
+
+    await page.evaluate(async (nextValues) => {
+        const harness = (window as Window).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!state?.core?.dice?.length) {
+            throw new Error('No dice found in state');
+        }
+
+        const { getDieFaceByDefinition } = await import('/src/games/dicethrone/domain/rules.ts');
+        const applyValues = (dice: Array<{ definitionId?: string; value?: number; symbol?: string; symbols?: string[] }>) => (
+            dice.map((die, index) => {
+                const value = nextValues[index] ?? die.value;
+                const symbol = typeof value === 'number' && die.definitionId
+                    ? getDieFaceByDefinition(die.definitionId, value)
+                    : die.symbol;
+                return {
+                    ...die,
+                    value,
+                    symbol,
+                    symbols: symbol ? [symbol] : die.symbols ?? [],
+                };
+            })
+        );
+
+        const currentRollContext = state.core.currentRollContext;
+        const currentDice = currentRollContext?.dice;
+        if (currentDice && currentDice.length !== nextValues.length) {
+            throw new Error(`Current roll has ${currentDice.length} dice, expected ${nextValues.length}`);
+        }
+
+        const dice = state.core.dice.length === nextValues.length
+            ? applyValues(state.core.dice)
+            : state.core.dice;
+        const nextCore = {
+            ...state.core,
+            dice,
+            ...(currentRollContext ? {
+                currentRollContext: {
+                    ...currentRollContext,
+                    dice: applyValues(currentDice!),
+                },
+            } : {}),
+            rollConfirmed: false,
+        };
+        harness.state.set({ ...state, core: nextCore });
+    }, values);
 };
 
 /**
@@ -1135,7 +1295,7 @@ export const maybePassResponse = async (page: Page): Promise<boolean> => {
 export const waitForPhase = async (page: Page, phase: string, timeout = 10000) => {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-        const state = await readDebugStateRoot(page);
+        const state = await readMatchState(page);
         const currentPhase = typeof state?.sys?.phase === 'string'
             ? state.sys.phase
             : (typeof state?.core?.phase === 'string' ? state.core.phase : undefined);

@@ -7,6 +7,7 @@ import { clearBaseAbilityRegistry, triggerBaseAbility } from '../../domain/baseA
 import { clearInteractionHandlers } from '../../domain/abilityInteractionHandlers';
 import { clearOngoingEffectRegistry, fireTriggers } from '../../domain/ongoingEffects';
 import { clearPowerModifierRegistry } from '../../domain/ongoingModifiers';
+import { isSpecialLimitBlocked } from '../../domain/abilityHelpers';
 import { SU_EVENTS } from '../../domain/types';
 import {
     applyEvents,
@@ -72,6 +73,36 @@ describe('哥布林能力', () => {
         const actionLimits = tails.events.filter(event =>
             event.type === SU_EVENTS.LIMIT_MODIFIED && (event as any).payload.limitType === 'action');
         expect(actionLimits).toHaveLength(2);
+    });
+
+    it('Gobbo：打出时按所有在场 Gobbo 投掷硬币，而不是只按刚打出的一个', () => {
+        const state = makeState({
+            bases: [
+                makeBase('base_goblin_town', [
+                    makeMinion('new-gobbo', 'goblins_gobbo', '0', 2),
+                    makeMinion('existing-gobbo', 'goblins_gobbo', '0', 2),
+                ]),
+                makeBase('base_goblin_caves', [
+                    makeMinion('other-player-gobbo', 'goblins_gobbo', '1', 2),
+                ]),
+            ],
+        });
+
+        const result = invokeRegisteredAbilityContract('goblins_gobbo', 'onPlay', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            cardUid: 'new-gobbo',
+            defId: 'goblins_gobbo',
+            baseIndex: 0,
+            random: randomSequence([0.9]),
+            now: 1000,
+        });
+
+        expect(result.events).toContainEqual(expect.objectContaining({
+            type: SU_EVENTS.POWER_COUNTER_ADDED,
+            payload: expect.objectContaining({ minionUid: 'new-gobbo', amount: 3 }),
+        }));
     });
 
     it('谁放的屁：连续正面会放置指示物，第一次反面后给额外行动并停止', () => {
@@ -260,5 +291,38 @@ describe('哥布林能力', () => {
                 toBaseIndex: 2,
             }),
         }));
+    });
+
+    it('爆破手：首次在基地计分前发动会写入该基地本回合限制，不能重复触发', () => {
+        const blaster = makeMinion('blaster-limit', 'goblins_blaster', '0', 3);
+        const state = makeState({
+            bases: [
+                makeBase({ defId: 'base_goblin_town', minions: [blaster], ongoingActions: [] }),
+                makeBase({ defId: 'base_goblin_caves', minions: [], ongoingActions: [] }),
+            ],
+        });
+
+        const result = invokeRegisteredAbilityContract('goblins_blaster', 'special', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            cardUid: 'blaster-limit',
+            defId: 'goblins_blaster',
+            baseIndex: 0,
+            random: randomSequence([0.9]),
+            now: 1001,
+        } as any);
+
+        expect(result.events).toContainEqual(expect.objectContaining({
+            type: SU_EVENTS.SPECIAL_LIMIT_USED,
+            payload: expect.objectContaining({
+                baseIndex: 0,
+                limitGroup: 'goblins_blaster',
+                abilityDefId: 'goblins_blaster',
+            }),
+        }));
+        const after = applyEvents(state, result.events);
+        expect(after.specialLimitUsed?.goblins_blaster).toEqual([0]);
+        expect(isSpecialLimitBlocked(after, 'goblins_blaster', 0)).toBe(true);
     });
 });

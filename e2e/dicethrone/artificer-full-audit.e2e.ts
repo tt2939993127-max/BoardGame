@@ -224,7 +224,7 @@ const isPreDamageBotChoiceSettled = (state: JsonRecord): boolean => {
 };
 
 const dismissAttackShowcaseIfVisible = async (page: Page): Promise<void> => {
-    const foregroundModal = page.locator('#modal-root [role="dialog"], [data-testid="token-response-modal"]');
+    const foregroundModal = page.locator('#modal-root [role="dialog"]');
     const hasForegroundModal = await foregroundModal.first().isVisible({ timeout: 1000 }).catch(() => false);
     if (hasForegroundModal) return;
 
@@ -2272,12 +2272,14 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
         });
         await dismissAttackShowcaseIfVisible(page);
 
-        const tokenResponseModal = page.getByTestId('token-response-modal');
-        await expect(tokenResponseModal).toBeVisible({ timeout: 10000 });
-        await expect(tokenResponseModal.getByText('治疗机器人')).toBeVisible({ timeout: 10000 });
+        const tokenResponse = page.getByTestId('dicethrone-response-window-hint');
+        const healBotToken = page.getByTestId(`dt-player-0-token-${TOKEN_IDS.HEAL_BOT}`);
+        await expect(tokenResponse).toBeVisible({ timeout: 10000 });
+        await expect(healBotToken).toBeVisible({ timeout: 10000 });
+        await expect(healBotToken).toHaveAttribute('data-token-clickable', 'true');
         await game.screenshot('artificer-heal-bot-before-damage-window-open', testInfo);
 
-        await tokenResponseModal.getByRole('button', { name: /^使用/ }).first().click();
+        await healBotToken.click();
 
         await expect.poll(async () => {
             const state = await game.getState() as JsonRecord;
