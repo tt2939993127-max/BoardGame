@@ -180,8 +180,9 @@ test('通过专用 HTTP 上传入口分块提交 staging tar 后再完成发布'
         receivedAuthorization = req.headers.authorization || '';
         if (req.method === 'POST' && req.url?.startsWith('/asset-publish/complete/')) {
             completed = true;
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end('{"ok":true}');
+            res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+            res.write(': asset publish in progress\n\n');
+            res.end('event: result\ndata: {"ok":true}\n\n');
             return;
         }
         if (req.method !== 'POST' || !req.url?.startsWith('/asset-publish/chunks/')) {

@@ -33,7 +33,7 @@ const DEFAULT_SSH_KEY_PATH = path.join(homedir(), '.ssh', 'id_ed25519');
 const DEFAULT_USER_SSH_KNOWN_HOSTS_PATH = path.join(homedir(), '.ssh', 'known_hosts');
 const MAX_PROCESS_OUTPUT_CHARS = 256 * 1024;
 const MAX_ASSET_INVENTORY_RESPONSE_CHARS = 16 * 1024 * 1024;
-const DEFAULT_UPLOAD_CHUNK_BYTES = 2 * 1024 * 1024;
+const DEFAULT_UPLOAD_CHUNK_BYTES = 512 * 1024;
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 
 const appendProcessOutput = (current, chunk) => {
@@ -184,6 +184,41 @@ const appendUploadPath = (endpointUrl, suffix) => {
     const url = new URL(endpointUrl);
     url.pathname = `${url.pathname.replace(/\/+$/, '')}/${suffix}`;
     return url;
+};
+
+const parseAssetPublishCompletionResponse = (responseBody) => {
+    const rawBody = responseBody.trim();
+    const sseData = rawBody
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice('data:'.length).trimStart())
+        .join('\n');
+    const payload = sseData || rawBody;
+    const isSse = /(?:^|\n)(?:event|data):/.test(rawBody);
+
+    if (!payload) {
+        if (isSse) {
+            throw new Error('素材上传入口未返回最终发布结果');
+        }
+        return '';
+    }
+
+    try {
+        const result = JSON.parse(payload);
+        if (result?.ok === false) {
+            throw new Error(result.error || '服务器素材发布失败');
+        }
+    } catch (error) {
+        if (error instanceof SyntaxError && !isSse) {
+            return payload;
+        }
+        if (error instanceof SyntaxError) {
+            throw new Error('素材上传入口返回了无效的 SSE 发布结果');
+        }
+        throw error;
+    }
+
+    return payload;
 };
 
 const sendAssetUploadRequest = ({ endpointUrl, token, headers = {}, body, agent }) => new Promise((resolve, reject) => {
@@ -365,20 +400,9 @@ export const publishStagedAssetsToUploadEndpoint = async ({
             agent,
             headers: { 'Content-Length': '0' },
         });
-        if (responseBody) {
-            console.log(responseBody);
-            try {
-                const result = JSON.parse(responseBody);
-                if (result?.ok === false) {
-                    throw new Error(result.error || '服务器素材发布失败');
-                }
-            } catch (error) {
-                if (error instanceof SyntaxError) {
-                    // 兼容旧 runner 的纯文本完成响应。
-                } else {
-                    throw error;
-                }
-            }
+        const completionPayload = parseAssetPublishCompletionResponse(responseBody);
+        if (completionPayload) {
+            console.log(completionPayload);
         }
     } catch (error) {
         throw error;

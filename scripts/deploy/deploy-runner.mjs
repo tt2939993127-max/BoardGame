@@ -649,19 +649,25 @@ async function handleAssetPublishCompleteRequest(req, res) {
     });
     session.writing = true;
     let heartbeatStarted = false;
-    const heartbeat = setInterval(() => {
+    const writeHeartbeat = () => {
         if (res.writableEnded) return;
         if (!res.headersSent) {
             res.writeHead(200, {
-                'Content-Type': 'application/json; charset=utf-8',
+                'Content-Type': 'text/event-stream; charset=utf-8',
                 'Cache-Control': 'no-store',
-                'Transfer-Encoding': 'chunked',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
             });
+            res.flushHeaders?.();
             heartbeatStarted = true;
         }
-        res.write(' ');
-    }, 10_000);
+        res.write(': asset publish in progress\n\n');
+    };
+    const heartbeat = setInterval(writeHeartbeat, 10_000);
     heartbeat.unref?.();
+    const endStream = (result) => {
+        res.end(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
+    };
     try {
         const result = await runAssetPublishArchive(
             job,
@@ -679,7 +685,7 @@ async function handleAssetPublishCompleteRequest(req, res) {
             parsed: parseScriptOutput(result.output),
         };
         if (heartbeatStarted) {
-            res.end(JSON.stringify(responseBody));
+            endStream(responseBody);
         } else {
             sendJson(res, 200, responseBody);
         }
@@ -695,7 +701,7 @@ async function handleAssetPublishCompleteRequest(req, res) {
             error: error instanceof Error ? error.message : 'Asset publish failed',
         };
         if (heartbeatStarted) {
-            res.end(JSON.stringify(responseBody));
+            endStream(responseBody);
         } else {
             sendJson(res, 503, responseBody);
         }
