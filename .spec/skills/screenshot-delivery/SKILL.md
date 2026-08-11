@@ -7,7 +7,7 @@ description: "BoardGame 截图交付适配。用于本项目的 E2E 证据目录
 
 这是 BoardGame 的 `adapter`，不是独立的用户开图规范。
 
-用户说“打开图、给我看图、图呢、重新打开”，或准备把最终验收图展示给用户时，用户可见开图、多图顺序、编号交接、原图与标记副本选择、查看器选择、PureRef 进程核验、失败回退和“用户是否真的看到”都只按系统 canonical-source 执行：
+用户说“打开图、给我看图、图呢、重新打开”，或准备把最终验收图展示给用户时，全部转到系统 canonical-source；本 skill 不承载用户可见开图的执行规则：
 
 `D:\codex-home\skills\show-image-to-user\SKILL.md`
 
@@ -37,6 +37,7 @@ node scripts/verify/open-verified-image.mjs --viewer pureref --paths "<绝对路
 
 - `OPENED_IMAGE=`、`OPENED_WITH_PUREREF=` 或脚本退出成功只证明项目脚本发起了动作；用户可见交付和最终回复口径仍以系统 canonical-source 为准。
 - `scripts/verify/label-image-sequence.py` 只负责生成项目内的全尺寸标记副本和序列索引，原图不得被覆盖；具体何时生成、打开哪一组文件由系统 canonical-source 决定。
+- 该标记脚本当前与系统 `show-image-to-user/scripts/label-image-sequence.py` 保持同哈希；项目副本是项目路径适配层，后续通过宿主同步 / 漂移检查保持一致，不是第二套交付规则来源。
 
 ## 落点
 

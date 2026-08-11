@@ -367,6 +367,18 @@ export const publishStagedAssetsToUploadEndpoint = async ({
         });
         if (responseBody) {
             console.log(responseBody);
+            try {
+                const result = JSON.parse(responseBody);
+                if (result?.ok === false) {
+                    throw new Error(result.error || '服务器素材发布失败');
+                }
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    // 兼容旧 runner 的纯文本完成响应。
+                } else {
+                    throw error;
+                }
+            }
         }
     } catch (error) {
         throw error;

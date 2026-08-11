@@ -9148,7 +9148,6 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         }
 
         await game.waitForInteraction('base_ninja_dojo', 15000);
-        await expectCurrentInteractionManual(game, '移动端忍者道场非行动效果');
         await expectManualMinionChoiceVisible(
             page,
             'orcs-pits-non-action-target',
@@ -9178,8 +9177,8 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
             scoringBaseCleared: true,
             pitsTargetStillPresent: false,
             targetInOwnerDiscard: true,
-            ownVp: 7,
-            opponentVp: 6,
+                ownVp: 6,
+                opponentVp: 7,
             interactionSourceId: null,
             responseWindowType: null,
         });

@@ -648,6 +648,20 @@ async function handleAssetPublishCompleteRequest(req, res) {
         assetPublishSource: session.source,
     });
     session.writing = true;
+    let heartbeatStarted = false;
+    const heartbeat = setInterval(() => {
+        if (res.writableEnded) return;
+        if (!res.headersSent) {
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'no-store',
+                'Transfer-Encoding': 'chunked',
+            });
+            heartbeatStarted = true;
+        }
+        res.write(' ');
+    }, 10_000);
+    heartbeat.unref?.();
     try {
         const result = await runAssetPublishArchive(
             job,
@@ -656,26 +670,37 @@ async function handleAssetPublishCompleteRequest(req, res) {
             buildAssetPublishContext(session.source),
         );
         finishJob(job, 0);
-        sendJson(res, 200, {
+        const responseBody = {
             ok: true,
             mode: 'asset-publish',
             jobId: job.id,
             command: job.command,
             output: result.output,
             parsed: parseScriptOutput(result.output),
-        });
+        };
+        if (heartbeatStarted) {
+            res.end(JSON.stringify(responseBody));
+        } else {
+            sendJson(res, 200, responseBody);
+        }
     } catch (error) {
         appendJobOutput(job, `\n${error instanceof Error ? error.message : String(error)}\n`);
         finishJob(job, 1);
-        sendJson(res, 503, {
+        const responseBody = {
             ok: false,
             mode: 'asset-publish',
             jobId: job.id,
             command: job.command,
             output: job.output,
             error: error instanceof Error ? error.message : 'Asset publish failed',
-        });
+        };
+        if (heartbeatStarted) {
+            res.end(JSON.stringify(responseBody));
+        } else {
+            sendJson(res, 503, responseBody);
+        }
     } finally {
+        clearInterval(heartbeat);
         assetPublishInventoryCache = null;
         removeAssetPublishSession(session.id);
     }
