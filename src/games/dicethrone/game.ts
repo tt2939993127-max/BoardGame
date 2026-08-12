@@ -43,6 +43,7 @@ import type {
     CpChangedEvent,
     CardDrawnEvent,
     BonusDieRolledEvent,
+    BonusDieRerolledEvent,
     DamageShieldGrantedEvent,
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
@@ -80,6 +81,7 @@ const ACTION_LOG_ALLOWLIST = [
     'USE_PURIFY',
     'PAY_TO_REMOVE_KNOCKDOWN',
     'USE_PASSIVE_ABILITY',
+    'REROLL_BONUS_DIE',
     // 确认投掷：记录最终骰面结果
     'CONFIRM_ROLL',
     // 交互确认会承载关键选择结果（如暴击/精准），需要进入操作日志
@@ -1009,13 +1011,16 @@ function formatDiceThroneActionEntry({
 
         if (event.type === 'DIE_REROLLED') {
             const rerollEvent = event as DieRerolledEvent;
-            const { dieId, oldValue, newValue, playerId, sourceCardId } = rerollEvent.payload;
+            const { dieId, oldValue, newValue, playerId, sourceCardId, target } = rerollEvent.payload;
             const card = sourceCardId ? findDiceThroneCard(core, sourceCardId, playerId) : undefined;
             const cardName = card?.name ?? sourceCardId;
             const isCardI18n = cardName?.includes('.');
+            const rerollKey = target === 'pendingBonusDie'
+                ? 'actionLog.bonusDieRerolled'
+                : 'actionLog.dieRerolled';
             
             const segments: ActionLogSegment[] = [
-                i18nSeg('actionLog.dieRerolled', {
+                i18nSeg(rerollKey, {
                     dieId: dieId + 1, 
                     oldValue, 
                     newValue 
@@ -1033,6 +1038,40 @@ function formatDiceThroneActionEntry({
                 actorId: playerId,
                 kind: 'DIE_REROLLED',
                 segments,
+            });
+            return;
+        }
+
+        if (event.type === 'BONUS_DIE_ROLLED') {
+            const bonusDieEvent = event as BonusDieRolledEvent;
+            const { value, playerId } = bonusDieEvent.payload;
+            entries.push({
+                id: `BONUS_DIE_ROLLED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'BONUS_DIE_ROLLED',
+                segments: [
+                    i18nSeg('actionLog.bonusDieRolled', { value }),
+                ],
+            });
+            return;
+        }
+
+        if (event.type === 'BONUS_DIE_REROLLED') {
+            const bonusDieEvent = event as BonusDieRerolledEvent;
+            const { dieIndex, oldValue, newValue, playerId } = bonusDieEvent.payload;
+            entries.push({
+                id: `BONUS_DIE_REROLLED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'BONUS_DIE_REROLLED',
+                segments: [
+                    i18nSeg('actionLog.bonusDieRerolled', {
+                        dieId: dieIndex + 1,
+                        oldValue,
+                        newValue,
+                    }),
+                ],
             });
             return;
         }

@@ -109,6 +109,7 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
                 // → TOKEN_RESPONSE_REQUESTED（攻击方有伏击）→ halt
                 // Token 响应窗口：使用伏击
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过后续响应 → 伤害结算
             ],
             expect: {
@@ -181,6 +182,7 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
                 cmd('SELECT_ABILITY', '0', { abilityId: 'shadow-shank' }),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 cmd('SKIP_TOKEN_RESPONSE', '0'),
             ],
             expect: {
@@ -228,10 +230,12 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
             { type: 'SELECT_ABILITY', playerId: '0', payload: { abilityId: 'shadow-shank' } },
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
             { type: 'USE_TOKEN', playerId: '0', payload: { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 } },
+            { type: 'SKIP_BONUS_DICE_REROLL', playerId: '0', payload: {} },
             { type: 'SKIP_TOKEN_RESPONSE', playerId: '0', payload: {} },
         ];
 
         let useTokenEvents: any[] = [];
+        let confirmBonusDieEvents: any[] = [];
         let skipTokenEvents: any[] = [];
         for (const c of commands) {
             const command = { ...c, timestamp: Date.now() } as DiceThroneCommand;
@@ -239,6 +243,9 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
             if (!result.success) throw new Error(`Command ${c.type} failed: ${result.error}`);
             if (c.type === 'USE_TOKEN') {
                 useTokenEvents = result.events;
+            }
+            if (c.type === 'SKIP_BONUS_DICE_REROLL') {
+                confirmBonusDieEvents = result.events;
             }
             if (c.type === 'SKIP_TOKEN_RESPONSE') {
                 skipTokenEvents = result.events;
@@ -251,8 +258,8 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
         expect(tokenUsedEvent).toBeDefined();
         expect(tokenUsedEvent.payload.damageModifier).toBe(0);
 
-        // 同批事件中有 BONUS_DIE_ROLLED（pendingDamageBonus=3）
-        const bonusDieEvent = useTokenEvents.find((e: any) => e.type === 'BONUS_DIE_ROLLED');
+        // 确认奖励骰后才有按最终骰面产生的 BONUS_DIE_ROLLED。
+        const bonusDieEvent = confirmBonusDieEvents.find((e: any) => e.type === 'BONUS_DIE_ROLLED');
         expect(bonusDieEvent).toBeDefined();
         expect(bonusDieEvent.payload.pendingDamageBonus).toBe(3);
 
@@ -267,7 +274,11 @@ describe('暗影穿刺 + 伏击 伤害丢失 Bug 复现', () => {
         // 验证 ActionLog formatEntry 对 USE_TOKEN 命令的输出
         // formatEntry 应该用 BONUS_DIE_ROLLED 的掷骰值（3）替代 TOKEN_USED 的 damageModifier（0）
         const useTokenCommand = { type: 'USE_TOKEN', playerId: '0', payload: { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }, timestamp: 1 };
-        const logEntries = formatDiceThroneActionEntry({ command: useTokenCommand as any, state: state as any, events: useTokenEvents });
+        const logEntries = formatDiceThroneActionEntry({
+            command: useTokenCommand as any,
+            state: state as any,
+            events: [...useTokenEvents, ...confirmBonusDieEvents],
+        });
         // 找到 TOKEN_USED 的日志条目
         const tokenLogEntries = Array.isArray(logEntries) ? logEntries : logEntries ? [logEntries] : [];
         const tokenUsedLog = tokenLogEntries.find((e: any) => e.kind === 'TOKEN_USED');

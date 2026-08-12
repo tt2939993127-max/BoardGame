@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import { execute } from '../domain/execute';
+import { DiceThroneDomain } from '../domain';
+import { GameTestRunner } from '../../../engine/testing';
 import { reduce } from '../domain/reducer';
 import { diceThroneFlowHooks } from '../domain/flowHooks';
 import { resolveAttack, resolvePostDamageEffects } from '../domain/attack';
@@ -14,6 +16,7 @@ import {
     getSimpleChoicePrompt,
     injectSimpleChoicePrompt,
     respondToPrompt,
+    testSystems,
 } from './test-utils';
 
 const applyEvents = (core: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore =>
@@ -185,7 +188,13 @@ describe('DiceThrone Ninja Token 机制', () => {
         };
 
         const events = execute(state, command('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SMOKE_BOMB, amount: 1 }), createQueuedRandom([2]));
-        const next = applyEvents(state.core, events);
+        const afterUse = applyEvents(state.core, events);
+        const settleEvents = execute(
+            { core: afterUse, sys: { phase: 'defensiveRoll' } },
+            command('SKIP_TOKEN_RESPONSE', '0'),
+            createQueuedRandom([1]),
+        );
+        const next = applyEvents(afterUse, settleEvents);
 
         expect(events.find(event => event.type === 'TOKEN_USED')?.payload).toMatchObject({
             tokenId: TOKEN_IDS.SMOKE_BOMB,
@@ -346,7 +355,7 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(resolveResult.events.some(event => event.type === 'ATTACK_MADE_UNDEFENDABLE')).toBe(true);
     });
 
-    it('基础死亡盛放应先结算 5 颗技能骰，再决定是否弹出忍术或进入防御', () => {
+    it('基础死亡盛放应先结算 5 颗技能骰，再恢复到防御流程', () => {
         const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
         state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU] = 0;
         state.core.pendingAttack = {
@@ -358,6 +367,7 @@ describe('DiceThrone Ninja Token 机制', () => {
         };
         state.sys.phase = 'offensiveRoll';
         state.sys.flowHalted = false;
+        state.core.rollConfirmed = true;
 
         const result = diceThroneFlowHooks.onPhaseExit?.({
             state: { core: state.core, sys: state.sys },
@@ -367,13 +377,36 @@ describe('DiceThrone Ninja Token 机制', () => {
             random: createQueuedRandom([6, 6, 4, 4, 1]),
         } as Parameters<NonNullable<typeof diceThroneFlowHooks.onPhaseExit>>[0]);
         const events = Array.isArray(result) ? result : (result?.events ?? []);
-        const next = applyEvents(state.core, events as DiceThroneEvent[]);
+        const opened = applyEvents(state.core, events as DiceThroneEvent[]);
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: createQueuedRandom([1]),
+            setup: () => ({ core: opened, sys: state.sys }),
+        });
+        runner.setState({ core: opened, sys: state.sys });
+        const settled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+        expect(settled.success).toBe(true);
+        const next = settled.finalState.core;
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(5);
         expect(next.pendingAttack?.bonusDamage).toBe(5);
         expect(next.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(2);
-        expect(events.some(event => event.type === 'CHOICE_REQUESTED')).toBe(true);
+        expect(settled.finalState.sys.interaction.current).toBeUndefined();
+        expect(settled.finalState.sys.phase).toBe('offensiveRoll');
         expect(next.pendingAttack?.isDefendable).toBe(true);
+
+        const advanced = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanced.success).toBe(true);
+        expect(advanced.finalState.sys.phase).toBe('offensiveRoll');
+        const tokenPrompt = getSimpleChoicePrompt(advanced.finalState, 'death-blossom');
+        const skipOption = tokenPrompt.options.find(option => option.value?.customId === 'skip');
+        expect(skipOption).toBeTruthy();
+
+        const skipped = runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: skipOption!.id });
+        expect(skipped.success).toBe(true);
+        expect(skipped.finalState.sys.phase).toBe('defensiveRoll');
     });
 
     it('死亡盛放 II 在奖励骰收口出面具后，应先把当前攻击改成不可防御', () => {
@@ -431,21 +464,38 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(firstUse.success).toBe(true);
         if (!firstUse.success) return;
 
-        expect(firstUse.state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(1);
-        expect(firstUse.state.core.pendingAttack?.bonusDamage).toBe(2);
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: createQueuedRandom([1]),
+            setup: () => firstUse.state,
+        });
+        runner.setState(firstUse.state);
+        const firstSettled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+        expect(firstSettled.success).toBe(true);
+        const firstSettledState = firstSettled.finalState;
 
-        const secondPrompt = getSimpleChoicePrompt(firstUse.state, 'slash');
+        expect(firstSettledState.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(1);
+        expect(firstSettledState.core.pendingAttack?.bonusDamage).toBe(2);
+
+        const secondPrompt = getSimpleChoicePrompt(firstSettledState, 'slash');
         const secondUseOption = secondPrompt.options.find(option => option.value?.customId === 'use-ninjutsu');
         expect(secondUseOption).toBeTruthy();
 
-        const secondUse = respondToPrompt(firstUse.state, secondUseOption!.id, '0', createQueuedRandom([4]), ['0', '1']);
+        const secondUse = respondToPrompt(firstSettledState, secondUseOption!.id, '0', createQueuedRandom([4]), ['0', '1']);
         expect(secondUse.success).toBe(true);
         if (!secondUse.success) return;
 
-        expect(secondUse.state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(0);
-        expect(secondUse.state.core.pendingAttack?.bonusDamage).toBe(4);
+        runner.setState(secondUse.state);
+        const secondSettled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+        expect(secondSettled.success).toBe(true);
+        const secondSettledState = secondSettled.finalState;
 
-        const finalPrompt = getSimpleChoicePrompt(secondUse.state, 'slash');
+        expect(secondSettledState.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(0);
+        expect(secondSettledState.core.pendingAttack?.bonusDamage).toBe(4);
+
+        const finalPrompt = getSimpleChoicePrompt(secondSettledState, 'slash');
         expect(finalPrompt.options.map(option => option.value?.customId)).toContain('skip');
     });
 

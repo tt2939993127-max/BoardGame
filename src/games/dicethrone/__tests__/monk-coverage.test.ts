@@ -243,8 +243,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '0'),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('SKIP_TOKEN_RESPONSE', '0'),
                 ],
             });
 
@@ -288,7 +288,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '0'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -331,7 +332,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '0'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -376,6 +378,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
                     cmd('SKIP_TOKEN_RESPONSE', '0'),
                 ],
                 expect: {
@@ -416,7 +420,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '0'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
             });
 
@@ -474,6 +478,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
             });
 

@@ -43,16 +43,17 @@
 | `.spec/knowledge/standards/ui-responsive-layout.md` | canonical-source 候选 | 响应式/双端布局专项 | 保留为专项分卷，由 `ui-change-gates.md` 或 `ui-ux.md` 引用。 |
 | `.spec/knowledge/standards/ui-animation-patterns.md` | canonical-source 候选 | UI 动画专项 | 保留为专项分卷；与 `animation-effects.md` 区分 UI 动画 vs 引擎 FX。 |
 | `.spec/skills/boardgame-ui-imagegen/SKILL.md` | workflow | 生图/设计稿执行流 | 保留 workflow；只引用 UI 标准，不复制标准正文。 |
-| `D:\codex-home\skills\show-image-to-user\SKILL.md` | canonical-source | 用户可见开图与多图交付通用正文 | 系统 skill 保持唯一开图真相源；BoardGame 专属 evidence、脚本和相册边界由项目 `screenshot-delivery` 适配。 |
+| `.spec/skills/show-image-to-user/SKILL.md` | canonical-source | BoardGame 用户可见开图、多图交付和项目证据适配正文 | 项目协作者只读此文件；系统同名 skill 仅作后续人工比较的上游候选。 |
 
-待精读项已在 P1.3 完成：`e2e-verification.md` 保留真实入口与证据资格，`ui-change-gates.md` 保留 BoardGame 布局增量，AI `PASS/REVISE` 回系统 `ui-audit-loop`，用户开图和 PureRef 回系统 `show-image-to-user`。
+待精读项已在 P1.3 完成：`e2e-verification.md` 保留真实入口与证据资格，`ui-change-gates.md` 保留 BoardGame 布局增量，AI `PASS/REVISE` 回项目 `ui-audit-loop`，用户开图和 PureRef 回项目 `show-image-to-user`。
 
 ### P1 精读裁决（2026-08-08）
 
 - `ui-ux.md` 顶部已经声明详细门禁拆到 `ui-change-gates.md`，当前不删；后续重点是继续压缩 §0 的最小执行口径，避免和 `ui-change-gates.md` 双写。
 - `ui-change-gates.md` 是 UI 改动和玩家视角审计主源；`ui-ux.md` 不应复制它的截图闭环细则。
 - `e2e-verification.md` 的“看图验收 / 截图来源与证据文档”是截图证据主源；它可以和 UI gate 互相引用，但不应承载“如何打开给用户”的执行步骤。
-- 2026-08-12 的一次中间合并曾把系统开图正文与项目适配合并到 `.spec/skills/show-image-to-user/`；本轮已更正为系统 canonical-source + 项目 `screenshot-delivery` adapter，项目同名目录已删除。该中间状态只作为历史记录，不是当前入口。
+- 2026-08-12 曾把项目同名目录误删并保留 `screenshot-delivery` adapter；当前已将系统候选中本项目实际选用的规则与 adapter 独有内容收口到 `.spec/skills/show-image-to-user/`，并删除 `screenshot-delivery`。项目同名 skill 是当前唯一执行入口。
+- 2026-08-12 已逐项迁入项目活动规范直接调用的通用能力：`audio-integration`、`config-review-workflow`、`game-design`、`game-ui-design`、`img2threejs`、`img2threejs-readiness`、`planning-with-files`、`pua`、`skill-governance`、`ui-audit-loop`、`ui-design-pipeline`、`ui-ux-pro-max`。活动路由统一改为项目副本；系统同名目录只作后续人工比较候选。原项目 `mobile-responsiveness` 只是转发到 `adapt-game-mobile` 的空路由，已删除；`mobile-adaptive` 保留为 OpenSpec 产品迁移 workflow。
 - `.spec/skills/boardgame-ui-imagegen/SKILL.md` 是生图 workflow。本轮已补“规范来源与职责边界”，明确 UI 标准、UI gate、资源链分别由 `ui-ux.md`、`ui-change-gates.md`、`asset-pipeline.md` 承担。
 
 P1 本轮动作：先完成主从标注，再在 P1.3 完成截图/UI 跨层职责收口；本批未删除仍有职责的标准或脚本，只把重复正文改为引用或项目增量。
@@ -461,32 +462,32 @@ P5 本轮动作：不删除文件；完成职责分层。下一步若继续 P5�
 | 旧规则 / 原路径 | 迁移后路径 | 裁决与原因 |
 | --- | --- | --- |
 | UI 路由中的 `## 职责落点`：布局、E2E、AI 审图、用户开图和项目脚本的五行职责表 | `.spec/knowledge/README.md` 的 `## UI 与截图职责总览` | 保留职责图，但从路由移到总索引；路由只负责告诉执行者下一跳，不承载职责正文。 |
-| `.spec/knowledge/standards/e2e-verification.md`「图片读取方式口径」第 2 条：用户要求打开图时转系统 skill | 原路径保留为边界提示；唯一执行正文是 `D:\codex-home\skills\show-image-to-user\SKILL.md` | 这是系统级用户行为，不删除入口提示；项目标准只说明自己不定义查看器和打开成功。 |
-| `e2e-verification.md`「图片读取方式口径」第 4 条：原图 / 标记副本选择 | 系统 `show-image-to-user` | 原图、标记副本、预览和用户交付资格属于通用开图规则；E2E 只保留高清证据可回查要求。 |
-| `e2e-verification.md`「流程截图证据链」原 `2C`：端到端截图必须成组，并把相册、本机打开和汇报绑定到同组选中图 | `e2e-verification.md` 新 `2C` 保留“业务节点不能由单图冒充”；用户展示部分转系统 skill | “必须覆盖哪些业务节点”是项目证据规则；选哪组、编号、顺序和怎么展示是系统交付规则，不能继续合写。 |
-| `e2e-verification.md` 原 `2D`：本机/相册整组打开时按顺序给用户读法 | 系统 `show-image-to-user` 的多图编号、顺序、过渡说明和交接映射 | 该规则完整迁移，没有丢失；项目标准不再教用户开图。 |
-| `e2e-verification.md`「看图验收」原 `6A` 中“不得打开给用户当最终验收图” | 原路径保留“截图未达标、不得作为最终证据”；用户展示动作由系统 skill 决定 | 保留截图资格的否决条件，删除项目层对用户查看动作的越权描述。 |
-| `e2e-verification.md`「截图来源与证据文档」原参考图条目：候选图必须先打开给用户逐张确认 | 原路径改为“先锁定候选路径并进入用户确认流程”，展示按系统 skill | 保留“未锁定前不得据此改 UI/收口”的业务决策门禁，避免在 E2E 标准中重复查看器 SOP。 |
+| `.spec/knowledge/standards/e2e-verification.md`「图片读取方式口径」第 2 条：用户要求打开图时转项目 skill | 原路径保留为边界提示；唯一执行正文是 `.spec/skills/show-image-to-user/SKILL.md` | 项目标准只说明自己不定义查看器和打开成功；项目 skill 承担全部开图动作。 |
+| `e2e-verification.md`「图片读取方式口径」第 4 条：原图 / 标记副本选择 | 项目 `show-image-to-user` | 原图、标记副本、预览和用户交付资格已随项目实际选用的通用规则迁入；E2E 只保留高清证据可回查要求。 |
+| `e2e-verification.md`「流程截图证据链」原 `2C`：端到端截图必须成组，并把相册、本机打开和汇报绑定到同组选中图 | `e2e-verification.md` 新 `2C` 保留“业务节点不能由单图冒充”；用户展示部分转项目 skill | “必须覆盖哪些业务节点”是项目证据规则；选哪组、编号、顺序和怎么展示只由项目执行 skill 定义。 |
+| `e2e-verification.md` 原 `2D`：本机/相册整组打开时按顺序给用户读法 | 项目 `show-image-to-user` 的多图编号、顺序、过渡说明和交接映射 | 规则已迁入项目唯一执行入口；项目标准不再教用户开图。 |
+| `e2e-verification.md`「看图验收」原 `6A` 中“不得打开给用户当最终验收图” | 原路径保留“截图未达标、不得作为最终证据”；用户展示动作由项目 skill 决定 | 保留截图资格的否决条件，删除项目标准对用户查看动作的重复描述。 |
+| `e2e-verification.md`「截图来源与证据文档」原参考图条目：候选图必须先打开给用户逐张确认 | 原路径改为“先锁定候选路径并进入用户确认流程”，展示按项目 skill | 保留“未锁定前不得据此改 UI/收口”的业务决策门禁，避免在 E2E 标准中重复查看器 SOP。 |
 | `e2e-verification.md`「截图来源与证据文档」原第 3、4 条：文件名和目录名必须说明中文场景/阶段 | 原路径保留 | 这是 BoardGame evidence 可追溯性和语义命名，不是用户开图规则；项目脚本和证据目录需要它。 |
-| `e2e-verification.md`「截图来源与证据文档」原第 5 条：多图默认编号、前后态命名和顺序读法 | 改为阶段语义可回查；编号、展示顺序和过渡说明转系统 skill | 文件名仍需表达业务阶段，但多图交接只有系统一个可执行正文。 |
-| `e2e-verification.md`「截图来源与证据文档」原第 10 条：用户要求给图时默认先给整体图 | 改为“项目主证据先保留完整上下文”；用户展示转系统 skill | “整图优先”仍是证据资格，具体给用户哪张图和展示通道不是 E2E 标准职责。 |
+| `e2e-verification.md`「截图来源与证据文档」原第 5 条：多图默认编号、前后态命名和顺序读法 | 改为阶段语义可回查；编号、展示顺序和过渡说明转项目 skill | 文件名仍需表达业务阶段，但多图交接只有项目一个可执行正文。 |
+| `e2e-verification.md`「截图来源与证据文档」原第 10 条：用户要求给图时默认先给整体图 | 改为“项目主证据先保留完整上下文”；用户展示转项目 skill | “整图优先”仍是证据资格，具体给用户哪张图和展示通道不是 E2E 标准职责。 |
 | `e2e-verification.md`「截图来源与证据文档」原第 12、13 条中“给用户看的最终截图”与后处理图限制 | 原路径保留为真实证据现场和原图可回查要求 | 真实性和可审计性属于项目证据；去掉用户交付措辞，避免和系统开图规则重叠。 |
 | `ui-change-gates.md` `0.0 截图后的 BoardGame 视觉增量门禁` 中逐图看图、合格/不合格、汇报表、失败返工等通用审计规则 | 系统 `D:\codex-home\skills\ui-audit-loop\SKILL.md`；项目标准保留双端缺失矩阵、信息去向、布局/压力态增量 | 通用 `PASS/REVISE`、审计表和返工循环已有系统唯一主源；BoardGame 专属双端和槽位约束不能删除，改为项目增量。 |
 | `ui-change-gates.md` 原 `0.0 UI 审计闭环` 的固定审计表、连续失败换结构、低级错误复盘和最终回复门槛 | 系统 `ui-audit-loop`；项目 `ui-change-gates` 只保留项目矩阵和增量核对 | 信息已由系统 skill 无损覆盖；保留两份会造成执行者在两个 `PASS/REVISE` 正文之间漂移。 |
-| `ui-change-gates.md` 原“流程型 UI 禁止单图收口”中的最终用户截图组、真实操作顺序 | `e2e-verification.md` 的业务证据组门禁 + 系统 `show-image-to-user` | 项目 UI gate 只判断布局和槽位；业务状态由 E2E 证明，用户展示由系统交接。 |
+| `ui-change-gates.md` 原“流程型 UI 禁止单图收口”中的最终用户截图组、真实操作顺序 | `e2e-verification.md` 的业务证据组门禁 + 项目 `show-image-to-user` | 项目 UI gate 只判断布局和槽位；业务状态由 E2E 证明，用户展示由项目执行 skill 交接。 |
 | `docs/testing-best-practices.md` §1.1 中六段截图、四列表、完整流程证据和 `passed` 不能收口的重复清单 | `e2e-verification.md` 保留截图证据正文；本文件保留测试分层、工具和 seam 规则 | 测试实践不再复制 E2E 验收清单；测试通过与截图/视觉结论的区别保留为入口提示。 |
-| `.spec/skills/screenshot-delivery/SKILL.md` 中与用户开图重叠的正文 | `D:\codex-home\skills\show-image-to-user\SKILL.md`；项目专属部分回 `.spec/skills/screenshot-delivery/SKILL.md` | 用户开图、原图/标记图、多图编号顺序、查看器和回退归系统唯一正文；BoardGame evidence 路径、项目命令、标记脚本和相册授权保留在项目 adapter。中间合并到项目同名 skill 已更正并删除，信息未丢失。 |
-| `routes/ui.md`、`routes/testing.md` 中截图链路触发条件 | 原路由保留为读取顺序和条件导航；职责总览归入本台账 P1.3，`.spec/knowledge/README.md` 只保留台账链接 | 路由仍告诉执行者何时读 E2E、系统 skill 和项目 skill，但不复制任何正文规则；总入口保持 lint 要求的浅层结构。 |
-| `.spec/skills/adapt-game-mobile/SKILL.md` 移动端“打开截图逐张阅读”验收句 | 原路径保留移动端 PC 对照顺序和视口基线；图面审计转系统 `ui-audit-loop`，用户展示转 `show-image-to-user` | 移动端的对照矩阵、横屏基线和适配风险是项目 workflow 独有内容；“打开”不再被解释成该 skill 自己选择用户查看通道。 |
-| `.spec/skills/boardgame-ui-imagegen/SKILL.md` Open Design / 人工验收中的“打开给用户、PureRef”句 | 原路径保留规则素材、设计前置回执和 PC 先于移动端门禁；用户展示转系统 `show-image-to-user` | 生图 workflow 仍决定何时具备人工验收资格，但不决定查看器、原图选择或多图交接。 |
-| `.spec/skills/create-new-game/references/ui-implementation-gates.md` 素材输入包、AI PASS、用户人工验收和截图问题回退句 | 原路径保留新游戏专属素材 / 设计前置门禁；用户验收展示统一转系统 skill，AI 复看统一引用 `ui-audit-loop` | 新游戏的素材准入、设计前置包和实现冻结条件是专项合同；删除其中的 PureRef / viewer 操作，避免专项 reference 成为第二开图入口。 |
-| `docs/infra/open-design.md` Open Design 固定交付模式和人工验收顺序 | 原路径保留 artifact、固定视口、规则素材和导出边界；用户展示转系统 `show-image-to-user` | 这是 Open Design 工具的项目专项合同，保留一次性产品/工具要求，但不再定义“怎么打开给用户”。 |
+| `.spec/skills/screenshot-delivery/SKILL.md` 中与用户开图重叠的正文 | `.spec/skills/show-image-to-user/SKILL.md` | 项目实际采用的系统规则与 BoardGame evidence 路径、项目命令、标记脚本和相册授权已合并；旧 adapter 已删除，信息没有丢失。 |
+| `routes/ui.md`、`routes/testing.md` 中截图链路触发条件 | 原路由保留为读取顺序和条件导航；职责总览归入本台账 P1.3，`.spec/knowledge/README.md` 只保留台账链接 | 路由仍告诉执行者何时读 E2E 和项目 skill，但不复制任何正文规则；总入口保持 lint 要求的浅层结构。 |
+| `.spec/skills/adapt-game-mobile/SKILL.md` 移动端“打开截图逐张阅读”验收句 | 原路径保留移动端 PC 对照顺序和视口基线；图面审计转系统 `ui-audit-loop`，用户展示转项目 `show-image-to-user` | 移动端的对照矩阵、横屏基线和适配风险是项目 workflow 独有内容；“打开”不再被解释成该 skill 自己选择用户查看通道。 |
+| `.spec/skills/boardgame-ui-imagegen/SKILL.md` Open Design / 人工验收中的“打开给用户、PureRef”句 | 原路径保留规则素材、设计前置回执和 PC 先于移动端门禁；用户展示转项目 `show-image-to-user` | 生图 workflow 仍决定何时具备人工验收资格，但不决定查看器、原图选择或多图交接。 |
+| `.spec/skills/create-new-game/references/ui-implementation-gates.md` 素材输入包、AI PASS、用户人工验收和截图问题回退句 | 原路径保留新游戏专属素材 / 设计前置门禁；用户验收展示统一转项目 skill，AI 复看统一引用 `ui-audit-loop` | 新游戏的素材准入、设计前置包和实现冻结条件是专项合同；删除其中的 PureRef / viewer 操作，避免专项 reference 成为第二开图入口。 |
+| `docs/infra/open-design.md` Open Design 固定交付模式和人工验收顺序 | 原路径保留 artifact、固定视口、规则素材和导出边界；用户展示转项目 `show-image-to-user` | 这是 Open Design 工具的项目专项合同，保留一次性产品/工具要求，但不再定义“怎么打开给用户”。 |
 
 ### 本批未迁移 / 未删除的差异
 
 - `e2e-verification.md` 的真实入口、状态注入、自然链与代表态断点、截图必须证明的业务状态、整屏上下文、压力态和证据文件语义均保留；这些是 BoardGame 的证据资格，不属于系统用户开图。
 - `ui-change-gates.md` 的对象本体承接、布局层级、主交互槽位、PC/移动端信息去向矩阵和固定构图门禁均保留；这些是项目 UI 增量，不属于通用 AI 审图循环。
-- 原 `screenshot-delivery` 的 `test-results/evidence-screenshots/<game>/<测试文件>/<用例>/` 路径、`npm run verify:open-image`、项目 `open-verified-image.mjs`、标记脚本和服务器相册授权边界均保留在项目 `screenshot-delivery`；它们依赖项目目录或命令，不能上移到系统 skill。
+- 原 `screenshot-delivery` 的 `test-results/evidence-screenshots/<game>/<测试文件>/<用例>/` 路径、`npm run verify:open-image`、项目 `open-verified-image.mjs`、标记脚本和服务器相册授权边界均已保留在项目 `show-image-to-user`；它们依赖项目目录或命令，不能上移到系统 skill。
 - `.spec/knowledge/README.md` 只保留任务路由和 P1.3 台账链接；完整职责总览在本台账，`openspec/` 和专项 evidence 仍只承载产品要求或执行记录。
 
 ## 下一批执行顺序

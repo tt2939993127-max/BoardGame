@@ -683,7 +683,9 @@
     "dieModified": "修改骰子 #{{dieId}}：{{oldValue}} → {{newValue}}",
     "dieModifiedSource": "（{{source}}）",
     "dieRerolled": "重投骰子 #{{dieId}}：{{oldValue}} → {{newValue}}",
-    "dieRerolledSource": "（{{source}}）"
+    "dieRerolledSource": "（{{source}}）",
+    "bonusDieRolled": "奖励骰结果：{{value}}",
+    "bonusDieRerolled": "重投奖励骰 #{{dieId}}：{{oldValue}} → {{newValue}}"
   },
   "purify": {
     "title": "使用净化",
@@ -2367,9 +2369,9 @@
     },
     "burn-down-2": {
       "name": "烧毁 II",
-      "description": "获得 1 精通。激活烧毁：移除任意数量精通；每移除 1 精通，便造成 4 点不可防御伤害。",
+      "description": "获得 1 层火焰精通。激活烧毁：移除至多 4 层火焰精通；每移除 1 层，便造成 4 点不可防御伤害。",
       "effects": {
-        "main": "激活烧毁：移除任意数量火焰精通。每移除 1 层，便造成 4 点不可防御伤害"
+        "main": "激活烧毁：移除至多 4 层火焰精通。每移除 1 层，便造成 4 点不可防御伤害"
       }
     },
     "ignite-2": {

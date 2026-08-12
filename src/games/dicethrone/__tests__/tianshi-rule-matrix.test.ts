@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import '../domain';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
+import { reduce } from '../domain/reducer';
 import { getAvailableAbilityIds } from '../domain/rules';
 import { TIANSHI_DICE_FACE_IDS as FACE, STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import type { Die, DiceThroneEvent } from '../domain/types';
@@ -39,6 +41,23 @@ const resolve = (
     createContext(state, sourceAbilityId),
     { random: createQueuedRandom(randomValues) },
 );
+
+const resolveAndSettleBonus = (
+    state: ReturnType<typeof createTianshiState>,
+    events: DiceThroneEvent[],
+): DiceThroneEvent[] => {
+    const requestedState = events.reduce((current, event) => reduce(current, event), state.core);
+    const settlement = requestedState.pendingBonusDiceSettlement;
+    if (!settlement) return events;
+    const settlementEvents = buildBonusDiceSettlementEvents({
+        state: requestedState,
+        settlement,
+        random: createQueuedRandom([1]),
+        timestamp: 200,
+        sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+    });
+    return [...events, ...settlementEvents];
+};
 
 const findVariantDamageValues = (ability: AbilityDef): number[] => (
     (ability.variants ?? []).map(variant => {
@@ -103,7 +122,10 @@ describe('炽天使规则分支矩阵', () => {
             damage: 8,
         };
 
-        const events = resolve(state, 'triumphant-return-2', ability.effects ?? [], 'preDefense', [value]);
+        const events = resolveAndSettleBonus(
+            state,
+            resolve(state, 'triumphant-return-2', ability.effects ?? [], 'preDefense', [value]),
+        );
         const bonusDamage = events.find(event => event.type === 'BONUS_DAMAGE_ADDED');
         expect(bonusDamage?.payload.amount ?? 0).toBe(damage);
         expect(events.some(event => event.type === 'ATTACK_MADE_UNDEFENDABLE')).toBe(undefendable);
@@ -146,7 +168,7 @@ describe('炽天使规则分支矩阵', () => {
         expect(card).toBeDefined();
         if (!card) return;
 
-        const events = resolve(state, card.id, card.effects, 'immediate', values);
+        const events = resolveAndSettleBonus(state, resolve(state, card.id, card.effects, 'immediate', values));
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(5);
         expect(events).toContainEqual(expect.objectContaining({
             type: 'BONUS_DAMAGE_ADDED',
@@ -170,7 +192,7 @@ describe('炽天使规则分支矩阵', () => {
         expect(card).toBeDefined();
         if (!card) return;
 
-        const events = resolve(state, card.id, card.effects, 'immediate', [value]);
+        const events = resolveAndSettleBonus(state, resolve(state, card.id, card.effects, 'immediate', [value]));
         const matching = events.find(event => event.type === eventType);
         expect(matching?.payload[field as keyof typeof matching.payload]).toBe(expected);
     });
@@ -181,7 +203,7 @@ describe('炽天使规则分支矩阵', () => {
         expect(card).toBeDefined();
         if (!card) return;
 
-        const events = resolve(state, card.id, card.effects, 'immediate', [6]);
+        const events = resolveAndSettleBonus(state, resolve(state, card.id, card.effects, 'immediate', [6]));
         expect(events).toContainEqual(expect.objectContaining({
             type: 'TOKEN_GRANTED',
             payload: expect.objectContaining({ targetId: '0', tokenId: TOKEN_IDS.FLIGHT, amount: 2 }),

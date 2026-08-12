@@ -1,15 +1,15 @@
 ---
 name: pua-debugging
-description: "BoardGame 恢复/收敛路由。用于连续失败、反复返工或把问题转回项目 workflow；通用恢复优先全局 pua。"
+description: "BoardGame 恢复/收敛路由。用于连续失败、反复返工或把问题转回项目 workflow；通用恢复优先项目 pua。"
 ---
 
-# Route To Global `pua`
+# Route To Project `pua`
 
 这个 skill 用来把“卡住了”的任务路由回正确入口。
 
 ## 使用方式
 
-- 通用“卡住了、失败两次以上、别再磨洋工”的恢复逻辑：直接使用全局 `pua`
+- 通用“卡住了、失败两次以上、别再磨洋工”的恢复逻辑：直接使用项目 `.spec/skills/pua/SKILL.md`
 - 进入具体任务后，再按场景回到项目 skill，例如：
   - Git / PR：`.spec/skills/git-operations/SKILL.md`
   - 部署：`.spec/skills/deploy-after-ci/SKILL.md`
@@ -18,4 +18,4 @@ description: "BoardGame 恢复/收敛路由。用于连续失败、反复返工�
 
 ## 目录原则
 
-`pua` 属于跨任务、跨项目都成立的通用恢复能力，不该在 BoardGame 项目目录里再维护一整份副本。
+`pua` 的本项目副本是协作者的执行入口；系统版本只作后续人工比较的上游候选。

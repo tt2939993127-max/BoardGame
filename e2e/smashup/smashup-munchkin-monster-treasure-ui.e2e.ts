@@ -11701,6 +11701,148 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('移动端-兽人躺下-压制状态结算后', testInfo);
     });
 
+    test('兽人躺下移动端并列最高时仍进入计分前响应并完成压制清理', async ({ page, game }, testInfo) => {
+        test.setTimeout(120000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsAndStayDownScene({ ownPower: 9, opponentPower: 9 }));
+
+        await expect(page.locator('[data-card-uid="orcs-stay-down-1"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人躺下-并列最高计分前', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases'
+                    && state?.sys?.responseWindow?.current?.windowType === 'meFirst'
+                    && state?.sys?.interaction?.current?.data?.sourceId === 'smashup_reaction_choose';
+            },
+            { timeout: 20000, polling: 200 },
+        );
+        await expectCurrentInteractionManual(game, '移动端躺下并列最高计分前响应');
+        await expect.poll(async () => {
+            const options = await game.getInteractionOptions() as InteractionOption[];
+            return options.some(option =>
+                option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-stay-down-1'
+                && option.value?.targetBaseIndex === 0,
+            );
+        }, { timeout: 10000 }).toBe(true);
+
+        const responsePromptLayout = await page.evaluate(() => {
+            const prompt = document.querySelector<HTMLElement>('[data-testid="smashup-docked-prompt"]');
+            const turnTracker = document.querySelector<HTMLElement>('[data-testid="su-turn-tracker"]');
+            const promptRect = prompt?.getBoundingClientRect();
+            const baseRects = Array.from(document.querySelectorAll<HTMLElement>('[data-base-index]'))
+                .map(element => element.getBoundingClientRect());
+            const overlapsBase = promptRect
+                ? baseRects.some(rect => promptRect.left < rect.right && promptRect.right > rect.left && promptRect.top < rect.bottom && promptRect.bottom > rect.top)
+                : true;
+            const turnRect = turnTracker?.getBoundingClientRect();
+            const overlapsTurnTracker = promptRect && turnRect
+                ? promptRect.left < turnRect.right && promptRect.right > turnRect.left && promptRect.top < turnRect.bottom && promptRect.bottom > turnRect.top
+                : true;
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                promptVisible: Boolean(promptRect && promptRect.width > 24 && promptRect.height > 24),
+                noBaseOverlap: !overlapsBase,
+                noTurnTrackerOverlap: !overlapsTurnTracker,
+            };
+        });
+        expect(responsePromptLayout, '移动端躺下并列最高提示必须可见且不遮挡基地或回合信息').toEqual({
+            noUnexpectedOverflow: true,
+            promptVisible: true,
+            noBaseOverlap: true,
+            noTurnTrackerOverlap: true,
+        });
+        await game.screenshot('移动端-兽人躺下-并列最高计分前响应入口', testInfo);
+
+        await clickVisibleInteractionOptionBy(
+            page,
+            game,
+            option => option.value?.kind === 'play_action'
+                && option.value?.cardUid === 'orcs-stay-down-1'
+                && option.value?.targetBaseIndex === 0,
+            '移动端躺下并列最高选择计分前响应',
+        );
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const events = (state.sys?.eventStream?.entries ?? []).map((entry: EventStreamEntry) => entry.event);
+            return {
+                phase: state.sys?.phase,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                scoredBaseLeftBoard: !state.core.bases?.some((base: { defId?: string }) => base.defId === 'base_garrison'),
+                baseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                hasSuppressionEvent: events.some((event: any) =>
+                    event?.type === 'su:base_metadata_updated'
+                    && event.payload?.baseIndex === 0
+                    && event.payload?.metadataUpdate?.andStayDownSuppressorPlayerId === '0',
+                ),
+                hasCardInDiscard: state.core.players?.['0']?.discard?.some((card: any) => card.uid === 'orcs-stay-down-1') ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toEqual({
+            phase: 'playCards',
+            ownVp: 7,
+            opponentVp: 6,
+            scoredBaseLeftBoard: true,
+            baseCleared: true,
+            hasSuppressionEvent: true,
+            hasCardInDiscard: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 24 && rect.height > 24 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect && rect.width > 0 && rect.height > 0 && rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.top >= -2 && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                firstBaseVisible: inViewport('[data-base-index="0"]'),
+                secondBaseVisible: inViewport('[data-base-index="1"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端躺下并列最高收口后双方基础计分、压制清理和原版布局应成立').toEqual({
+            noUnexpectedOverflow: true,
+            firstBaseVisible: true,
+            secondBaseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+        await game.screenshot('移动端-兽人躺下-并列最高压制后清场收口', testInfo);
+    });
+
     test('兽人愤怒的掠夺者移动端横屏计分前手动选择响应并获得 VP', async ({ page, game }, testInfo) => {
         test.setTimeout(120000);
 

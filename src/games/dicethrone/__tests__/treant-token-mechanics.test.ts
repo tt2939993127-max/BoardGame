@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiceThroneCommand, DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import { execute } from '../domain/execute';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
 import { reduce } from '../domain/reducer';
 import { diceThroneFlowHooks } from '../domain/flowHooks';
 import { validateCommand } from '../domain/commandValidation';
@@ -15,6 +16,18 @@ import type { RemoveStatusCommand } from '../domain/types';
 
 const applyEvents = (core: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore =>
     events.reduce((current, event) => reduce(current, event), core);
+
+const settlePendingBonusDice = (core: DiceThroneCore, timestamp = 200): DiceThroneEvent[] => {
+    const settlement = core.pendingBonusDiceSettlement;
+    if (!settlement) return [];
+    return buildBonusDiceSettlementEvents({
+        state: core,
+        settlement,
+        random: createQueuedRandom([1]),
+        timestamp,
+        sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+    });
+};
 
 const command = (type: DiceThroneCommand['type'], playerId: string, payload: Record<string, unknown> = {}): DiceThroneCommand => ({
     type,
@@ -431,7 +444,8 @@ describe('DiceThrone Treant Token 机制', () => {
             passiveId: 'treant-life-sap',
             actionIndex: 0,
         }), createQueuedRandom([5]));
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const next = applyEvents(rolled, settlePendingBonusDice(rolled));
 
         expect(events.some(event => event.type === 'BONUS_DIE_ROLLED')).toBe(true);
         expect(next.players['0'].tokens[TOKEN_IDS.LIFE_SAP]).toBe(0);
@@ -447,7 +461,8 @@ describe('DiceThrone Treant Token 机制', () => {
             passiveId: 'treant-life-sap',
             actionIndex: 0,
         }), createQueuedRandom([1]));
-        let next = applyEvents(low.core, events);
+        let rolled = applyEvents(low.core, events);
+        let next = applyEvents(rolled, settlePendingBonusDice(rolled));
         expect(next.players['0'].resources[RESOURCE_IDS.HP]).toBe(31);
 
         const high = createHeroMatchup('treant', 'ninja')(['0', '1'], createQueuedRandom([1]));
@@ -458,7 +473,8 @@ describe('DiceThrone Treant Token 机制', () => {
             passiveId: 'treant-life-sap',
             actionIndex: 0,
         }), createQueuedRandom([6]));
-        next = applyEvents(high.core, events);
+        rolled = applyEvents(high.core, events);
+        next = applyEvents(rolled, settlePendingBonusDice(rolled));
         expect(next.players['0'].resources[RESOURCE_IDS.HP]).toBe(33);
     });
 
@@ -472,7 +488,8 @@ describe('DiceThrone Treant Token 机制', () => {
             passiveId: 'treant-life-sap',
             actionIndex: 0,
         }), createQueuedRandom([6]));
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const next = applyEvents(rolled, settlePendingBonusDice(rolled));
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(next.players['0'].tokens[TOKEN_IDS.LIFE_SAP]).toBe(0);
@@ -487,7 +504,8 @@ describe('DiceThrone Treant Token 机制', () => {
             passiveId: 'treant-life-sap',
             actionIndex: 0,
         }), createQueuedRandom([6]));
-        const cappedNext = applyEvents(capped.core, cappedEvents);
+        const cappedRolled = applyEvents(capped.core, cappedEvents);
+        const cappedNext = applyEvents(cappedRolled, settlePendingBonusDice(cappedRolled));
 
         expect(cappedNext.players['0'].tokens[TOKEN_IDS.LIFE_SAP]).toBe(0);
         expect(cappedNext.players['0'].resources[RESOURCE_IDS.HP]).toBe(MAX_HEALTH);

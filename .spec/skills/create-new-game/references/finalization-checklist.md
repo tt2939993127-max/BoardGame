@@ -52,7 +52,7 @@
 **强制先读**（权威单一来源，避免本文档过时）：
 - `AGENTS.md`「音频资源架构（强制）」
 - `.spec/knowledge/standards/asset-pipeline.md`「🔊 音频资源规范」
-- 系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`（workflow） + `.spec/knowledge/standards/audio-assets.md`（运行时主合同）+ `docs/audio/audio-usage.md`（项目接入合同；新增音频资产流程见 `docs/audio/add-audio.md`）
+- 项目 skill `.spec/skills/audio-integration/SKILL.md`（workflow） + `.spec/knowledge/standards/audio-assets.md`（运行时主合同）+ `docs/audio/audio-usage.md`（项目接入合同；新增音频资产流程见 `docs/audio/add-audio.md`）
 
 **你在新游戏里只需要做这些（最小闭环）**：
 1. 创建 `src/games/<gameId>/audio.config.ts`，导出 `GameAudioConfig`：

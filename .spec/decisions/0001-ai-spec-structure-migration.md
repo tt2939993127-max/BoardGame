@@ -37,7 +37,7 @@ BoardGame 的 AI 规范采用 `.spec/` 作为唯一根；`openspec/` 保持产�
 | 用户目标、范围、交接与证据边界 | `rules/system.md` + `knowledge/standards/conversation-handoff-target-lock.md` |
 | 归并、worktree、提交与推送 | `rules/system.md` + `knowledge/standards/worktree-branch-target-lock.md` + `skills/git-operations/` 与 `skills/merge-*/` |
 | Bug、回归、规则合同与审计 | `knowledge/standards/rule-contract-audit.md`、`regression-closeout.md`、`testing-audit*.md` + 对应 workflow |
-| 测试、E2E、截图与用户看图 | `knowledge/standards/e2e-verification.md`、`testing-audit*.md`、`docs/automated-testing.md` + `skills/screenshot-delivery/` |
+| 测试、E2E、截图与用户看图 | `knowledge/standards/e2e-verification.md`、`testing-audit*.md`、`docs/automated-testing.md` + `skills/show-image-to-user/` |
 | UI、设计稿、移动端与视觉验收 | `knowledge/standards/ui-*.md`、`generated-design-implementation.md` + UI workflow |
 | 资源、音频、录入与配置 | `knowledge/standards/asset-pipeline.md`、`audio-assets.md`、`data-entry.md`、`game-config-package.md` + 对应 workflow |
 | React、类型、编码与架构基线 | `knowledge/standards/golden-rules.md`、`engine-*.md`、`docs/framework/`、`docs/architecture.md` |

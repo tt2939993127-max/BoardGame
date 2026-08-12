@@ -13,6 +13,7 @@ import { getBonusDiceSettlementHandler } from '../domain/bonusDiceSettlement';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
 import { reduce } from '../domain/reducer';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
 
 initializeCustomActions();
 registerDiceDefinition(moonElfDiceDefinition);
@@ -106,6 +107,20 @@ function eventsOfType(events: DiceThroneEvent[], type: string) {
 
 function reduceAll(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore {
     return events.reduce((acc, event) => reduce(acc, event as any), state);
+}
+
+function settlePendingBonusDice(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneEvent[] {
+    const requested = reduceAll(state, events);
+    const settlement = requested.pendingBonusDiceSettlement;
+    expect(settlement).toBeDefined();
+    if (!settlement) return events;
+    return buildBonusDiceSettlementEvents({
+        state: requested,
+        settlement,
+        random: { d: () => 1 } as any,
+        timestamp: 2000,
+        sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+    });
 }
 
 function getVolleySettlement(events: DiceThroneEvent[]) {
@@ -461,8 +476,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-moon-shadow-strike', {
                 random: () => 1 / 6, // d(6)→1 → bow
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
+            expect(eventsOfType(settlementEvents, 'CARD_DRAWN')).toHaveLength(1);
         });
 
         it('投出足面时抽1牌（非月面→抽牌）', () => {
@@ -472,10 +488,11 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-moon-shadow-strike', {
                 random: () => 4 / 6, // d(6)→4 → foot
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
             // 非月面→抽1牌（i18n描述："否则抽取1张牌"）
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
-            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
+            expect(eventsOfType(settlementEvents, 'CARD_DRAWN')).toHaveLength(1);
+            expect(eventsOfType(settlementEvents, 'STATUS_APPLIED')).toHaveLength(0);
         });
 
         it('投出月面时施加致盲+缠绕+锁定', () => {
@@ -484,9 +501,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-moon-shadow-strike', {
                 random: () => 1, // d(6)→6 → moon
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
             // 月面→致盲+缠绕+锁定（i18n描述："施加致盲、缠绕和锁定"）
-            const status = eventsOfType(events, 'STATUS_APPLIED');
+            const status = eventsOfType(settlementEvents, 'STATUS_APPLIED');
             expect(status).toHaveLength(3);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.BLINDED);
             expect((status[1] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
@@ -573,18 +591,20 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-watch-out', {
                 random: () => 1 / 6, // d(6)→1 → bow
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const bonusEvents = eventsOfType(events, 'BONUS_DAMAGE_ADDED');
+            const bonusEvents = eventsOfType(settlementEvents, 'BONUS_DAMAGE_ADDED');
             expect(bonusEvents).toHaveLength(1);
             expect((bonusEvents[0] as any).payload).toMatchObject({
                 playerId: '0',
                 amount: 2,
                 sourceCardId: 'watch-out',
             });
-            const reduced = reduceAll(state, events);
+            const requested = reduceAll(state, events);
+            const reduced = reduceAll(requested, settlementEvents);
             expect(reduced.pendingAttack?.bonusDamage).toBe(2);
             expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(2);
-            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
+            expect(eventsOfType(settlementEvents, 'STATUS_APPLIED')).toHaveLength(0);
             const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
             expect(bonusDieEvents).toHaveLength(1);
             expect((bonusDieEvents[0] as any).payload.effectKey).toBe('bonusDie.effect.watchOut.bow');
@@ -596,8 +616,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-watch-out', {
                 random: () => 1 / 6, // d(6)→1 → bow
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const reduced = reduceAll(state, events);
+            const requested = reduceAll(state, events);
+            const reduced = reduceAll(requested, settlementEvents);
             expect(reduced.pendingAttack).toBeNull();
             expect((reduced.players['0'] as any).pendingBonusDamage).toBe(2);
         });
@@ -608,8 +630,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-watch-out', {
                 random: () => 4 / 6, // d(6)→4 → foot
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const status = eventsOfType(events, 'STATUS_APPLIED');
+            const status = eventsOfType(settlementEvents, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
             const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
@@ -623,8 +646,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-action-watch-out', {
                 random: () => 1, // d(6)→6 → moon
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const status = eventsOfType(events, 'STATUS_APPLIED');
+            const status = eventsOfType(settlementEvents, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.BLINDED);
             const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');

@@ -113,7 +113,7 @@
    - 移除 `handleShadowShankDamage` 中的 `bonusCp` 重复计算
 
 2. `src/games/dicethrone/domain/customActions/pyromancer.ts`
-   - 修改 `burn-down-2-resolve` 的 `limit` 参数从 4 改为 99
+   - 历史记录更正：2026-08-12 已确认 99 是错误放宽；`burn-down-2-resolve` 应保持上限 4
 
 ### 测试修复
 3. `apps/api/test/feedback.e2e-spec.ts`

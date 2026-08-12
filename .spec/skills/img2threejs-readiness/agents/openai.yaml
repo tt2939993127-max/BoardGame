@@ -1,0 +1,4 @@
+interface:
+  display_name: "Img2ThreeJS Readiness"
+  short_description: "Require official img2threejs tools before model generation."
+  default_prompt: "Use the img2threejs readiness gate before any reference-image-to-Three.js model task."

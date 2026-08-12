@@ -1,0 +1,4 @@
+interface:
+  display_name: "音效对接"
+  short_description: "通用音效匹配、中文名汇报、对象绑定、试听与交付流程"
+  default_prompt: "Use $audio-integration to match sound effects, separate generic versus object-specific bindings, and report Chinese-friendly names plus ids for auditioning."

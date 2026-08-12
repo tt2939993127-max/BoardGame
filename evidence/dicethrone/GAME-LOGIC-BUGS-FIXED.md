@@ -1,6 +1,6 @@
 # 游戏逻辑专项修复证据
 
-> 2026-06-06 当前有效口径：本文只保留 Shadow Thief `Shadow Shank + Sneak Attack` 与 Pyromancer `Burn Down II` 这两条历史游戏逻辑问题的专项修复证据，不代表 DiceThrone 全体英雄、任一单英雄，或四位新英雄整批当前已经审计完成。它现在只能证明这两条当轮命中的旧逻辑 bug 被修掉并回归过，不能外推成 DiceThrone 当前整体已收口。
+> 2026-08-12 更正：本文关于 Pyromancer `Burn Down II` 的旧结论曾误把卡图中的“至多 4 个火焰专精”录成“任意数量”，并据此放宽实现上限。该结论已失效；当前规则与回归以卡图原文为准：获得 1 个火焰专精后，至多移除 4 个，每个造成 4 点不可防御伤害。Shadow Thief 条目不受本次更正影响。
 
 **修复时间**: 2026-03-04  
 **状态**: 当轮专项完成
@@ -45,37 +45,35 @@ const damageAmt = currentCp + 5;
 
 ---
 
-### 2. Pyromancer Burn Down II FM 消耗上限错误 ✅
+### 2. Pyromancer Burn Down II FM 消耗上限错误（2026-08-12 更正）
 
 **问题描述**:
 - 燃烧殆尽 II（Burn Down II）技能
-- 描述："移除任意数量精通"
-- 实际只能移除最多 4 个精通（与 I 级相同）
+- 卡图原文："移除至多 4 个火焰专精"
+- 因此 II 级与 I 级同样最多移除 4 个；区别是每个专精造成 4 点不可防御伤害。
 
 **根本原因**:
-- `burn-down-2-resolve` 的 `limit` 参数设置为 4
-- 应该是 99（无限制）
+- 旧录入把“至多 4 个”遗漏成“任意数量”，导致 `burn-down-2-resolve` 的上限被错误改为 99。
 
 **技能描述对比**:
-- burn-down（I 级）："移除最多4个火焰精通，每移除1造成3点不可防御伤害"（limit=4）
-- burn-down-2（II 级）："移除任意数量精通，每移除1精通造成4不可防御伤害"（limit=99）
+- burn-down（I 级）："移除最多 4 个火焰精通，每移除 1 个造成 3 点不可防御伤害"（上限 4）
+- burn-down-2（II 级）："移除至多 4 个火焰专精，每移除 1 个造成 4 点不可防御伤害"（上限 4）
 
 **修复方案**:
 ```typescript
-// 修复前
-registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 4), { categories: ['damage', 'resource'] });
-
-// 修复后
+// 错误状态
 registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 99), { categories: ['damage', 'resource'] });
+
+// 2026-08-12 更正后
+registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 4), { categories: ['damage', 'resource'] });
 ```
 
 **测试结果**:
-- ✅ `burn-down-2-resolve (焚尽 II) > 获得1FM后消耗全部，每个4点伤害` - 通过
-- ✅ 所有 41 个 Pyromancer 测试通过
+- 本次回归必须覆盖“已有 5 个火焰专精时，只消耗 4 个、造成 16 点伤害，并留下 1 个”。
 
 **影响范围**:
-- 只影响 Pyromancer 的 Burn Down II 技能
-- 修复后可以消耗所有精通（最多 5 个）
+- 影响 Pyromancer 的 Burn Down II 技能结算与中英文规则描述。
+- 更正后最多消耗 4 个火焰专精，最高造成 16 点不可防御伤害。
 
 ---
 
@@ -114,7 +112,7 @@ registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx,
    - 移除 `handleShadowShankDamage` 中的 `bonusCp` 重复计算
 
 2. `src/games/dicethrone/domain/customActions/pyromancer.ts`
-   - 修改 `burn-down-2-resolve` 的 `limit` 参数从 4 改为 99
+   - 2026-08-12 将 `burn-down-2-resolve` 的错误上限从 99 更正为 4
 
 ---
 

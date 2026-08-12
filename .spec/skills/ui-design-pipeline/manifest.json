@@ -1,0 +1,37 @@
+{
+  "name": "ui-design-pipeline",
+  "kind": "skill",
+  "version": "0.1.2",
+  "status": "incubating",
+  "risk_level": "medium",
+  "owner": "auto",
+  "source_cases": [
+    "https://alibaba-cloud-design.github.io/vibe-designing-playbook",
+    "Project new-game UI workflow",
+    "Commercial card-game UI rework feedback"
+  ],
+  "last_eval_at": "2026-07-15",
+  "promote_policy": "L1",
+  "entrypoint": "SKILL.md",
+  "eval": {
+    "cases": "eval_cases.json",
+    "last_result": "quick_validate_passed"
+  },
+  "ownership_scope": "self",
+  "source_type": "local",
+  "evolution_lane": "direct_upgrade",
+  "changelog": [
+    {
+      "date": "2026-07-15",
+      "change": "Created global UI Design I/O pipeline skill."
+    },
+    {
+      "date": "2026-07-25",
+      "change": "Added reference-backed UI baseline workflow for mature commercial UI patterns and screenshot-chain validation."
+    },
+    {
+      "date": "2026-07-25",
+      "change": "Added exploratory UI workflow for domains with no standard answer: constraints, design axes, falsifiable directions, and decision matrix."
+    }
+  ]
+}

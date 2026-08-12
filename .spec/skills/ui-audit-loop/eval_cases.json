@@ -1,0 +1,83 @@
+{
+  "cases": [
+    {
+      "id": "e2e-green-but-target-invisible",
+      "type": "positive",
+      "prompt": "E2E 已经能点击三个目标，截图里目标素材却是空块，而且高亮盖住本体。你看 UI 有没有问题？",
+      "expected": {
+        "trigger": true,
+        "verdict": "REVISE",
+        "hard_failures": ["asset_not_rendered", "target_occluded"],
+        "must_not_accept": ["dom_visible", "click_succeeded", "e2e_passed"]
+      }
+    },
+    {
+      "id": "mobile-overlap-and-small-targets",
+      "type": "positive",
+      "prompt": "审计移动端真实页面截图，底部按钮压住卡牌，几个关键点击区域只有 28px。没过就继续重构。",
+      "expected": {
+        "trigger": true,
+        "verdict": "REVISE",
+        "required_actions": ["inspect_original_screenshot", "fix_overlap", "enforce_44px_targets", "recapture_same_state", "reaudit"]
+      }
+    },
+    {
+      "id": "same-source-final-pass",
+      "type": "positive",
+      "prompt": "当前工作区刚跑完真实交互截图，请做最终玩家视角审计。",
+      "fixture": {
+        "score": 94,
+        "hard_failures": [],
+        "same_source": true,
+        "screenshot_postdates_edit": true
+      },
+      "expected": {
+        "trigger": true,
+        "verdict": "PASS",
+        "required_actions": ["write_visual_judgment", "open_final_original_with_show_image_to_user"]
+      }
+    },
+    {
+      "id": "stale-evidence-boundary",
+      "type": "boundary",
+      "prompt": "代码刚改完，但 evidence 目录里只有昨天另一条分支的通过截图，先按那个图算通过吧。",
+      "expected": {
+        "trigger": true,
+        "verdict": "REVISE",
+        "reason": "The screenshot is stale and not from the current runtime source.",
+        "required_action": "capture_current_same_source_screenshot"
+      }
+    },
+    {
+      "id": "partial-centering-is-not-composition-centering",
+      "type": "positive",
+      "prompt": "目标房间在屏幕中央，但顶部指令条从屏幕中线向右展开。E2E 只检查了房间中心和指令条高度，这张图能过吗？",
+      "expected": {
+        "trigger": true,
+        "verdict": "REVISE",
+        "hard_failures": ["task_elements_do_not_share_composition_axis"],
+        "required_actions": ["measure_banner_center", "measure_target_center", "assert_shared_viewport_axis", "recapture_and_reaudit"]
+      }
+    },
+    {
+      "id": "readable-skill-showcase-auto-dismiss",
+      "type": "positive",
+      "prompt": "其他玩家的进攻技能特写刚出现就自己关闭了，代码里有 3 秒 autoDismiss。E2E 只检查它出现过一瞬间，这张 UI 能过吗？",
+      "expected": {
+        "trigger": true,
+        "verdict": "REVISE",
+        "hard_failures": ["readable_showcase_auto_dismissed"],
+        "required_actions": ["remove_short_timer", "assert_still_visible_after_old_timeout", "assert_explicit_close_only"]
+      }
+    },
+    {
+      "id": "backend-only-review",
+      "type": "negative",
+      "prompt": "审查这个数据库迁移有没有事务风险，没有任何 UI 改动。",
+      "expected": {
+        "trigger": false,
+        "reason": "A backend-only review has no visual acceptance surface."
+      }
+    }
+  ]
+}

@@ -47,9 +47,8 @@ Daze 机制已修复为正确实现，但旧测试基于错误理解编写，需
 - **修复**: 同上
 
 ### 4. `pyromancer-behavior.test.ts`
-- **测试**: "burn-down-2-resolve (焚尽 II) > 获得1FM后消耗全部，每个4点伤害"
-- **问题**: 期望消耗 5 个 FM，实际只有 4 个
-- **分析**: 这个测试与 Daze 无关，可能是其他问题
+- **历史测试**: "burn-down-2-resolve (焚尽 II) > 获得1FM后消耗全部，每个4点伤害"
+- **2026-08-12 更正**: 该期望源于把卡图“至多 4 个火焰专精”误录为无限制；正确行为是至多消耗 4 个，每个造成 4 点不可防御伤害。
 
 ### 5. `shadow-shank-sneak-attack-bug.test.ts`
 - **测试1**: "终极技能 shadow-shank + sneak_attack：伤害应包含伏击奖励骰"

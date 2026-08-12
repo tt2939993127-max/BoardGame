@@ -18,7 +18,7 @@
    - 项目 skill 必须包含实际需要的通用规则，以及项目专属命令、路径、脚本和验收口径
    - 系统 skill 的后续更新不会自动覆盖项目；需要吸收时，先裁决差异和影响，再迁入该项目 skill
    - 同主题项目 skill 已存在时，不再把系统同名 skill 当作本项目的第二个执行入口
-   - 若项目 skill 只是对系统 canonical-source 的项目适配（例如 `screenshot-delivery` 适配系统 `show-image-to-user`），项目 skill 只承载项目增量；系统正文仍是唯一规则来源，不得把它理解成系统规则的复制品
+   - 已迁入的项目 skill（包括 `show-image-to-user`、`ui-audit-loop`、`ui-design-pipeline`、`audio-integration`、`config-review-workflow` 等）都是项目执行正文：协作者只读项目副本；系统版本只作为后续人工比较的上游候选，不是本项目第二入口
    - 不要把本项目事故、项目口径、项目补丁反写回 `D:\\codex-home\\skills\\**`
 
 ## 目录硬规则
@@ -66,30 +66,37 @@
 - `merge-pr-workflow`
 - `rule-bug-fix-workflow`
 - `safe-image-reading`
-- `screenshot-delivery`
+- `show-image-to-user`
 - `smashup-faction-addition`
 - `tutorial-workflow`
+- `audio-integration`
+- `config-review-workflow`
+- `game-design`
+- `game-ui-design`
+- `img2threejs-readiness`
+- `img2threejs`
+- `planning-with-files`
+- `pua`
+- `skill-governance`
+- `ui-audit-loop`
+- `ui-design-pipeline`
+- `ui-ux-pro-max`
 
 ### 系统 skill 备选（项目没有同主题 skill 时才读取）
 
-- `audio-integration`
 - `github-pr-review-merge`
 - `tdd`
-- `ui-ux-pro-max`
 
 ### 仓库内辅助 skill
 
 - `brainstorming`
-- `planning-with-files`
 
 ## 特殊说明
 
 - `mobile-adaptive`
   这是仓库内仍在维护的一份 OpenSpec/mobile-first workflow。是否使用，按具体任务决定。
-- `mobile-responsiveness`
-  这是项目内的移动端路由 skill；新任务默认优先走 `adapt-game-mobile`。
 - `pua-debugging`
-  这是项目内的恢复/收敛路由 skill；新任务默认直接使用系统 `pua`。
+  这是项目内的恢复/收敛路由 skill；新任务默认直接使用项目 `pua`。
 
 ## 最低门禁
 
@@ -105,4 +112,3 @@
 8. 如果未来第 100 个游戏接进来，这条规则会帮它避坑，还是会强迫它照抄当前游戏的章节答案、起手路线或专属机制？
 9. 我现在补进去的到底是“跨游戏判断方法”，还是“当前这个游戏这次最顺手的答案”？如果是后者，为什么还没有下沉？
 10. 如果用户此刻要我“先更 skill”，我补进去的是能拦很多游戏共性错误的门禁，还是只是把当前这款游戏的方案换个地方再写一遍？
-

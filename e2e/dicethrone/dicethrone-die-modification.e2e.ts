@@ -1,4 +1,9 @@
 import { test, expect } from '../framework';
+import {
+    dispatchDiceThroneCommand,
+    setDiceThroneBonusDiceValues,
+    setDiceThroneDiceValues,
+} from '../helpers/dicethrone';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../../src/games/dicethrone/heroes/zhanshujia/tokens';
 import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
@@ -50,6 +55,23 @@ async function clickAbilitySlot(page: any, slotId: string): Promise<void> {
     const slot = page.locator(`[data-testid="player-board-surface"] [data-ability-slot="${slotId}"]`).first();
     await expect(slot).toHaveAttribute('data-can-click', 'true', { timeout: 10000 });
     await slot.click();
+}
+
+async function openActionLogPanel(page: any): Promise<any> {
+    const panel = page.getByTestId('fab-panel-action-log');
+    if (await panel.isVisible().catch(() => false)) return panel;
+
+    const actionLogButton = page.locator('[data-fab-id="action-log"]').first();
+    if (!await actionLogButton.isVisible().catch(() => false)) {
+        const mainButton = page.locator('[data-fab-id="exit"]').first();
+        if (await mainButton.isVisible().catch(() => false)) {
+            await mainButton.click();
+        }
+    }
+    await expect(actionLogButton).toBeVisible({ timeout: 5000 });
+    await actionLogButton.click();
+    await expect(panel).toBeVisible({ timeout: 5000 });
+    return panel;
 }
 
 test.describe('DiceThrone - 选择骰子修改', () => {
@@ -956,167 +978,77 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         await game.screenshot('闪避失败后正式收口并正常掉血', testInfo);
     });
 
-    test('战术家在右侧奖励骰专用入口存在时仍可主动使用战术优势重掷', async ({ page, game }, testInfo) => {
+    test('战术家真实战争贩子奖励骰可用战术优势重投军刀，并在确认后才进入 5 点攻击结算', async ({ page, game }, testInfo) => {
         await game.openTestGame('dicethrone', { playerID: '0' });
         await game.setupScene({
             gameId: 'dicethrone',
+            randomQueue: [randomValueForDieFace(3), randomValueForDieFace(1)],
             player0: {
                 resources: { CP: 2, HP: 50 },
+                tokens: { [TOKEN_IDS.TACTICAL_ADVANTAGE]: 1 },
             },
             player1: {
                 resources: { CP: 2, HP: 50 },
             },
             currentPlayer: '0',
-            phase: 'main1',
+            phase: 'offensiveRoll',
             extra: {
                 selectedCharacters: { '0': 'zhanshujia', '1': 'barbarian' },
                 hostStarted: true,
+                activePlayerId: '0',
+                rollCount: 1,
+                rollLimit: 3,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 1, isKept: false },
+                    { id: 1, value: 4, isKept: false },
+                    { id: 2, value: 4, isKept: false },
+                    { id: 3, value: 4, isKept: false },
+                    { id: 4, value: 2, isKept: false },
+                ],
             },
         });
-        await game.waitForPhase('main1', 5000);
 
-        await page.evaluate((scenario) => {
-            const harness = (window as Window & {
-                __BG_TEST_HARNESS__?: {
-                    random?: { setQueue?: (values: number[]) => void };
-                    state?: { get?: () => any; set?: (state: any) => void | Promise<void> };
-                };
-            }).__BG_TEST_HARNESS__;
-            const current = harness?.state?.get?.();
-            if (!current || !harness?.state?.set) {
-                throw new Error('TestHarness state 不可用');
-            }
+        const warMongerSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="sky"]').first();
+        await expect(warMongerSlot).toHaveAttribute('data-resolved-ability-id', 'war-monger', { timeout: 10000 });
+        await clickAbilitySlot(page, 'sky');
+        await expect.poll(async () => (await game.getState())?.core?.pendingAttack?.sourceAbilityId, { timeout: 10000 })
+            .toBe('war-monger');
 
-            const settlementId = 'e2e-zhanshujia-passive-bonus-reroll';
-            const currentRollContext = {
-                id: `bonus:${settlementId}`,
-                kind: 'bonus',
-                ownerPlayerId: '0',
-                targetPlayerId: '1',
-                sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
-                dice: [{
-                    id: 0,
-                    definitionId: 'zhanshujia-dice',
-                    value: 3,
-                    symbol: 'banner',
-                    symbols: ['banner'],
-                    isKept: false,
-                    ownerId: '0',
-                    displayOnly: true,
-                }],
-                status: 'open',
-                policy: {
-                    modifiableBy: 'owner',
-                    rerollableBy: 'owner',
-                    allowPassiveReroll: true,
-                    allowDiceCardTargeting: true,
-                    ultimateLocked: false,
-                    blocksPhaseFlow: true,
-                },
-                settlement: {
-                    mode: 'none',
-                    metadata: { pendingBonusDiceSettlementId: settlementId },
-                },
-                display: { surface: 'diceTray', replayOnly: false },
-            };
-            const pendingBonusDiceSettlement = {
-                id: settlementId,
-                sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
-                attackerId: '0',
-                targetId: '1',
-                dice: [{
-                    index: 0,
-                    value: 3,
-                    face: 'banner',
-                    effectKey: 'bonusDie.effect.zhanshujiaWarRoom',
-                    effectParams: { value: 3, amount: 2 },
-                }],
-                rerollCostTokenId: scenario.unavailableBonusRerollTokenId,
-                rerollCostAmount: 1,
-                rerollCount: 0,
-                maxRerollCount: 1,
-                readyToSettle: false,
-                displayOnly: true,
-                showTotal: false,
-                resolutionMode: 'none',
-                allowDiceModification: false,
-            };
-
-            harness.random?.setQueue?.([0.999]);
-            return harness.state.set({
-                ...current,
-                sys: {
-                    ...current.sys,
-                    phase: 'offensiveRoll',
-                    interaction: { current: undefined, queue: [] },
-                    responseWindow: { current: undefined },
-                },
-                core: {
-                    ...current.core,
-                    activePlayerId: '0',
-                    rollCount: 1,
-                    rollLimit: 3,
-                    rollConfirmed: false,
-                    currentRollContext,
-                    pendingBonusDiceSettlement,
-                    pendingAttack: {
-                        attackerId: '0',
-                        defenderId: '1',
-                        sourceAbilityId: 'war-monger',
-                        isDefendable: true,
-                        damage: 5,
-                        bonusDamage: 0,
-                        attackModifierBonusDamage: 0,
-                        damageResolved: false,
-                        resolvedDamage: 0,
-                        preDefenseResolved: false,
-                        offensiveRollEndTokenResolved: false,
-                    },
-                    players: {
-                        ...current.core.players,
-                        '0': {
-                            ...current.core.players['0'],
-                            passiveAbilities: scenario.passiveAbilities,
-                            tokens: {
-                                ...current.core.players['0'].tokens,
-                                [scenario.tacticalAdvantageTokenId]: 1,
-                            },
-                        },
-                    },
-                },
-            });
-        }, {
-            passiveAbilities: ZHANSHUJIA_PASSIVE_ABILITIES,
-            tacticalAdvantageTokenId: TOKEN_IDS.TACTICAL_ADVANTAGE,
-            unavailableBonusRerollTokenId: TOKEN_IDS.TAIJI,
-        });
+        await page.locator('[data-tutorial-id="advance-phase-button"]').click();
 
         await expect.poll(async () => {
             const state = await game.getState();
+            const pendingDamageEvents = (state?.sys?.eventStream?.entries ?? []).filter((entry: any) => (
+                entry.event?.type === 'DAMAGE_DEALT'
+                && entry.event?.payload?.sourceAbilityId === 'war-monger'
+            ));
             return {
-                rollCount: state?.core?.rollCount ?? null,
                 rollKind: state?.core?.currentRollContext?.kind ?? null,
                 dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
                 tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+                hasAttackDamage: typeof state?.core?.pendingAttack?.damage === 'number',
+                pendingDamageEvents: pendingDamageEvents.length,
             };
-        }, { timeout: 10000 }).toMatchObject({
-            rollCount: 1,
+        }, { timeout: 10000 }).toEqual({
             rollKind: 'bonus',
             dieValue: 3,
-            tacticalAdvantage: 1,
+            tacticalAdvantage: 2,
+            hasAttackDamage: false,
+            pendingDamageEvents: 0,
         });
-
         const passiveReroll = page.getByTestId('passive-action-zhanshujia-tactical-advantage-1');
         await expect(passiveReroll).toBeVisible({ timeout: 10000 });
         await expect(passiveReroll).toBeEnabled();
-        await game.screenshot('01-战术家-奖励骰主动重掷前', testInfo);
+        await game.screenshot('01-战争贩子-奖励骰待战术优势重投', testInfo);
+        await setDiceThroneBonusDiceValues(page, [1]);
         await passiveReroll.click();
 
         const bonusDie = page.getByTestId('die-button-0').first();
         await expect(bonusDie).toBeVisible({ timeout: 5000 });
         await expect(bonusDie).toHaveAttribute('data-display-only', 'true');
         await expect(bonusDie).toHaveAttribute('data-clickable', 'true');
-        await game.screenshot('02-战术家-主动重掷模式下奖励骰可点击', testInfo);
+        await game.screenshot('02-战争贩子-战术优势选中临时骰', testInfo);
         await bonusDie.click();
 
         await expect.poll(async () => {
@@ -1124,34 +1056,94 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             return {
                 dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
                 pendingDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
+                pendingDieFace: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.face ?? null,
                 tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
-                pendingAttack: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+                pendingAttack: {
+                    sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+                    hasDamage: typeof state?.core?.pendingAttack?.damage === 'number',
+                },
+                pendingDamageEvents: (state?.sys?.eventStream?.entries ?? []).filter((entry: any) => (
+                    entry.event?.type === 'DAMAGE_DEALT'
+                    && entry.event?.payload?.sourceAbilityId === 'war-monger'
+                )).length,
             };
-        }, { timeout: 10000 }).toMatchObject({
-            dieValue: 6,
-            pendingDieValue: 6,
-            tacticalAdvantage: 0,
-            pendingAttack: 'war-monger',
+        }, { timeout: 10000 }).toEqual({
+            dieValue: 1,
+            pendingDieValue: 1,
+            pendingDieFace: 'sabre',
+            tacticalAdvantage: 1,
+            pendingAttack: { sourceAbilityId: 'war-monger', hasDamage: false },
+            pendingDamageEvents: 0,
         });
-        await expect(bonusDie).toHaveAttribute('data-display-value', '6');
+        await expect(bonusDie).toHaveAttribute('data-display-value', '1');
         await expect.poll(() => bonusDie.getByTestId('dice-2d').getAttribute('data-roll-animation'), { timeout: 5000 })
             .toBe('settled');
-        await game.screenshot('03-战术家-攻击已选定时重投奖励骰后攻击仍在', testInfo);
+        const actionLogPanel = await openActionLogPanel(page);
+        await expect(actionLogPanel.getByTestId('hud-action-log-row').filter({ hasText: /重投奖励骰|Rerolled bonus die/ })).toBeVisible();
+        await game.screenshot('03-战争贩子-重投军刀与操作日志', testInfo);
+        await page.locator('[data-fab-id="action-log"]').click();
 
         await settleCurrentBonusDice(page, () => game.getState(), {
-            sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
+            sourceAbilityId: 'war-monger',
         });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
+                phase: state?.sys?.phase ?? null,
                 pendingSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
-                pendingAttack: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+                pendingAttack: state?.core?.pendingAttack
+                    ? {
+                        sourceAbilityId: state.core.pendingAttack.sourceAbilityId,
+                        damage: state.core.pendingAttack.damage,
+                        isDefendable: state.core.pendingAttack.isDefendable,
+                    }
+                    : null,
             };
-        }, { timeout: 10000 }).toMatchObject({
+        }, { timeout: 10000 }).toEqual({
+            phase: 'defensiveRoll',
             pendingSettlement: null,
-            pendingAttack: 'war-monger',
+            pendingAttack: { sourceAbilityId: 'war-monger', damage: 5, isDefendable: true },
         });
-        await game.screenshot('04-战术家-确认临时骰后攻击仍待防御结算', testInfo);
+        await game.screenshot('04-战争贩子-确认军刀后进入五点可防御攻击', testInfo);
+
+        // 同一真实对局继续由防守方完成防御。野蛮人没有心面，不能抵消这 5 点伤害。
+        await setDiceThroneDiceValues(page, [1, 1, 1]);
+        await dispatchDiceThroneCommand(page, {
+            type: 'ROLL_DICE',
+            playerId: '1',
+            payload: {},
+        });
+        await dispatchDiceThroneCommand(page, {
+            type: 'CONFIRM_ROLL',
+            playerId: '1',
+            payload: {},
+        });
+        await dispatchDiceThroneCommand(page, {
+            type: 'ADVANCE_PHASE',
+            playerId: '1',
+            payload: {},
+        });
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const warMongerDamage = (state?.sys?.eventStream?.entries ?? [])
+                .map((entry: any) => entry.event)
+                .find((event: any) => event?.type === 'DAMAGE_DEALT'
+                    && event?.payload?.sourceAbilityId === 'war-monger');
+            return {
+                phase: state?.sys?.phase ?? null,
+                pendingAttack: state?.core?.pendingAttack ?? null,
+                defenderHp: state?.core?.players?.['1']?.resources?.hp ?? null,
+                damageAmount: warMongerDamage?.payload?.amount ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            phase: 'main2',
+            pendingAttack: null,
+            defenderHp: 45,
+            damageAmount: 5,
+        });
+        await expect(page.getByTestId('dt-top-header-1-hp')).toHaveText('45', { timeout: 10000 });
+        await expect(page.locator('[data-floating-text-preset="dicethrone-damage"]')).toHaveCount(0, { timeout: 10000 });
+        await game.screenshot('05-战争贩子-防御完成五点伤害已扣血', testInfo);
     });
 
     test('战争贩子军刀奖励骰确认后进入防御投掷，不能以零伤害提前收口', async ({ page, game }, testInfo) => {

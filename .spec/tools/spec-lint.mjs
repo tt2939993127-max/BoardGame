@@ -35,8 +35,10 @@ function checkFrontmatter(path, expectedName) {
   if (lines[0] !== '---') return fail(path, '缺少 frontmatter')
   const end = lines.indexOf('---', 1)
   if (end === -1) return fail(path, 'frontmatter 未关闭')
-  const fields = lines.slice(1, end).filter((line) => line.trim()).map((line) => line.split(':', 1)[0].trim())
-  if (fields.sort().join(',') !== 'description,name') return fail(path, 'frontmatter 只允许 name 和 description')
+  const fields = lines.slice(1, end).filter((line) => line.trim() && !line.startsWith(' ') && !line.startsWith('-')).map((line) => line.split(':', 1)[0].trim())
+  for (const requiredField of ['name', 'description']) {
+    if (!fields.includes(requiredField)) return fail(path, `frontmatter 缺少 ${requiredField}`)
+  }
   const name = lines.slice(1, end).find((line) => line.startsWith('name:'))?.slice(5).trim()
   if (name !== expectedName) fail(path, `name「${name ?? ''}」与目录「${expectedName}」不一致`)
 }
@@ -99,6 +101,22 @@ for (const path of walk(join(spec, 'skills'), (path) => basename(path) === 'SKIL
   checkFrontmatter(path, basename(dirname(path)))
 }
 
+const showImageSkill = join(spec, 'skills', 'show-image-to-user', 'SKILL.md')
+const legacyScreenshotDelivery = join(spec, 'skills', 'screenshot-delivery')
+const imageSequenceLabeler = join(spec, 'skills', 'show-image-to-user', 'scripts', 'label-image-sequence.py')
+if (!exists(showImageSkill)) fail(showImageSkill, '项目用户开图唯一执行 skill 缺失')
+if (exists(legacyScreenshotDelivery)) fail(legacyScreenshotDelivery, '已删除的 screenshot-delivery 不得作为第二个开图入口复活')
+if (!exists(imageSequenceLabeler)) fail(imageSequenceLabeler, 'PureRef 多图标记脚本缺失')
+if (exists(showImageSkill) && !read(showImageSkill).includes('`Viewed Image` is forbidden before explicit opening is delivered.')) {
+  fail(showImageSkill, '缺少“用户明确打开前禁止 Viewed Image”的硬门禁')
+}
+
+for (const path of walk(join(spec, 'knowledge'), (path) => path.endsWith('.md')).concat(walk(join(spec, 'skills'), (path) => path.endsWith('.md')))) {
+  if (/D:\\+codex-home\\+skills\\+show-image-to-user/i.test(read(path))) {
+    fail(path, '活动项目规范不得把系统 show-image-to-user 当作项目执行入口')
+  }
+}
+
 if (exists(join(root, '.gitignore'))) {
   const ignore = read(join(root, '.gitignore'))
   for (const path of ['/.codex/skill/', '/.agents/skills/', '/.claude/skills/']) {
@@ -128,6 +146,15 @@ for (const path of activeSpecMarkdown) {
     fail(path, 'AI 规范目录混入了 OpenSpec 托管指令')
   }
   if (body.includes('docs/ai-rules/')) fail(path, '活跃 AI 规范仍引用旧规范路径')
+}
+
+for (const dir of ['knowledge', 'skills', 'rules']) {
+  for (const path of walk(join(spec, dir), (path) => path.endsWith('.md'))) {
+    const body = read(path)
+    if (body.includes('D:\\codex-home\\skills\\') || body.includes('D:/codex-home/skills/')) {
+      fail(path, '项目活动规范不得要求读取系统 skill；迁入项目副本后改为项目入口')
+    }
+  }
 }
 
 const standards = walk(join(spec, 'knowledge', 'standards'), (path) => path.endsWith('.md') && basename(path) !== 'README.md')

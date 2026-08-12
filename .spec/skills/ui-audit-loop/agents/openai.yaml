@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI 审计循环"
+  short_description: "基于真实截图审计 UI，未通过时持续重构并重新验收"
+  default_prompt: "使用 $ui-audit-loop 审计当前真实 UI 截图，未通过就继续重构并重新验收。"

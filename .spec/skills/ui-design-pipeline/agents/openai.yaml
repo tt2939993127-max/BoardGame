@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI Design Pipeline"
+  short_description: "复杂 UI 设计生成链路、执行契约和评估回流工作流"
+  default_prompt: "Use ui-design-pipeline to turn a UI request into design declarations, implementation contracts, and evaluator feedback before image generation or frontend implementation."

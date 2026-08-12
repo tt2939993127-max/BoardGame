@@ -17,6 +17,7 @@ import type {
     StatusRemovedEvent,
     TokenGrantedEvent,
     TokenUsedEvent,
+    BonusDieRolledEvent,
 } from '../domain/types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { createInitializedState, fixedRandom, fistAttackAbilityId } from './test-utils';
@@ -645,6 +646,51 @@ describe('formatDiceThroneActionEntry', () => {
         const statusSeg = findI18nSegment(entries[0].segments, 'actionLog.statusRemoved');
         expect(statusSeg?.params?.statusLabel).toBe('statusEffects.daze.name');
         expect(statusSeg?.paramI18nKeys).toContain('statusLabel');
+    });
+
+    it('奖励骰出现和被动重投临时骰应写入可区分的操作日志', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'USE_PASSIVE_ABILITY',
+            playerId: '0',
+            payload: { passiveId: 'zhanshujia-tactical-advantage', actionIndex: 1, targetDieId: 0 },
+            timestamp: 50,
+        };
+        const bonusRolled: BonusDieRolledEvent = {
+            type: 'BONUS_DIE_ROLLED',
+            payload: { value: 3, face: 'banner', playerId: '0', targetPlayerId: '1' },
+            timestamp: 49,
+        };
+        const rerolled = {
+            type: 'DIE_REROLLED',
+            payload: {
+                dieId: 0,
+                oldValue: 3,
+                newValue: 1,
+                playerId: '0',
+                target: 'pendingBonusDie',
+            },
+            timestamp: 50,
+        } as GameEvent;
+
+        const bonusEntries = normalizeEntries(formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [bonusRolled] as GameEvent[],
+        }));
+        const rerollEntries = normalizeEntries(formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [rerolled],
+        }));
+
+        const bonusEntry = bonusEntries.find(entry => entry.kind === 'BONUS_DIE_ROLLED');
+        expect(bonusEntry).toBeTruthy();
+        expect(getI18nKeys(bonusEntry!.segments)).toContain('actionLog.bonusDieRolled');
+        const rerollEntry = rerollEntries.find(entry => entry.kind === 'DIE_REROLLED');
+        expect(rerollEntry).toBeTruthy();
+        const rerollSegment = findI18nSegment(rerollEntry!.segments, 'actionLog.bonusDieRerolled');
+        expect(rerollSegment?.params).toMatchObject({ dieId: 1, oldValue: 3, newValue: 1 });
     });
 
 });

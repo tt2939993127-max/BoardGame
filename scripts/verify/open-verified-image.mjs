@@ -17,7 +17,7 @@ const usage = () => {
   --path <路径>     打开指定图片；可重复传入多次
   --paths <路径...> 依次打开多张指定图片
   --latest [目录]   递归查找目录下最后修改的一张图片，默认 test-results/evidence-screenshots
-  --viewer <system|pureref>  指定查看器；pureref 会一次性打开整批图片
+  --viewer <system|pureref>  指定查看器；默认 pureref，pureref 会一次性打开整批图片
   --pureref         等同于 --viewer pureref
   --dry-run         只解析路径，不实际打开
   --help            显示帮助
@@ -46,7 +46,7 @@ const parseArgs = (argv) => {
         path: null,
         paths: [],
         latest: null,
-        viewer: process.env.BG_IMAGE_VIEWER ?? 'system',
+        viewer: process.env.BG_IMAGE_VIEWER ?? 'pureref',
         dryRun: false,
         help: false,
     };

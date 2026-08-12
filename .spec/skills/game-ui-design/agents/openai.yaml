@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game UI Design"
+  short_description: "游戏 UI 规则转界面与验收流程"
+  default_prompt: "Use $game-ui-design to derive a game UI design from rules, assets, player tasks, and saturation states before creating a visual draft."

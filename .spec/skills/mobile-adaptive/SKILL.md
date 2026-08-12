@@ -19,30 +19,11 @@ description: "BoardGame 移动端优先适配与移植 workflow。新增游戏�
 - 涉及引擎系统/交互系统：`.spec/knowledge/standards/engine-systems.md`
 - 需要补 E2E：`docs/automated-testing.md`、`docs/testing-best-practices.md`
 
-## 规范来源（单一真实来源）
+## 职责与前置规格
 
-- `openspec/specs/mobile-adaptive/spec.md`
-- `openspec/specs/mobile-adaptive/design.md`
-
-如两者与代码现状冲突，以 spec 为准，必要时先更新 spec。
-
-## 移植目标（验收门禁）
-
-### 设备视口组（默认必须覆盖）
-
-- 手机竖屏：`390x844`
-- 手机竖屏大屏：`430x932`
-- 手机横屏：`844x390`
-- 手机横屏（XR）：`896x414`
-- 平板竖屏：`768x1024`
-- 平板横屏：`1024x768`
-
-### 关键验收
-
-- 不出现明显横向溢出（`pageOverflowX <= 1px`）
-- 不依赖整页缩放（root scaleX >= 0.99）
-- 核心战场与手牌区可见且可操作
-- tightLandscape（宽>=800 且高<=420）允许更松的 bottom 偏差，但不应出现明显遮挡
+- 产品应具备什么行为、断点与验收条件，只读 [`spec.md`](../../../openspec/specs/mobile-adaptive/spec.md) 和 [`design.md`](../../../openspec/specs/mobile-adaptive/design.md)。它们是产品规格，不能被本 workflow 替代。
+- 本文件只定义 AI 如何把该产品规格落地到当前仓库、如何选择源码与测试、如何记录证据；它不是第二份产品规格。
+- 产品行为有冲突时，停在 OpenSpec 规格处裁决；执行步骤、读取顺序或项目路径有冲突时，以本 workflow 为准。不得用“以 spec 为准”笼统覆盖两种不同职责。
 
 ## 工作流（按顺序执行）
 
@@ -89,10 +70,10 @@ description: "BoardGame 移动端优先适配与移植 workflow。新增游戏�
 
 ### 7) E2E（强制）+ 证据
 
-- 在对应 `e2e/<game>-*.e2e.ts` 中补充 viewport 组
+- 按 OpenSpec 产品规格选取要求覆盖的 viewport 组，并在对应 `e2e/<game>-*.e2e.ts` 中补齐。
 - 必须运行：`npm run test:e2e:ci -- <测试文件>`
 - 创建证据：`evidence/<gameId>-mobile-adaptive-e2e.md`
-- 证据必须包含截图 + 每张截图对应的 viewport 说明与结论
+- 证据必须包含截图、每张截图对应的 viewport、以及相对产品规格的结论。
 
 ## Cardia 作为参考实现
 

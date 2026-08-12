@@ -926,7 +926,7 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('meteor-2-resolve', resolveMeteor, { categories: ['damage', 'resource'] });
 
     registerCustomActionHandler('burn-down-resolve', (ctx) => resolveBurnDown(ctx, 3, 4), { categories: ['damage', 'resource'] });
-    registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 99), { categories: ['damage', 'resource'] });
+    registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 4), { categories: ['damage', 'resource'] });
 
     registerCustomActionHandler('ignite-resolve', (ctx) => resolveIgnite(ctx, 4, 2), { categories: ['damage', 'resource'] });
     registerCustomActionHandler('ignite-2-resolve', (ctx) => resolveIgnite(ctx, 5, 2), { categories: ['damage', 'resource'] });

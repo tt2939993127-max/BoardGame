@@ -683,7 +683,9 @@
     "dieModified": "Modified die #{{dieId}}: {{oldValue}} → {{newValue}}",
     "dieModifiedSource": "({{source}})",
     "dieRerolled": "Rerolled die #{{dieId}}: {{oldValue}} → {{newValue}}",
-    "dieRerolledSource": "({{source}})"
+    "dieRerolledSource": "({{source}})",
+    "bonusDieRolled": "Bonus die result: {{value}}",
+    "bonusDieRerolled": "Rerolled bonus die #{{dieId}}: {{oldValue}} → {{newValue}}"
   },
   "purify": {
     "title": "Use Purify",
@@ -2794,9 +2796,9 @@
     },
     "burn-down-2": {
       "name": "Burn Down II",
-      "description": "Gain 1 Fire Mastery. Activate Burn Down: each removed Fire Mastery deals 4 undefendable damage.",
+      "description": "Gain 1 Fire Mastery. Activate Burn Down: remove up to 4 Fire Mastery; each removed deals 4 undefendable damage.",
       "effects": {
-        "main": "Activate Burn Down: remove any number of Fire Mastery. Each removed deals 4 undefendable damage"
+        "main": "Activate Burn Down: remove up to 4 Fire Mastery. Each removed deals 4 undefendable damage"
       }
     },
     "ignite-2": {

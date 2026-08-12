@@ -1,0 +1,107 @@
+{
+  "cases": [
+    {
+      "id": "commercial-reference-backed-game-ui",
+      "prompt": "这个卡牌游戏 UI 完全不合格，直接对齐成熟商业案例，已有很多标准参考。",
+      "expected": {
+        "trigger": true,
+        "phase_sequence": [
+          "lock_problem_truth_entry_acceptance",
+          "produce_reference_baseline",
+          "produce_gap_matrix",
+          "produce_design_declarations",
+          "implement_against_gap_matrix",
+          "verify_with_multi_step_screenshot_chain"
+        ],
+        "artifacts": [
+          "reference_baseline",
+          "gap_matrix",
+          "spec",
+          "domain",
+          "design",
+          "components",
+          "craft",
+          "template",
+          "evaluator"
+        ]
+      }
+    },
+    {
+      "id": "new-game-ui-design-before-implementation",
+      "prompt": "给一个项目新增桌游，规则和素材已经录入，接下来要做主界面设计稿和界面实现。",
+      "expected": {
+        "trigger": true,
+        "phase_sequence": [
+          "lock_problem_truth_entry_acceptance",
+          "confirm_stage0_intake_complete",
+          "produce_design_declarations",
+          "produce_evaluator_contract",
+          "route_to_project_ui_workflow_or_implementation"
+        ],
+        "artifacts": [
+          "spec",
+          "domain",
+          "design",
+          "components",
+          "craft",
+          "template",
+          "evaluator"
+        ]
+      }
+    },
+    {
+      "id": "complex-dashboard-redesign",
+      "prompt": "重做一个 Agent 调度看板，要求状态、组件语义、视觉 token 和验收标准都稳定。",
+      "expected": {
+        "trigger": true,
+        "phase_sequence": [
+          "gather_existing_ui_and_design_system",
+          "produce_design_declarations",
+          "map_components",
+          "define_token_and_craft_contract",
+          "evaluate_with_issue_source_fix"
+        ],
+        "artifacts": [
+          "ui_spec",
+          "component_contract",
+          "visual_contract",
+          "evaluator_rubric"
+        ]
+      }
+    },
+    {
+      "id": "no-standard-answer-game-ui-exploration",
+      "prompt": "这个原创桌游没有现成商业 UI 标准答案，先帮我设计主界面方向，避免做成模板。",
+      "expected": {
+        "trigger": true,
+        "phase_sequence": [
+          "lock_problem_truth_entry_acceptance",
+          "produce_exploration_baseline",
+          "define_design_axes",
+          "produce_2_to_3_falsifiable_directions",
+          "score_decision_matrix",
+          "converge_winning_direction",
+          "define_screenshot_or_prototype_validation"
+        ],
+        "artifacts": [
+          "exploration_baseline",
+          "design_axes",
+          "hypothesis_risk_table",
+          "decision_matrix",
+          "spec",
+          "domain",
+          "template",
+          "evaluator"
+        ]
+      }
+    },
+    {
+      "id": "small-css-polish",
+      "prompt": "把这个按钮的 icon 和文字垂直对齐一下。",
+      "expected": {
+        "trigger": false,
+        "reason": "Small local UI polish should use the project UI rules or ui-ux-pro-max directly; full design pipeline is unnecessary."
+      }
+    }
+  ]
+}

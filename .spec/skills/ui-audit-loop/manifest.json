@@ -1,0 +1,40 @@
+{
+  "name": "ui-audit-loop",
+  "kind": "workflow",
+  "version": "0.1.2",
+  "status": "incubating",
+  "risk_level": "medium",
+  "owner": "auto",
+  "ownership_scope": "self",
+  "source_type": "local",
+  "evolution_lane": "direct_upgrade",
+  "source_cases": [
+    "Target-selection UI passed DOM E2E while target assets were visually broken"
+  ],
+  "last_eval_at": "2026-07-19T14:20:00",
+  "promote_policy": "L1",
+  "entrypoint": "SKILL.md",
+  "spec": "workflow.spec.json",
+  "eval": {
+    "cases": "eval_cases.json",
+    "last_result": "JSON_VALIDATE_AND_TARGETED_REGRESSION_PASSED"
+  },
+  "changelog": [
+    {
+      "date": "2026-07-18",
+      "change": "Created a same-source runtime screenshot audit loop with hard visual failures and mandatory implementation iteration."
+    },
+    {
+      "date": "2026-07-18",
+      "change": "Passed official skill validation and five positive, negative, and boundary evaluation cases; review approved for incubating use."
+    },
+    {
+      "date": "2026-07-18",
+      "change": "Added composition-axis auditing after a centered target passed while its command bar remained horizontally offset."
+    },
+    {
+      "date": "2026-07-19",
+      "change": "Extended readable showcase checks from card spotlights to opponent skill / upgrade-card showcases so short auto-dismiss timers fail UI audit."
+    }
+  ]
+}

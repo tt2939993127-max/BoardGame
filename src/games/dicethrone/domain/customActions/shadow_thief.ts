@@ -664,20 +664,9 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
 
     const dieValue = random.d(6);
     const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
-    return [{
-        type: 'BONUS_DIE_ROLLED',
-        payload: {
-            value: dieValue,
-            face,
-            playerId: attackerId,
-            targetPlayerId: state.pendingAttack.defenderId,
-            effectKey: 'bonusDie.effect.sneakAttack',
-            // 伏击掷骰值加到 pendingDamage.currentDamage
-            pendingDamageBonus: dieValue,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp
-    } as BonusDieRolledEvent, createDisplayOnlySettlement(
+    // 伏击骰面在确认前仍可被改写，不能先把初始值记入待伤害。
+    // settlement handler 会在确认后将最终骰面写回当前伤害响应。
+    return [createDisplayOnlySettlement(
         state.pendingAttack.defenderId ? 'shadow-thief-sneak-attack' : SNEAK_ATTACK_SETTLEMENT_ID,
         attackerId,
         state.pendingAttack.defenderId ?? attackerId,

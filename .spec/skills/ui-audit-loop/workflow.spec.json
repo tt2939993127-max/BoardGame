@@ -1,0 +1,64 @@
+{
+  "name": "ui-audit-loop",
+  "description": "Audit same-source runtime screenshots from the user's perspective and force implementation iteration until visual acceptance passes.",
+  "trigger": {
+    "keywords": [
+      "UI审计",
+      "截图验收",
+      "你觉得截图没问题",
+      "玩家视角",
+      "没过审计继续重构"
+    ],
+    "explicit_only": false
+  },
+  "phases": [
+    {
+      "name": "lock_audit_target",
+      "required_artifacts": ["problem_object", "truth_source", "runtime_entry", "acceptance_contract"],
+      "gates": ["audit_prerequisites_locked"],
+      "on_fail": "halt"
+    },
+    {
+      "name": "capture_same_source_runtime",
+      "required_artifacts": ["functional_result", "original_screenshots", "viewport_and_state"],
+      "gates": ["screenshot_is_current_and_same_source", "target_state_reached"],
+      "on_fail": "revise"
+    },
+    {
+      "name": "player_view_visual_audit",
+      "required_artifacts": ["score", "hard_failures", "issues", "verdict"],
+      "gates": ["original_image_visually_inspected", "all_dimensions_scored"],
+      "on_fail": "revise"
+    },
+    {
+      "name": "implementation_iteration",
+      "when": {"verdict": "REVISE"},
+      "required_artifacts": ["evidence_bound_fixes"],
+      "gates": ["fixes_address_observed_issues"],
+      "on_fail": "halt",
+      "next": "capture_same_source_runtime"
+    },
+    {
+      "name": "final_delivery",
+      "when": {"verdict": "PASS"},
+      "required_artifacts": ["final_original_screenshot", "written_visual_judgment", "user_visible_open_result"],
+      "gates": ["score_at_least_90", "no_hard_failures", "final_image_opened_via_show_image_skill"],
+      "on_fail": "revise"
+    }
+  ],
+  "verification_contract": {
+    "required_checks": [
+      "functional_and_visual_evidence_are_separate",
+      "runtime_screenshot_postdates_relevant_edits",
+      "screenshot_matches_current_worktree_route_viewport_and_state",
+      "hard_failures_are_zero",
+      "score_is_at_least_90"
+    ],
+    "forbidden_substitutions": [
+      "dom_presence_for_visual_visibility",
+      "e2e_pass_for_visual_pass",
+      "historical_evidence_for_current_runtime",
+      "candidate_image_for_final_acceptance"
+    ]
+  }
+}

@@ -447,7 +447,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 ## 音频资源入口
 
-> 完整规范已拆到 `.spec/knowledge/standards/audio-assets.md`；音频 workflow 优先走系统 skill `D:\codex-home\skills\audio-integration\SKILL.md`。
+> 完整规范已拆到 `.spec/knowledge/standards/audio-assets.md`；音频 workflow 优先走项目 [`audio-integration`](../../skills/audio-integration/SKILL.md)。
 
 - 音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用完整 key。
 - 共享音频包路径合同、移动端已安装包读取、音效触发路径和工具链见 `audio-assets.md`。

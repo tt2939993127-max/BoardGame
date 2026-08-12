@@ -465,7 +465,7 @@ function handleDeathBlossom(ctx: CustomActionContext): DiceThroneEvent[] {
     }
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp + 5, {
-        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: true },
     }));
     events.push(bonusDamageEvent(attackerId, katanaCount + shurikenCount * 2, sourceAbilityId, timestamp + 6));
     if (maskCount > 0) {

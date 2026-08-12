@@ -1414,6 +1414,7 @@ describe('伏击 Token - 完整流程测试', () => {
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → Token 响应窗口
                 // Token 响应窗口：攻击者有伏击 Token
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }), // 掷骰 → 5
+                cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认伏击最终骰面
                 cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过攻击方后续响应 → 伤害结算 → main2
             ],
             expect: {
@@ -1489,6 +1490,7 @@ describe('伏击 Token - 完整流程测试', () => {
             commands: [
                 // 使用伏击 Token
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过攻击方后续响应
             ],
             expect: {
@@ -1503,11 +1505,13 @@ describe('伏击 Token - 完整流程测试', () => {
         });
 
         expect(result.assertionErrors).toHaveLength(0);
-        // 验证 TOKEN_USED 和 BONUS_DIE_ROLLED 事件
+        // 使用 Token 打开骰盘，确认后才按最终骰面加伤。
         const steps = result.steps;
         const useTokenStep = steps[0];
+        const confirmBonusDieStep = steps[1];
         expect(useTokenStep.events).toContain('TOKEN_USED');
-        expect(useTokenStep.events).toContain('BONUS_DIE_ROLLED');
+        expect(useTokenStep.events).toContain('BONUS_DICE_REROLL_REQUESTED');
+        expect(confirmBonusDieStep.events).toContain('BONUS_DIE_ROLLED');
     });
 });
 

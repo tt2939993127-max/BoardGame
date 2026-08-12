@@ -1,0 +1,7 @@
+interface:
+  display_name: "PUA Driver"
+  short_description: "Break loops with pressure and structured debugging"
+  default_prompt: "Use $pua to break a stuck task, force evidence-based debugging, and produce the next verified action."
+
+policy:
+  allow_implicit_invocation: true

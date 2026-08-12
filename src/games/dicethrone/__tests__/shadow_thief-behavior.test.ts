@@ -14,6 +14,7 @@ import { registerDiceDefinition } from '../domain/diceRegistry';
 import { shadowThiefDiceDefinition } from '../heroes/shadow_thief/diceConfig';
 import { resolveAttack } from '../domain/attack';
 import { reduce } from '../domain/reducer';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
 
 initializeCustomActions();
 registerDiceDefinition(shadowThiefDiceDefinition);
@@ -117,6 +118,20 @@ function buildCtx(
 
 function eventsOfType(events: DiceThroneEvent[], type: string) {
     return events.filter(e => e.type === type);
+}
+
+function settlePendingBonusDice(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneEvent[] {
+    const requested = events.reduce((current, event) => reduce(current, event), state);
+    const settlement = requested.pendingBonusDiceSettlement;
+    expect(settlement).toBeDefined();
+    if (!settlement) return events;
+    return buildBonusDiceSettlementEvents({
+        state: requested,
+        settlement,
+        random: { d: () => 1 } as any,
+        timestamp: 2000,
+        sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+    });
 }
 
 function createFourPlayerShadowManipulationState(): DiceThroneCore {
@@ -356,8 +371,9 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-shadow-dance-roll', {
                 random: () => 1, // d(6)→6
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            const dmg = eventsOfType(settlementEvents, 'DAMAGE_DEALT');
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(3); // ceil(6/2)
         });
@@ -368,8 +384,9 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-shadow-dance-roll', {
                 random: () => 3 / 6,
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(2); // ceil(3/2)
+            expect((eventsOfType(settlementEvents, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(2); // ceil(3/2)
         });
     });
 
@@ -380,18 +397,19 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-shadow-dance-roll-2', {
                 random: () => 4 / 6,
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
             // 伤害
-            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            const dmg = eventsOfType(settlementEvents, 'DAMAGE_DEALT');
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(2); // ceil(4/2)
 
             // Token: SNEAK + SNEAK_ATTACK
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
+            const tokens = eventsOfType(settlementEvents, 'TOKEN_GRANTED');
             expect(tokens).toHaveLength(2);
 
             // 抽牌
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
+            expect(eventsOfType(settlementEvents, 'CARD_DRAWN')).toHaveLength(1);
         });
     });
 

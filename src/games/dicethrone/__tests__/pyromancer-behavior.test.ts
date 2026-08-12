@@ -21,6 +21,7 @@ import { registerDiceDefinition } from '../domain/diceRegistry';
 import { pyromancerDiceDefinition } from '../heroes/pyromancer/diceConfig';
 import { reduce } from '../domain/reducer';
 import { getBonusDiceSettlementHandler } from '../domain/bonusDiceSettlement';
+import { buildBonusDiceSettlementEvents } from '../domain/executeTokens';
 
 // 模块顶层初始化
 initializeCustomActions();
@@ -159,6 +160,20 @@ function eventsOfType<T extends DiceThroneEvent>(events: DiceThroneEvent[], type
 
 function reduceAll(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore {
     return events.reduce((acc, event) => reduce(acc, event as any), state);
+}
+
+function settlePendingBonusDice(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneEvent[] {
+    const requested = reduceAll(state, events);
+    const settlement = requested.pendingBonusDiceSettlement;
+    expect(settlement).toBeDefined();
+    if (!settlement) return events;
+    return buildBonusDiceSettlementEvents({
+        state: requested,
+        settlement,
+        random: { d: () => 1 } as any,
+        timestamp: 2000,
+        sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+    });
 }
 
 function getPyroBlastSettlement(events: DiceThroneEvent[]) {
@@ -419,12 +434,13 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'pyro-infernal-embrace-roll', {
                 random: () => 1,
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
+            const tokenEvents = eventsOfType(settlementEvents, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
             expect((tokenEvents[0] as any).payload.amount).toBe(3);
             expect((tokenEvents[0] as any).payload.newTotal).toBe(5);
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(0);
+            expect(eventsOfType(settlementEvents, 'CARD_DRAWN')).toHaveLength(0);
         });
 
         it('掷出非陨石面时抽1张牌，不授予火焰精通', () => {
@@ -434,9 +450,10 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'pyro-infernal-embrace-roll', {
                 random: () => 4 / 6,
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            expect(eventsOfType(events, 'TOKEN_GRANTED')).toHaveLength(0);
-            const drawEvents = eventsOfType(events, 'CARD_DRAWN');
+            expect(eventsOfType(settlementEvents, 'TOKEN_GRANTED')).toHaveLength(0);
+            const drawEvents = eventsOfType(settlementEvents, 'CARD_DRAWN');
             expect(drawEvents).toHaveLength(1);
             expect((drawEvents[0] as any).payload.cardId).toBe('drawn-card');
         });
@@ -475,21 +492,22 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // burn-down-2-resolve: 获得1FM，消耗全部FM，每个造成4点伤害
+    // burn-down-2-resolve: 获得1FM，至多消耗4个FM，每个造成4点伤害
     // ========================================================================
     describe('burn-down-2-resolve (焚尽 II)', () => {
-        it('获得1FM后消耗全部，每个4点伤害', () => {
+        it('获得1FM后至多消耗4个，每个4点伤害', () => {
             const state = createState({ attackerFM: 5, fmLimit: 5 });
             const handler = getCustomActionHandler('burn-down-2-resolve')!;
             const events = handler(buildCtx(state, 'burn-down-2-resolve'));
 
-            // FM: min(5+1, 5)=5, 消耗全部5个（limit=99）
+            // FM: min(5+1, 5)=5，至多消耗4个
             const consumeEvents = eventsOfType(events, 'TOKEN_CONSUMED');
-            expect((consumeEvents[0] as any).payload.amount).toBe(5);
+            expect((consumeEvents[0] as any).payload.amount).toBe(4);
+            expect((consumeEvents[0] as any).payload.newTotal).toBe(1);
 
-            // 伤害: 5 × 4 = 20
+            // 伤害: 4 × 4 = 16
             const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
-            expect((dmgEvents[0] as any).payload.amount).toBe(20);
+            expect((dmgEvents[0] as any).payload.amount).toBe(16);
         });
 
         it('FM=0时获得1FM后消耗1个，造成4点伤害', () => {
@@ -851,8 +869,9 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'pyro-get-fired-up-roll', {
                 random: () => 1 / 6, // fire
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const bonusEvents = eventsOfType(events, 'BONUS_DAMAGE_ADDED');
+            const bonusEvents = eventsOfType(settlementEvents, 'BONUS_DAMAGE_ADDED');
             expect(bonusEvents).toHaveLength(1);
             expect((bonusEvents[0] as any).payload).toMatchObject({
                 playerId: '0',
@@ -860,7 +879,8 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
                 sourceCardId: 'card-get-fired-up',
             });
 
-            const reduced = reduceAll(state, events);
+            const requested = reduceAll(state, events);
+            const reduced = reduceAll(requested, settlementEvents);
             expect(reduced.pendingAttack?.bonusDamage).toBe(3);
             expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(3);
         });
@@ -871,8 +891,10 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'pyro-get-fired-up-roll', {
                 random: () => 1 / 6, // fire
             }));
+            const settlementEvents = settlePendingBonusDice(state, events);
 
-            const reduced = reduceAll(state, events);
+            const requested = reduceAll(state, events);
+            const reduced = reduceAll(requested, settlementEvents);
             expect(reduced.pendingAttack).toBeNull();
             expect((reduced.players['0'] as any).pendingBonusDamage).toBe(3);
         });

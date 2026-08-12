@@ -65,7 +65,7 @@ events.push(addPermanentPower(minionUid, baseIndex, count * 2, 'miskatonic_manda
 **POD 删除内容**:
 - 删除所有 `DAMAGE_DEALT` 事件中的 `phase: ctx.damagePhase` 字段（8 处）
 - 删除 `resolveMagmaArmor` 函数的 `checkBurn` 参数和相关逻辑（15 行）
-- 修改 `burn-down-2-resolve` 的参数（从 4 改为 99）
+- 历史记录更正：2026-08-12 已确认 `burn-down-2-resolve` 的 99 是错误放宽，正确上限为 4
 - 修改 `magma-armor-resolve` 和 `magma-armor-2-resolve` 的调用方式
 
 **当前 HEAD 状态**: ✅ 所有删除都已应用，代码使用新的伤害计算管线（`createDamageCalculation`）

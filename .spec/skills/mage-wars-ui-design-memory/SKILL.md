@@ -5,7 +5,7 @@ description: "Mage Wars 设计稿与真实 Board/UI 实现的用户原话反思�
 
 # Mage Wars UI Design Memory
 
-这是 BoardGame 项目内、Mage Wars 设计稿与真实 Board/UI 实现专用的用户原话反思 skill。它是本主题的项目适配层 / 用户纠正正源；README、审计、实现合同和前置包只能引用或记录，不另写一套独立规则。通用游戏 UI 设计方法以 `D:\codex-home\skills\game-ui-design\SKILL.md` 为准，设计链路以上游 `D:\codex-home\skills\ui-design-pipeline\SKILL.md` 为准；本 skill 只记录 Mage Wars 的具体对象、素材和用户纠正实例。
+这是 BoardGame 项目内、Mage Wars 设计稿与真实 Board/UI 实现专用的用户原话反思 skill。它是本主题的项目适配层 / 用户纠正正源；README、审计、实现合同和前置包只能引用或记录，不另写一套独立规则。通用游戏 UI 设计方法以项目 `.spec/skills/game-ui-design/SKILL.md` 为准，设计链路以项目 `.spec/skills/ui-design-pipeline/SKILL.md` 为准；本 skill 只记录 Mage Wars 的具体对象、素材和用户纠正实例。
 
 ## 使用顺序
 
