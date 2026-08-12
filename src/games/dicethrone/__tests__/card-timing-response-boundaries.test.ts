@@ -18,9 +18,11 @@ const getAllDistinctCards = () => {
 describe('DiceThrone 即时行动牌与响应窗口边界', () => {
     const allCards = getAllDistinctCards();
     const instantActions = allCards.filter((card) => card.type === 'action' && card.timing === 'instant');
-    const damageResponseCards = allCards.filter((card) => (
-        card.playCondition?.pendingDamage !== undefined
-        || (card.timing === 'roll' && card.playCondition?.requireMinDamageDealt !== undefined)
+    const unrestrictedInstantActions = instantActions.filter((card) => card.playCondition === undefined);
+    const conditionalInstantActions = instantActions.filter((card) => card.playCondition !== undefined);
+    const beforeDamageResponseCards = allCards.filter((card) => card.playCondition?.pendingDamage !== undefined);
+    const afterAttackResponseCards = allCards.filter((card) => (
+        card.timing === 'roll' && card.playCondition?.requireMinDamageDealt !== undefined
     ));
 
     const prepareState = () => {
@@ -98,19 +100,39 @@ describe('DiceThrone 即时行动牌与响应窗口边界', () => {
         ]);
     });
 
-    it('任意时机即时行动牌在对方普通回合仍能通过领域校验', () => {
+    it('所有没有额外前提的即时行动牌，在对方普通回合都能通过领域校验', () => {
         const state = prepareState();
-        const anytimeCards = instantActions.filter((card) => (
-            card.id !== 'card-flick'
-            && card.playCondition?.pendingDamage === undefined
-            && card.playCondition?.phase === undefined
-        ));
+        state.core.players['0'].tokens = {};
 
-        for (const card of anytimeCards) {
+        expect(unrestrictedInstantActions).toHaveLength(21);
+        for (const card of unrestrictedInstantActions) {
             expect(
                 checkPlayCard(state.core, '1', card, 'main1'),
                 `${card.id} 应可在对方普通回合按即时行动打出`,
             ).toEqual({ ok: true });
+        }
+    });
+
+    it('有明确前提的即时行动牌不会因为手牌入口放开而被错误放行', () => {
+        const state = prepareState();
+        state.core.players['0'].tokens = {};
+        state.core.pendingDamage = undefined;
+
+        expect(conditionalInstantActions.map((card) => card.id).sort()).toEqual([
+            'card-absolution',
+            'card-artificer-mechanical-strike',
+            'card-bye-bye',
+            'card-flick',
+            'card-next-time',
+            'card-zhanshujia-tactical-retreat',
+            'ninja-card-escape',
+        ]);
+
+        for (const card of conditionalInstantActions) {
+            expect(
+                checkPlayCard(state.core, '1', card, 'main1').ok,
+                `${card.id} 在没有满足自身前提时不能因“即时牌”被放行`,
+            ).toBe(false);
         }
     });
 
@@ -138,7 +160,7 @@ describe('DiceThrone 即时行动牌与响应窗口边界', () => {
         expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.ACCURACY]).toBe(0);
     });
 
-    it('受伤响应牌仍只在伤害窗口放行，未被改骰窗口收紧影响', () => {
+    it('受伤前响应牌仍能由受伤者在真实待结算伤害中打出，且不进入改骰窗口', () => {
         const state = prepareState();
         state.core.pendingDamage = {
             id: 'instant-response-damage',
@@ -152,23 +174,44 @@ describe('DiceThrone 即时行动牌与响应窗口边界', () => {
         } as typeof state.core.pendingDamage;
         state.core.lastResolvedAttackDamage = 10;
 
-        expect(damageResponseCards.map((card) => card.id)).toEqual(expect.arrayContaining([
+        expect(beforeDamageResponseCards.map((card) => card.id).sort()).toEqual([
             'card-next-time',
             'ninja-card-escape',
             'card-artificer-mechanical-strike',
             'upgrade-artificer-shock-bot-2',
-            'card-dizzy',
-        ]));
+        ].sort());
 
-        for (const card of damageResponseCards) {
+        for (const card of beforeDamageResponseCards) {
             expect(
-                checkPlayCard(state.core, '1', card, 'main2', 'afterAttackResolved'),
-                `${card.id} 应继续在伤害响应窗口可用`,
+                checkPlayCard(state.core, '1', card, 'main2'),
+                `${card.id} 应继续在受伤前的待结算伤害中可用`,
             ).toEqual({ ok: true });
             expect(
                 checkPlayCard(state.core, '1', card, 'offensiveRoll', 'afterRollConfirmed'),
                 `${card.id} 不能被错误放进改骰响应窗口`,
             ).toEqual({ ok: false, reason: 'wrongPhaseForCard' });
         }
+    });
+
+    it('攻击结算后的响应牌仍只在攻击方造成足够伤害后出现，未被改骰窗口收紧影响', () => {
+        const state = prepareState();
+        state.core.lastResolvedAttackDamage = 10;
+        state.core.players['0'].hand = afterAttackResponseCards;
+        state.core.players['1'].hand = [];
+
+        expect(afterAttackResponseCards.map((card) => card.id)).toEqual(['card-dizzy']);
+        expect(getPlayableCardsInResponseWindow(
+            state.core,
+            '0',
+            'afterAttackResolved',
+            'main2',
+        ).map((card) => card.id)).toEqual(['card-dizzy']);
+        expect(checkPlayCard(
+            state.core,
+            '0',
+            afterAttackResponseCards[0],
+            'offensiveRoll',
+            'afterRollConfirmed',
+        )).toEqual({ ok: false, reason: 'wrongPhaseForCard' });
     });
 });
