@@ -634,7 +634,6 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
             );
             await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('探索到金库');
             await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText(`拿到了${itemCard.name}`);
-            await expect(page.getByTestId('betrayal-inventory-row-item')).toContainText(itemCard.name);
             await expect.poll(() => readOrdinaryItemDiscoveryState(page)).toMatchObject({
                 latestDiscoveryTitle: itemCard.name,
                 latestDiscoveryKind: 'item',

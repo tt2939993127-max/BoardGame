@@ -935,6 +935,7 @@ function resolvePowderKegUpkeepEvents(
         customResolutionId: POWDER_KEG_SETTLEMENT_ID,
         allowDiceModification: true,
         opensAfterRollConfirmedResponseWindow: value <= 2 || value === 6,
+        continuation: { kind: 'complete' },
     };
     return [{
         type: 'BONUS_DIE_ROLLED',
@@ -1012,6 +1013,7 @@ function resolveBlindedCheckExitResult(
         customResolutionId: BLINDED_CHECK_SETTLEMENT_ID,
         allowDiceModification: true,
         opensAfterRollConfirmedResponseWindow: value <= 2,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
     };
 
     return {
@@ -1099,6 +1101,7 @@ function resolveDazzleCheckExitResult(
         resolutionMode: 'none',
         customResolutionId: TIANSHi_DAZZLE_CHECK_SETTLEMENT_ID,
         allowDiceModification: true,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
     };
 
     return {

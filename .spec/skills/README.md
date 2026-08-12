@@ -18,7 +18,7 @@
    - 项目 skill 必须包含实际需要的通用规则，以及项目专属命令、路径、脚本和验收口径
    - 系统 skill 的后续更新不会自动覆盖项目；需要吸收时，先裁决差异和影响，再迁入该项目 skill
    - 同主题项目 skill 已存在时，不再把系统同名 skill 当作本项目的第二个执行入口
-   - 若项目 skill 只是对系统 canonical-source 的项目适配（例如 `show-image-to-user`），项目 skill 只承载项目增量；系统正文仍是唯一规则来源，不得把它理解成系统规则的复制品
+   - 若项目 skill 只是对系统 canonical-source 的项目适配（例如 `screenshot-delivery` 适配系统 `show-image-to-user`），项目 skill 只承载项目增量；系统正文仍是唯一规则来源，不得把它理解成系统规则的复制品
    - 不要把本项目事故、项目口径、项目补丁反写回 `D:\\codex-home\\skills\\**`
 
 ## 目录硬规则

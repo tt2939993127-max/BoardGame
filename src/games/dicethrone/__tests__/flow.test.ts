@@ -1470,7 +1470,7 @@ describe('王权骰铸流程测试', () => {
             const resolvedState = settledResult.state as MatchState<DiceThroneCore>;
             expect(resolvedState.core.players['3'].statusEffects[STATUS_IDS.CONCUSSION]).toBe(1);
             expect(resolvedState.core.players['1'].statusEffects[STATUS_IDS.CONCUSSION] ?? 0).toBe(0);
-            expect(resolvedState.sys.interaction.current).toBeUndefined();
+            expect(getCurrentInteractionSummary(resolvedState).id).toBeUndefined();
         });
 
         it('4 人模式 targetingRoll 自动目标后，Loaded token 的奖励骰特写应命中自动目标', () => {
@@ -1733,7 +1733,7 @@ describe('王权骰铸流程测试', () => {
             expect(finalState.core.pendingAttack?.defenderId).toBe('1');
             expect(finalState.core.pendingAttack?.bonusDamage).toBe(2);
             expect(finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(1);
-            expect(finalState.sys.interaction.current).toBeUndefined();
+            expect(getCurrentInteractionSummary(finalState).id).toBeUndefined();
             expect(loadedTokenLogs).toHaveLength(1);
         });
 

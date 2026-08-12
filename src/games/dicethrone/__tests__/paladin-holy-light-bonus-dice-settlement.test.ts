@@ -3,6 +3,7 @@ import { DiceThroneDomain } from '../domain';
 import type { DiceThroneCommand, DiceThroneCore } from '../domain/types';
 import { executePipeline } from '../../../engine/pipeline';
 import type { MatchState, PlayerId } from '../../../engine/types';
+import { getCurrentInteractionSummary } from '../../../engine/testing/interactionTestFacade';
 import { cmd, createHeroMatchup, createQueuedRandom, testSystems } from './test-utils';
 
 describe('圣光术奖励骰反馈回归', () => {
@@ -37,7 +38,7 @@ describe('圣光术奖励骰反馈回归', () => {
             attackerId: '0',
         });
         expect(state.core.pendingBonusDiceSettlement?.dice).toHaveLength(2);
-        expect(state.sys.interaction.current?.kind).toBe('dt:bonus-dice');
+        expect(getCurrentInteractionSummary(state).kind).toBe('dt:bonus-dice');
 
         const skipResult = dispatch('SKIP_BONUS_DICE_REROLL');
 
@@ -45,7 +46,7 @@ describe('圣光术奖励骰反馈回归', () => {
         expect(skipResult.events.map((event: { type: string }) => event.type)).not.toContain('BONUS_DICE_REROLL_REQUESTED');
 
         expect(state.core.pendingBonusDiceSettlement).toBeUndefined();
-        expect(state.sys.interaction.current).toBeUndefined();
+        expect(getCurrentInteractionSummary(state).id).toBeUndefined();
         expect(state.sys.phase).toBe('main2');
     });
 });

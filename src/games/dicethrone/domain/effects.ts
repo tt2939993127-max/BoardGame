@@ -1470,20 +1470,22 @@ export function resolveEffectsToEvents(
             ))
             ? 'inline' as const
             : 'standalone' as const;
-        const rollDieContinuation = effect.action.type === 'rollDie' && ctx.state.pendingAttack
-            ? timing === 'preDefense'
-                ? {
-                    kind: 'attack' as const,
-                    settlementStage: 'preDamage' as const,
-                    markBonusDiceResolved: false,
-                }
-                : {
-                    kind: 'attack' as const,
-                    settlementStage: rollDieBonusDamageMode === 'inline'
-                        ? 'withDamageChoicePending' as const
-                        : 'readyToResolve' as const,
-                    markBonusDiceResolved: true,
-                }
+        const rollDieContinuation = effect.action.type === 'rollDie'
+            ? ctx.state.pendingAttack
+                ? timing === 'preDefense'
+                    ? {
+                        kind: 'attack' as const,
+                        settlementStage: 'preDamage' as const,
+                        markBonusDiceResolved: false,
+                    }
+                    : {
+                        kind: 'attack' as const,
+                        settlementStage: rollDieBonusDamageMode === 'inline'
+                            ? 'withDamageChoicePending' as const
+                            : 'readyToResolve' as const,
+                        markBonusDiceResolved: true,
+                    }
+                : { kind: 'complete' as const }
             : undefined;
         const effectEvents = resolveEffectAction(
             effect.action,
