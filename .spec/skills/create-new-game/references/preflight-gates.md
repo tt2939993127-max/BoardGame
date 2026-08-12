@@ -11,7 +11,7 @@
    - 主动询问用户是否要先同步/更新 `main`；默认推荐“是”，尤其是准备新开 `feat/game-<gameId>` 时。
    - 命中新游戏 workflow 时，默认直接从 `main` 派生 `feat/game-<gameId>` 并创建独立 worktree；只有用户明确要求留在当前工作区时才跳过。
 2. **服务器素材主源本地同步确认**
-   - 主动询问是否要先执行 `npm run assets:download -- --check` 或 `npm run assets:download`，把远端资源拉到本地。
+   - 主动询问是否要先执行 `npm run assets:download -- --game <gameId> --dry-run` 检查，再按游戏把远端运行时资源拉到本地。
    - 推荐场景：换机/新环境、本地缺图、要复用 `common/` 资源、或当前游戏已有远端图片资产。
 3. **真相源 / 对照源裁定**
    - 主动询问本轮主真相源是什么：官方规则书、官方站点、用户图片、用户指定网站、数据库等。

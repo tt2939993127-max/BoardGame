@@ -330,8 +330,8 @@
 | 给我！ | `选择一个仆从身上的行动。摧毁那个仆从然后转移那个行动到你的一个仆从身上。` | C1 选择附着在仆从身上的 1 张行动；C2 摧毁该行动当前宿主；C3 选择你的 1 个仆从作为新宿主；C4 将该行动转移到新宿主；C5 需要处理宿主被摧毁时附着行动不进弃牌堆的特例 | `implemented / L2_passed / L3/L4_passed`：移动端补齐宿主展开、手牌二次确认、附着行动本体和新宿主本体手动选择，以及转移收口 |
 | 洗手间 | `打出到一个基地上。持续：每当另一个玩家打出一张牌时，你可以选择你在这里的仆从不受它的影响。` | C1 打到基地上；C2 持续监听另一个玩家打出牌；C3 你可以选择保护你在这里的仆从；C4 保护范围是“不受该牌影响”；C5 需要可拒绝和逐次触发清理 | `历史占位：已被 2026-08-05 当前对象矩阵、桌面真实入口和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
 | 太难了 | `打出到一个仆从身上。持续：这个仆从不受其他玩家的行动影响。` | C1 附着到 1 个仆从；C2 宿主持续不受其他玩家行动影响；C3 不防控制者自己的行动、基地效果、怪物效果或非行动影响；C4 附着移除后恢复 | `历史占位：已被 2026-08-05 当前对象矩阵和 2026-08-10 移动端对象级证据替代；当前实现状态见下方矩阵` |
-| 要塞 | `12 / 3-2-1 / 2怪物。当这个基地计分时，如果所有玩家在这里的总力量为22或更多，力量最高的三个玩家各自获得1VP。` | C1 基地破坏点 12；C2 VP 3/2/1；C3 初始/补充 2 怪物；C4 计分时检查所有玩家在这里的总力量是否 22+；C5 若满足，力量最高的三个玩家各得 1VP；C6 并列排名 / 少于三名有力玩家需实现时裁定 | `implemented / L2_passed / L3/L4_passed`：22 总力量正向门槛、总力量 21 的不奖励额外 VP 负向分支、清场和移动端收口均已验证；并列 / 少于三名有力玩家的边界仍按对象矩阵保留为后续负向审计项 |
-| 坑洞 | `16 / 4-2-1 / 2怪物。这里的仆从不会受到其他玩家的行动影响。` | C1 基地破坏点 16；C2 VP 4/2/1；C3 初始/补充 2 怪物；C4 这里所有仆从持续不受其他玩家行动影响；C5 不防控制者自己的行动、非行动效果或离开基地后的仆从 | `implemented / L2_passed / L3/L4_passed`：基地保护边界、另一基地手动目标、两张《挤碎》分步确认下的候选过滤、离开坑洞后《死亡之息》重新可选、控制者自己的《死亡之息》可影响坑洞随从、计分清场和移动端收口已验证；非行动效果边界仍按对象矩阵保留为后续负向审计项 |
+| 要塞 | `12 / 3-2-1 / 2怪物。当这个基地计分时，如果所有玩家在这里的总力量为22或更多，力量最高的三个玩家各自获得1VP。` | C1 基地破坏点 12；C2 VP 3/2/1；C3 初始/补充 2 怪物；C4 计分时检查所有玩家在这里的总力量是否 22+；C5 若满足，力量最高的三个玩家各得 1VP；C6 并列排名 / 少于三名有力玩家按有效玩家数裁定 | `implemented / L2_passed / L3/L4_passed`：22 总力量正向门槛、总力量 21 的不奖励额外 VP、并列最高且只有两名有效玩家时两人均获额外 VP、要塞清场和移动端收口均已验证 |
+| 坑洞 | `16 / 4-2-1 / 2怪物。这里的仆从不会受到其他玩家的行动影响。` | C1 基地破坏点 16；C2 VP 4/2/1；C3 初始/补充 2 怪物；C4 这里所有仆从持续不受其他玩家行动影响；C5 不防控制者自己的行动、非行动效果或离开基地后的仆从 | `implemented / L2_passed / L3/L4_passed`：基地保护边界、另一基地手动目标、两张《挤碎》分步确认下的候选过滤、离开坑洞后《死亡之息》重新可选、控制者自己的《死亡之息》可影响坑洞随从、其他玩家的《忍者道场》非行动效果可影响坑洞随从、计分清场和移动端收口已验证 |
 
 ### 勇士规则原文与子句锁定（2026-08-02 09:40）
 
@@ -1147,6 +1147,8 @@
 | 愤怒的掠夺者计分前响应截图复核 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人愤怒的掠夺者计分前真实响应手动选择后获得-1-VP\兽人-愤怒的掠夺者-计分前手动选择响应.jpg`；同目录 `兽人-愤怒的掠夺者-获得-VP-后.jpg` | `PASS / 92`：响应选择必须由玩家手动触发；结算后玩家 VP 增加，桌面没有残留旧提示层或重复显示同一来源卡。 |
 | 要塞真实计分 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人要塞真实计分按玩家总力量 22 门槛给两名最高玩家额外 VP"` | `passed`：1/1；计分前要塞总力量为 22，玩家力量为 12 / 10，避免平手误读；计分后两名有力玩家在原始 3/2 分基础上各额外获得 1VP，原基地已离场并清场。 |
 | 要塞截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞真实计分按玩家总力量-22-门槛给两名最高玩家额外-VP\兽人-要塞-计分前总力量达到22.jpg`；同目录 `兽人-要塞-达到22后两名玩家获得额外VP.jpg` | `PASS / 92`：计分前基地、双方力量、计分板和公共小牌堆均清楚；计分后 VP 变化和原版布局保留可读，没有因怪物 / 宝藏 UI 挤压基地、手牌或右侧操作区。 |
+| 要塞并列 / 少于三名有效玩家移动端 E2E | `PW_E2E_SERVICE_REUSE=isolated PW_SKIP_ASSET_BOOTSTRAP=true node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人要塞移动端并列最高且少于三名玩家时两名玩家均获额外VP" --project=chromium` | `passed`：1/1；真实 844x390 横屏，两个有效玩家力量均为 11、总力量 22，事件记录显示两人本次各得 4VP（基础 3VP + 要塞额外 1VP），最终双方 VP 8/8；要塞离场并清场，交互与响应窗口收口，公共小牌与原版操作入口可见且无横向溢出。 |
+| 要塞并列 / 少于三名有效玩家截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人要塞移动端并列最高且少于三名玩家时两名玩家均获额外VP\移动端-兽人要塞-并列最高两名玩家计分前.jpg`；同目录 `移动端-兽人要塞-并列最高两名玩家各获额外VP并清场.jpg` | `PASS / 92`：计分前两名 11 力量与要塞总力量 22 清楚；收口后双方 VP 8/8、要塞清场和替换基地清楚；公共小牌 `x20/x22`、手牌、回合信息、结束回合入口均在原版布局内，无遮挡、重复弃牌堆或横向溢出。 |
 | 坑洞真实计分 E2E | `PW_E2E_SERVICE_REUSE=isolated node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人坑洞真实计分达到16后清场并保留原版计分布局"` | `passed`：1/1；计分前坑洞总力量达到 16，计分后玩家按 4/2 得分，原坑洞已离场并清场。 |
 | 坑洞截图 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞真实计分达到16后清场并保留原版计分布局\兽人-坑洞-计分前总力量达到16.jpg`；同目录 `兽人-坑洞-计分清场后保留原版布局.jpg` | `PASS / 92`：计分前后基地、随从、记分板、公共牌堆小牌、手牌和结束回合入口均在原版槽位内，未出现泰坦 / 行动卡 / 基地 / 玩家面板重叠。 |
 | 本轮静态验证 | `npx eslint src/games/smashup/abilities/munchkin_orcs.ts src/games/smashup/__tests__/abilities/munchkin-orcs.test.ts e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts`；`npm run typecheck`；`git diff --check`；`openspec validate add-smashup-munchkin-orcs-faction --strict --no-interactive` | `passed`：ESLint 0 errors，保留 76 个 warning；typecheck 通过；diff check 无内容错误，仅有 Windows 换行提示；OpenSpec 严格校验通过。 |
@@ -1171,7 +1173,7 @@
 | 洗手间 | 手牌附着基地、逐次保护、可拒绝和来源玩家边界 | 桌面手动附着基地与对手行动后的保护选择；移动端横屏手动点击基地本体、在保护随从与“不保护”之间手动选择，并验证跳过后继续结算与收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
 | 太难了 | 手牌附着随从、保护过滤与受保护目标保留；移动端单候选也必须手动选择 | 桌面手动附着随从、死亡之息真实过滤保护目标；移动端横屏手动点击随从本体并验证收口 | `L2 + 桌面 L3/L4 + 移动端 L4 passed` |
 | 要塞 | 22 总力量门槛、前三名额外 VP、计分清场 | 桌面真实计分前后图与 VP 收口；移动端横屏真实计分、额外 VP、清场和公共小牌/操作入口核验 | `L2 + L3/L4 passed` |
-| 坑洞 | 16 总力量计分、基地保护边界、清场恢复 | 桌面真实入口验证坑洞保护、另一基地手动目标和计分清场；移动端横屏真实计分清场与公共小牌/操作入口核验 | `L2 + L3/L4 passed` |
+| 坑洞 | 16 总力量计分、基地保护边界（行动保护、离开恢复、控制者自身行动、其他玩家非行动）、清场恢复 | 桌面真实入口验证坑洞保护、另一基地手动目标和计分清场；移动端横屏补齐真实计分、保护候选过滤、离开后恢复、控制者自身行动和其他玩家非行动目标选择，均核验公共小牌/原版操作入口 | `L2 + L3/L4 passed` |
 
 ### 聚合验证口径
 
@@ -1621,3 +1623,17 @@
 | 截图 3：牌库底收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\兽人坑洞移动端控制者自己的行动仍可影响坑洞随从\移动端-兽人坑洞控制者行动-目标进入牌库底并收口.jpg` | `PASS / 92`：目标随从已离开坑洞进入牌库底，行动进入弃牌；两座基地、手牌、公共小牌、回合信息和结束回合入口保持原版布局，无新增弃牌堆或横向溢出。 |
 | AI 图面审计 | 上述 3 张本次官方 runner 生成的当前工作区原始截图；已逐张打开核验，并按用户要求直接打开到 PureRef | `PASS / 92`：来源例外、真实目标载体和最终牌库底收口均清楚；没有提示遮挡、目标错位、重复源卡、公共小牌缺失或布局溢出。 |
 | 当前范围裁决 | 本节仅覆盖兽人“坑洞”控制者自己的行动例外 | `passed_object_mobile_visual / scoped_debt`：控制者自己的行动不受坑洞保护拦截已补齐；非行动效果边界、其它兽人对象和兽人 / Munchkin 整体批次矩阵仍未完成，因此继续保持“实施中”。 |
+
+## 2026-08-11 续审记录：兽人坑洞其他玩家的非行动效果边界
+
+| 项目 | 证据 | 结论 |
+| --- | --- | --- |
+| 规则与实现语义 | `src/games/smashup/abilities/munchkin_orcs.ts` 的坑洞保护注册只针对 `action`；`src/games/smashup/domain/baseAbilities.ts` 的 `base_ninja_dojo` afterScoring 从全场随从中选择消灭；`src/games/smashup/domain/ongoingEffects.ts` 的保护检查接收来源类型 | `passed`：这条真实链把 P0 的《忍者道场》基地能力作为 `nonAction` 来源，目标是 P1 位于《坑洞》的随从，直接覆盖“其他玩家的非行动效果不能被坑洞保护错误拦截”这一剩余边界。 |
+| 移动端真实入口 E2E | `node scripts/infra/run-e2e-single.mjs default e2e/smashup/smashup-munchkin-monster-treasure-ui.e2e.ts "兽人坑洞移动端其他玩家的非行动效果仍可影响坑洞随从" --project=chromium` | `passed`：1/1，35.9 秒；真实 `844x390` 横屏先点击页面可见的“忍者道场”强制效果按钮，再进入基地能力交互。 |
+| 来源玩家与目标候选 | 同一测试的 `base_ninja_dojo` 交互、可见《忍者道场》按钮、坑洞随从本体断言 | `passed`：权威交互玩家为 P0，目标随从控制者为 P1；P0 在真实页面手动点击 P1 位于《坑洞》的随从本体，证明这是其他玩家的非行动效果，而不是坑洞控制者自己的例外。 |
+| 最终权威状态收口 | 同一测试最终 `game.getState()` 断言 | `passed`：计分后 VP 为 P0=6、P1=7；《忍者道场》被替换并清场，坑洞目标随从从基地离场并进入 P1 弃牌，`interactionSourceId` 与 `responseWindowType` 均为 `null`。 |
+| 截图 1：计分前入口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞移动端其他玩家的非行动效果仍可影响坑洞随从\移动端-兽人坑洞非行动-忍者道场计分前与坑洞目标.jpg` | `PASS / 92`：忍者道场 19/18、坑洞 3/16、目标随从、双方 VP、公共怪物 / 宝藏 `x20 / x22` 和结束回合入口同屏可见，没有横向溢出。 |
+| 截图 2：手动选择坑洞随从 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞移动端其他玩家的非行动效果仍可影响坑洞随从\移动端-兽人坑洞非行动-忍者道场手动选择坑洞随从.jpg` | `PASS / 92`：真实提示“忍者道场：选择消灭的随从”，坑洞目标随从本体处于可点击高亮；没有大卡预览、重复源卡或提示遮挡。 |
+| 截图 3：目标消灭并收口 | `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup\smashup-munchkin-monster-treasure-ui.e2e\兽人坑洞移动端其他玩家的非行动效果仍可影响坑洞随从\移动端-兽人坑洞非行动-目标被忍者道场消灭并收口.jpg` | `PASS / 92`：VP 6/7、计分基地替换、坑洞目标已离场并进入弃牌计数可见；公共小牌、两座基地、回合信息和结束回合入口仍在原版槽位内。 |
+| AI 图面审计 | 上述 3 张本次官方 runner 生成的当前工作区原始截图；已逐张打开核验 | `PASS / 92`：计分前、真实选择态和最终收口均清楚；没有提示遮挡、目标错位、公共小牌缺失、重复弃牌堆或横向溢出。 |
+| 当前范围裁决 | 本节仅覆盖兽人“坑洞”其他玩家非行动效果这一对象级边界 | `passed_object_mobile_visual / scoped_debt`：坑洞的行动保护、离开恢复、控制者自身行动和其他玩家非行动效果边界均已补齐；其它兽人对象、兽人整派系和 Munchkin 整体批次矩阵仍未完成，因此继续保持“实施中”。 |

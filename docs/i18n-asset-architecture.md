@@ -159,4 +159,4 @@ npm run assets:upload -- --sync
 | `src/components/common/media/OptimizedImage.tsx` | `<img>` 图片组件，自动 locale |
 | `src/components/common/media/CardPreview.tsx` | 卡牌预览组件（系统 B），`AtlasCard` |
 | `src/engine/primitives/spriteAtlas.ts` | 精灵图系统（系统 A） |
-| `docs/ai-rules/asset-pipeline.md` | 资源管道完整规范 |
+| `.spec/knowledge/standards/asset-pipeline.md` | 资源管道完整规范 |

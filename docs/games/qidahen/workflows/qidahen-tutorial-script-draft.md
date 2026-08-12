@@ -8,7 +8,7 @@
 
 ## 规范分层
 
-- 跨游戏都成立的教程判断方法、场景直选、高亮、玩家视角、提示 UI 与真实交互承接物边界，统一由 `.spec/skills/tutorial-workflow/SKILL.md`、`docs/ai-rules/tutorial-design.md`、`docs/ai-rules/e2e-verification.md` 和 `docs/ai-rules/ui-change-gates.md` 约束。
+- 跨游戏都成立的教程判断方法、场景直选、高亮、玩家视角、提示 UI 与真实交互承接物边界，统一由 `.spec/skills/tutorial-workflow/SKILL.md`、`.spec/knowledge/standards/tutorial-design.md`、`.spec/knowledge/standards/e2e-verification.md` 和 `.spec/knowledge/standards/ui-change-gates.md` 约束。
 - 本文只承载《七大恨》自己的章节名、教学顺序、规则对象、示范案例和当前文案，不把山海关、公共轮盘、朝鲜或六章结构反写成通用教程模板。
 - 当前源码、当前工作区真实截图与端到端结果优先于历史草案；本文与运行态不一致时，本文属于待修订对象。
 

@@ -786,12 +786,7 @@ async function expectDiscoveryResolutionLedgerTraceOnly(
   await expect(
     resolutionLedger,
     `${label}确认队列只能作为隐藏追踪，不能可见复写结果正文`,
-  ).toBeHidden();
-  await expect(resolutionLedger).toHaveAttribute("aria-hidden", "true");
-  await expect(resolutionLedger).toHaveAttribute(
-    "data-ui-role",
-    "nonvisual-resolution-ledger",
-  );
+  ).toHaveCount(0);
 }
 
 async function expectEventChoiceKeepsTurnBlocked(page: Page, label: string) {
@@ -3646,13 +3641,19 @@ test.describe("山屋惊魂事件牌真实页面选择承接", () => {
     );
     const rollPanel = discoveryPanel.getByTestId("betrayal-recent-roll-panel");
     await expect(rollPanel).toBeVisible();
-    await expect(rollPanel).toContainText("作祟检定");
     const afterRollCore = await readCurrentCore(page);
     const rolledDice = afterRollCore.recentRoll?.dice ?? [];
     const rolledSubtotal = rolledDice.reduce((sum, pip) => sum + pip, 0);
     expect(rolledDice.length).toBeGreaterThan(0);
     expect(rolledDice.every((pip) => pip === 0)).toBe(true);
     await expect(rollPanel).toContainText(`总点数 ${rolledSubtotal}`);
+    await expect(
+      page.getByTestId("betrayal-discovery-continue"),
+      "一瓶微尘结算必须给当前玩家提供确认入口",
+    ).toBeEnabled();
+    await expect(page.getByTestId("betrayal-discovery-continue")).toContainText(
+      "确认",
+    );
     const rollBreakdown = rollPanel.getByTestId(
       "betrayal-recent-roll-breakdown",
     );
@@ -3694,10 +3695,9 @@ test.describe("山屋惊魂事件牌真实页面选择承接", () => {
       `${screenshotBase}-04-选择作祟检定后骰盘停稳.jpg`,
     );
 
-    const discoveryDetail = page.getByTestId("betrayal-discovery-detail");
-    await expect(discoveryDetail).toContainText("总点数 0");
-    await expect(discoveryDetail).toContainText("神志 +1");
-    await expect(discoveryDetail).not.toContainText("力量 -1");
+    await expect(rollPanel).toContainText("总点数 0");
+    await expect(rollPanel).toContainText("神志 +1");
+    await expect(rollPanel).not.toContainText("力量 -1");
     await expect(page.getByTestId("betrayal-event-choice-panel")).toHaveCount(
       0,
     );
@@ -3717,6 +3717,294 @@ test.describe("山屋惊魂事件牌真实页面选择承接", () => {
     assertNoFatalFrontendErrors([
       { label: "betrayal-event-choice-一瓶微尘-完整链路", diagnostics },
     ]);
+  });
+
+  test("事件、物品、预兆结算必须由每个玩家在自己的页面分别确认", async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(120000);
+    const diagnostics = attachPageDiagnostics(
+      page,
+      "betrayal-event-card-resolution-multi-view-confirmation",
+    );
+    await page.goto(
+      "/play/betrayal?players=3&seat0=human&seat1=human&seat2=human&playerID=0",
+      { waitUntil: "commit", timeout: 30000 },
+    );
+    await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => undefined);
+    await waitForBetrayalPageReady(page);
+    const cases = [
+      {
+        kind: "event" as const,
+        title: "一瓶微尘",
+        cardId: undefined,
+        summary: "跳过作祟检定",
+        detail: "力量 -1；神志 +1",
+        stepKind: "event-effect" as const,
+        kindLabel: "事件牌",
+      },
+      {
+        kind: "item" as const,
+        title: "急救包",
+        cardId: "medical-kit",
+        summary: "获得物品",
+        detail: "已加入持有区：急救包",
+        stepKind: "drawn-card" as const,
+        kindLabel: "物品牌",
+      },
+      {
+        kind: "omen" as const,
+        title: "书本",
+        cardId: "omen-book",
+        summary: "获得预兆",
+        detail: "已加入持有区：书本",
+        stepKind: "drawn-card" as const,
+        kindLabel: "预兆牌",
+      },
+    ];
+
+    for (const cardCase of cases) {
+      const baseCore = createRuntimeCore();
+      const inventoryCard = cardCase.cardId
+        ? [{ id: cardCase.cardId, name: cardCase.title, kind: cardCase.kind }]
+        : [];
+      baseCore.currentExplorer = {
+        ...baseCore.currentExplorer,
+        roomId: "kitchen",
+        traits: { ...baseCore.currentExplorer.traits, might: 4, sanity: 4 },
+        inventory: inventoryCard,
+      };
+      baseCore.currentExplorerTraits = { ...baseCore.currentExplorer.traits };
+      baseCore.currentExplorerInventory = inventoryCard;
+      baseCore.latestDiscovery = {
+        kind: cardCase.kind,
+        title: cardCase.title,
+        summary: cardCase.summary,
+        detail: cardCase.detail,
+        tone: "accent",
+      };
+      baseCore.latestDiscoveryOwnerPlayerId = "0";
+      baseCore.pendingCardResolutionQueue = [{
+        id: `e2e-${cardCase.kind}-resolution`,
+        playerId: "0",
+        requiredPlayerIds: ["0", "1", "2"],
+        acknowledgedPlayerIds: [],
+        deckKind: cardCase.kind,
+        cardId: cardCase.cardId,
+        cardName: cardCase.title,
+        discoveryTitle: cardCase.title,
+        stepKind: cardCase.stepKind,
+        text: cardCase.detail,
+        index: 1,
+        total: 1,
+      }];
+
+      await injectCore(page, baseCore);
+      await expect(page.getByTestId("betrayal-discovery-panel")).toBeVisible();
+      const confirm = page.getByTestId("betrayal-discovery-continue");
+      await expect(confirm).toBeEnabled();
+      await expect(confirm).toContainText("确认");
+      await confirm.click();
+      let currentCore = await readCurrentCore(page);
+      expect(currentCore.pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toEqual(["0"]);
+
+      const playerPages: Page[] = [];
+      for (const playerId of ["1", "2"]) {
+        const playerPage = await context.newPage();
+        playerPages.push(playerPage);
+        await playerPage.setViewportSize({ width: 1600, height: 900 });
+        await playerPage.goto(
+          `/play/betrayal?players=3&seat0=human&seat1=human&seat2=human&playerID=${playerId}`,
+          { waitUntil: "commit", timeout: 30000 },
+        );
+        await playerPage.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => undefined);
+        await waitForBetrayalPageReady(playerPage);
+        await injectCore(playerPage, currentCore);
+        const playerPanel = playerPage.getByTestId("betrayal-discovery-panel");
+        await expect(playerPanel).toBeVisible();
+        await expect(playerPanel).toHaveAttribute(
+          "aria-label",
+          new RegExp(`${cardCase.kindLabel} ${cardCase.title}`),
+        );
+        const playerConfirm = playerPage.getByTestId("betrayal-discovery-continue");
+        await expect(playerConfirm).toBeEnabled();
+        await expect(playerConfirm).toContainText("确认");
+        await playerConfirm.click();
+        if (playerId === "2") {
+          await expect
+            .poll(
+              async () => (await readCurrentCore(playerPage)).pendingCardResolutionQueue,
+              {
+                message: `${cardCase.title}最后一位玩家确认后必须完成展示过场并清空结算队列`,
+                timeout: 10000,
+              },
+            )
+            .toEqual([]);
+        } else {
+          currentCore = await readCurrentCore(playerPage);
+          expect(currentCore.pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toContain(playerId);
+        }
+      }
+
+      await expect(playerPages[1].getByTestId("betrayal-discovery-panel")).toHaveCount(0);
+      await expect(playerPages[1].getByTestId("betrayal-board")).toBeVisible();
+      await Promise.all(playerPages.map((playerPage) => playerPage.close()));
+    }
+    assertNoFatalFrontendErrors([
+      { label: "betrayal-card-resolution-multi-view-confirmation", diagnostics },
+    ]);
+  });
+
+  test("当前43张事件牌都能进入同一确认队列并由全员确认收口", async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+    const diagnostics = attachPageDiagnostics(
+      page,
+      "betrayal-event-card-confirmation-matrix",
+    );
+
+    for (const [index, event] of BETRAYAL_DISCOVERY_POOLS.events.entries()) {
+      const core = createRuntimeCore();
+      core.currentExplorer = {
+        ...core.currentExplorer,
+        roomId: "kitchen",
+        inventory: [],
+      };
+      core.currentExplorerTraits = { ...core.currentExplorer.traits };
+      core.currentExplorerInventory = [];
+      core.latestDiscovery = {
+        kind: "event",
+        title: event.name,
+        summary: "事件结算",
+        detail: event.effect?.mode
+          ? `事件效果：${event.effect.mode}`
+          : "事件牌已翻开，等待全员确认",
+        tone: "accent",
+      };
+      core.latestDiscoveryOwnerPlayerId = "0";
+      core.pendingCardResolutionQueue = [{
+        id: `e2e-event-matrix-${index}`,
+        playerId: "0",
+        requiredPlayerIds: ["0", "1", "2"],
+        acknowledgedPlayerIds: [],
+        deckKind: "event",
+        cardName: event.name,
+        discoveryTitle: event.name,
+        stepKind: "event-effect",
+        text: core.latestDiscovery.detail,
+        index: 1,
+        total: 1,
+      }];
+
+      await injectCore(page, core);
+      const panel = page.getByTestId("betrayal-discovery-panel");
+      await expect(panel, `事件牌「${event.name}」必须显示发现面板`).toBeVisible();
+      await expect(panel).toHaveAttribute("aria-label", `事件牌 ${event.name}`);
+      const confirm = panel.getByTestId("betrayal-discovery-continue");
+      await expect(confirm).toBeEnabled();
+      await expect(confirm).toContainText("确认");
+      await confirm.click();
+
+      const afterOwnerConfirmation = await readCurrentCore(page);
+      const pending = afterOwnerConfirmation.pendingCardResolutionQueue?.[0];
+      expect(pending?.acknowledgedPlayerIds).toEqual(["0"]);
+      for (const playerId of ["1", "2"]) {
+        await dispatchHarnessCommand(
+          page,
+          BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION,
+          playerId,
+          { resolutionId: pending!.id },
+        );
+      }
+      await expect.poll(() => readCurrentCore(page)).toMatchObject({
+        pendingCardResolutionQueue: [],
+      });
+      await expect(panel).toHaveCount(0);
+    }
+
+    assertNoFatalFrontendErrors([
+      { label: "betrayal-event-card-confirmation-matrix", diagnostics },
+    ]);
+  });
+
+  test("一瓶微尘跳过作祟后每个玩家都能在自己的页面确认", async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(120000);
+    const diagnostics = attachPageDiagnostics(
+      page,
+      "betrayal-dusty-vial-decline-multi-view-confirmation",
+    );
+    const screenshotBase = `${EVIDENCE_DIR}/一瓶微尘-跳过作祟-多人确认`;
+    await page.goto(
+      "/play/betrayal?players=3&seat0=human&seat1=human&seat2=human&playerID=0",
+      { waitUntil: "commit", timeout: 30000 },
+    );
+    await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => undefined);
+    await waitForBetrayalPageReady(page);
+
+    const core = createPendingChoiceCore(
+      "一瓶微尘",
+      eventEffect("一瓶微尘"),
+      {
+        id: "e2e-dusty-vial-decline-multi-view",
+        acceptLabel: "进行作祟检定",
+        declineLabel: "跳过作祟检定",
+      },
+    );
+    await injectCore(page, core);
+    await page.getByTestId("betrayal-event-choice-decline").click();
+    await expect(page.getByTestId("betrayal-event-choice-panel")).toHaveCount(0);
+    await expect(page.getByTestId("betrayal-discovery-panel")).toHaveAttribute(
+      "aria-label",
+      /事件牌 一瓶微尘/,
+    );
+    await expect(page.getByTestId("betrayal-discovery-continue")).toBeEnabled();
+    await saveScreenshot(page, `${screenshotBase}-01-发起者确认前.jpg`);
+    await page.getByTestId("betrayal-discovery-continue").click();
+    let currentCore = await readCurrentCore(page);
+    expect(currentCore.pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toEqual(["0"]);
+
+    const playerPages: Page[] = [];
+    for (const playerId of ["1", "2"]) {
+      const playerPage = await context.newPage();
+      playerPages.push(playerPage);
+      await playerPage.setViewportSize({ width: 1600, height: 900 });
+      await playerPage.goto(
+        `/play/betrayal?players=3&seat0=human&seat1=human&seat2=human&playerID=${playerId}`,
+        { waitUntil: "commit", timeout: 30000 },
+      );
+      await playerPage.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => undefined);
+      await waitForBetrayalPageReady(playerPage);
+      await injectCore(playerPage, currentCore);
+      const panel = playerPage.getByTestId("betrayal-discovery-panel");
+      const confirm = playerPage.getByTestId("betrayal-discovery-continue");
+      await expect(panel).toHaveAttribute("aria-label", /事件牌 一瓶微尘/);
+      await expect(confirm).toBeEnabled();
+      await expect(confirm).toContainText("确认");
+      if (playerId === "1") {
+        await saveScreenshot(playerPage, `${screenshotBase}-02-第二位玩家确认前.jpg`);
+      }
+      await confirm.click();
+      if (playerId === "1") {
+        currentCore = await readCurrentCore(playerPage);
+        expect(currentCore.pendingCardResolutionQueue?.[0]?.acknowledgedPlayerIds).toEqual(["0", "1"]);
+      } else {
+        await expect
+          .poll(async () => (await readCurrentCore(playerPage)).pendingCardResolutionQueue)
+          .toEqual([]);
+        await expect(panel).toHaveCount(0);
+        await saveScreenshot(playerPage, `${screenshotBase}-03-全员确认后回到牌桌.jpg`);
+      }
+    }
+
+    assertNoFatalFrontendErrors([
+      { label: "betrayal-dusty-vial-decline-multi-view-confirmation", diagnostics },
+    ]);
+    await Promise.all(playerPages.map((playerPage) => playerPage.close()));
   });
 
   test("一瓶微尘成功进入灰尘后可寻找解药并完成疾病交换同意", async ({

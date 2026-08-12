@@ -1,8 +1,8 @@
 /**
  * 正义战法（Righteous Combat）奖励骰时机测试
  *
- * 验证场景：正义战法的奖励骰必须先结算为攻击加伤，再进入防御结算。
- * 这样奖励骰加出的伤害会被同一轮防御一起处理，而不是防御完之后再额外出结果。
+ * 验证场景：正义战法的奖励骰必须在确认最终骰面后结算为攻击加伤，再进入防御结算。
+ * 这样改骰窗口不会提前写入伤害，确认后的加伤仍会被同一轮防御一起处理。
  *
  * 圣骑士骰面：1,2→sword  3,4→helm  5→heart  6→pray
  */
@@ -81,12 +81,13 @@ describe('正义战法奖励骰时机', () => {
             },
         });
 
-        // 验证事件流包含关键事件
+        // 奖励骰出现不等于攻击加伤已经落地；确认后才进入攻击加伤和防御链。
         const allEvents = result.steps.flatMap(s => s.events);
         expect(allEvents).toContain('TOKEN_RESPONSE_REQUESTED');
         expect(allEvents).toContain('BONUS_DIE_ROLLED');
         expect(allEvents).toContain('BONUS_DAMAGE_ADDED');
         expect(allEvents.indexOf('BONUS_DIE_ROLLED')).toBeLessThan(allEvents.indexOf('ATTACK_DEFENSE_RESOLVED'));
+        expect(allEvents.indexOf('BONUS_DAMAGE_ADDED')).toBeGreaterThan(allEvents.indexOf('BONUS_DICE_REROLL_REQUESTED'));
         expect(allEvents.indexOf('BONUS_DAMAGE_ADDED')).toBeLessThan(allEvents.indexOf('ATTACK_DEFENSE_RESOLVED'));
         expect(allEvents).toContain('BONUS_DICE_REROLL_REQUESTED');
         expect(allEvents).toContain('DAMAGE_DEALT');
@@ -95,7 +96,7 @@ describe('正义战法奖励骰时机', () => {
     });
 
     /**
-     * 对照组：防御方无 Token → 无 TOKEN_RESPONSE_REQUESTED → rollDie 仍先于防御结算执行
+     * 对照组：防御方无 Token → 无 TOKEN_RESPONSE_REQUESTED → 确认后的 rollDie 加伤仍先于防御结算
      *
      * 随机数队列（共 10 个）：
      * [1,1,1,3,3] → 进攻骰: 3 sword + 2 helm
@@ -148,6 +149,7 @@ describe('正义战法奖励骰时机', () => {
         expect(allEvents).toContain('BONUS_DIE_ROLLED');
         expect(allEvents).toContain('BONUS_DAMAGE_ADDED');
         expect(allEvents.indexOf('BONUS_DIE_ROLLED')).toBeLessThan(allEvents.indexOf('ATTACK_DEFENSE_RESOLVED'));
+        expect(allEvents.indexOf('BONUS_DAMAGE_ADDED')).toBeGreaterThan(allEvents.indexOf('BONUS_DICE_REROLL_REQUESTED'));
         expect(allEvents.indexOf('BONUS_DAMAGE_ADDED')).toBeLessThan(allEvents.indexOf('ATTACK_DEFENSE_RESOLVED'));
         expect(allEvents).toContain('BONUS_DICE_REROLL_REQUESTED');
 

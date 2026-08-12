@@ -58,6 +58,7 @@ const MICROBOT_SWARM = 'big_hero_6_microbot_swarm';
 const MUFASA = 'lion_king_mufasa';
 const HAKUNA_MATATA = 'lion_king_hakuna_matata';
 const TIMON_AND_PUMBAA = 'lion_king_timon_and_pumbaa';
+const MULAN_COUNTER_TURN_KEY = 'mulan_mulan_power_counter_turn';
 
 const DETERMINISTIC_RANDOM: RandomFn = {
     random: () => 0,
@@ -1363,7 +1364,6 @@ function liShang(ctx: AbilityContext): AbilityResult {
 }
 
 function mulan(ctx: AbilityContext): AbilityResult {
-    if ((ctx.state.powerCountersPlacedOnMinionsThisTurn ?? 0) <= 0) return { events: [] };
     return runPrompt({
         matchState: ctx.matchState,
         playerId: ctx.playerId,
@@ -1481,6 +1481,27 @@ function drawOnPowerCounterHere(ctx: TriggerContext, onceKey: string): SmashUpEv
     ];
 }
 
+function markMulanPowerCounterThisTurn(ctx: TriggerContext): SmashUpEvent[] {
+    if (
+        ctx.affectType !== 'power_change'
+        || ctx.counterChangeKind !== 'added'
+        || (ctx.counterDelta ?? 0) <= 0
+        || ctx.baseIndex === undefined
+        || !ctx.triggerMinion
+        || ctx.triggerMinion.uid !== ctx.sourceCardUid
+        || ctx.triggerMinion.controller !== ctx.sourceControllerId
+    ) return [];
+    const counterSourcePlayerId = (ctx.affectEvent?.payload as { sourcePlayerId?: PlayerId } | undefined)?.sourcePlayerId;
+    if (counterSourcePlayerId !== ctx.sourceControllerId) return [];
+    return [buildMinionMetadataEvent(
+        ctx.triggerMinion.uid,
+        ctx.baseIndex,
+        { [MULAN_COUNTER_TURN_KEY]: ctx.state.turnNumber },
+        MULAN_COUNTER_TURN_KEY,
+        ctx.now,
+    )];
+}
+
 function jungleParadiseAfterMinionDiscarded(ctx: TriggerContext): AbilityResult {
     const baseIndex = ctx.sourceBaseIndex ?? ctx.baseIndex;
     const playerId = ctx.triggerMinion?.controller ?? ctx.playerId;
@@ -1508,6 +1529,14 @@ function jungleParadiseAfterMinionDiscarded(ctx: TriggerContext): AbilityResult 
         optional: true,
         reason: 'base_jungle_paradise',
     });
+}
+
+function validateMulanTalent(ctx: AbilityContext): string | null {
+    const source = ctx.state.bases[ctx.baseIndex]?.minions.find(minion => minion.uid === ctx.cardUid);
+    if (!source || source.defId !== 'mulan_mulan') return '木兰不在这个基地';
+    return Number(source.metadata?.[MULAN_COUNTER_TURN_KEY] ?? -1) === ctx.state.turnNumber
+        ? null
+        : '本回合需要先在木兰身上放置 +1 力量标记';
 }
 
 function bigHeroProtection(ctx: ProtectionCheckContext): boolean {
@@ -1655,9 +1684,9 @@ export function registerDisneyFourFactionsAbilities(): void {
     registerSimpleAbility('mulan_ling', 'onPlay', ling);
     registerSimpleAbility('mulan_yao', 'onPlay', yao);
     registerSimpleAbility('mulan_li_shang', 'onPlay', liShang);
-    registerSimpleAbility('mulan_mulan', 'onPlay', mulan);
+    registerSimpleAbility('mulan_mulan', 'talent', { execute: mulan, validateUse: validateMulanTalent });
     registerSimpleAbility('mulan_avalanche', 'onPlay', avalanche);
-    registerSimpleAbility('mulan_be_a_man', 'onPlay', beAMan);
+    registerSimpleAbility('mulan_be_a_man', 'talent', beAMan);
     registerSimpleAbility('mulan_call_up_new_recruits', 'onPlay', callUpNewRecruits);
     registerSimpleAbility('mulan_dragon_cannon', 'onPlay', dragonCannon);
     registerSimpleAbility('mulan_group_training', 'onPlay', groupTraining);
@@ -1695,6 +1724,11 @@ export function registerDisneyFourFactionsAbilities(): void {
             canTrigger: ctx => ctx.affectType === 'power_change' && ctx.counterChangeKind === 'added',
         });
     }
+
+    registerTrigger('mulan_mulan', 'onMinionAffected', markMulanPowerCounterThisTurn, {
+        perInstance: true,
+        playerContext: 'sourceController',
+    });
 
     registerExtendedBase('base_sfit_robotics_lab', 'onMinionAffected', (ctx) => ({
         events: buildStandardDrawEvents(ctx.state, ctx.playerId, 1, ctx.random ?? DETERMINISTIC_RANDOM, ctx.now),

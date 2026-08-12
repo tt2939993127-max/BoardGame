@@ -237,7 +237,10 @@ function resolveWarMongerRollByConfig(
         targetId,
         [{ index: 0, value, face, effectKey }],
         timestamp,
-        { customResolutionId: config.settlementId },
+        {
+            customResolutionId: config.settlementId,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     ));
     return events;
 }
@@ -378,7 +381,7 @@ function resolveWarRoomRoll({
         attackerId,
         [{ index: 0, value, face, effectKey, effectParams }],
         timestamp + 2,
-        { customResolutionId: 'zhanshujia-war-room-roll' },
+        { customResolutionId: 'zhanshujia-war-room-roll', continuation: { kind: 'complete' } },
     ));
     return events;
 }
@@ -559,7 +562,15 @@ export function registerZhanshujiaCustomActions(): void {
             if (die.face === ZHANSHUJIA_DICE_FACE_IDS.SABRE) {
                 followupEvents.push({
                     type: 'PENDING_ATTACK_UPDATED',
-                    payload: { attackerId: settlement.attackerId, patch: { damage: sabreDamage } },
+                    payload: {
+                        attackerId: settlement.attackerId,
+                        // 战争贩子的军刀骰面把原本无伤害的技能转为可防御攻击。
+                        patch: {
+                            damage: sabreDamage,
+                            isDefendable: true,
+                            settlementStage: 'preDamage',
+                        },
+                    },
                     sourceCommandType: 'BONUS_DICE_SETTLED',
                     timestamp,
                 } as PendingAttackUpdatedEvent);

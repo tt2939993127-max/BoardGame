@@ -12,12 +12,12 @@ export const MULAN_MINIONS: MinionCardDef[] = [
     { id: 'mulan_ling', type: 'minion', name: '宁', nameEn: 'Ling', faction: FACTION, power: 3, abilityTags: ['onPlay', 'ongoing', 'extra'], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 48 } },
     { id: 'mulan_yao', type: 'minion', name: '尧', nameEn: 'Yao', faction: FACTION, power: 3, abilityTags: ['onPlay', 'ongoing'], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 49 } },
     { id: 'mulan_li_shang', type: 'minion', name: '李翔', nameEn: 'Li Shang', faction: FACTION, power: 4, abilityTags: ['onPlay'], count: 2, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 50 } },
-    { id: 'mulan_mulan', type: 'minion', name: '木兰', nameEn: 'Mulan', faction: FACTION, power: 5, abilityTags: ['onPlay', 'extra'], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 51 } },
+    { id: 'mulan_mulan', type: 'minion', name: '木兰', nameEn: 'Mulan', faction: FACTION, power: 5, abilityTags: ['talent'], activatableAbilities: [{ kind: 'talent', zone: 'board', window: 'playCards' }], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 51 } },
 ];
 
 export const MULAN_ACTIONS: ActionCardDef[] = [
     { id: 'mulan_avalanche', type: 'action', subtype: 'standard', name: '雪崩', nameEn: 'Avalanche', faction: FACTION, abilityTags: ['onPlay'], playNeedsBase: true, count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 52 } },
-    { id: 'mulan_be_a_man', type: 'action', subtype: 'ongoing', name: '成为一个男人', nameEn: 'Be a Man', faction: FACTION, abilityTags: ['onPlay', 'ongoing'], ongoingTarget: 'base', playNeedsBase: true, count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 53 } },
+    { id: 'mulan_be_a_man', type: 'action', subtype: 'ongoing', name: '成为一个男人', nameEn: 'Be a Man', faction: FACTION, abilityTags: ['ongoing', 'talent'], ongoingTarget: 'base', playNeedsBase: true, activatableAbilities: [{ kind: 'talent', zone: 'board', window: 'playCards' }], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 53 } },
     { id: 'mulan_call_up_new_recruits', type: 'action', subtype: 'standard', name: '招收新兵', nameEn: 'Call Up New Recruits', faction: FACTION, abilityTags: ['onPlay', 'extra'], count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 54 } },
     { id: 'mulan_dragon_cannon', type: 'action', subtype: 'standard', name: '飞龙巨炮', nameEn: 'Dragon Cannon', faction: FACTION, abilityTags: ['onPlay'], count: 2, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 55 } },
     { id: 'mulan_family_sword', type: 'action', subtype: 'ongoing', name: '家族之剑', nameEn: 'Family Sword', faction: FACTION, abilityTags: ['ongoing'], ongoingTarget: 'minion', playNeedsMinion: true, playTargetMinionController: 'self', count: 1, previewRef: { type: 'atlas', atlasId: CARD_ATLAS, index: 56 } },

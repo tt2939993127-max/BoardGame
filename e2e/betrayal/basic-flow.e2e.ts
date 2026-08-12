@@ -329,6 +329,33 @@ test.describe("山屋惊魂基本流程", () => {
     await expect(page.getByTestId("betrayal-room-hallway")).toBeEnabled();
     await saveScreenshot(page, MOVE_MODE_SCREENSHOT);
     await page.getByTestId("betrayal-room-hallway").click();
+    const moveTransitionBlocker = page.getByTestId(
+      "betrayal-visual-transition-blocker",
+    );
+    await expect(moveTransitionBlocker).toBeVisible();
+    await expect(moveTransitionBlocker).toHaveAttribute(
+      "data-transition-kind",
+      "explorer-move",
+    );
+    await expect(moveTransitionBlocker).toHaveAttribute(
+      "data-transition-target-testid",
+      "betrayal-room-hallway",
+    );
+    await expect
+      .poll(() =>
+        page
+          .locator('[data-testid^="betrayal-visual-transition-transition-"]')
+          .evaluate((node) => {
+            const transform = getComputedStyle(node).transform;
+            return transform !== "none" && !transform.endsWith("(1, 0, 0, 1, 0, 0)");
+          }),
+      )
+      .toBe(true);
+    await saveScreenshot(
+      page,
+      `${EVIDENCE_DIR}/07a-山屋惊魂-基本流程-移动到门厅动画中.png`,
+    );
+    await expect(moveTransitionBlocker).toHaveCount(0);
     await expect(
       page.getByTestId("betrayal-room-latest-feedback"),
     ).toContainText("移动到门厅");

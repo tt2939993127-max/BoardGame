@@ -18,7 +18,7 @@
 - Affected specs:
   - `dicethrone-attack-settlement`
 - Affected docs:
-  - `docs/ai-rules/doc-index.md`
+  - `.spec/knowledge/README.md`
   - `docs/games/dicethrone/attack-settlement-invariants.md`
 - Affected code:
   - `src/games/dicethrone/domain/core-types.ts`

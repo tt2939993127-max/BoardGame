@@ -185,5 +185,5 @@
 
 1. 先把当前候选资源从 `public/assets/betrayal/` 迁到 `public/assets/i18n/zh-CN/betrayal/`，并重新生成 manifest。
 2. 再从大拼版图中裁出房间板块、楼层板和可能的起始房间。
-3. 再按 `docs/ai-rules/data-entry.md` 的原文展示门禁，分别锁定规则书正文、求生者剧本书、叛徒剧本书、作祟开局、分阵营秘密阅读和结局朗读的原文来源；没有逐字原文或正式翻译原文时只能标 `blocked / disputed`，不得用摘要冒充剧本书正文。
+3. 再按 `.spec/knowledge/standards/data-entry.md` 的原文展示门禁，分别锁定规则书正文、求生者剧本书、叛徒剧本书、作祟开局、分阵营秘密阅读和结局朗读的原文来源；没有逐字原文或正式翻译原文时只能标 `blocked / disputed`，不得用摘要冒充剧本书正文。
 4. 最后补 OCR/人工录入，把规则、剧本和参考卡转成结构化文字合同。

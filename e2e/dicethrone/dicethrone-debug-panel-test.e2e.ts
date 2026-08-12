@@ -1,5 +1,6 @@
 import { test, expect } from '../framework';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath, withJpegEvidenceScreenshotOptions } from '../framework/evidenceScreenshots';
+import { settleCurrentBonusDice } from './bonus-dice-flow';
 
 test.describe('DiceThrone 调试面板', () => {
     test('状态页会反映注入后的生命值变更', async ({ page, game }) => {
@@ -251,11 +252,8 @@ test.describe('DiceThrone 调试面板', () => {
             });
         });
 
-        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
         const bonusDieButton = page.locator('[data-tutorial-id="dice-tray"] [data-testid="die-button-0"]').first();
         await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
-        await expect(confirmButton).toBeVisible({ timeout: 5000 });
-        await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
         await expect(bonusDieButton).toHaveAttribute('data-clickable', 'true');
         await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
 
@@ -275,11 +273,9 @@ test.describe('DiceThrone 调试面板', () => {
         });
         await expect(bonusDieButton).toHaveAttribute('data-clickable', 'false');
 
-        await confirmButton.click();
-        await expect.poll(async () => page.evaluate(() => {
-            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return state?.core?.pendingBonusDiceSettlement ?? null;
-        })).toBeNull();
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'volley',
+        });
 
         const path = getEvidenceScreenshotPath(testInfo, '奖励骰重掷后复用普通确认且没有专用结算按钮', { requireChineseName: true });
         await page.getByTestId('dicethrone-board-root').screenshot(

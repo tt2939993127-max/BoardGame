@@ -623,7 +623,35 @@ export interface PendingBonusDiceSettlement {
         isDefensiveContext?: boolean;
         sfxKey?: string;
     };
+    /**
+     * 临时骰确认后的父流程续跑帧。
+     * 它只描述规则流程，不携带 UI 展示语义；攻击型临时骰必须在创建时明确写出回到哪一攻击步骤。
+     */
+    continuation?: BonusDiceContinuation;
+    /**
+     * 被本次临时骰打断的父奖励骰。它是子骰私有的内部恢复信息，
+     * 不是第二个当前骰区，也不产生玩家可操作的恢复动作。
+     */
+    suspendedParentSettlement?: PendingBonusDiceSettlement;
 }
+
+/**
+ * 临时骰确认后的唯一流程去向。
+ *
+ * `complete` 不是省略值：它明确表示来源动作已经自行收口，临时骰只需退场。
+ * 任何仍属于攻击结算的临时骰都必须写出攻击恢复阶段，不能由 reducer 根据
+ * displayOnly、骰子来源或当前 UI 状态猜测。
+ */
+export type BonusDiceContinuation =
+    | {
+        kind: 'attack';
+        settlementStage: PendingAttackSettlementStage;
+        /** 该临时骰是否已经消费了原攻击效果，阻止流程重放同一效果。 */
+        markBonusDiceResolved: boolean;
+    }
+    | {
+        kind: 'complete';
+    };
 
 export type DiceThroneRollContextKind =
     | 'offensive'
@@ -669,7 +697,8 @@ export interface DiceThroneRollContextSettlement {
 }
 
 export interface DiceThroneRollContextDisplay {
-    surface: 'diceTray' | 'bonusOverlay' | 'compactOverlay' | 'recapOnly';
+    /** 直接可操作的骰子统一进入右侧 2D 骰盘；compactOverlay 只留给需要继续选择的比较/目标层。 */
+    surface: 'diceTray' | 'compactOverlay' | 'recapOnly';
     replayOnly: boolean;
     summaryKey?: string;
 }

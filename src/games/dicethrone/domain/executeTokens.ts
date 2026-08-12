@@ -35,6 +35,40 @@ import { applyEvents } from './utils';
 import { findCurrentRollDie, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
 import { rollDieValue } from './reroll';
 
+const normalizeBonusDiceFollowupEvents = (
+    state: DiceThroneCore,
+    settlement: NonNullable<DiceThroneCore['pendingBonusDiceSettlement']>,
+    events: DiceThroneEvent[],
+): DiceThroneEvent[] => events.flatMap((event) => {
+    if (event.type !== 'DAMAGE_DEALT') {
+        return [event];
+    }
+
+    // 奖励骰处理器产生的伤害仍属于当前临时骰的来源玩家；
+    // 统一补齐归属，避免 ActionLog、响应窗口和攻击归账各自猜来源。
+    const damageEvent = event.payload.sourcePlayerId
+        ? event
+        : {
+            ...event,
+            payload: {
+                ...event.payload,
+                sourcePlayerId: settlement.attackerId,
+            },
+        };
+
+    const damageScope = damageEvent.payload.damageScope
+        ?? (state.pendingAttack ? 'attack' : 'direct');
+    const responseEvent = maybeCreateDamageResponseEvent({
+        state,
+        damageEvent,
+        attackerId: settlement.attackerId,
+        sourceAbilityId: damageEvent.payload.sourceAbilityId ?? settlement.sourceAbilityId,
+        timestamp: typeof damageEvent.timestamp === 'number' ? damageEvent.timestamp : 0,
+        allowAttackerBoost: damageScope === 'attack',
+    });
+    return responseEvent ? [responseEvent] : [damageEvent];
+});
+
 /**
  * 按当前奖励骰面生成最终结算事件。
  *
@@ -67,10 +101,10 @@ export function buildBonusDiceSettlementEvents({
     const totalDamage = settlementResult?.totalDamage ?? defaultTotalDamage;
     const thresholdTriggered = settlementResult?.thresholdTriggered
         ?? (settlement.threshold ? totalDamage >= settlement.threshold : false);
-    const followupEvents = [
+    const followupEvents = normalizeBonusDiceFollowupEvents(state, settlement, [
         ...(settlementResult?.followupEvents ?? []),
         ...rollDieFollowupEvents,
-    ];
+    ]);
 
     events.push({
         type: 'BONUS_DICE_SETTLED',

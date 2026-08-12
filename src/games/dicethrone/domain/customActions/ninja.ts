@@ -464,7 +464,9 @@ function handleDeathBlossom(ctx: CustomActionContext): DiceThroneEvent[] {
         } as BonusDieRolledEvent);
     }
 
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp + 5));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp + 5, {
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+    }));
     events.push(bonusDamageEvent(attackerId, katanaCount + shurikenCount * 2, sourceAbilityId, timestamp + 6));
     if (maskCount > 0) {
         const ninjutsuEvent = grantTokenEvent(state, sourceAbilityId, attackerId, TOKEN_IDS.NINJUTSU, maskCount, timestamp + 7);

@@ -9,7 +9,7 @@ description: "BoardGame 截图交付适配。用于本项目的 E2E 证据目录
 
 用户说“打开图、给我看图、图呢、重新打开”，或准备把最终验收图展示给用户时，全部转到系统 canonical-source；本 skill 不承载用户可见开图的执行规则：
 
-`D:\codex-home\skills\show-image-to-user\SKILL.md`
+`D:\\codex-home\\skills\\show-image-to-user\\SKILL.md`
 
 截图是否具备验收资格、必须拍哪些状态、如何区分 AI 核图与用户开图，以项目标准为准：
 
@@ -37,11 +37,11 @@ node scripts/verify/open-verified-image.mjs --viewer pureref --paths "<绝对路
 
 - `OPENED_IMAGE=`、`OPENED_WITH_PUREREF=` 或脚本退出成功只证明项目脚本发起了动作；用户可见交付和最终回复口径仍以系统 canonical-source 为准。
 - `scripts/verify/label-image-sequence.py` 只负责生成项目内的全尺寸标记副本和序列索引，原图不得被覆盖；具体何时生成、打开哪一组文件由系统 canonical-source 决定。
-- 该标记脚本当前与系统 `show-image-to-user/scripts/label-image-sequence.py` 保持同哈希；项目副本是项目路径适配层，后续通过宿主同步 / 漂移检查保持一致，不是第二套交付规则来源。
+- 该标记脚本当前与系统 `show-image-to-user/scripts/label-image-sequence.py` 保持同哈希；它是项目命令可直接调用的执行副本，不承载独立交付规则。任一脚本变更后，必须重新比对两份实现，避免副本漂移；宿主同步只负责 `.spec/skills` 下的项目 skill，不负责这个脚本。
 
 ## 落点
 
-- 用户可见开图唯一真相源：`D:\codex-home\skills\show-image-to-user\SKILL.md`
+- 用户可见开图唯一真相源：`D:\\codex-home\\skills\\show-image-to-user\\SKILL.md`
 - 截图验收总规则：`.spec/knowledge/standards/e2e-verification.md`
 - UI 玩家视角门禁：`.spec/knowledge/standards/ui-change-gates.md`
 - 仓库开图脚本：`scripts/verify/open-verified-image.mjs`

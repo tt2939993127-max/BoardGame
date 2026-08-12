@@ -55,10 +55,6 @@ describe('DiceBoxPhysicsSource', () => {
                 destroy: vi.fn(),
                 setCanvasDiagnostics: vi.fn(),
                 setDieSkins: vi.fn(),
-                recoverOutOfBoundsDice: vi.fn(),
-                freezeSettledDice: vi.fn(),
-                separateOverlappingDice: vi.fn(),
-                settleDiceIntoSafeSpread: vi.fn(),
                 getPhysicsState: vi.fn(),
                 hasDice: vi.fn()
                     .mockReturnValueOnce(false)
@@ -98,15 +94,6 @@ describe('DiceBoxPhysicsSource', () => {
             });
             expect(engineMock.restoreValues).toHaveBeenCalledWith([6]);
             expect(engineMock.rollToValues).not.toHaveBeenCalled();
-            expect(engineMock.recoverOutOfBoundsDice).toHaveBeenCalledWith({
-                strictProjectedBounds: true,
-            });
-            expect(engineMock.separateOverlappingDice).toHaveBeenCalledTimes(1);
-            expect(engineMock.separateOverlappingDice).toHaveBeenCalledWith({
-                settleAfter: true,
-            });
-            expect(engineMock.settleDiceIntoSafeSpread).toHaveBeenCalledTimes(1);
-            expect(engineMock.freezeSettledDice).toHaveBeenCalledTimes(2);
             expect(
                 engineMock.restoreValues.mock.invocationCallOrder[0],
             ).toBeLessThan(engineMock.rerollToValues.mock.invocationCallOrder[0]);
@@ -125,10 +112,6 @@ describe('DiceBoxPhysicsSource', () => {
             destroy: vi.fn(),
             setCanvasDiagnostics: vi.fn(),
             setDieSkins: vi.fn(),
-            recoverOutOfBoundsDice: vi.fn(),
-            freezeSettledDice: vi.fn(),
-            separateOverlappingDice: vi.fn(),
-            settleDiceIntoSafeSpread: vi.fn(),
             getPhysicsState: vi.fn(),
             hasDice: vi.fn().mockReturnValue(false),
             rollToValues: vi.fn(),
@@ -173,10 +156,6 @@ describe('DiceBoxPhysicsSource', () => {
             destroy: vi.fn(),
             setCanvasDiagnostics: vi.fn(),
             setDieSkins: vi.fn(),
-            recoverOutOfBoundsDice: vi.fn(),
-            freezeSettledDice: vi.fn(),
-            separateOverlappingDice: vi.fn(),
-            settleDiceIntoSafeSpread: vi.fn(),
             getPhysicsState: vi.fn(),
             hasDice: vi.fn().mockReturnValue(false),
             rollToValues: vi.fn(),
@@ -216,10 +195,6 @@ describe('DiceBoxPhysicsSource', () => {
             destroy: vi.fn(),
             setCanvasDiagnostics: vi.fn(),
             setDieSkins: vi.fn(),
-            recoverOutOfBoundsDice: vi.fn(),
-            freezeSettledDice: vi.fn(),
-            separateOverlappingDice: vi.fn(),
-            settleDiceIntoSafeSpread: vi.fn(),
             getPhysicsState: vi.fn(),
             hasDice: vi.fn().mockReturnValue(true),
             rerollToValues,
@@ -265,5 +240,60 @@ describe('DiceBoxPhysicsSource', () => {
         await waitFor(() => {
             expect(rerollToValues).toHaveBeenCalledTimes(2);
         });
+    });
+
+    it('物理投掷中不抢写骰子坐标，避免连续跳变和透视缩放抖动', async () => {
+        const originalRequestAnimationFrame = window.requestAnimationFrame;
+        const originalCancelAnimationFrame = window.cancelAnimationFrame;
+        const animationFrames: FrameRequestCallback[] = [];
+        let finishRoll: (() => void) | undefined;
+        const rolling = new Promise<void>((resolve) => {
+            finishRoll = resolve;
+        });
+        const engineMock = {
+            resize: vi.fn(),
+            destroy: vi.fn(),
+            setCanvasDiagnostics: vi.fn(),
+            setDieSkins: vi.fn(),
+            getPhysicsState: vi.fn(),
+            hasDice: vi.fn().mockReturnValue(true),
+            rerollToValues: vi.fn().mockImplementation(() => rolling),
+            syncSettledValues: vi.fn(),
+            previewValues: vi.fn(),
+            clear: vi.fn(),
+            removeDice: vi.fn(),
+            restoreValues: vi.fn(),
+        };
+        createEngineMock.mockResolvedValue(engineMock);
+        window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+            animationFrames.push(callback);
+            return animationFrames.length;
+        });
+        window.cancelAnimationFrame = vi.fn();
+
+        try {
+            render(
+                <DiceBoxPhysicsSource
+                    dice={[{ id: 7, value: 6, isKept: false }]}
+                    isRolling={true}
+                />,
+            );
+
+            await waitFor(() => {
+                expect(engineMock.rerollToValues).toHaveBeenCalledWith([0], [6], []);
+                expect(animationFrames.length).toBeGreaterThan(0);
+            });
+
+            await act(async () => {
+                animationFrames.shift()?.(performance.now());
+            });
+
+        } finally {
+            await act(async () => {
+                finishRoll?.();
+            });
+            window.requestAnimationFrame = originalRequestAnimationFrame;
+            window.cancelAnimationFrame = originalCancelAnimationFrame;
+        }
     });
 });

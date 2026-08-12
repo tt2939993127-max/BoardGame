@@ -195,7 +195,9 @@ const createBonusDieEvents = (
         timestamp,
     } as BonusDieRolledEvent));
 
-    events.push(createDisplayOnlySettlement(sourceAbilityId, playerId, playerId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, playerId, playerId, dice, timestamp, {
+        continuation: { kind: 'complete' },
+    }));
     return { dice, events };
 };
 

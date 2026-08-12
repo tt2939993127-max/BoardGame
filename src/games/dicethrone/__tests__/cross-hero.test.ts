@@ -1009,27 +1009,21 @@ describe('cross hero battles', () => {
                     cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.sys.phase).toBe('offensiveRoll');
+            // Loaded 是攻击的一部分；奖励骰确认只收口临时骰，父攻击仍需进入防御投。
+            expect(result.finalState.sys.phase).toBe('defensiveRoll');
             expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
-            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
-            expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
-            expect(result.finalState.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement).toMatchObject({
-                displayOnly: true,
-                attackerId: '0',
-                targetId: '1',
-                // 普通 Loaded 不承接“我又行了”的重掷；只有技能/攻击修正牌显式声明 hook 才可重掷。
-                maxRerollCount: 0,
+            expect(result.finalState.core.pendingAttack).toMatchObject({
+                sourceAbilityId: 'revolver-3',
+                bonusDamage: 1,
+                isDefendable: true,
+                defenseAbilityId: 'meditation',
             });
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice[0]).toMatchObject({
-                value: 1,
-                effectKey: 'bonusDie.effect.gunslingerLoadedDie',
-            });
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
         });
 
         it('eat my lead adds damage from 5 dice and applies knockdown over 4', () => {
@@ -1066,6 +1060,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
                     cmd('PLAY_CARD', '0', { cardId: 'card-eat-my-lead' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -1077,13 +1072,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.gunslingerEatMyLead.resultKnockdown');
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toEqual({
-                bulletCount: 5,
-                bonusDamage: 5,
-            });
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(5);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(5);
@@ -1490,7 +1479,26 @@ describe('cross hero battles', () => {
                 return;
             }
 
-            const finalState = resolveResult.state as MatchState<DiceThroneCore>;
+            const pendingState = resolveResult.state as MatchState<DiceThroneCore>;
+            expect(pendingState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
+            const settledResult = executePipeline(
+                pipelineConfig,
+                pendingState,
+                {
+                    type: 'SKIP_BONUS_DICE_REROLL',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: 3,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(settledResult.success).toBe(true);
+            if (!settledResult.success) {
+                return;
+            }
+
+            const finalState = settledResult.state as MatchState<DiceThroneCore>;
             expect(finalState.core.players['3'].tokens.bounty).toBe(1);
             expect(finalState.core.players['1'].tokens.bounty ?? 0).toBe(0);
             expect(finalState.core.players['2'].tokens.bounty ?? 0).toBe(0);
@@ -1843,6 +1851,7 @@ describe('cross hero battles', () => {
                 name: 'gunslinger high-noon dash branch',
                 commands: [
                     cmd('PLAY_CARD', '0', { cardId: 'card-high-noon' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'main1',
@@ -1905,7 +1914,7 @@ describe('cross hero battles', () => {
                 kind: 'dt:token-response',
                 playerId: '1',
             });
-            expect(responseResult.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(49);
+            expect(responseResult.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
 
             const settledResult = runner.run({
                 name: 'gunslinger high-noon bullet branch skips protect response',
@@ -1917,7 +1926,7 @@ describe('cross hero battles', () => {
                     turnPhase: 'main1',
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 1 },
-                        '1': { hp: 47 },
+                        '1': { hp: 48 },
                     },
                 },
             });
@@ -2010,6 +2019,7 @@ describe('cross hero battles', () => {
                 name: 'gunslinger high-noon bullseye branch',
                 commands: [
                     cmd('PLAY_CARD', '0', { cardId: 'card-high-noon' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'main1',
@@ -2363,21 +2373,20 @@ describe('cross hero battles', () => {
                     cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(getCurrentInteractionSummary(result.finalState).kind).toBe('dt:bonus-dice');
+            expect(result.finalState.sys.phase).toBe('defensiveRoll');
             expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
-            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
-            expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
-            expect(result.finalState.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice?.[0]).toMatchObject({
-                value: 1,
-                effectKey: 'bonusDie.effect.gunslingerLoadedDie',
+            expect(result.finalState.core.pendingAttack).toMatchObject({
+                sourceAbilityId: 'revolver-3',
+                bonusDamage: 1,
+                isDefendable: true,
+                defenseAbilityId: 'meditation',
             });
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
         });
     });
 
@@ -2624,6 +2633,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('ADVANCE_PHASE', '1'),
                     cmd('USE_TOKEN', '1', { tokenId: TOKEN_IDS.SAMURAI_RETRIBUTION, amount: 1 }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '1'),
                     cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {
@@ -2728,6 +2738,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'katana-slice-3' }),
                     cmd('PLAY_CARD', '0', { cardId: 'card-righteousness' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -2739,8 +2750,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('katana-slice-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(2);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
@@ -2782,6 +2792,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'katana-slice-3' }),
                     cmd('PLAY_CARD', '0', { cardId: 'card-righteousness' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -2793,8 +2804,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('katana-slice-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage ?? 0).toBe(0);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage ?? 0).toBe(0);
@@ -2836,6 +2846,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'katana-slice-3' }),
                     cmd('PLAY_CARD', '0', { cardId: 'card-zanshin' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -2847,16 +2858,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.samuraiMasamune.result');
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toEqual({
-                katanaCount: 2,
-                shameCount: 1,
-                appliedShameCount: 1,
-                retributionCount: 2,
-                grantedRetributionCount: 1,
-            });
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('katana-slice-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(2);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
@@ -2907,9 +2909,10 @@ describe('cross hero battles', () => {
                     cmd('ADVANCE_PHASE', '1'),
                     cmd('SKIP_TOKEN_RESPONSE', '0'),
                     cmd('SKIP_TOKEN_RESPONSE', '1'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
-                    turnPhase: 'defensiveRoll',
+                    turnPhase: 'main2',
                     players: {
                         '0': { cp: 0, discardSize: 0 },
                         '1': {},
@@ -2918,21 +2921,8 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.samuraiMasamune.result');
-            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toMatchObject({
-                katanaCount: expect.any(Number),
-                shameCount: expect.any(Number),
-                appliedShameCount: expect.any(Number),
-                retributionCount: expect.any(Number),
-                grantedRetributionCount: expect.any(Number),
-            });
-            expect(result.finalState.core.pendingAttack).toMatchObject({
-                sourceAbilityId: 'masamune-2-large-straight',
-                damageResolved: true,
-                defenseResolved: true,
-            });
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(result.finalState.core.pendingAttack).toBeNull();
             expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
             expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] ?? 0).toBe(0);
         });

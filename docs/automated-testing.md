@@ -112,6 +112,9 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 ### 测试前置依赖与运行模式（强制）
 
+- **E2E 素材自动准备**：标准入口 `node scripts/infra/run-e2e-command.mjs ... e2e/<gameId>/...` 或 `run-e2e-single.mjs` 会在启动测试服务前自动按 `gameId` 从服务器素材主源补齐本地缺失运行时素材；已有文件按服务器 SHA-256 自动跳过。共享音频只补齐精简运行时注册表引用的对象，不会把全站音频一起下载。测试者不需要手动记住下载步骤。只列举用例（`--list`）不下载；共享测试或无明确游戏目录的测试不自动扩大到全站素材。
+- **手动按游戏补齐素材**：`npm run assets:download -- --game <gameId>`；多个游戏可重复 `--game`。只有确实需要完整运行时镜像时才显式使用 `npm run assets:download -- --all`。
+
 - **缺依赖先补齐再重试原命令**：若失败明确指向仓库已声明的 Node 包、Playwright 浏览器、构建工具或测试运行时，先按当前 lockfile 和项目包管理入口安装必要依赖，再重跑同一条命令。不得把依赖失败改写成业务失败，也不得跳过该测试或换旁路命令冒充通过。
 - **外部服务不作为默认安装门槛**：Docker、外部 MongoDB、Redis 等系统服务只有在目标测试实际验证其行为时才需要启用；先使用项目已有的 lite、内存存储或测试内存服务。系统级软件不因普通测试失败而擅自安装。
 - **运行模式按目标升级**：规则 / 引擎 / 游戏 UI 默认走最窄的 Vitest、GameTestRunner 或状态注入 E2E；只有认证、社交、后台、保存恢复、排行榜归档、真实持久化兼容性等目标，才升级到 API / 外部数据库相关测试。
@@ -404,7 +407,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 - 给出建议和警告
 
 **截图验收主源**：
-- 看图验收、外部资源缺失、线上现状图、移动端主方向和截图有效性，以 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 的「看图验收」和「截图来源与证据文档」为准。
+- 图面证据判定、外部资源缺失、线上现状图、移动端主方向和截图有效性，以 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 的「图面证据判定」和「截图来源与证据文档」为准。
 - 本文只保留 E2E 运行、截图产物位置和测试工具用法；新增验收规则必须回到 `.spec/knowledge/standards/` 的 canonical-source，不要在这里新增第二套清单。
 
 #### 2. 服务器就绪检查

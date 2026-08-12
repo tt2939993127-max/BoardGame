@@ -62,7 +62,7 @@ scripts/
 - `extract_assets.js`：资源提取脚本（需在脚本内配置本地路径）
 - `generate_asset_manifests.js`：生成/校验 `assets-manifest.json`
 - `upload-to-server.js`：上传资源到服务器素材主源
-- `download-from-server.js`：保留 `assets:download` 兼容入口；当前不再从对象存储反向同步全量素材
+- `download-from-server.js` / `download-from-server.mjs`：按 `--game <gameId>` 从服务器主源补齐运行时素材；共享音频只同步精简运行时注册表引用的对象，`--all` 才是显式全量运行时镜像
 
 ### 游戏（scripts/game/）
 

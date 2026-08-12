@@ -238,7 +238,7 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
         targetId,
         [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
         timestamp + 1,
-        { customResolutionId: SHADOW_DANCE_SETTLEMENT_ID },
+        { customResolutionId: SHADOW_DANCE_SETTLEMENT_ID, continuation: { kind: 'complete' } },
     )];
 }
 
@@ -464,7 +464,7 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
         targetId,
         [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
         timestamp + 1,
-        { customResolutionId: SHADOW_DANCE_2_SETTLEMENT_ID },
+        { customResolutionId: SHADOW_DANCE_2_SETTLEMENT_ID, continuation: { kind: 'complete' } },
     )];
 }
 
@@ -683,7 +683,7 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
         state.pendingAttack.defenderId ?? attackerId,
         [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.sneakAttack' }],
         timestamp + 1,
-        { customResolutionId: SNEAK_ATTACK_SETTLEMENT_ID },
+        { customResolutionId: SNEAK_ATTACK_SETTLEMENT_ID, continuation: { kind: 'complete' } },
     )];
 }
 

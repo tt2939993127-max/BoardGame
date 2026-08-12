@@ -208,7 +208,7 @@ export const createEvasionRollContext = (
             },
         },
         display: {
-            surface: 'compactOverlay',
+            surface: 'diceTray',
             replayOnly: false,
         },
     };

@@ -183,18 +183,12 @@ export function DiceBoxPhysicsSource({
     ) => {
         if (nextValues.length === 0) return;
         await engine.restoreValues(nextValues);
-        engine.recoverOutOfBoundsDice({ strictProjectedBounds: true });
-        engine.separateOverlappingDice({ settleAfter: true });
-        engine.settleDiceIntoSafeSpread();
-        engine.freezeSettledDice();
         emitPhysicsStates(engine, true);
     }, [emitPhysicsStates]);
 
     const finalizeVisibleSettledDice = React.useCallback((
         engine: DiceBoxThreeEngine,
     ) => {
-        engine.recoverOutOfBoundsDice({ strictProjectedBounds: true });
-        engine.freezeSettledDice();
         emitPhysicsStates(engine, true);
     }, [emitPhysicsStates]);
 
@@ -277,13 +271,6 @@ export function DiceBoxPhysicsSource({
             }
             lastEmitAt = now;
             try {
-                engine.recoverOutOfBoundsDice({
-                    strictProjectedBounds: settledRef.current && !activeMotionRef.current,
-                });
-                if (!settledRef.current && activeMotionRef.current) {
-                    engine.separateOverlappingDice();
-                }
-
                 emitPhysicsStates(engine, settledRef.current);
             } catch (error) {
                 failEngine(error);

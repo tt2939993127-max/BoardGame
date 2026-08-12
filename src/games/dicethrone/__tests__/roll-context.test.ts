@@ -19,7 +19,7 @@ import { TOKEN_IDS } from '../domain/ids';
 import { COMMON_CARDS } from '../domain/commonCards';
 import { canAdvancePhase, checkPlayCard } from '../domain/rules';
 import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../heroes/zhanshujia/tokens';
-import { createEvasionRollContext, createMainRollContext } from '../domain/rollContext';
+import { createCompareRollContext, createEvasionRollContext, createMainRollContext } from '../domain/rollContext';
 
 initializeCustomActions();
 
@@ -458,6 +458,221 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(playSix).toBeDefined();
         if (!playSix) return;
         expect(checkPlayCard(opened, '0', playSix, 'offensiveRoll')).toEqual({ ok: true });
+    });
+
+    it('攻击已选定时重掷奖励骰不会要求重选技能或清空攻击', () => {
+        const opened = reduce(roll(createCore(), [1, 2, 3, 4, 5]), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const state: DiceThroneCore = {
+            ...opened,
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'war-monger',
+                isDefendable: true,
+                damage: 5,
+            },
+        };
+
+        const events = execute(
+            { core: state, sys: { phase: 'offensiveRoll' } } as MatchState<DiceThroneCore>,
+            {
+                type: 'USE_PASSIVE_ABILITY',
+                playerId: '0',
+                payload: {
+                    passiveId: 'zhanshujia-tactical-advantage',
+                    actionIndex: 1,
+                    targetDieId: 0,
+                },
+            } as any,
+            queuedRandom([1]),
+        );
+        const rerolled = events.reduce((current, event) => reduce(current, event), state);
+
+        expect(events.some(event => event.type === 'ABILITY_RESELECTION_REQUIRED')).toBe(false);
+        expect(rerolled.pendingAttack).toMatchObject({
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'war-monger',
+            damage: 5,
+        });
+        expect(rerolled.pendingBonusDiceSettlement?.dice[0]?.value).toBe(1);
+    });
+
+    it('攻击已选定时专用奖励骰重掷不会清空攻击', () => {
+        const opened = reduce(roll(createCore(), [1, 2, 3, 4, 5]), {
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement: createBonusSettlement() },
+            timestamp: 3,
+        } as DiceThroneEvent);
+        const state: DiceThroneCore = {
+            ...opened,
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'war-monger',
+                isDefendable: true,
+                damage: 5,
+            },
+        };
+
+        const events = execute(
+            { core: state, sys: { phase: 'offensiveRoll' } } as MatchState<DiceThroneCore>,
+            {
+                type: 'REROLL_BONUS_DIE',
+                playerId: '0',
+                payload: { dieIndex: 0 },
+            } as any,
+            queuedRandom([6]),
+        );
+        const rerolled = events.reduce((current, event) => reduce(current, event), state);
+
+        expect(events.some(event => event.type === 'ABILITY_RESELECTION_REQUIRED')).toBe(false);
+        expect(rerolled.pendingAttack).toMatchObject({
+            sourceAbilityId: 'war-monger',
+            damage: 5,
+        });
+        expect(rerolled.pendingBonusDiceSettlement?.dice[0]?.value).toBe(6);
+    });
+
+    it('攻击已选定时重掷进攻比较骰不会要求重选技能或清空攻击', () => {
+        const state: DiceThroneCore = {
+            ...createCore(),
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'showdown',
+                isDefendable: true,
+                damage: 5,
+            },
+            currentRollContext: createCompareRollContext(createCore(), {
+                id: 'compare:showdown-reroll-regression',
+                ownerPlayerId: '0',
+                targetPlayerId: '1',
+                sourceAbilityId: 'showdown',
+                dice: [
+                    { ...createDie(0, 4), ownerId: '0' },
+                    { ...createDie(1, 2), ownerId: '1' },
+                ],
+                metadata: { compareKind: 'gunslingerShowdown' },
+            }),
+        };
+
+        const events = execute(
+            { core: state, sys: { phase: 'offensiveRoll' } } as MatchState<DiceThroneCore>,
+            {
+                type: 'USE_PASSIVE_ABILITY',
+                playerId: '0',
+                payload: {
+                    passiveId: 'zhanshujia-tactical-advantage',
+                    actionIndex: 1,
+                    targetDieId: 0,
+                },
+            } as any,
+            queuedRandom([1]),
+        );
+        const rerolled = events.reduce((current, event) => reduce(current, event), state);
+
+        expect(events.some(event => event.type === 'ABILITY_RESELECTION_REQUIRED')).toBe(false);
+        expect(rerolled.pendingAttack).toMatchObject({
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'showdown',
+            damage: 5,
+        });
+        expect(rerolled.currentRollContext?.dice[0]?.value).toBe(1);
+    });
+
+    it('攻击已选定时修改进攻比较骰也不会要求重选技能或清空攻击', () => {
+        const state: DiceThroneCore = {
+            ...createCore(),
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'showdown',
+                isDefendable: true,
+                damage: 5,
+            },
+            currentRollContext: createCompareRollContext(createCore(), {
+                id: 'compare:showdown-modify-regression',
+                ownerPlayerId: '0',
+                targetPlayerId: '1',
+                sourceAbilityId: 'showdown',
+                dice: [
+                    { ...createDie(0, 4), ownerId: '0' },
+                    { ...createDie(1, 2), ownerId: '1' },
+                ],
+                metadata: { compareKind: 'gunslingerShowdown' },
+            }),
+        };
+
+        const events = execute(
+            { core: state, sys: { phase: 'offensiveRoll' } } as MatchState<DiceThroneCore>,
+            {
+                type: 'MODIFY_DIE',
+                playerId: '0',
+                payload: { dieId: 0, newValue: 6 },
+            } as any,
+            queuedRandom([]),
+        );
+        const modified = events.reduce((current, event) => reduce(current, event), state);
+
+        expect(events.some(event => event.type === 'ABILITY_RESELECTION_REQUIRED')).toBe(false);
+        expect(modified.pendingAttack).toMatchObject({
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'showdown',
+            damage: 5,
+        });
+        expect(modified.currentRollContext?.dice[0]?.value).toBe(6);
+    });
+
+    it.each([
+        'defensive',
+        'targeting',
+        'effect',
+        'bonus',
+        'evasion',
+        'compare',
+    ] as const)('攻击已选定时普通重掷 %s 临时骰不会要求重选技能', (kind) => {
+        const base = { ...createCore(), rollCount: 1 };
+        const state: DiceThroneCore = {
+            ...base,
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'war-monger',
+                isDefendable: true,
+                damage: 5,
+            },
+            currentRollContext: {
+                ...createMainRollContext(base, {
+                    phase: 'offensiveRoll',
+                    dice: [createDie(0, 4)],
+                }),
+                id: `${kind}:reroll-regression`,
+                kind,
+            },
+        };
+
+        const events = execute(
+            { core: state, sys: { phase: 'offensiveRoll' } } as MatchState<DiceThroneCore>,
+            {
+                type: 'REROLL_DIE',
+                playerId: '0',
+                payload: { dieId: 0 },
+            } as any,
+            queuedRandom([6]),
+        );
+
+        expect(events).toContainEqual(expect.objectContaining({
+            type: 'DIE_REROLLED',
+            payload: expect.objectContaining({ newValue: 6 }),
+        }));
+        expect(events.some(event => event.type === 'ABILITY_RESELECTION_REQUIRED')).toBe(false);
     });
 
     it('战术家的战术优势可在非投掷阶段重掷当前奖励骰', () => {

@@ -9,5 +9,5 @@
 - [ ] 1.8 切换 `assets.easyboardgame.top/official` 公开链路到 R2 主源。
 - [ ] 1.9 用真实公开域名验证代表性普通素材、manifest、OTA、原生更新包和移动素材包均来自 R2 主源。
 - [ ] 1.10 完成服务器和 R2 历史对象清理，只删除 dry-run 已证明安全的候选。
-- [ ] 1.11 更新 `docs/ai-rules/asset-pipeline.md`、`docs/deploy.md` 和相关移动发布文档。
+- [ ] 1.11 更新 `.spec/knowledge/standards/asset-pipeline.md`、`docs/deploy.md` 和相关移动发布文档。
 - [ ] 1.12 跑 OpenSpec 校验、资源审计和发布脚本定向测试。

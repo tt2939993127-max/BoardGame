@@ -11,6 +11,7 @@ import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { initHeroState } from '../../src/games/dicethrone/domain/characters';
 import '../../src/games/dicethrone/domain';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 type JsonRecord = Record<string, any>;
 
@@ -2527,6 +2528,7 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
                 handIds: artificer?.hand?.map((card: JsonRecord) => card.id) ?? [],
                 discardIds: artificer?.discard?.map((card: JsonRecord) => card.id) ?? [],
                 synth: artificer?.tokens?.[TOKEN_IDS.SYNTH] ?? null,
+                pendingBonusDice: state?.core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null,
                 bonusDieValues: (state?.sys?.eventStream?.entries ?? [])
                     .map((entry: JsonRecord) => entry?.event)
                     .filter((event: JsonRecord) => event?.type === 'BONUS_DIE_ROLLED')
@@ -2550,12 +2552,29 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
             selectedCharacter: ARTIFICER,
             handIds: [],
             discardIds: ['card-artificer-masterpiece'],
-            synth: 5,
+            synth: 0,
+            pendingBonusDice: 'card-artificer-masterpiece',
             bonusDieValues: [6],
             bonusDieFaces: ['electricity'],
             bonusDieEffectKeys: ['bonusDie.effect.artificerMasterpieceElectricity'],
             drawnCards: 0,
         });
+
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-masterpiece',
+        });
+        await game.screenshot('artificer-masterpiece-bonus-die-before-confirm', testInfo);
+        await settleCurrentBonusDice(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-masterpiece',
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState() as JsonRecord;
+            return {
+                synth: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.SYNTH] ?? null,
+                pendingBonusDice: state?.core?.pendingBonusDiceSettlement ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({ synth: 5, pendingBonusDice: null });
 
         await game.screenshot('artificer-masterpiece-after-play', testInfo);
     });
@@ -2629,6 +2648,24 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
         await expect.poll(async () => {
             const state = await game.getState() as JsonRecord;
             return {
+                pendingBonusDice: state?.core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null,
+                player3Nanobomb: state?.core?.players?.['3']?.statusEffects?.[STATUS_IDS.NANOBOMB] ?? 0,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            pendingBonusDice: 'card-artificer-overdrive',
+            player3Nanobomb: 0,
+        });
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-overdrive',
+        });
+        await game.screenshot('artificer-overdrive-bonus-die-before-confirm', testInfo);
+        await settleCurrentBonusDice(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-overdrive',
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState() as JsonRecord;
+            return {
                 handIds: state?.core?.players?.['0']?.hand?.map((card: JsonRecord) => card.id) ?? [],
                 discardIds: state?.core?.players?.['0']?.discard?.map((card: JsonRecord) => card.id) ?? [],
                 artificerHp: state?.core?.players?.['0']?.resources?.[RESOURCE_IDS.HP] ?? null,
@@ -2675,6 +2712,7 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
                 handIds: artificer?.hand?.map((card: JsonRecord) => card.id) ?? [],
                 discardIds: artificer?.discard?.map((card: JsonRecord) => card.id) ?? [],
                 synth: artificer?.tokens?.[TOKEN_IDS.SYNTH] ?? null,
+                pendingBonusDice: state?.core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null,
                 bonusDieValues: (state?.sys?.eventStream?.entries ?? [])
                     .map((entry: JsonRecord) => entry?.event)
                     .filter((event: JsonRecord) => event?.type === 'BONUS_DIE_ROLLED')
@@ -2691,11 +2729,28 @@ test.describe('DiceThrone 工匠 P0 全面审计真实入口', () => {
         }, { timeout: 10000 }).toMatchObject({
             handIds: [],
             discardIds: ['card-artificer-perfectly-calibrated'],
-            synth: 3,
+            synth: 0,
+            pendingBonusDice: 'card-artificer-perfectly-calibrated',
             bonusDieValues: [5],
             bonusDieFaces: ['gear'],
             bonusDieEffectKeys: ['bonusDie.effect.artificerPerfectlyCalibrated'],
         });
+
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-perfectly-calibrated',
+        });
+        await game.screenshot('artificer-perfectly-calibrated-bonus-die-before-confirm', testInfo);
+        await settleCurrentBonusDice(page, () => game.getState() as Promise<JsonRecord>, {
+            sourceAbilityId: 'card-artificer-perfectly-calibrated',
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState() as JsonRecord;
+            return {
+                synth: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.SYNTH] ?? null,
+                pendingBonusDice: state?.core?.pendingBonusDiceSettlement ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({ synth: 3, pendingBonusDice: null });
 
         await game.screenshot('artificer-perfectly-calibrated-after-play', testInfo);
     });

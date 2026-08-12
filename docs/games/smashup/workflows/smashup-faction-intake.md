@@ -263,7 +263,7 @@ https://assets.easyboardgame.top/official
 
 本步骤的“是否必须发布、失败后如何汇报”按通用规则执行：
 
-- `docs/ai-rules/data-entry.md` § 资源上传收口
+- `.spec/knowledge/standards/data-entry.md` § 资源上传收口
 - `docs/deploy.md` § 生产素材域名：服务器主源
 
 检查差异：

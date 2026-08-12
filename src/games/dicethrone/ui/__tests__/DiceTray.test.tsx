@@ -284,4 +284,25 @@ describe('DiceActions', () => {
 
         expect(container.querySelector('[data-tutorial-id="dice-roll-button"]')).toBeDisabled();
     });
+
+    it('改骰交互的确认仍在右侧骰盘，但与最终骰面确认使用不同稳定入口', () => {
+        render(
+            <DiceActions
+                rollCount={1}
+                rollLimit={3}
+                rollConfirmed={false}
+                onRoll={vi.fn()}
+                onConfirm={vi.fn()}
+                currentPhase="offensiveRoll"
+                canInteract
+                isRolling={false}
+                setIsRolling={vi.fn()}
+                interaction={createModifyInteraction('any')}
+                multistepInteraction={createMultistepState({ modifications: { 0: 6 }, modCount: 1, totalAdjustment: 0 })}
+            />,
+        );
+
+        expect(screen.getByTestId('dice-interaction-confirm-button')).toBeEnabled();
+        expect(screen.queryByTestId('dice-confirm-button')).toBeNull();
+    });
 });

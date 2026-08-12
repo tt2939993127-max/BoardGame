@@ -29,5 +29,5 @@
   - `scripts/mobile/`
   - `scripts/deploy/`
   - `docs/deploy.md`
-  - `docs/ai-rules/asset-pipeline.md`
+  - `.spec/knowledge/standards/asset-pipeline.md`
   - `.spec/skills/android-app-release/SKILL.md`

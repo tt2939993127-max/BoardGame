@@ -18,7 +18,7 @@
 | 使用 The Gang TTS/Workshop 素材 | `D:\gongzuo\webgame\gameasset\纸牌帮 The Gang\Mods\Workshop\纸牌帮 The Gang.json` | 只作为素材、对象和局部参考来源；不再作为 UI 风格目标 | material-only |
 | 使用 PDF 规则 | `temp/the-gang-intake/the-gang-rules.md` | `node scripts/infra/pdf_to_md.js ... -o ...` | locked |
 | 使用 Images 素材 | `D:\gongzuo\webgame\gameasset\纸牌帮 The Gang\Mods\Images` | 已建立素材候选清单；筹码、隐藏牌背、52 张普通牌面、警报、金条、桌面/牌槽和规则参考已完成运行时接入 | pass |
-| 根据规则选择需要的图片处理流程 | `docs/ai-rules/asset-pipeline.md` + 素材候选清单 | 已逐项处理基础版规则对象素材矩阵；不再沿用“只接入缩略图”旧口径 | pass |
+| 根据规则选择需要的图片处理流程 | `.spec/knowledge/standards/asset-pipeline.md` + 素材候选清单 | 已逐项处理基础版规则对象素材矩阵；不再沿用“只接入缩略图”旧口径 | pass |
 | 实施新游戏 | `src/games/the-gang/**` | 核心流程、素材接入、附加能力 baseline、桌面过程态、桌面教程端到端和 The Gang 压缩资源远端发布已有证据；手机验收、用户桌面验收和最终完成口径未关闭；当前资源主源为服务器素材主源 | in_progress |
 | 两副牌与上手/下手 UI 裁定 | `docs/games/the-gang/user-stories/two-hand-pre-start-swap-and-touch-ui-2026-07-28.md` | 用户已明确：交换牌发生在开始游戏前；上手/下手按钮不能贴底；两副牌模式必须按该用户故事重修文案、测试、UI 和验收 | locked |
 

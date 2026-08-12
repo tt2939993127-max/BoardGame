@@ -114,6 +114,8 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                     index,
                     bonusDamage: Math.ceil(value / 2),
                 }),
+                // Loaded 自己的攻击末 Token 选择已在父攻击状态中收口；这里不能改写阶段。
+                continuation: { kind: 'complete' },
             },
             () => [],
         );
@@ -149,7 +151,7 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                 effectParams: { value: roll, index: 0, bonusDamage },
             }],
             timestamp + 1,
-            { customResolutionId: GUNSLINGER_LOADED_SETTLEMENT_ID },
+            { customResolutionId: GUNSLINGER_LOADED_SETTLEMENT_ID, continuation: { kind: 'complete' } },
         ),
     ];
 }
@@ -369,6 +371,7 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
                 ? 'bonusDie.effect.gunslingerEatMyLead.resultKnockdown'
                 : 'bonusDie.effect.gunslingerEatMyLead.result',
             summaryEffectParams: { bulletCount, bonusDamage },
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
         },
     ));
 
@@ -697,7 +700,7 @@ function handleHighNoonResolve({ attackerId, targetId, sourceAbilityId, state, t
         targetId,
         [{ index: 0, value, face, effectKey }],
         timestamp + 1,
-        { customResolutionId: GUNSLINGER_HIGH_NOON_SETTLEMENT_ID },
+        { customResolutionId: GUNSLINGER_HIGH_NOON_SETTLEMENT_ID, continuation: { kind: 'complete' } },
     ));
     return events;
 }

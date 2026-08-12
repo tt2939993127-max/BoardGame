@@ -39,7 +39,7 @@ iOS Safari 横屏可视高度常常很低（地址栏/工具栏影响），对�
 
 - 使用 `dvh`/`svh`（若已在项目内封装则使用封装）保证 iOS 地址栏变化的稳定性
 - 使用 `env(safe-area-inset-*)` 处理安全区
-- flex 容器中出现 `overflow-y-auto` 时，子元素必须满足 `min-h-0`（遵守 `docs/ai-rules/ui-ux.md`）
+- flex 容器中出现 `overflow-y-auto` 时，子元素必须满足 `min-h-0`（遵守 `.spec/knowledge/standards/ui-ux.md`）
 
 ### 2.3 横屏布局
 

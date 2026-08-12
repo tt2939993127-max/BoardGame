@@ -109,7 +109,7 @@
    - 图集配置落到 `public/assets/atlas-configs/<gameId>/`
    - 切片顺序、索引和命名先写合同，再接入代码
 4. 若当前环境依赖远端默认资源基址：
-   - 启动前主动询问是否先 `npm run assets:download -- --check`
+   - 启动前主动询问是否先 `npm run assets:download -- --game <gameId> --dry-run` 检查本地缺失运行时素材
    - 交付前必须执行 `npm run assets:check`
    - 若检查到本轮新增/变更的运行时资源远端缺失，必须继续上传并用远端 URL 复核到 `200/206`，再算交付完成
 

@@ -10354,6 +10354,124 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         await game.screenshot('移动端-兽人要塞-总力量21计分后仅基础VP并清场', testInfo);
     });
 
+    test('兽人要塞移动端并列最高且少于三名玩家时两名玩家均获额外VP', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildMunchkinOrcsBaseScoringScene({
+            baseDefId: 'base_garrison',
+            ownPower: 11,
+            opponentPower: 11,
+            turnNumber: 36,
+        }));
+
+        await expect(page.locator('[data-base-index="0"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-own"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-minion-uid="orcs-score-opponent"]').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('su-munchkin-monster-supply-count')).toHaveText('x 20');
+        await expect(page.getByTestId('su-munchkin-treasure-supply-count')).toHaveText('x 22');
+        await game.screenshot('移动端-兽人要塞-并列最高两名玩家计分前', testInfo);
+
+        await game.advancePhase();
+        await page.waitForFunction(
+            () => {
+                const state = (window as BrowserHarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'scoreBases' || state?.sys?.phase === 'playCards';
+            },
+            { timeout: 15000, polling: 200 },
+        );
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const state = await game.getState();
+            if (state.sys?.phase === 'playCards' && !state.sys?.interaction?.current) break;
+            const didPass = await passOpenReactionOrResponseWindow(page, game, `移动端要塞并列最高计分前让过响应 ${attempt + 1}`);
+            if (!didPass) await page.waitForTimeout(300);
+        }
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state.sys?.phase,
+                ownVp: state.core.players?.['0']?.vp ?? 0,
+                opponentVp: state.core.players?.['1']?.vp ?? 0,
+                scoredBaseLeftBoard: !state.core.bases?.some((base: { defId?: string }) => base.defId === 'base_garrison'),
+                scoredBaseCleared: state.core.bases?.[0]?.minions?.length === 0,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+            };
+        }, { timeout: 20000 }).toMatchObject({
+            phase: 'playCards',
+            ownVp: 8,
+            opponentVp: 8,
+            scoredBaseLeftBoard: true,
+            scoredBaseCleared: true,
+            interactionSourceId: null,
+            responseWindowType: null,
+        });
+
+        const finalState = await game.getState();
+        const scoreEvent = (finalState as { sys?: { eventStream?: { entries?: EventStreamEntry[] } } }).sys?.eventStream?.entries
+            ?.map((entry: EventStreamEntry) => entry.event)
+            .find((event: TriggerQueueEvidenceEvent | undefined) => event?.type === 'su:base_scored' && event.payload?.baseDefId === 'base_garrison');
+        expect(scoreEvent?.payload?.rankings?.filter(ranking => ranking.power === 11)).toEqual([
+            { playerId: '0', power: 11, vp: 4 },
+            { playerId: '1', power: 11, vp: 4 },
+        ]);
+
+        const mobileResolutionEvidence = await page.evaluate(() => {
+            const inViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 24
+                    && rect.height > 24
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            const supplyBadgeInViewport = (selector: string) => {
+                const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+                return !!rect
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.left >= -2
+                    && rect.right <= window.innerWidth + 2
+                    && rect.top >= -2
+                    && rect.bottom <= window.innerHeight + 2;
+            };
+            return {
+                noUnexpectedOverflow: document.documentElement.scrollWidth <= window.innerWidth + 2,
+                baseVisible: inViewport('[data-base-index="0"]'),
+                handVisible: inViewport('[data-testid="su-hand-area"]'),
+                supplyVisible: supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-monster-supply-count"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-card"]')
+                    && supplyBadgeInViewport('[data-testid="su-munchkin-treasure-supply-count"]'),
+                turnTrackerVisible: inViewport('[data-testid="su-turn-tracker"]'),
+                endTurnVisible: inViewport('button[aria-label*="结束回合"], button[aria-label*="End turn"]'),
+                monsterDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-monster-discard"]'),
+                treasureDiscardAbsent: !document.querySelector('[data-testid="su-munchkin-treasure-discard"]'),
+            };
+        });
+        expect(mobileResolutionEvidence, '移动端要塞并列计分收口后两名玩家额外VP、公共小牌和原版操作入口应可见且无横向溢出').toEqual({
+            noUnexpectedOverflow: true,
+            baseVisible: true,
+            handVisible: true,
+            supplyVisible: true,
+            turnTrackerVisible: true,
+            endTurnVisible: true,
+            monsterDiscardAbsent: true,
+            treasureDiscardAbsent: true,
+        });
+
+        await waitForSmashUpFxToSettle(page);
+        await game.screenshot('移动端-兽人要塞-并列最高两名玩家各获额外VP并清场', testInfo);
+    });
+
     test('兽人坑洞真实计分达到16后清场并保留原版计分布局', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 

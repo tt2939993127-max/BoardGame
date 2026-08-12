@@ -31,6 +31,16 @@ export interface BuildCurrentRollRerollEventsOptions {
     skipAbilityReselection?: boolean;
 }
 
+/** 只有主进攻骰变更会使已选攻击技能失效；临时骰不改变攻击骰型。 */
+export const shouldRequireAbilityReselectionForCurrentRoll = (
+    state: DiceThroneCore,
+    phase: TurnPhase,
+): boolean => (
+    phase === 'offensiveRoll'
+    && state.pendingAttack !== null
+    && resolveCurrentRollContext(state, phase)?.kind === 'offensive'
+);
+
 /**
  * 当前骰区指定一颗骰子的唯一重投执行路径。
  *
@@ -67,7 +77,7 @@ export const buildCurrentRollRerollEvents = ({
         timestamp,
     } as DieRerolledEvent];
 
-    if (!skipAbilityReselection && phase === 'offensiveRoll' && state.pendingAttack) {
+    if (!skipAbilityReselection && shouldRequireAbilityReselectionForCurrentRoll(state, phase)) {
         events.push({
             type: 'ABILITY_RESELECTION_REQUIRED',
             payload: {

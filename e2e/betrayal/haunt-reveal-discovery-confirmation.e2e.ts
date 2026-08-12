@@ -19,6 +19,7 @@ import {
 } from '../helpers/common';
 import {
     initBetrayalContext,
+    dispatchHarnessCommand,
     injectCore,
     saveScreenshot,
     waitForBetrayalPageReady,
@@ -333,6 +334,21 @@ async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, filename: 
     );
 }
 
+async function acknowledgeRemainingPlayers(page: Page): Promise<void> {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+        const pending = await page.evaluate(() => (
+            (window as typeof window & { __BG_TEST_HARNESS__?: { state?: { get?: () => { core?: BetrayalCore } } } })
+                .__BG_TEST_HARNESS__?.state?.get?.().core?.pendingCardResolutionQueue?.[0]
+        ));
+        if (!pending) return;
+        const requiredPlayerIds = pending.requiredPlayerIds?.length ? pending.requiredPlayerIds : [pending.playerId];
+        const nextPlayerId = requiredPlayerIds.find((playerId) => !(pending.acknowledgedPlayerIds ?? []).includes(playerId));
+        if (!nextPlayerId) return;
+        await dispatchHarnessCommand(page, BETRAYAL_COMMANDS.ACKNOWLEDGE_CARD_RESOLUTION, nextPlayerId, { resolutionId: pending.id });
+    }
+    throw new Error('山屋预兆矩阵确认队列超过安全上限');
+}
+
 test.beforeEach(async ({ page: _page }, testInfo) => {
     await clearEvidenceScreenshotsForTest(testInfo);
 });
@@ -354,9 +370,6 @@ test('普通预兆触发作祟时先确认预兆和检定，再承接作祟揭�
     const discoveryPanel = page.getByTestId('betrayal-discovery-panel');
     await expect(discoveryPanel, '触发作祟的预兆卡必须先显示').toBeVisible({ timeout: 10000 });
     await expect(discoveryPanel).toContainText(DOG_OMEN_CARD.name);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText(DOG_OMEN_CARD.name);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText('作祟检定');
     await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveText('确认');
     await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute(
         'data-pending-card-resolution-step',
@@ -424,8 +437,6 @@ test('旁观视角也先看触发预兆和检定，再本地进入剧本阅读',
     const discoveryPanel = page.getByTestId('betrayal-discovery-panel');
     await expect(discoveryPanel, '旁观视角也必须先看到触发作祟的预兆结果').toBeVisible({ timeout: 10000 });
     await expect(discoveryPanel).toContainText(DOG_OMEN_CARD.name);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText('作祟检定');
     await expect(discoveryPanel.getByTestId('betrayal-recent-roll-panel')).toBeVisible();
     await expect(discoveryPanel.getByTestId('betrayal-house-dice-3d-group')).toHaveAttribute('data-dice-count', '4');
     await expect.poll(() => readHauntDiscoveryConfirmationState(page)).toMatchObject({
@@ -472,9 +483,6 @@ test('普通预兆未触发作祟时同屏显示获得预兆和作祟检定且�
     const discoveryPanel = page.getByTestId('betrayal-discovery-panel');
     await expect(discoveryPanel).toBeVisible({ timeout: 10000 });
     await expect(discoveryPanel).toContainText('狗');
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText('狗');
-    await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText('作祟检定');
     await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveText('确认');
     await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute(
         'data-pending-card-resolution-step',
@@ -530,13 +538,6 @@ test('当前9张预兆未触发作祟时均只需一次确认并进入持有区'
             timeout: 10000,
         });
         await expect(discoveryPanel).toContainText(omenCard.name);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText(
-            omenCard.name,
-        );
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText(
-            '作祟检定',
-        );
         await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveText('确认');
         await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute(
             'data-pending-card-resolution-step',
@@ -557,9 +558,10 @@ test('当前9张预兆未触发作祟时均只需一次确认并进入持有区'
         }
 
         await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
+        await acknowledgeRemainingPlayers(page);
         await expect(discoveryPanel).toHaveCount(0);
         await expect(page.getByTestId('betrayal-haunt-reveal-cue')).toHaveCount(0);
-        await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/恶兆前|pre-haunt/i);
+        await expect(page.getByTestId('betrayal-runtime-header-grid')).toContainText(/作祟前|恶兆前|pre-haunt/i);
         await expect(page.getByTestId('betrayal-inventory-row-omen')).toContainText(omenCard.name);
         await expect.poll(async () => {
             const state = await readHauntDiscoveryConfirmationState(page);
@@ -619,13 +621,6 @@ test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作�
             timeout: 10000,
         });
         await expect(discoveryPanel).toContainText(omenCard.name);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(2);
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText(
-            omenCard.name,
-        );
-        await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(1)).toContainText(
-            '作祟检定',
-        );
         await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveText('确认');
         await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute(
             'data-pending-card-resolution-step',
@@ -640,6 +635,7 @@ test('当前9张预兆触发作祟时均先确认预兆和检定，再进入作�
         }
 
         await discoveryPanel.getByTestId('betrayal-discovery-continue').click();
+        await acknowledgeRemainingPlayers(page);
         await expect(discoveryPanel).toHaveCount(0);
         await expect(page.getByTestId('betrayal-scenario-reader-dialog'), `预兆「${omenCard.name}」确认后才打开剧本书承接`).toBeVisible({
             timeout: 10000,

@@ -1,7 +1,7 @@
 # 音频资源使用合同
 
 > 本文承载 BoardGame 音频资源的目录、生成命令、查找/试听、BGM 分配和项目接入合同。
-> 跨游戏运行时架构、共享音频包路径和音效触发时机主源是 `docs/ai-rules/audio-assets.md`；执行型 workflow 走系统 skill：`D:\codex-home\skills\audio-integration\SKILL.md`。
+> 跨游戏运行时架构、共享音频包路径和音效触发时机主源是 `.spec/knowledge/standards/audio-assets.md`；执行型 workflow 走系统 skill：`D:\codex-home\skills\audio-integration\SKILL.md`。
 > 如果任务是“对接音效 / 查匹配 key / 新增素材 / 补预加载 / 做试听收口”，先走该 skill，再回到本文查具体项目合同。
 
 ## 0. 文档分工
@@ -16,12 +16,12 @@
   承担 AI 精简检索入口
 - `public/assets/common/audio/registry.json`
   承担运行时完整注册表
-- `docs/ai-rules/audio-assets.md`
+- `.spec/knowledge/standards/audio-assets.md`
   承担跨游戏运行时架构、共享包路径和音效触发时机主合同
 
 ## 1. 运行时架构合同入口
 
-跨游戏的三层架构、registry 唯一来源、FX `FeedbackPack`、完整 key 和 `compressed/` 路径禁令统一见 `docs/ai-rules/audio-assets.md` 的“音频架构 / 音频资源架构”。
+跨游戏的三层架构、registry 唯一来源、FX `FeedbackPack`、完整 key 和 `compressed/` 路径禁令统一见 `.spec/knowledge/standards/audio-assets.md` 的“音频架构 / 音频资源架构”。
 
 本文件只补充项目级资源使用细节：命令入口、候选查找、BGM 分配、游戏专用音效池、预加载和浏览器试听；若本文件与运行时主合同冲突，以 `audio-assets.md` 为准。
 
@@ -248,7 +248,7 @@ return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_sy
 
 ## 8. 已安装包 / 本地包 / 共享音频路径合同入口
 
-Android 已安装包、共享音频包和 `common-audio` 的相对路径合同统一见 `docs/ai-rules/audio-assets.md` 的“共享音频包路径合同”。本文件不再复制本地读取、blob URL、播放续接和四层路径同构规则；这里只记录项目接入时应回查该主合同。
+Android 已安装包、共享音频包和 `common-audio` 的相对路径合同统一见 `.spec/knowledge/standards/audio-assets.md` 的“共享音频包路径合同”。本文件不再复制本地读取、blob URL、播放续接和四层路径同构规则；这里只记录项目接入时应回查该主合同。
 
 ## 9. 质量检查清单
 

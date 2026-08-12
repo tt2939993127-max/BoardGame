@@ -212,12 +212,13 @@ export function createDisplayOnlySettlement(
     targetId: PlayerId,
     dice: BonusDieInfo[],
     timestamp: number,
-    options?: {
+    options: {
         summaryEffectKey?: string;
         summaryEffectParams?: Record<string, string | number>;
         customResolutionId?: string;
         allowDiceModification?: boolean;
         opensAfterRollConfirmedResponseWindow?: boolean;
+        continuation: NonNullable<PendingBonusDiceSettlement['continuation']>;
     },
 ): BonusDiceRerollRequestedEvent {
     return {
@@ -235,11 +236,12 @@ export function createDisplayOnlySettlement(
                 maxRerollCount: 0,
                 readyToSettle: false,
                 displayOnly: true,
-                summaryEffectKey: options?.summaryEffectKey,
-                summaryEffectParams: options?.summaryEffectParams,
-                customResolutionId: options?.customResolutionId,
+                summaryEffectKey: options.summaryEffectKey,
+                summaryEffectParams: options.summaryEffectParams,
+                customResolutionId: options.customResolutionId,
+                continuation: options.continuation,
                 allowDiceModification: true,
-                opensAfterRollConfirmedResponseWindow: options?.opensAfterRollConfirmedResponseWindow,
+                opensAfterRollConfirmedResponseWindow: options.opensAfterRollConfirmedResponseWindow,
             },
         },
         sourceCommandType: 'ABILITY_EFFECT',
@@ -302,6 +304,8 @@ export interface BonusDiceRollConfig {
     opensAfterRollConfirmedResponseWindow?: boolean | ((dice: BonusDieInfo[]) => boolean);
     /** 可选：构建每颗奖励骰的 effectParams（用于文案插值/日志展示） */
     effectParamsBuilder?: (params: { value: number; index: number; face: DieFace }) => Record<string, string | number>;
+    /** 临时骰确认后恢复攻击结算的明确步骤。 */
+    continuation: NonNullable<PendingBonusDiceSettlement['continuation']>;
 }
 
 /**
@@ -356,6 +360,8 @@ export function createBonusDiceWithReroll(
     const opensAfterRollConfirmedResponseWindow = typeof config.opensAfterRollConfirmedResponseWindow === 'function'
         ? config.opensAfterRollConfirmedResponseWindow(dice)
         : config.opensAfterRollConfirmedResponseWindow;
+    // 续跑语义必须由创建者声明；不能根据当前攻击、展示方式或结算模式猜测。
+    const continuation = config.continuation;
 
     if (hasToken) {
         // 有足够 token，创建可重掷的 settlement
@@ -378,6 +384,7 @@ export function createBonusDiceWithReroll(
             attackBonusSourceCardId: config.attackBonusSourceCardId,
             postSettleBonusDamageAdds: config.postSettleBonusDamageAdds,
             customResolutionId: config.customResolutionId,
+            continuation,
             allowDiceModification,
             opensAfterRollConfirmedResponseWindow,
         };
@@ -412,6 +419,7 @@ export function createBonusDiceWithReroll(
                     attackBonusSourceCardId: config.attackBonusSourceCardId,
                     postSettleBonusDamageAdds: config.postSettleBonusDamageAdds,
                     customResolutionId: config.customResolutionId,
+                    continuation,
                     allowDiceModification,
                     opensAfterRollConfirmedResponseWindow,
                 },
@@ -500,6 +508,7 @@ function resolveEffectAction(
     random?: RandomFn,
     sfxKey?: string,
     rollDieBonusDamageMode?: 'inline' | 'standalone',
+    rollDieContinuation?: PendingBonusDiceSettlement['continuation'],
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const timestamp = ctx.timestamp ?? 0;
@@ -813,6 +822,7 @@ function resolveEffectAction(
                             isDefensiveContext: ctx.isDefensiveContext,
                             sfxKey,
                         },
+                        continuation: rollDieContinuation,
                     },
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
@@ -1460,6 +1470,21 @@ export function resolveEffectsToEvents(
             ))
             ? 'inline' as const
             : 'standalone' as const;
+        const rollDieContinuation = effect.action.type === 'rollDie' && ctx.state.pendingAttack
+            ? timing === 'preDefense'
+                ? {
+                    kind: 'attack' as const,
+                    settlementStage: 'preDamage' as const,
+                    markBonusDiceResolved: false,
+                }
+                : {
+                    kind: 'attack' as const,
+                    settlementStage: rollDieBonusDamageMode === 'inline'
+                        ? 'withDamageChoicePending' as const
+                        : 'readyToResolve' as const,
+                    markBonusDiceResolved: true,
+                }
+            : undefined;
         const effectEvents = resolveEffectAction(
             effect.action,
             ctx,
@@ -1467,6 +1492,7 @@ export function resolveEffectsToEvents(
             config?.random,
             effect.sfxKey,
             rollDieBonusDamageMode,
+            rollDieContinuation,
         ).filter(e => e !== undefined);
         const immediateEvents: DiceThroneEvent[] = [];
         for (const event of effectEvents) {

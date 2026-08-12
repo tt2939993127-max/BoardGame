@@ -184,6 +184,10 @@ test.describe('山屋惊魂第一剧本杰克之灵怪物路径预览', () => {
         await targetRoom.click();
         const transitionBlocker = page.getByTestId('betrayal-visual-transition-blocker');
         await expect(transitionBlocker).toBeVisible();
+        await expect(transitionBlocker).toHaveAttribute(
+            'data-transition-target-testid',
+            `betrayal-room-${targetRoomId}`,
+        );
         await expect(page.getByTestId('betrayal-board')).toHaveAttribute('data-betrayal-visual-busy', 'true');
         await expect.poll(() => readJackSpiritMoveState(page)).toMatchObject({
             currentPlayer: '2',

@@ -110,7 +110,7 @@ function handleBackStrikeUse({ ctx, state, random, timestamp }: CustomActionCont
         originalAttackerId,
         [{ index: 0, value: roll, face: face as any, effectKey: 'bonusDie.effect.samuraiBackStrikeDie', effectParams: { value: roll, damage } }],
         timestamp + 1,
-        { customResolutionId: SAMURAI_BACK_STRIKE_SETTLEMENT_ID },
+        { customResolutionId: SAMURAI_BACK_STRIKE_SETTLEMENT_ID, continuation: { kind: 'complete' } },
     )];
 }
 
@@ -254,6 +254,11 @@ function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, ra
         timestamp + 10,
         {
             customResolutionId: SAMURAI_MASAMUNE_SETTLEMENT_ID,
+            continuation: {
+                kind: 'attack',
+                settlementStage: 'readyToResolve',
+                markBonusDiceResolved: true,
+            },
             summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
             summaryEffectParams: { katanaCount, shameCount, retributionCount },
         },
@@ -296,7 +301,10 @@ function handleRighteousness({ attackerId, ctx, sourceAbilityId, state, timestam
         defenderId,
         [{ index: 0, value, face, effectKey: effectKeyMap[face] ?? 'bonusDie.effect.default' }],
         timestamp + 1,
-        { customResolutionId: SAMURAI_RIGHTEOUSNESS_SETTLEMENT_ID },
+        {
+            customResolutionId: SAMURAI_RIGHTEOUSNESS_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     ));
 
     return events;

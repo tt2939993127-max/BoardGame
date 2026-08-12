@@ -1168,7 +1168,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                                 hasFace = trigger.symbols.includes(passive.trigger.requiredFace);
                             } else if (trigger.type === 'smallStraight' || trigger.type === 'largeStraight') {
                                 // 顺子不声明骰面，需要检查实际骰面中是否包含所需面
-                                const activeDice = newState.core.dice.slice(0, newState.core.rollDiceCount);
+                                const activeDice = getActiveDice(newState.core);
                                 hasFace = activeDice.some(d => d.symbol === passive.trigger!.requiredFace);
                             }
                             if (hasFace) {

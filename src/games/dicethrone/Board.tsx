@@ -395,6 +395,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         opponentName,
         isSpectator,
         selectedCharacters: G.selectedCharacters,
+        suppressBonusDiceInCardSpotlight: isRightTrayBonusDiceContext,
         cacheScope: rawG.sys.matchId
             ?? `${Object.entries(G.selectedCharacters ?? {})
                 .map(([pid, characterId]) => `${pid}:${characterId}`)

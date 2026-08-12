@@ -14,7 +14,7 @@ const SEVERITY_RANK = {
 
 function parseArgs(argv) {
     const options = {
-        baseUrl: process.env.BOARDGAME_FEEDBACK_BASE_URL || 'http://127.0.0.1:3000',
+        baseUrl: process.env.BOARDGAME_FEEDBACK_BASE_URL || 'https://api.easyboardgame.top',
         token: process.env.BOARDGAME_FEEDBACK_TOKEN || '',
         statuses: ['open', 'in_progress'],
         limit: 100,

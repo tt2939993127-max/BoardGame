@@ -27,6 +27,7 @@ import {
     makeState,
     respondToPrompt,
     respondToPromptOption,
+    respondToPromptOptions,
 } from '../helpers';
 
 const FIXED_RANDOM = {
@@ -457,5 +458,60 @@ describe('迪士尼四派系代表性玩法行为', () => {
 
         expect(isMinionProtected(core, core.bases[0].minions[1], 0, '1', 'affect', { sourceKind: 'action' })).toBe(true);
         expect(isMinionProtected(core, core.bases[0].minions[1], 0, '0', 'affect', { sourceKind: 'action' })).toBe(false);
+    });
+
+    it('花木兰：成为一个男人和木兰本人都通过每回合天赋入口结算', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('draw-1', 'frozen_snowgie', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_training_camp',
+                minions: [
+                    makeMinion('mulan', 'mulan_mulan', '0', 5),
+                    makeMinion('ally', 'mulan_mushu', '0', 2),
+                    makeMinion('enemy', 'frozen_snowgie', '1', 2),
+                ],
+                ongoingActions: [{ uid: 'be-a-man', defId: 'mulan_be_a_man', ownerId: '0' }],
+            })],
+        });
+
+        const beAMan = runCommand(makeMatchState(core), {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'be-a-man', baseIndex: 0 },
+        } as any, FIXED_RANDOM);
+        expect(beAMan.success, beAMan.error).toBe(true);
+        const counterPrompt = getSimpleChoicePrompt(beAMan.finalState, 'disney_four_factions_prompt');
+        const selectedOptionIds = getPromptOptions(counterPrompt)
+            .filter(option => ['mulan', 'ally'].includes(option.value?.minionUid))
+            .map(option => option.id);
+        const countered = respondToPromptOptions(beAMan.finalState, selectedOptionIds, '0', FIXED_RANDOM);
+        expect(countered.success, countered.error).toBe(true);
+        expect(countered.finalState.core.bases[0].minions.find(minion => minion.uid === 'mulan')?.powerCounters).toBe(1);
+        expect(countered.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally')?.powerCounters).toBe(1);
+        expect(countered.finalState.core.bases[0].minions.find(minion => minion.uid === 'enemy')?.powerCounters ?? 0).toBe(0);
+
+        const mulanTalent = runCommand(countered.finalState, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'mulan', baseIndex: 0 },
+        } as any, FIXED_RANDOM);
+        expect(mulanTalent.success, mulanTalent.error).toBe(true);
+        const extraAction = respondToPromptOption(
+            mulanTalent.finalState,
+            option => option.value?.mode === 'extra_action',
+            '木兰额外行动',
+            '0',
+            FIXED_RANDOM,
+        );
+        expect(extraAction.success, extraAction.error).toBe(true);
+        expect(extraAction.events).toContainEqual(expect.objectContaining({
+            type: 'su:limit_modified',
+            payload: expect.objectContaining({ playerId: '0', limitType: 'action', delta: 1 }),
+        }));
     });
 });

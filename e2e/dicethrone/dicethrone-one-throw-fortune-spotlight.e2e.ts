@@ -12,6 +12,12 @@ import {
     waitForGameBoard,
 } from '../helpers/dicethrone';
 import { MONK_CARDS } from '../../src/games/dicethrone/heroes/monk/cards';
+import {
+    expectRightTrayBonusDiceAwaitingResponse,
+    expectRightTrayBonusDiceConfirmation,
+    getRightTrayDie,
+    settleCurrentBonusDice,
+} from './bonus-dice-flow';
 
 const DICETHRONE_ONLINE_TEST_TIMEOUT_MS = 240000;
 
@@ -81,15 +87,6 @@ async function dismissBlockingBonusPresentation(page: Page): Promise<void> {
     await closeCardSpotlightIfVisible(page);
 }
 
-async function clickConfirmForPlayer(page: Page, playerId: string): Promise<void> {
-    const confirmButton = page
-        .locator(`[data-player-seat-anchor="${playerId}"]`)
-        .getByRole('button', { name: /确认|Confirm/i })
-        .last();
-    await expect(confirmButton).toBeEnabled({ timeout: 5000 });
-    await confirmButton.click();
-}
-
 test('一掷千金奖励骰显示在右侧骰盘并可确认', async ({ browser }, testInfo) => {
     test.setTimeout(DICETHRONE_ONLINE_TEST_TIMEOUT_MS);
 
@@ -155,6 +152,9 @@ test('一掷千金奖励骰显示在右侧骰盘并可确认', async ({ browser 
                 bonusCp: firstDie?.effectParams?.cp ?? null,
                 allowDiceModification: settlement?.allowDiceModification ?? null,
                 windowType: state?.sys?.responseWindow?.current?.windowType ?? null,
+                currentRollKind: state?.core?.currentRollContext?.kind ?? null,
+                phase: state?.sys?.phase ?? null,
+                activePlayerId: state?.core?.activePlayerId ?? null,
                 guestCp: state?.core?.players?.['1']?.resources?.cp ?? null,
                 guestDiscardIds: (state?.core?.players?.['1']?.discard ?? []).map((card: any) => card.id),
                 lastEventTypes: (state?.sys?.eventStream?.entries ?? []).slice(-6).map((entry: any) => entry.event?.type),
@@ -162,11 +162,39 @@ test('一掷千金奖励骰显示在右侧骰盘并可确认', async ({ browser 
         };
 
         await expect.poll(readBonusTraySnapshot, { timeout: 15000 }).toMatchObject({
+            settlementSource: 'card-one-throw-fortune',
+            bonusValue: expect.any(Number),
+            bonusCp: expect.any(Number),
+            allowDiceModification: true,
+            windowType: null,
+            currentRollKind: 'bonus',
+            phase: 'main1',
+            activePlayerId: '1',
+            guestCp: 3,
+            guestDiscardIds: ['card-one-throw-fortune'],
+        });
+
+        await ensureDebugPanelClosed(guestPage);
+        await expectRightTrayBonusDiceConfirmation(guestPage, () => readMatchState(guestPage) as Promise<Record<string, any>>, {
+            sourceAbilityId: 'card-one-throw-fortune',
+        });
+        await guestPage.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, '02-一掷千金奖励骰-等待投掷者确认最终骰面', { requireChineseName: true }),
+            fullPage: false,
+        });
+
+        await settleCurrentBonusDice(guestPage, () => readMatchState(guestPage) as Promise<Record<string, any>>, {
+            sourceAbilityId: 'card-one-throw-fortune',
+        });
+        await expect.poll(readBonusTraySnapshot, { timeout: 15000 }).toMatchObject({
             settlementSource: null,
             bonusValue: null,
             bonusCp: null,
             allowDiceModification: null,
             windowType: null,
+            currentRollKind: null,
+            phase: 'main1',
+            activePlayerId: '1',
             guestCp: expect.any(Number),
             guestDiscardIds: ['card-one-throw-fortune'],
         });
@@ -176,13 +204,10 @@ test('一掷千金奖励骰显示在右侧骰盘并可确认', async ({ browser 
         expect(settledBonusSnapshot.lastEventTypes).toContain('BONUS_DIE_ROLLED');
         expect(settledBonusSnapshot.lastEventTypes).toContain('BONUS_DICE_SETTLED');
 
-        await ensureDebugPanelClosed(guestPage);
-        await expect(guestPage.locator('[data-testid="bonus-die-overlay"]')).toHaveCount(0);
-        await expect(guestPage.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
         await closeCardSpotlightIfVisible(guestPage);
         await expect(guestPage.locator('[data-testid="card-spotlight-overlay"]')).toHaveCount(0, { timeout: 5000 });
         await guestPage.screenshot({
-            path: getEvidenceScreenshotPath(testInfo, '02-一掷千金奖励骰-无介入牌自动结算并获得CP', { requireChineseName: true }),
+            path: getEvidenceScreenshotPath(testInfo, '03-一掷千金奖励骰-确认后按最终骰面获得CP', { requireChineseName: true }),
             fullPage: false,
         });
     } finally {
@@ -298,15 +323,12 @@ test('一掷千金奖励骰结算前会给弹一手真实介入窗口', async ({
 
         await ensureDebugPanelClosed(hostPage);
         await ensureDebugPanelClosed(guestPage);
-        await expect(hostPage.locator('[data-testid="bonus-die-overlay"]')).toHaveCount(0);
-        await expect(guestPage.locator('[data-testid="bonus-die-overlay"]')).toHaveCount(0);
-        const guestDiceTrayDuringResponse = guestPage.locator('[data-player-seat-anchor="1"] [data-tutorial-id="dice-tray"]').first();
-        await expect(guestDiceTrayDuringResponse).toBeVisible({ timeout: 5000 });
-        const guestBonusDieDuringResponse = guestDiceTrayDuringResponse.locator('[data-testid="die-button-0"]').first();
+        await expectRightTrayBonusDiceAwaitingResponse(guestPage, () => readMatchState(guestPage) as Promise<Record<string, any>>, {
+            sourceAbilityId: 'card-one-throw-fortune',
+        });
+        const guestBonusDieDuringResponse = getRightTrayDie(guestPage, 0);
         await expect(guestBonusDieDuringResponse).toBeVisible({ timeout: 5000 });
         await expect(guestBonusDieDuringResponse).toHaveAttribute('data-display-value', String(initialBonusValue), { timeout: 5000 });
-        await expect(guestPage.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
-        await expect(guestPage.locator('[data-player-seat-anchor="1"] [data-tutorial-id="dice-confirm-button"]')).toHaveCount(0);
         await guestPage.screenshot({
             path: getEvidenceScreenshotPath(testInfo, '04a-一掷千金奖励骰-响应窗口期间无确认入口', { requireChineseName: true }),
             fullPage: false,
@@ -373,12 +395,48 @@ test('一掷千金奖励骰结算前会给弹一手真实介入窗口', async ({
             fullPage: false,
         });
 
-        await clickConfirmForPlayer(hostPage, '0');
+        const confirmModifyButton = hostPage.getByTestId('dice-interaction-confirm-button').first();
+        await expect(confirmModifyButton).toBeEnabled({ timeout: 10000 });
+        await expect(confirmModifyButton).toHaveText(/^(确认|Confirm)$/);
+        await confirmModifyButton.click();
 
         await expect.poll(async () => {
             const state = await readMatchState(hostPage) as Record<string, any>;
             return {
                 pendingSettlement: state?.core?.pendingBonusDiceSettlement ? 'present' : 'none',
+                currentRollKind: state?.core?.currentRollContext?.kind ?? null,
+                interactionKind: state?.sys?.interaction?.current?.kind ?? null,
+                windowType: state?.sys?.responseWindow?.current?.windowType ?? null,
+                hostDiscardIds: (state?.core?.players?.['0']?.discard ?? []).map((card: any) => card.id),
+                guestCp: state?.core?.players?.['1']?.resources?.cp ?? null,
+                guestDiscardIds: (state?.core?.players?.['1']?.discard ?? []).map((card: any) => card.id),
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            pendingSettlement: 'present',
+            currentRollKind: 'bonus',
+            interactionKind: null,
+            windowType: null,
+            hostDiscardIds: ['card-flick'],
+            guestCp: guestStartingCp,
+            guestDiscardIds: ['card-one-throw-fortune'],
+        });
+        await ensureDebugPanelClosed(hostPage);
+        await ensureDebugPanelClosed(guestPage);
+        await dismissBlockingBonusPresentation(guestPage);
+
+        await guestPage.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, '07-一掷千金奖励骰-改骰后等待投掷者确认', { requireChineseName: true }),
+            fullPage: false,
+        });
+        await settleCurrentBonusDice(guestPage, () => readMatchState(guestPage) as Promise<Record<string, any>>, {
+            sourceAbilityId: 'card-one-throw-fortune',
+        });
+
+        await expect.poll(async () => {
+            const state = await readMatchState(hostPage) as Record<string, any>;
+            return {
+                pendingSettlement: state?.core?.pendingBonusDiceSettlement ? 'present' : 'none',
+                currentRollKind: state?.core?.currentRollContext?.kind ?? null,
                 interactionKind: state?.sys?.interaction?.current?.kind ?? null,
                 windowType: state?.sys?.responseWindow?.current?.windowType ?? null,
                 hostDiscardIds: (state?.core?.players?.['0']?.discard ?? []).map((card: any) => card.id),
@@ -387,19 +445,17 @@ test('一掷千金奖励骰结算前会给弹一手真实介入窗口', async ({
             };
         }, { timeout: 10000 }).toMatchObject({
             pendingSettlement: 'none',
+            currentRollKind: null,
             interactionKind: null,
             windowType: null,
             hostDiscardIds: ['card-flick'],
             guestCp: guestStartingCp + modifiedBonusCp,
             guestDiscardIds: ['card-one-throw-fortune'],
         });
-        await ensureDebugPanelClosed(hostPage);
 
         await closeCardSpotlightIfVisible(guestPage);
-        await expect(guestPage.locator('[data-testid="bonus-die-overlay"]')).toHaveCount(0);
-        await expect(guestPage.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
         await guestPage.screenshot({
-            path: getEvidenceScreenshotPath(testInfo, '07-一掷千金奖励骰-改骰后自动按最终骰面结算', { requireChineseName: true }),
+            path: getEvidenceScreenshotPath(testInfo, '08-一掷千金奖励骰-确认后按改后骰面结算', { requireChineseName: true }),
             fullPage: false,
         });
     } finally {

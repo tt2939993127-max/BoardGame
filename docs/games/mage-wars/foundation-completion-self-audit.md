@@ -56,7 +56,7 @@ npx eslint src/games/mage-wars/Board.tsx src/games/mage-wars/ui/fxSetup.ts e2e/m
 npx vitest run src/games/mage-wars
 node scripts/infra/run-e2e-command.mjs ci e2e/mage-wars/foundation-board-runtime.e2e.ts
 openspec validate add-mage-wars-foundation --strict --no-interactive
-git diff --check -- .spec/skills/mage-wars-ui-design-memory/SKILL.md docs/games/mage-wars/design/reference/user-correction-traceability-ledger.md docs/ai-rules/doc-index.md docs/games/mage-wars/design/generated/runtime-board-rule-object-coverage.md docs/games/mage-wars/design/generated/runtime-board-implementation-audit.md test-results/evidence-screenshots/mage-wars/foundation-board-runtime/evidence.md openspec/changes/add-mage-wars-foundation/tasks.md
+git diff --check -- .spec/skills/mage-wars-ui-design-memory/SKILL.md docs/games/mage-wars/design/reference/user-correction-traceability-ledger.md .spec/knowledge/README.md docs/games/mage-wars/design/generated/runtime-board-rule-object-coverage.md docs/games/mage-wars/design/generated/runtime-board-implementation-audit.md test-results/evidence-screenshots/mage-wars/foundation-board-runtime/evidence.md openspec/changes/add-mage-wars-foundation/tasks.md
 ```
 
 - ESLint：通过，0 errors。

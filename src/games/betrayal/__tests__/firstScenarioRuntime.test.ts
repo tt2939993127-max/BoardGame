@@ -24407,6 +24407,7 @@ describe('Betrayal first scenario runtime', () => {
             trait: 'speed',
             dice: [1, 1, 0],
         });
+        expect(resolveBetrayalMonsterTurnRuntimeState(core).moveRemainingById).toEqual({});
 
         expect(BetrayalDomain.validate(
             { core, sys: {} as never },

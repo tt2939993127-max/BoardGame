@@ -1716,6 +1716,7 @@ function BetrayalVisualTransitionLayer({
       <div
         data-testid="betrayal-visual-transition-blocker"
         data-transition-kind={transition.kind}
+        data-transition-target-testid={transition.targetTestId}
         data-transition-ready={targetRect ? "true" : "false"}
         aria-busy="true"
         className="pointer-events-auto fixed inset-0 cursor-wait"
@@ -5101,17 +5102,8 @@ const BETRAYAL_HOUSE_DICE_STYLE_PROFILE = {
   lightIntensity: 1.08,
   baseScale: 82,
   cameraZoom: 1.2,
-  initialThrowSpread: 0.86,
-  settledSpreadAnimationMs: 180,
-  settledFaceForwardAnimationMs: 160,
-  settledTiltX: -0.42,
-  settledTiltY: 0.38,
-  fitWorldToCameraView: true,
-  worldWidthScale: 0.82,
-  worldHeightScale: 0.78,
   strength: 0.9,
   iterationLimit: 900,
-  arrangeSettledDice: true,
   customColorset: {
     name: "betrayal-house-aged-bone",
     foreground: "#2b2418",
@@ -5126,15 +5118,6 @@ const BETRAYAL_HOUSE_DICE_MOBILE_STYLE_PROFILE = {
   ...BETRAYAL_HOUSE_DICE_STYLE_PROFILE,
   id: "betrayal-house-dice-mobile-landscape",
   cameraZoom: 1.2,
-  worldWidthScale: 0.88,
-  worldHeightScale: 0.78,
-  settledScreenZScale: 0.78,
-  settledLayoutScale: 0.76,
-  settledLayout: [
-    { x: -0.58, y: -0.22, yaw: -0.12 },
-    { x: 0.58, y: -0.16, yaw: 0.1 },
-    { x: 0, y: 0.36, yaw: -0.04 },
-  ],
 } satisfies DiceBoxStyleProfile;
 
 const BETRAYAL_HOUSE_DICE_FACE_SYSTEM = "betrayal-house-0-1-2-per-die-skin";
@@ -9560,6 +9543,12 @@ export default function BetrayalBoard({
     () => resolveBetrayalMonsterActionPanel(core),
     [core],
   );
+  const isDeadTraitorJackSpiritControlTurn =
+    core.phase === "haunt" &&
+    core.scenarioRuntime.traitorPlayerId === core.currentPlayer &&
+    core.scenarioRuntime.deadExplorerPlayerIds.includes(core.currentPlayer) &&
+    core.scenarioRuntime.jackSpiritReleased &&
+    Boolean(core.scenarioRuntime.jackSpiritRoomId);
   const monsterTurnStartActionSlot =
     monsterActionPanel.slots.find(
       (slot) => slot.kind === "turn-start" && slot.enabled && slot.monsterId,
@@ -11227,11 +11216,33 @@ export default function BetrayalBoard({
     if (!sourceRect) {
       return false;
     }
+    const ownerExplorer = latestDiscoveryOwnerPlayerId
+      ? allExplorers.find(
+          (explorer) => explorer.playerId === latestDiscoveryOwnerPlayerId,
+        )
+      : null;
+    const ownerRoom = ownerExplorer
+      ? core.rooms.find((room) => room.id === ownerExplorer.roomId)
+      : null;
+    if (ownerRoom) {
+      // 接收者可能在另一层地图；先切到接收者所在楼层，让真实 token
+      // 成为动画终点，而不是退回当前 viewer 的持有区。
+      setSelectedRoomMapFloor(ownerRoom.floor);
+    }
     return beginBetrayalVisualTransition({
       kind: "possession-gain",
       sourceRect,
       targetRect: null,
-      targetTestId: "betrayal-inventory-section",
+      targetTestId: latestDiscoveryOwnerPlayerId
+        ? `betrayal-explorer-figure-token-${latestDiscoveryOwnerPlayerId}`
+        : "betrayal-explorer-figure-token-unknown",
+      fallbackRoomTestId: latestDiscoveryOwnerPlayerId
+        ? `betrayal-room-${
+            allExplorers.find(
+              (explorer) => explorer.playerId === latestDiscoveryOwnerPlayerId,
+            )?.roomId ?? "unknown"
+          }`
+        : undefined,
       possessionCard: pendingGain.card,
       possessionVisual: pendingGain.visual,
       locale: effectiveLocale,
@@ -11239,7 +11250,14 @@ export default function BetrayalBoard({
       onComplete,
     });
     },
-    [beginBetrayalVisualTransition, effectiveLocale, t],
+    [
+      allExplorers,
+      beginBetrayalVisualTransition,
+      core.rooms,
+      effectiveLocale,
+      latestDiscoveryOwnerPlayerId,
+      t,
+    ],
   );
   const handleDismissLatestDiscovery = React.useCallback(() => {
     if (!latestDiscoveryKey) {
@@ -11752,14 +11770,18 @@ export default function BetrayalBoard({
           roomId,
           ...(useSkeletonKey ? { useSkeletonKey: true } : {}),
         });
-      if (!startExplorerMoveVisual(roomId, move)) {
+      const finishMove = () => {
         move();
+        focusRoomOnMap(roomId);
+      };
+      if (!startExplorerMoveVisual(roomId, finishMove)) {
+        move();
+        focusRoomOnMap(roomId);
       }
       setPreviewState((previousState) => ({
         ...previousState,
         interactionMode: useSkeletonKey ? "default" : "move",
       }));
-      focusRoomOnMap(roomId);
     },
     [
       dispatch,
@@ -12953,10 +12975,14 @@ export default function BetrayalBoard({
         monsterId,
         roomId,
       });
-    if (!startMonsterMoveVisual(monsterId, roomId, move)) {
+    const finishMove = () => {
       move();
+      focusRoomOnMap(roomId);
+    };
+    if (!startMonsterMoveVisual(monsterId, roomId, finishMove)) {
+      move();
+      focusRoomOnMap(roomId);
     }
-    focusRoomOnMap(roomId);
     setInventoryPreviewCardId(null);
     setPreviewState((previousState) => ({
       ...previousState,
@@ -13803,6 +13829,10 @@ export default function BetrayalBoard({
       ]
     : helpingHandsMonsterTurnStatus.active
     ? helpingHandsMonsterTurnActionItems
+    : isDeadTraitorJackSpiritControlTurn
+    ? actionItems.filter(
+        (action) => action.id === "move" || action.id === "endTurn",
+      )
     : bloodFromStoneSetupPlacementActionItems.length > 0
     ? bloodFromStoneSetupPlacementActionItems
     : core.turnEndedByDiscovery
@@ -15392,7 +15422,9 @@ export default function BetrayalBoard({
                       className="sr-only"
                       data-testid="betrayal-discovery-detail"
                     >
-                      {latestDiscoveryDisplayedKindLabel} {latestDiscoveryDisplayedTitle}
+                      {latestDiscoveryDisplayedKindLabel} {latestDiscoveryDisplayedTitle}{" "}
+                      {latestDiscoveryDisplaySummary}{" "}
+                      {latestDiscovery?.detail ?? ""}
                     </span>
                     {shouldShowLatestDiscoveryCardFace ||
                     (shouldShowLatestDiscoveryRoll &&

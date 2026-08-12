@@ -10,9 +10,9 @@
 
 ## 规范落点
 
-- 通用端到端门禁：`docs/ai-rules/e2e-verification.md`。
-- UI/骰盘/开放式主舞台门禁：`docs/ai-rules/ui-ux.md` 与 `docs/ai-rules/ui-change-gates.md`。
-- 审计完成定义与漏审复盘：`docs/ai-rules/testing-audit.md`、`testing-audit-core-principles.md`、`testing-audit-dimensions.md`。
+- 通用端到端门禁：`.spec/knowledge/standards/e2e-verification.md`。
+- UI/骰盘/开放式主舞台门禁：`.spec/knowledge/standards/ui-ux.md` 与 `.spec/knowledge/standards/ui-change-gates.md`。
+- 审计完成定义与漏审复盘：`.spec/knowledge/standards/testing-audit.md`、`.spec/knowledge/standards/testing-audit-core-principles.md`、`.spec/knowledge/standards/testing-audit-dimensions.md`。
 - 山屋专项审计与本轮留档：`docs/games/betrayal/workflows/` 与 `evidence/`。
 - 不写入全局 `AGENTS.md`：本轮是项目专项规则与项目通用 E2E/UI/审计门禁，不属于跨所有仓库的不变量。
 

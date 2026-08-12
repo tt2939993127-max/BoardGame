@@ -6,6 +6,7 @@ import {
     dispatchDiceThroneCommand,
     ensureDebugPanelClosed,
     readyAndStartGame,
+    readMatchState,
     selectCharacter,
     setupDTOnlineMatch,
     setDiceThroneBonusDiceValues,
@@ -15,6 +16,7 @@ import {
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
 import { COMMON_CARDS } from '../../src/games/dicethrone/domain/commonCards';
 import { MOON_ELF_CARDS } from '../../src/games/dicethrone/heroes/moon_elf/cards';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 const DICETHRONE_ONLINE_TEST_TIMEOUT_MS = 600000;
 
@@ -154,7 +156,10 @@ async function waitForCardSpotlightVisualReady(page: Page, cardId: string) {
     const spotlight = page.locator(`[data-testid="card-spotlight-overlay"][data-card-id="${cardId}"]`).first();
     await expect(spotlight).toBeVisible({ timeout: 15000 });
 
-    await expect.poll(async () => page.evaluate((expectedCardId) => {
+    let lastVisualState: unknown = null;
+    let lastMountedVisualState: unknown = null;
+    const readVisualState = async () => {
+        const visualState = await page.evaluate((expectedCardId) => {
         const attackShowcase = document.querySelector('[data-testid="attack-showcase-overlay"]');
         const overlay = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="card-spotlight-overlay"]'))
             .find((node) => node.dataset.cardId === expectedCardId);
@@ -188,9 +193,29 @@ async function waitForCardSpotlightVisualReady(page: Page, cardId: string) {
             attackShowcaseVisible: Boolean(attackShowcase),
             hasShimmer,
             imageReady,
+            rect: {
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height,
+            },
             reason: 'not-ready',
         };
-    }, cardId), { timeout: 15000, intervals: [100, 200, 500] }).toMatchObject({ ready: true });
+        }, cardId);
+        lastVisualState = visualState;
+        if (visualState.reason !== 'missing-overlay') {
+            lastMountedVisualState = visualState;
+        }
+        return visualState;
+    };
+
+    try {
+        await expect.poll(readVisualState, { timeout: 15000, intervals: [100, 200, 500] }).toMatchObject({ ready: true });
+    } catch {
+        throw new Error(`卡牌特写未达到可读状态: ${JSON.stringify({ lastMountedVisualState, lastVisualState })}`);
+    }
 
     await page.waitForTimeout(500);
     return spotlight;
@@ -240,20 +265,6 @@ async function dragHandCardToPlay(page: Page, cardId: string): Promise<void> {
     await page.mouse.up();
     await page.mouse.move(2, 2);
     await page.waitForTimeout(450);
-}
-
-async function clickBonusConfirm(page: Page, playerId: string): Promise<void> {
-    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-tutorial-id="dice-confirm-button"]`).first();
-    await expect(confirmButton).toBeEnabled({ timeout: 8000 });
-    await confirmButton.click();
-    await page.waitForTimeout(500);
-}
-
-async function assertRuleSourcedBonusConfirmation(page: Page, playerId: string): Promise<void> {
-    const confirmButton = page.locator(`[data-player-seat-anchor="${playerId}"] [data-tutorial-id="dice-confirm-button"]`).first();
-    await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
-    await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
-    await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
 }
 
 async function setupTwoPageDicethrone(
@@ -622,10 +633,15 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
             });
             await expect(dieButton(hostPage, volleyChoice.dieIndex))
                 .toHaveAttribute('data-display-value', String(volleyChoice.afterValue), { timeout: 5000 });
-            await assertRuleSourcedBonusConfirmation(hostPage, '0');
+            await expectRightTrayBonusDiceConfirmation(hostPage, () => readMatchState(hostPage) as Promise<MutableCore>, {
+                sourceAbilityId: 'volley',
+            });
+            await expect(hostPage.getByTestId('restore-covered-roll-button')).toHaveCount(0);
             await screenshotStep(hostPage, testInfo, '06-万箭齐发-改后奖励骰等待攻击方确认');
 
-            await clickBonusConfirm(hostPage, '0');
+            await settleCurrentBonusDice(hostPage, () => readMatchState(hostPage) as Promise<MutableCore>, {
+                sourceAbilityId: 'volley',
+            });
             await expect.poll(() => readVisibleBonusSnapshot(hostPage), { timeout: 10000 }).toMatchObject({
                 sourceAbilityId: null,
                 pendingAttackBonusDamage: volleyChoice.afterBowCount,
@@ -759,10 +775,15 @@ test.describe('DiceThrone 奖励骰被弹一手改骰后的结算截图链', () 
                 windowType: null,
                 diceValues: thunderAfterValues,
             });
-            await assertRuleSourcedBonusConfirmation(hostPage, '0');
+            await expectRightTrayBonusDiceConfirmation(hostPage, () => readMatchState(hostPage) as Promise<MutableCore>, {
+                sourceAbilityId: 'thunder-strike',
+            });
+            await expect(hostPage.getByTestId('restore-covered-roll-button')).toHaveCount(0);
             await screenshotStep(hostPage, testInfo, '06-雷霆万钧-改后奖励骰等待攻击方确认');
 
-            await clickBonusConfirm(hostPage, '0');
+            await settleCurrentBonusDice(hostPage, () => readMatchState(hostPage) as Promise<MutableCore>, {
+                sourceAbilityId: 'thunder-strike',
+            });
             await expect.poll(() => readVisibleBonusSnapshot(hostPage), { timeout: 10000 }).toMatchObject({
                 phase: 'main2',
                 sourceAbilityId: null,

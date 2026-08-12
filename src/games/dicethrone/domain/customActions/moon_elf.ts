@@ -332,6 +332,7 @@ function resolveExplodingArrowMultiDie(
             opponentId,
             dice,
             timestamp + (includeEntangle ? 10 : 9),
+            { continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true } },
         ),
     );
 
@@ -460,7 +461,10 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
         opponentId,
         [{ index: 0, value, face: face as any, effectKey }],
         timestamp + 1,
-        { customResolutionId: MOON_ELF_SHADOW_STRIKE_SETTLEMENT_ID },
+        {
+            customResolutionId: MOON_ELF_SHADOW_STRIKE_SETTLEMENT_ID,
+            continuation: { kind: 'complete' },
+        },
     )];
 }
 
@@ -508,6 +512,7 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
             customResolutionId: MOON_ELF_VOLLEY_SETTLEMENT_ID,
             allowDiceModification: true,
             opensAfterRollConfirmedResponseWindow: bowCount > 0,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
         },
     ));
 
@@ -545,7 +550,10 @@ function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
         opponentId,
         [{ index: 0, value, face: face as any, effectKey }],
         timestamp + 1,
-        { customResolutionId: MOON_ELF_WATCH_OUT_SETTLEMENT_ID },
+        {
+            customResolutionId: MOON_ELF_WATCH_OUT_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     )];
 }
 

@@ -1,6 +1,7 @@
 import { test, expect } from '../framework';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../../src/games/dicethrone/heroes/zhanshujia/tokens';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 const randomValueForDieFace = (value: number): number => {
     const normalized = Math.max(1, Math.min(6, Math.floor(value)));
@@ -43,6 +44,12 @@ async function dragHandCardToPlay(page: any, cardId: string): Promise<void> {
     }
     await page.mouse.up();
     await page.mouse.move(2, 2);
+}
+
+async function clickAbilitySlot(page: any, slotId: string): Promise<void> {
+    const slot = page.locator(`[data-testid="player-board-surface"] [data-ability-slot="${slotId}"]`).first();
+    await expect(slot).toHaveAttribute('data-can-click', 'true', { timeout: 10000 });
+    await slot.click();
 }
 
 test.describe('DiceThrone - 选择骰子修改', () => {
@@ -340,7 +347,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                             pendingBonusDiceSettlementId: 'e2e-main1-bonus-die-modification',
                         },
                     },
-                    display: { surface: 'bonusOverlay', replayOnly: false },
+                    display: { surface: 'diceTray', replayOnly: false },
                 },
             },
         });
@@ -465,7 +472,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                         blocksPhaseFlow: true,
                     },
                     settlement: { mode: 'none' },
-                    display: { surface: 'bonusOverlay', replayOnly: false },
+                    display: { surface: 'diceTray', replayOnly: false },
                 },
             },
         });
@@ -509,10 +516,13 @@ test.describe('DiceThrone - 选择骰子修改', () => {
             contextStatus: 'open',
         });
 
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), {
+            sourceAbilityId: 'e2e-ultimate-locked',
+        });
         await game.screenshot('终极来源骰-改骰后等待确认', testInfo);
-        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
-        await expect(confirmButton).toBeVisible({ timeout: 5000 });
-        await confirmButton.click();
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'e2e-ultimate-locked',
+        });
 
         await expect.poll(async () => {
             const state = await game.getState();
@@ -648,9 +658,9 @@ test.describe('DiceThrone - 选择骰子修改', () => {
 
         const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
         const temporaryDie = diceTray.getByTestId('die-button-0');
-        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
-        await expect(confirmButton).toBeVisible({ timeout: 10000 });
-        await expect(confirmButton).toHaveText(/^(确认|Confirm)$/);
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), {
+            sourceAbilityId: 'e2e-temporary-barbarian-die',
+        });
         await expect(diceTray.getByTestId('dice-2d')).toHaveCount(1);
         await expect(temporaryDie.getByTestId('dice-2d')).toHaveAttribute(
             'data-sprite-url',
@@ -660,7 +670,9 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         await expect(page.getByTestId('restore-covered-roll-button')).toHaveCount(0);
         await game.screenshot('01-野蛮人临时奖励骰等待确认', testInfo);
 
-        await confirmButton.click();
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'e2e-temporary-barbarian-die',
+        });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
@@ -900,6 +912,48 @@ test.describe('DiceThrone - 选择骰子修改', () => {
         });
         await page.mouse.move(960, 80);
         await game.screenshot('闪避骰-战术优势重掷后', testInfo);
+
+        const responsePassButton = page.getByTestId('dicethrone-response-pass-button');
+        await expect(responsePassButton).toBeVisible({ timeout: 5000 });
+        await expect(responsePassButton).toHaveText(/^(确认|Confirm|跳过|Pass)$/);
+        await responsePassButton.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const entries = state?.sys?.eventStream?.entries ?? [];
+            const damageEvent = [...entries]
+                .reverse()
+                .find((entry: any) => (
+                    entry.event?.type === 'DAMAGE_DEALT'
+                    && entry.event?.payload?.targetId === '1'
+                ));
+            return {
+                pendingDamage: state?.core?.pendingDamage ?? null,
+                interaction: state?.sys?.interaction?.current ?? null,
+                defenderHp: state?.core?.players?.['1']?.resources?.hp
+                    ?? state?.core?.players?.['1']?.resources?.HP
+                    ?? null,
+                damageEventType: damageEvent?.event?.type ?? null,
+                damageTargetId: damageEvent?.event?.payload?.targetId ?? null,
+                damageAmount: damageEvent?.event?.payload?.amount ?? null,
+                actualDamage: damageEvent?.event?.payload?.actualDamage ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            pendingDamage: null,
+            interaction: null,
+            defenderHp: 45,
+            damageEventType: 'DAMAGE_DEALT',
+            damageTargetId: '1',
+            damageAmount: 5,
+            actualDamage: 5,
+        });
+
+        await expect(responsePassButton).toBeHidden({ timeout: 5000 });
+        await expect(
+            page.getByTestId('dt-player-stats-panel').getByText('45', { exact: true }),
+        ).toBeVisible({ timeout: 10000 });
+        await page.mouse.move(960, 80);
+        await game.screenshot('闪避失败后正式收口并正常掉血', testInfo);
     });
 
     test('战术家在右侧奖励骰专用入口存在时仍可主动使用战术优势重掷', async ({ page, game }, testInfo) => {
@@ -993,18 +1047,31 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 ...current,
                 sys: {
                     ...current.sys,
-                    phase: 'main1',
+                    phase: 'offensiveRoll',
                     interaction: { current: undefined, queue: [] },
                     responseWindow: { current: undefined },
                 },
                 core: {
                     ...current.core,
                     activePlayerId: '0',
-                    rollCount: 0,
+                    rollCount: 1,
                     rollLimit: 3,
                     rollConfirmed: false,
                     currentRollContext,
                     pendingBonusDiceSettlement,
+                    pendingAttack: {
+                        attackerId: '0',
+                        defenderId: '1',
+                        sourceAbilityId: 'war-monger',
+                        isDefendable: true,
+                        damage: 5,
+                        bonusDamage: 0,
+                        attackModifierBonusDamage: 0,
+                        damageResolved: false,
+                        resolvedDamage: 0,
+                        preDefenseResolved: false,
+                        offensiveRollEndTokenResolved: false,
+                    },
                     players: {
                         ...current.core.players,
                         '0': {
@@ -1033,7 +1100,7 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
             };
         }, { timeout: 10000 }).toMatchObject({
-            rollCount: 0,
+            rollCount: 1,
             rollKind: 'bonus',
             dieValue: 3,
             tacticalAdvantage: 1,
@@ -1058,16 +1125,124 @@ test.describe('DiceThrone - 选择骰子修改', () => {
                 dieValue: state?.core?.currentRollContext?.dice?.[0]?.value ?? null,
                 pendingDieValue: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
                 tacticalAdvantage: state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.TACTICAL_ADVANTAGE] ?? null,
+                pendingAttack: state?.core?.pendingAttack?.sourceAbilityId ?? null,
             };
         }, { timeout: 10000 }).toMatchObject({
             dieValue: 6,
             pendingDieValue: 6,
             tacticalAdvantage: 0,
+            pendingAttack: 'war-monger',
         });
         await expect(bonusDie).toHaveAttribute('data-display-value', '6');
         await expect.poll(() => bonusDie.getByTestId('dice-2d').getAttribute('data-roll-animation'), { timeout: 5000 })
             .toBe('settled');
-        await game.screenshot('03-战术家-战术优势已消耗且奖励骰改为六', testInfo);
+        await game.screenshot('03-战术家-攻击已选定时重投奖励骰后攻击仍在', testInfo);
+
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'e2e-zhanshujia-passive-bonus-reroll',
+        });
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                pendingSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
+                pendingAttack: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            pendingSettlement: null,
+            pendingAttack: 'war-monger',
+        });
+        await game.screenshot('04-战术家-确认临时骰后攻击仍待防御结算', testInfo);
+    });
+
+    test('战争贩子军刀奖励骰确认后进入防御投掷，不能以零伤害提前收口', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone', { playerID: '0' });
+        await game.setupScene({
+            gameId: 'dicethrone',
+            randomQueue: [randomValueForDieFace(1)],
+            player0: {
+                resources: { CP: 2, HP: 50 },
+                tokens: { [TOKEN_IDS.TACTICAL_ADVANTAGE]: 0 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'zhanshujia', '1': 'barbarian' },
+                hostStarted: true,
+                activePlayerId: '0',
+                rollCount: 1,
+                rollLimit: 3,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 1, isKept: false },
+                    { id: 1, value: 4, isKept: false },
+                    { id: 2, value: 4, isKept: false },
+                    { id: 3, value: 4, isKept: false },
+                    { id: 4, value: 2, isKept: false },
+                ],
+                pendingAttack: null,
+                pendingBonusDiceSettlement: undefined,
+            },
+        });
+
+        const warMongerSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="sky"]').first();
+        await expect(warMongerSlot).toHaveAttribute('data-resolved-ability-id', 'war-monger', { timeout: 10000 });
+        await clickAbilitySlot(page, 'sky');
+        await expect.poll(async () => (await game.getState())?.core?.pendingAttack?.sourceAbilityId, { timeout: 10000 })
+            .toBe('war-monger');
+
+        const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+        await advanceButton.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state?.sys?.phase ?? null,
+                rollKind: state?.core?.currentRollContext?.kind ?? null,
+                bonusFace: state?.core?.pendingBonusDiceSettlement?.dice?.[0]?.face ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            phase: 'offensiveRoll',
+            rollKind: 'bonus',
+            bonusFace: 'sabre',
+        });
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), {
+            sourceAbilityId: 'war-monger',
+        });
+        await game.screenshot('战争贩子-军刀奖励骰-右侧骰盘确认前', testInfo);
+
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'war-monger',
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                phase: state?.sys?.phase ?? null,
+                pendingSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
+                pendingAttack: state?.core?.pendingAttack
+                    ? {
+                        sourceAbilityId: state.core.pendingAttack.sourceAbilityId,
+                        damage: state.core.pendingAttack.damage,
+                        isDefendable: state.core.pendingAttack.isDefendable,
+                        settlementStage: state.core.pendingAttack.settlementStage,
+                    }
+                    : null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            phase: 'defensiveRoll',
+            pendingSettlement: null,
+            pendingAttack: {
+                sourceAbilityId: 'war-monger',
+                damage: 5,
+                isDefendable: true,
+                settlementStage: 'preDamage',
+            },
+        });
+        await game.screenshot('战争贩子-军刀奖励骰确认后-进入防御投掷', testInfo);
     });
 
     test('战术家可从真实主骰入口主动使用战术优势重掷', async ({ page, game }, testInfo) => {

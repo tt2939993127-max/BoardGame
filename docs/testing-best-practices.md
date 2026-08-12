@@ -826,4 +826,4 @@ E2E 的运行命令、`GameTestContext` API、就绪检查、截图产物目录�
 
 E2E 的真实入口、状态注入与真实链路边界、流程阶段、截图证据资格、视觉结果和对外结论以 [`.spec/knowledge/standards/e2e-verification.md`](../.spec/knowledge/standards/e2e-verification.md) 为唯一正文。这里不再复制 E2E 截图清单、人工看图要求或用户开图步骤。
 
-涉及玩家视角 UI 审计时，追加系统 [`ui-audit-loop`](D:/codex-home/skills/ui-audit-loop/SKILL.md) 和项目 [`ui-change-gates`](../.spec/knowledge/standards/ui-change-gates.md)；涉及把最终图片展示给用户时，追加系统 [`show-image-to-user`](D:/codex-home/skills/show-image-to-user/SKILL.md)。测试通过、截图落盘和 AI 核图分别证明不同事实，不能互相替代。
+涉及玩家视角 UI 审计时，追加系统 [`ui-audit-loop`](D:/codex-home/skills/ui-audit-loop/SKILL.md) 和项目 [`ui-change-gates`](../.spec/knowledge/standards/ui-change-gates.md)；涉及把最终图片展示给用户时，追加系统 [`show-image-to-user`](D:/codex-home/skills/show-image-to-user/SKILL.md)；涉及 BoardGame 证据目录、项目脚本或相册约定时，再读项目 [`screenshot-delivery`](../.spec/skills/screenshot-delivery/SKILL.md)。测试通过、截图落盘和 AI 核图分别证明不同事实，不能互相替代。

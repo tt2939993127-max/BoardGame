@@ -523,6 +523,7 @@ function handleHealBotUse({ targetId, state, timestamp, random }: CustomActionCo
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, targetId, value) ?? ARTIFICER_DICE_FACE_IDS.WRENCH;
+    const healAmount = face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2;
     return [
         {
             type: 'BONUS_DIE_ROLLED',
@@ -541,9 +542,12 @@ function handleHealBotUse({ targetId, state, timestamp, random }: CustomActionCo
             'artificer-heal-bot-use',
             targetId,
             targetId,
-            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerHealBot', effectParams: { value, heal: face === ARTIFICER_DICE_FACE_IDS.WRENCH ? 1 : 2 } }],
+            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerHealBot', effectParams: { value, heal: healAmount } }],
             timestamp + 0.001,
-            { customResolutionId: ARTIFICER_HEAL_BOT_SETTLEMENT_ID },
+            {
+                customResolutionId: ARTIFICER_HEAL_BOT_SETTLEMENT_ID,
+                continuation: { kind: 'complete' },
+            },
         ),
     ];
 }
@@ -662,7 +666,10 @@ function buildWrenchStrikeBonusEvents(
         state.pendingAttack?.defenderId ?? attackerId,
         [{ index: 0, value, face: face as any, effectKey: faceToEffectKey[face] ?? 'bonusDie.effect.artificerWrenchStrikeWrench', presentationKind }],
         timestamp + 0.001,
-        { customResolutionId: ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID },
+        {
+            customResolutionId: ARTIFICER_WRENCH_STRIKE_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
+        },
     ));
     return events;
 }
@@ -739,6 +746,7 @@ function handlePerfectlyCalibratedRoll({ attackerId, sourceAbilityId, state, tim
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? ARTIFICER_DICE_FACE_IDS.WRENCH;
+    const synthGain = Math.ceil(value / 2);
     return [
         {
             type: 'BONUS_DIE_ROLLED',
@@ -759,7 +767,10 @@ function handlePerfectlyCalibratedRoll({ attackerId, sourceAbilityId, state, tim
             attackerId,
             [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated', effectParams: { value } }],
             timestamp + 0.001,
-            { customResolutionId: ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID },
+            {
+                customResolutionId: ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID,
+                continuation: { kind: 'complete' },
+            },
         ),
     ];
 }

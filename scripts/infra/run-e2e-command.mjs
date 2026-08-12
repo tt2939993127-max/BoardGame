@@ -11,6 +11,7 @@ import { cleanupTestConnections } from './cleanup_test_connections.js';
 import { assertSafeE2EServerMode, resolveUseDevServers } from './e2e-mode-config.js';
 import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
 import { acquireTaskGuard } from './heavy-task-guard.mjs';
+import { ensureE2EAssets } from './ensure-e2e-assets.mjs';
 
 function resolvePlaywrightCli(startDir) {
     let currentDir = path.resolve(startDir);
@@ -503,6 +504,15 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {}, e
     if (explicitTargetPath) {
         modeEnv.PW_TEST_TARGET = explicitTargetPath;
     }
+
+    ensureE2EAssets({
+        targetPath: explicitTargetPath,
+        env: {
+            ...modeEnv,
+            PW_E2E_LIST_ONLY: isListMode ? 'true' : 'false',
+        },
+        runner: runtimeNode,
+    });
 
     const requestedServiceReuse = resolveRequestedServiceReuse(envOverrides);
     const autoPreferSharedSingleRun = (

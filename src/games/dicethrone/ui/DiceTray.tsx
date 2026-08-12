@@ -507,6 +507,7 @@ export const DiceActions = ({
                     `flex items-center justify-center h-full whitespace-nowrap overflow-hidden font-black !py-0 ${actionTokens.buttonClassName} ${actionTokens.confirmTextClassName}`,
                     !isBonusDiceSettlement && !isInteractionMode && rollConfirmed && '!text-white/60',
                 )}
+                data-testid={isInteractionMode ? 'dice-interaction-confirm-button' : undefined}
                 data-tutorial-id={isInteractionMode ? undefined : 'dice-confirm-button'}
             >
                 {isBonusDiceSettlement || isInteractionMode

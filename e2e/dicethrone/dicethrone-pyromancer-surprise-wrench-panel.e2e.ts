@@ -1,4 +1,5 @@
 import { test, expect } from '../framework';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 const PYROMANCER = 'pyromancer';
 const ARTIFICER = 'artificer';
@@ -34,14 +35,14 @@ test.describe('DiceThrone - 火法改奖励骰与发明家面板验收', () => {
                 resources: { CP: 5, HP: 50 },
             },
             currentPlayer: '0',
-            phase: 'main1',
+            phase: 'offensiveRoll',
             extra: {
                 selectedCharacters: { '0': PYROMANCER, '1': 'barbarian' },
                 hostStarted: true,
                 rollCount: 1,
                 rollLimit: 3,
                 rollDiceCount: 1,
-                rollConfirmed: true,
+                rollConfirmed: false,
                 dice: [
                     { id: 0, value: 1, isKept: false },
                 ],
@@ -77,21 +78,50 @@ test.describe('DiceThrone - 火法改奖励骰与发明家面板验收', () => {
                     customResolutionId: 'pyro-blast-roll',
                     allowDiceModification: true,
                 },
+                currentRollContext: {
+                    id: 'bonus:pyro-blast-e2e-settlement',
+                    kind: 'bonus',
+                    ownerPlayerId: '0',
+                    targetPlayerId: '1',
+                    sourceAbilityId: 'pyro-blast-2-4',
+                    dice: [{
+                        id: 0,
+                        definitionId: 'pyromancer-dice',
+                        value: 1,
+                        symbol: 'fire',
+                        symbols: ['fire'],
+                        isKept: false,
+                        ownerId: '0',
+                        displayOnly: true,
+                    }],
+                    status: 'open',
+                    policy: {
+                        modifiableBy: 'owner',
+                        rerollableBy: 'owner',
+                        allowPassiveReroll: true,
+                        allowDiceCardTargeting: true,
+                        ultimateLocked: false,
+                        blocksPhaseFlow: true,
+                    },
+                    settlement: { mode: 'none' },
+                    display: { surface: 'diceTray', replayOnly: false },
+                },
             },
             sys: {
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 currentPlayerIndex: 0,
                 interaction: { current: undefined, queue: [] },
                 responseWindow: { current: undefined },
             },
         });
 
-        const bonusOverlay = page.getByTestId('bonus-die-overlay').first();
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
         const surpriseCard = page.locator('[data-testid="hand-area"] [data-card-id="card-surprise"]').first();
 
-        await expect(bonusOverlay).toBeVisible({ timeout: 10000 });
-        await expect(bonusOverlay).toContainText('烈焰：伤害 +3');
-        await expect(bonusOverlay).not.toContainText('bonusDie.effect');
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), {
+            sourceAbilityId: 'pyro-blast-2-4',
+        });
+        await expect(diceTray.getByTestId('die-button-0')).toHaveAttribute('data-display-value', '1');
         await expect(surpriseCard).toBeVisible({ timeout: 10000 });
         await expect.poll(async () => {
             const state = await game.getState();
@@ -133,8 +163,7 @@ test.describe('DiceThrone - 火法改奖励骰与发明家面板验收', () => {
         await expect(dieButton).toHaveAttribute('data-display-value', '1');
         await expect(dieButton).toHaveAttribute('data-owner-id', '0');
 
-        const dieControlRow = dieButton.locator('xpath=../..');
-        const incrementButton = dieControlRow.getByRole('button', { name: /^\+$/ }).first();
+        const incrementButton = page.getByTestId('die-adjust-increment-0').first();
         await expect(incrementButton).toBeVisible({ timeout: 10000 });
 
         for (let value = 2; value <= 6; value += 1) {
@@ -144,10 +173,11 @@ test.describe('DiceThrone - 火法改奖励骰与发明家面板验收', () => {
         await expect(page.getByTestId('die-selected-ring-0')).toHaveCount(0);
         await page.waitForTimeout(450);
 
-        await game.screenshot('火法-惊不惊喜-奖励骰改为流星-确认前', testInfo);
+        await game.screenshot('火法-惊不惊喜-右侧骰盘改为流星-确认前', testInfo);
 
-        const confirmModifyButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).first();
+        const confirmModifyButton = page.getByTestId('dice-interaction-confirm-button').first();
         await expect(confirmModifyButton).toBeEnabled({ timeout: 10000 });
+        await expect(confirmModifyButton).toHaveText(/^(确认|Confirm)$/);
         await confirmModifyButton.click();
 
         await expect.poll(async () => {
@@ -163,19 +193,17 @@ test.describe('DiceThrone - 火法改奖励骰与发明家面板验收', () => {
             face: 'meteor',
         });
 
-        await expect(bonusOverlay).toBeVisible({ timeout: 10000 });
-        await expect(bonusOverlay).toContainText('陨石：施加击倒');
-        await expect(bonusOverlay).not.toContainText('bonusDie.effect');
-        const changedBonusDieContent = bonusOverlay.getByTestId('bonus-die-spotlight-content').first();
-        await expect(changedBonusDieContent).toHaveAttribute('data-is-rolling', 'false', { timeout: 10000 });
-        // 文案揭示完成后，WebGL 骰体仍需完成落地阻尼与结果面回正，避免截图抓到中间骰面。
-        await page.waitForTimeout(1800);
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), {
+            sourceAbilityId: 'pyro-blast-2-4',
+        });
+        await expect(diceTray.getByTestId('die-button-0')).toHaveAttribute('data-display-value', '6');
+        await page.waitForTimeout(500);
         await expect(page.getByTestId('die-button-0').first()).toHaveAttribute('data-display-value', '6');
-        await game.screenshot('火法-惊不惊喜-奖励骰已改为流星', testInfo);
+        await game.screenshot('火法-惊不惊喜-右侧骰盘已改为流星', testInfo);
 
-        const settleBonusDieButton = page.getByRole('button', { name: /^(关闭特写|Close Spotlight)$/i }).first();
-        await expect(settleBonusDieButton).toBeVisible({ timeout: 10000 });
-        await settleBonusDieButton.click();
+        await settleCurrentBonusDice(page, () => game.getState(), {
+            sourceAbilityId: 'pyro-blast-2-4',
+        });
 
         await expect.poll(async () => {
             const state = await game.getState();

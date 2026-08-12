@@ -378,7 +378,7 @@ node scripts/assets/generate_asset_manifests.js --root public/assets/i18n/zh-CN 
 
 本步骤的“是否必须发布、失败后如何汇报”按通用规则执行：
 
-- `docs/ai-rules/data-entry.md` § 资源上传收口
+- `.spec/knowledge/standards/data-entry.md` § 资源上传收口
 - `docs/deploy.md` § 生产素材域名：服务器主源
 
 建议顺序：
@@ -412,7 +412,7 @@ npm run assets:upload
 
 如果本轮不只是录入，还要补技能或 Token 机制实现，必须再读：
 
-- `docs/ai-rules/engine-systems.md`
+- `.spec/knowledge/standards/engine-systems.md`
 
 并先完成：
 

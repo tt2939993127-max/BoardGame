@@ -299,6 +299,7 @@ function makeNoRerollBonusDice(
         customResolutionId: settlementId,
         showTotal: false,
         allowDiceModification: true,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
     }, resolve);
 }
 
@@ -482,6 +483,7 @@ function handleUseFlight({ state, attackerId, sourceAbilityId, timestamp, action
         state.pendingAttack.defenderId ?? state.pendingAttack.attackerId,
         dice,
         timestamp + 2,
+        { continuation: { kind: 'complete' } },
     ));
 
     if (activated) {
@@ -616,6 +618,7 @@ function handleAngelicCloak(ctx: CustomActionContext): DiceThroneEvent[] {
         customResolutionId: ANGELIC_CLOAK_SETTLEMENT_ID,
         damageTargetId: ctx.ctx.defenderId,
         showTotal: false,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
     }, () => []);
 }
 

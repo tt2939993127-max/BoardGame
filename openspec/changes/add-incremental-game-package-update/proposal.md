@@ -24,4 +24,4 @@
   - `src/features/mobile-packages/nativeGamePackagePlugin.ts` — 继续以 `assetPackFileIndexUrl` 调用原生增量入口，并准确区分增量不可用回退与真实差异安装。
   - `src/features/mobile-packages/packageManagerService.ts` — 安装状态和进度需要能表达文件级差异更新，不只表达整包下载。
   - Android 原生层 `GamePackagePlugin` / `AndroidDownloadForegroundService` / `GamePackageFs` — 用远端 file-index 与本地 installed-files-index 完成文件级下载、合并、裁剪、校验和原子切换。
-  - `docs/ai-rules/asset-pipeline.md` / `docs/android-app-build.md` — 固化“本地资源、服务器对象、App 素材包 manifest/file-index 必须同步”的发布口径。
+  - `.spec/knowledge/standards/asset-pipeline.md` / `docs/android-app-build.md` — 固化“本地资源、服务器对象、App 素材包 manifest/file-index 必须同步”的发布口径。

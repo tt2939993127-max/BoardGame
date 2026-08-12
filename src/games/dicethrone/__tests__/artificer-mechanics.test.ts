@@ -77,6 +77,19 @@ const command = (
 const eventsOfType = <T extends DiceThroneEvent['type']>(events: DiceThroneEvent[], type: T) =>
     events.filter((event): event is Extract<DiceThroneEvent, { type: T }> => event.type === type);
 
+const confirmBonusDice = (
+    state: MatchState<DiceThroneCore>,
+    core: DiceThroneCore,
+    playerId: string,
+) => {
+    const events = execute(
+        { ...state, core },
+        command('SKIP_BONUS_DICE_REROLL', playerId),
+        fixedRandom,
+    );
+    return { events, nextState: applyEvents(core, events) };
+};
+
 const getArtificerCard = (cardId: string) => {
     const card = ARTIFICER_CARDS.find(entry => entry.id === cardId);
     if (!card) {
@@ -243,9 +256,10 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         setArtificerAbilityLevel(state.core, 'collect-parts', 2);
 
         const events = enterUpkeep(state.core, createQueuedRandom([4]));
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const { events: settlementEvents, nextState: next } = confirmBonusDice(state, rolled, '0');
         const roll = eventsOfType(events, 'BONUS_DIE_ROLLED')[0];
-        const grant = eventsOfType(events, 'TOKEN_GRANTED')
+        const grant = eventsOfType(settlementEvents, 'TOKEN_GRANTED')
             .find(event => event.payload.tokenId === TOKEN_IDS.SYNTH);
 
         expect(roll?.payload).toMatchObject({
@@ -694,13 +708,21 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             tokenId: TOKEN_IDS.HEAL_BOT,
             amount: 1,
         }), createQueuedRandom([4]));
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const settlementEvents = execute(
+            { ...state, core: rolled },
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+        );
+        const next = applyEvents(rolled, settlementEvents);
 
         expect(next.players['1'].tokens[TOKEN_IDS.HEAL_BOT]).toBe(1);
         expect(next.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(0);
         expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(42);
         expect(next.pendingDamage?.currentDamage).toBe(6);
         expect(eventsOfType(events, 'BONUS_DIE_ROLLED')[0]?.payload.face).toBe('gear');
+        expect(eventsOfType(settlementEvents, 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(next.pendingBonusDiceSettlement).toBeUndefined();
         expect(next.players['1'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]?.activationsUsedThisTurn).toBe(1);
     });
 
@@ -747,11 +769,19 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             tokenId: TOKEN_IDS.HEAL_BOT,
             amount: 1,
         }), createQueuedRandom([1]));
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const settlementEvents = execute(
+            { ...state, core: rolled },
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+        );
+        const next = applyEvents(rolled, settlementEvents);
 
         expect(next.players['1'].tokens[TOKEN_IDS.HEAL_BOT]).toBe(1);
         expect(next.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(0);
         expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(41);
+        expect(eventsOfType(settlementEvents, 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(next.pendingBonusDiceSettlement).toBeUndefined();
         expect(next.players['1'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]).toMatchObject({
             built: true,
             upgraded: true,
@@ -797,14 +827,15 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         } as DiceThroneCore['pendingAttack'];
 
         const events = resolveOffensivePreDefenseEffects(state.core, createQueuedRandom([1]), 100);
-        const next = applyEvents(state.core, events);
+        const rolled = applyEvents(state.core, events);
+        const { events: settlementEvents, nextState: next } = confirmBonusDice(state, rolled, '0');
 
         expect(eventsOfType(events, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 1,
             face: 'wrench',
             effectKey: 'bonusDie.effect.artificerWrenchStrikeWrench',
         });
-        expect(eventsOfType(events, 'BONUS_DAMAGE_ADDED')[0]?.payload).toMatchObject({
+        expect(eventsOfType(settlementEvents, 'BONUS_DAMAGE_ADDED')[0]?.payload).toMatchObject({
             playerId: '0',
             amount: 1,
             sourceCardId: 'wrench-strike-3',
@@ -855,14 +886,15 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         } as DiceThroneEvent);
 
         const resolvedEvents = resolveOffensivePreDefenseEffects(chosenState, fixedRandom, 112);
-        const resolvedState = applyEvents(chosenState, resolvedEvents);
+        const rolled = applyEvents(chosenState, resolvedEvents);
+        const { events: settlementEvents, nextState: resolvedState } = confirmBonusDice(state, rolled, '0');
 
         expect(eventsOfType(resolvedEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerWrenchStrikeGear',
             presentationKind: 'choice',
         });
-        expect(eventsOfType(resolvedEvents, 'BONUS_DAMAGE_ADDED')[0]?.payload.amount).toBe(2);
+        expect(eventsOfType(settlementEvents, 'BONUS_DAMAGE_ADDED')[0]?.payload.amount).toBe(2);
         expect(resolvedState.pendingAttack?.bonusDamage).toBe(2);
         expect(resolvedState.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(0);
     });
@@ -901,14 +933,15 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         } as DiceThroneEvent);
 
         const resolvedEvents = resolveOffensivePreDefenseEffects(chosenState, fixedRandom, 122);
-        const resolvedState = applyEvents(chosenState, resolvedEvents);
+        const rolled = applyEvents(chosenState, resolvedEvents);
+        const { events: settlementEvents, nextState: resolvedState } = confirmBonusDice(state, rolled, '0');
 
         expect(eventsOfType(resolvedEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             face: 'electricity',
             effectKey: 'bonusDie.effect.artificerWrenchStrikeElectricity',
             presentationKind: 'choice',
         });
-        expect(eventsOfType(resolvedEvents, 'TOKEN_GRANTED')[0]?.payload).toMatchObject({
+        expect(eventsOfType(settlementEvents, 'TOKEN_GRANTED')[0]?.payload).toMatchObject({
             targetId: '0',
             tokenId: TOKEN_IDS.SYNTH,
             amount: 1,
@@ -983,12 +1016,10 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             playerIds,
         );
         expect(responded.success).toBe(true);
-        expect(responded.state.sys.phase).toBe('defensiveRoll');
-        expect(getCurrentInteractionId(responded.state)).toBeUndefined();
-        expect(responded.state.core.pendingAttack?.sourceAbilityId).toBe('wrench-strike-2-4');
-        expect(responded.state.core.pendingAttack?.preDefenseResolved).toBe(true);
-        expect(responded.state.core.pendingAttack?.defenseAbilityId).toBe('meditation');
-        expect(responded.state.core.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
+        expect(responded.state.core.pendingBonusDiceSettlement).toMatchObject({
+            sourceAbilityId: 'wrench-strike-2-4',
+            displayOnly: true,
+        });
 
         const bonusDie = eventsOfType(responded.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0];
         expect(bonusDie?.payload).toMatchObject({
@@ -997,7 +1028,22 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             effectKey: 'bonusDie.effect.artificerWrenchStrikeElectricity',
             presentationKind: 'choice',
         });
-        const tokenGranted = eventsOfType(responded.events as DiceThroneEvent[], 'TOKEN_GRANTED')[0];
+        const settled = executePipeline(
+            pipelineConfig,
+            responded.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            playerIds,
+        );
+        expect(settled.success).toBe(true);
+        expect(settled.state.sys.phase).toBe('defensiveRoll');
+        expect(getCurrentInteractionId(settled.state)).toBeUndefined();
+        expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.state.core.pendingAttack?.sourceAbilityId).toBe('wrench-strike-2-4');
+        expect(settled.state.core.pendingAttack?.preDefenseResolved).toBe(true);
+        expect(settled.state.core.pendingAttack?.defenseAbilityId).toBe('meditation');
+        expect(settled.state.core.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
+        const tokenGranted = eventsOfType(settled.events as DiceThroneEvent[], 'TOKEN_GRANTED')[0];
         expect(tokenGranted?.payload).toMatchObject({
             targetId: '0',
             tokenId: TOKEN_IDS.SYNTH,
@@ -1191,7 +1237,12 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         const electricityEvents = execute(electricityState, command('PLAY_CARD', '0', {
             cardId: 'card-artificer-masterpiece',
         }), createQueuedRandom([6]));
-        const afterElectricity = applyEvents(electricityState.core, electricityEvents);
+        const electricityRolled = applyEvents(electricityState.core, electricityEvents);
+        const { events: electricitySettlementEvents, nextState: afterElectricity } = confirmBonusDice(
+            electricityState,
+            electricityRolled,
+            '0',
+        );
 
         expect(eventsOfType(electricityEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 6,
@@ -1199,21 +1250,22 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             effectKey: 'bonusDie.effect.artificerMasterpieceElectricity',
         });
         expect(afterElectricity.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(5);
-        expect(eventsOfType(electricityEvents, 'CARD_DRAWN')).toHaveLength(0);
+        expect(eventsOfType(electricitySettlementEvents, 'CARD_DRAWN')).toHaveLength(0);
 
         const drawState = createArtificerCardPlayState('card-artificer-masterpiece');
         drawState.core.players['0'].deck = [getArtificerCard('card-artificer-voltage')];
         const drawEvents = execute(drawState, command('PLAY_CARD', '0', {
             cardId: 'card-artificer-masterpiece',
         }), createQueuedRandom([1]));
-        const afterDraw = applyEvents(drawState.core, drawEvents);
+        const drawRolled = applyEvents(drawState.core, drawEvents);
+        const { events: drawSettlementEvents, nextState: afterDraw } = confirmBonusDice(drawState, drawRolled, '0');
 
         expect(eventsOfType(drawEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 1,
             face: 'wrench',
             effectKey: 'bonusDie.effect.artificerMasterpieceOther',
         });
-        expect(eventsOfType(drawEvents, 'CARD_DRAWN')).toHaveLength(1);
+        expect(eventsOfType(drawSettlementEvents, 'CARD_DRAWN')).toHaveLength(1);
         expect(afterDraw.players['0'].hand.map(card => card.id)).toEqual(['card-artificer-voltage']);
     });
 
@@ -1303,7 +1355,8 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         const wrenchEvents = execute(wrenchState, command('PLAY_CARD', '0', {
             cardId: 'card-artificer-overdrive',
         }), createQueuedRandom([1]));
-        const afterWrench = applyEvents(wrenchState.core, wrenchEvents);
+        const wrenchRolled = applyEvents(wrenchState.core, wrenchEvents);
+        const { nextState: afterWrench } = confirmBonusDice(wrenchState, wrenchRolled, '0');
 
         expect(eventsOfType(wrenchEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 1,
@@ -1316,7 +1369,8 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         const gearEvents = execute(gearState, command('PLAY_CARD', '0', {
             cardId: 'card-artificer-overdrive',
         }), createQueuedRandom([4]));
-        const afterGear = applyEvents(gearState.core, gearEvents);
+        const gearRolled = applyEvents(gearState.core, gearEvents);
+        const { nextState: afterGear } = confirmBonusDice(gearState, gearRolled, '0');
 
         expect(eventsOfType(gearEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 4,
@@ -1329,7 +1383,8 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         const electricityEvents = execute(electricityState, command('PLAY_CARD', '0', {
             cardId: 'card-artificer-overdrive',
         }), createQueuedRandom([6]));
-        const afterElectricity = applyEvents(electricityState.core, electricityEvents);
+        const electricityRolled = applyEvents(electricityState.core, electricityEvents);
+        const { nextState: afterElectricity } = confirmBonusDice(electricityState, electricityRolled, '0');
 
         expect(eventsOfType(electricityEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 6,
@@ -1341,22 +1396,17 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
 
     it('万能电流在 4 人组队局会先创建仅列敌方的选目标交互，并在选定目标后按电能分支施加纳米爆弹', () => {
         const state = createFourPlayerArtificerCardPlayState('card-artificer-overdrive');
-        const playEvents = execute(state, command('PLAY_CARD', '0', {
-            cardId: 'card-artificer-overdrive',
-        }), createQueuedRandom([6]));
-        const reducedCore = applyEvents(state.core, playEvents);
-        const system = createDiceThroneEventSystem();
-        const afterPlay = system.afterEvents?.({
-            state: { ...state, core: reducedCore },
-            events: playEvents,
-            random: createQueuedRandom([6]),
-        } as any);
-
-        if (!afterPlay || Array.isArray(afterPlay) || !('state' in afterPlay)) {
-            throw new Error('万能电流未创建多人目标选择交互');
-        }
-
-        const promptState = afterPlay.state as MatchState<DiceThroneCore>;
+        const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
+        const played = executePipeline(
+            pipelineConfig,
+            state,
+            command('PLAY_CARD', '0', { cardId: 'card-artificer-overdrive' }),
+            createQueuedRandom([6]),
+            ['0', '1', '2', '3'],
+        );
+        expect(played.success).toBe(true);
+        if (!played.success) return;
+        const promptState = played.state;
         const interaction = getCardInteractionPrompt(promptState, 'card-artificer-overdrive');
         expect(interaction).toMatchObject({
             type: 'selectPlayer',
@@ -1366,23 +1416,38 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         });
         expect(interaction.targetPlayerIds).toEqual(['1', '3']);
 
-        const resolveEvents = execute(promptState, command('RESOLVE_INTERACTION', '0', {
-            selectedPlayerIds: ['3'],
-        }), createQueuedRandom([6]));
-        const next = applyEvents(promptState.core, resolveEvents);
-
-        expect(eventsOfType(resolveEvents, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
-            value: 6,
-            face: 'electricity',
-            effectKey: 'bonusDie.effect.artificerOverdriveElectricity',
+        const selectedTarget = executePipeline(
+            pipelineConfig,
+            promptState,
+            command('RESOLVE_INTERACTION', '0', { selectedPlayerIds: ['3'] }),
+            createQueuedRandom([6]),
+            ['0', '1', '2', '3'],
+        );
+        expect(selectedTarget.success).toBe(true);
+        if (!selectedTarget.success) return;
+        expect(selectedTarget.state.core.pendingBonusDiceSettlement).toMatchObject({
+            sourceAbilityId: 'card-artificer-overdrive',
         });
+
+        const settled = executePipeline(
+            pipelineConfig,
+            selectedTarget.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            ['0', '1', '2', '3'],
+        );
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+        const next = settled.state.core;
+        expect(next.pendingBonusDiceSettlement).toBeUndefined();
+
         expect(next.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
         expect(next.players['3'].statusEffects[STATUS_IDS.NANOBOMB]).toBe(1);
     });
 
     it('万能电流作为红色即时牌在普通对方回合也可打出并结算合成器', () => {
         const state = createOpponentTurnArtificerCardPlayState('card-artificer-overdrive');
-        const result = executePipeline(
+        const played = executePipeline(
             { domain: DiceThroneDomain, systems: testSystems },
             state,
             command('PLAY_CARD', '1', { cardId: 'card-artificer-overdrive' }),
@@ -1392,35 +1457,71 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
 
         expect(state.sys.phase).toBe('main1');
         expect(state.core.activePlayerId).toBe('0');
-        expect(result.success).toBe(true);
-        expect(eventsOfType(result.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
+        expect(played.success).toBe(true);
+        if (!played.success) return;
+        expect(eventsOfType(played.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 4,
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerOverdriveGear',
         });
-        expect(result.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-overdrive');
-        expect(result.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-overdrive');
-        expect(result.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            sourceAbilityId: 'card-artificer-overdrive',
+        });
+        expect(played.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-overdrive');
+        expect(played.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-overdrive');
+
+        const settled = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+            ['0', '1'],
+        );
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+        expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
     });
 
-    it('这玩意儿真棒按骰值一半向上取整获得合成器', () => {
+    it('这玩意儿真棒在奖励骰确认后按骰值一半向上取整获得合成器', () => {
         const state = createArtificerCardPlayState('card-artificer-perfectly-calibrated');
-        const events = execute(state, command('PLAY_CARD', '0', {
-            cardId: 'card-artificer-perfectly-calibrated',
-        }), createQueuedRandom([5]));
-        const next = applyEvents(state.core, events);
+        const played = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            state,
+            command('PLAY_CARD', '0', { cardId: 'card-artificer-perfectly-calibrated' }),
+            createQueuedRandom([5]),
+            ['0', '1'],
+        );
 
-        expect(eventsOfType(events, 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
+        expect(played.success).toBe(true);
+        if (!played.success) return;
+        expect(eventsOfType(played.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 5,
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
         });
-        expect(next.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            sourceAbilityId: 'card-artificer-perfectly-calibrated',
+        });
+
+        const settled = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+        expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.state.core.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
     });
 
-    it('这玩意儿真棒作为红色即时牌在普通对方回合也可打出并结算合成器', () => {
+    it('这玩意儿真棒作为红色即时牌在普通对方回合也可打出，并在奖励骰确认后结算合成器', () => {
         const state = createOpponentTurnArtificerCardPlayState('card-artificer-perfectly-calibrated');
-        const result = executePipeline(
+        const played = executePipeline(
             { domain: DiceThroneDomain, systems: testSystems },
             state,
             command('PLAY_CARD', '1', { cardId: 'card-artificer-perfectly-calibrated' }),
@@ -1430,15 +1531,32 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
 
         expect(state.sys.phase).toBe('main1');
         expect(state.core.activePlayerId).toBe('0');
-        expect(result.success).toBe(true);
-        expect(eventsOfType(result.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
+        expect(played.success).toBe(true);
+        if (!played.success) return;
+        expect(eventsOfType(played.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0]?.payload).toMatchObject({
             value: 5,
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
         });
-        expect(result.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-perfectly-calibrated');
-        expect(result.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-perfectly-calibrated');
-        expect(result.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            sourceAbilityId: 'card-artificer-perfectly-calibrated',
+        });
+        expect(played.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-perfectly-calibrated');
+        expect(played.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-perfectly-calibrated');
+
+        const settled = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
+        expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
     });
 
     it('电路图 II 额外获得 2 CP', () => {
@@ -2031,15 +2149,24 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerHealBot',
         });
-        expect(resolution.nextState.players['0'].resources[RESOURCE_IDS.HP]).toBe(42);
-        expect(resolution.nextState.players['0'].tokens[TOKEN_IDS.HEAL_BOT]).toBe(1);
-        expect(resolution.nextState.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(2);
-        expect(resolution.nextState.players['0'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]).toMatchObject({
+        const settlementEvents = execute(
+            { ...state, core: resolution.nextState },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+        );
+        const settled = applyEvents(resolution.nextState, settlementEvents);
+
+        expect(eventsOfType(settlementEvents, 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(settled.pendingBonusDiceSettlement).toBeUndefined();
+        expect(settled.players['0'].resources[RESOURCE_IDS.HP]).toBe(42);
+        expect(settled.players['0'].tokens[TOKEN_IDS.HEAL_BOT]).toBe(1);
+        expect(settled.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(2);
+        expect(settled.players['0'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]).toMatchObject({
             built: true,
             upgraded: false,
             activationsUsedThisTurn: 1,
         });
-        expect(resolution.nextState.pendingAttack?.preDefenseResolved).toBe(true);
+        expect(settled.pendingAttack?.preDefenseResolved).toBe(true);
     });
 
     it('伤害前机器人选择生成后应暂停攻击结算并保留 pendingAttack', () => {

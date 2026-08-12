@@ -22,4 +22,4 @@
   - `src/components/lobby/CreateRoomModal.tsx`
   - `e2e/qidahen/online-inmatch-setup.e2e.ts`
   - `.spec/skills/create-new-game/SKILL.md`
-  - `docs/ai-rules/ui-ux.md`
+  - `.spec/knowledge/standards/ui-ux.md`

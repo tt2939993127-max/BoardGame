@@ -10796,7 +10796,7 @@
     },
     "mulan_mulan": {
       "name": "Mulan",
-      "abilityText": "If you placed a +1 power counter this turn, you may play an extra action or draw a card."
+      "abilityText": "Talent: If you placed a +1 power counter on Mulan this turn, you may play an extra action or draw a card."
     },
     "mulan_avalanche": {
       "name": "Avalanche",
@@ -10804,7 +10804,7 @@
     },
     "mulan_be_a_man": {
       "name": "Be a Man",
-      "effectText": "Play on a base. Place a +1 power counter on up to two characters here."
+      "effectText": "Play on a base. Base Talent: Place a +1 power counter on up to two of your characters here."
     },
     "mulan_call_up_new_recruits": {
       "name": "Call Up New Recruits",

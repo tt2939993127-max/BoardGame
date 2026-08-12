@@ -347,24 +347,35 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     state,
     event
 ) => {
-    const isDisplayOnly = !!(event.payload as { displayOnly?: boolean })?.displayOnly;
-    const isAttackBonusSettlement = state.pendingBonusDiceSettlement?.resolutionMode === 'attackBonus';
-    const isNoDamageSettlement = state.pendingBonusDiceSettlement?.resolutionMode === 'none';
-    const isInlineRollDieSettlement = state.pendingBonusDiceSettlement?.rollDieResolution?.bonusDamageMode === 'inline';
-    // 仅“独立伤害型”奖励骰才标记 bonusDiceResolved。
-    const pendingAttack = isInlineRollDieSettlement && state.pendingAttack
-        ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'withDamageChoicePending')
-        : !isAttackBonusSettlement && !isNoDamageSettlement && state.pendingAttack
-            ? updatePendingAttackSettlementStage({ ...state.pendingAttack, bonusDiceResolved: true }, 'readyToResolve')
-            : state.pendingAttack;
-    const currentBonusContextId = state.pendingBonusDiceSettlement
-        ? `bonus:${state.pendingBonusDiceSettlement.id}`
+    const settlement = state.pendingBonusDiceSettlement;
+    const continuation = settlement?.continuation;
+    const pendingAttack = continuation?.kind === 'attack' && state.pendingAttack
+        ? updatePendingAttackSettlementStage(
+            continuation.markBonusDiceResolved
+                ? { ...state.pendingAttack, bonusDiceResolved: true }
+                : state.pendingAttack,
+            continuation.settlementStage,
+        )
+        : state.pendingAttack;
+    const currentBonusContextId = settlement
+        ? `bonus:${settlement.id}`
         : undefined;
-    const nextState = { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
+    const restoredSettlement = settlement?.suspendedParentSettlement;
+    const nextState = {
+        ...state,
+        pendingBonusDiceSettlement: restoredSettlement,
+        pendingAttack,
+    };
     if (currentBonusContextId && nextState.currentRollContext?.id === currentBonusContextId) {
         return restoreSuspendedParentRollContext(nextState, currentBonusContextId);
     }
-    return nextState;
+    if (restoredSettlement) {
+        return {
+            ...nextState,
+            currentRollContext: createBonusRollContextFromSettlement(nextState, restoredSettlement),
+        };
+    }
+    return clearCurrentRollContext(nextState);
 };
 
 /**
@@ -1263,14 +1274,32 @@ const handleBonusDiceRerollRequested: EventHandler<Extract<DiceThroneEvent, { ty
     state,
     event
 ) => {
-    const nextState = { ...state, pendingBonusDiceSettlement: event.payload.settlement };
-    if (getBonusSettlementContextDice(nextState, event.payload.settlement).length > 0) {
+    const previousSettlement = state.pendingBonusDiceSettlement;
+    const hasCurrentPreviousSettlement = previousSettlement
+        && isCurrentBonusRollSettlement(state, previousSettlement);
+    const settlement = hasCurrentPreviousSettlement
+        ? {
+            ...event.payload.settlement,
+            suspendedParentSettlement: previousSettlement,
+        }
+        : event.payload.settlement;
+    const nextState = {
+        ...state,
+        pendingBonusDiceSettlement: settlement,
+    };
+    if (getBonusSettlementContextDice(nextState, settlement).length > 0) {
+        const parentState = hasCurrentPreviousSettlement && !state.currentRollContext
+            ? {
+                ...nextState,
+                currentRollContext: createBonusRollContextFromSettlement(state, previousSettlement),
+            }
+            : nextState;
         return openTemporaryRollContext(
-            nextState,
-            createBonusRollContextFromSettlement(nextState, event.payload.settlement),
+            parentState,
+            createBonusRollContextFromSettlement(parentState, settlement),
         );
     }
-    return clearCurrentRollContext(nextState);
+    return clearCurrentRollContext(nextState, state.currentRollContext?.id);
 };
 
 const handleCompareRollRequested: EventHandler<Extract<DiceThroneEvent, { type: 'COMPARE_ROLL_REQUESTED' }>> = (

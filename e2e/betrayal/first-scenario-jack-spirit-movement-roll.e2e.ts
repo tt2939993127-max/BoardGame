@@ -6,10 +6,12 @@ import {
 import {
     createJackSpiritMovementRollReadyRuntimeCore,
     createJackSpiritNaturalMonsterTurnBeforeRollRuntimeCore,
+    expectVisiblePhysicalDiceBox,
     initBetrayalContext,
     injectCore,
     saveScreenshot,
     setHarnessRandomQueue,
+    waitForPhysicalDiceSettled,
     waitForBetrayalPageReady,
     warmBetrayalFrontend,
 } from './betrayalTestHelpers';
@@ -19,6 +21,69 @@ const ROLL_READY_SCREENSHOT = `${EVIDENCE_DIR}/01-山屋惊魂-第一剧本-杰�
 const MOVED_SCREENSHOT = `${EVIDENCE_DIR}/02-山屋惊魂-第一剧本-杰克之灵移动扣点后.jpg`;
 const NATURAL_TURN_BEFORE_SCREENSHOT = `${EVIDENCE_DIR}/03-山屋惊魂-第一剧本-杰克之灵自然回合-上一英雄结束前.jpg`;
 const NATURAL_TURN_ROLL_SCREENSHOT = `${EVIDENCE_DIR}/04-山屋惊魂-第一剧本-杰克之灵自然回合-移动骰出现.jpg`;
+const ROLL_ANIMATING_SCREENSHOT = `${EVIDENCE_DIR}/00-山屋惊魂-第一剧本-杰克之灵移动骰滚动中.jpg`;
+
+const expectPhysicalDiceMotionKeepsStageStable = async (
+    page: import('@playwright/test').Page,
+    rollPanel: import('@playwright/test').Locator,
+) => {
+    const physicsSource = rollPanel.getByTestId('betrayal-house-dice-physics-source');
+    await expect.poll(async () => physicsSource.getAttribute('data-dice-settled'), {
+        timeout: 5000,
+    }).toBe('false');
+
+    const readSample = () => rollPanel.evaluate((panel) => {
+        type DebugSnapshot = {
+            dice?: Array<{ layout?: { visualWidth?: number; visualHeight?: number } | null }>;
+            canvas?: { clientWidth?: number; clientHeight?: number } | null;
+        };
+        const group = panel.querySelector('[data-testid="betrayal-house-dice-3d-group"]') as HTMLElement | null;
+        const canvas = panel.querySelector('canvas') as HTMLCanvasElement | null;
+        const debugKey = group?.dataset.diceDebugKey;
+        const debugRegistry = (window as typeof window & {
+            __diceBoxThreeDebug?: Record<string, () => DebugSnapshot | null>;
+        }).__diceBoxThreeDebug ?? {};
+        const snapshot = debugKey ? debugRegistry[debugKey]?.() ?? null : null;
+        const visibleSizes = (snapshot?.dice ?? [])
+            .map((die) => Math.min(die.layout?.visualWidth ?? 0, die.layout?.visualHeight ?? 0))
+            .filter((size) => size > 0);
+        return {
+            canvasWidth: snapshot?.canvas?.clientWidth ?? canvas?.clientWidth ?? 0,
+            canvasHeight: snapshot?.canvas?.clientHeight ?? canvas?.clientHeight ?? 0,
+            diceCount: snapshot?.dice?.length ?? 0,
+            minVisibleDieSize: visibleSizes.length ? Math.min(...visibleSizes) : 0,
+        };
+    });
+    const first = await readSample();
+    await page.waitForTimeout(120);
+    const second = await readSample();
+
+    expect(first.canvasWidth, `杰克之灵移动骰滚动中画布宽度必须可用：${JSON.stringify(first)}`).toBeGreaterThanOrEqual(160);
+    expect(first.canvasHeight, `杰克之灵移动骰滚动中画布高度必须可用：${JSON.stringify(first)}`).toBeGreaterThanOrEqual(120);
+    expect(second.canvasWidth).toBe(first.canvasWidth);
+    expect(second.canvasHeight).toBe(first.canvasHeight);
+    expect(second.diceCount).toBe(first.diceCount);
+    expect(second.minVisibleDieSize, `杰克之灵移动骰滚动中不能缩成不可见小点：${JSON.stringify({ first, second })}`).toBeGreaterThanOrEqual(18);
+};
+
+const switchRoomMapToFloor = async (
+    page: import('@playwright/test').Page,
+    floor: 'upper' | 'ground' | 'basement',
+) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        if (await page.getByTestId(`betrayal-room-floor-${floor}`).isVisible({ timeout: 500 }).catch(() => false)) {
+            return;
+        }
+        const upperVisible = await page.getByTestId('betrayal-room-floor-upper').isVisible({ timeout: 250 }).catch(() => false);
+        const basementVisible = await page.getByTestId('betrayal-room-floor-basement').isVisible({ timeout: 250 }).catch(() => false);
+        if (floor === 'upper' || (floor === 'ground' && basementVisible)) {
+            await page.getByTestId('betrayal-room-floor-up').click();
+        } else if (floor === 'basement' || (floor === 'ground' && upperVisible)) {
+            await page.getByTestId('betrayal-room-floor-down').click();
+        }
+    }
+    await expect(page.getByTestId(`betrayal-room-floor-${floor}`)).toBeVisible();
+};
 
 test.describe('山屋惊魂第一剧本杰克之灵移动骰边界', () => {
     test('死叛徒回合会显示杰克之灵 Speed 3 移动骰，并按点数扣减移动', async ({ page, context }) => {
@@ -66,13 +131,25 @@ test.describe('山屋惊魂第一剧本杰克之灵移动骰边界', () => {
         });
         await expect(page.getByTestId('betrayal-status-chip')).toContainText(/当前回合|剩余移动 2/);
         await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText(/杰克之灵速度 3 投出 2|本回合可移动 2 间/);
-        await expect(page.getByTestId('betrayal-action-monsterMove')).toBeEnabled();
+        const rollPanel = page.getByTestId('betrayal-recent-roll-panel');
+        await expectVisiblePhysicalDiceBox(rollPanel);
+        await expectPhysicalDiceMotionKeepsStageStable(page, rollPanel);
+        await saveScreenshot(page, ROLL_ANIMATING_SCREENSHOT);
+        await waitForPhysicalDiceSettled(rollPanel);
         await saveScreenshot(page, ROLL_READY_SCREENSHOT);
 
-        await page.getByTestId('betrayal-action-monsterMove').click();
-        await expect(page.getByTestId('betrayal-room-basement-landing')).toBeVisible();
-        await page.getByTestId('betrayal-room-basement-landing').click();
-        await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('杰克之灵游荡到了地下室起始点');
+        await page.getByTestId('betrayal-roll-continue').click();
+        await expect(page.getByTestId('betrayal-action-monsterTurnStart')).toHaveCount(0);
+        await expect(page.getByTestId('betrayal-action-monsterMovementRoll')).toHaveCount(0);
+        await expect(page.getByTestId('betrayal-action-monsterMove')).toHaveCount(0);
+        await expect(page.getByTestId('betrayal-action-move')).toBeEnabled();
+        await page.getByTestId('betrayal-action-move').click();
+        await switchRoomMapToFloor(page, 'upper');
+        const moveTarget = page.getByTestId('betrayal-room-upper-landing');
+        await expect(moveTarget).toBeVisible();
+        await expect(moveTarget).toBeEnabled();
+        await moveTarget.click();
+        await expect(page.getByTestId('betrayal-room-latest-feedback')).toContainText('杰克之灵游荡到了上层起始点');
         await expect(page.getByTestId('betrayal-status-chip')).toContainText('剩余移动 1');
         await expect.poll(async () => page.evaluate(() => {
             const state = (window as typeof window & {
@@ -96,7 +173,7 @@ test.describe('山屋惊魂第一剧本杰克之灵移动骰边界', () => {
         })).toMatchObject({
             currentPlayer: '2',
             movesRemaining: 1,
-            jackSpiritRoomId: 'basement-landing',
+            jackSpiritRoomId: 'upper-landing',
         });
         await saveScreenshot(page, MOVED_SCREENSHOT);
 

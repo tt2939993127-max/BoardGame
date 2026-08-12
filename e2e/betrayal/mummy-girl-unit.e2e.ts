@@ -14,11 +14,11 @@ import {
 } from "./betrayalTestHelpers";
 
 const EVIDENCE_DIR = "evidence/betrayal-mummy-girl-unit";
-const ROOM_STATE_SCREENSHOT = `${EVIDENCE_DIR}/01-山屋惊魂-女孩单位-房间中可拾取.png`;
-const PICKUP_ANIMATION_SCREENSHOT = `${EVIDENCE_DIR}/02-山屋惊魂-女孩单位-拾取动画中.png`;
-const EXPLORER_STATE_SCREENSHOT = `${EVIDENCE_DIR}/03-山屋惊魂-女孩单位-探索者持有.png`;
-const GIVE_ANIMATION_SCREENSHOT = `${EVIDENCE_DIR}/04-山屋惊魂-女孩单位-交出动画中.png`;
-const MUMMY_STATE_SCREENSHOT = `${EVIDENCE_DIR}/05-山屋惊魂-女孩单位-木乃伊持有.png`;
+const ROOM_STATE_SCREENSHOT = `${EVIDENCE_DIR}/01-山屋惊魂-女孩单位-房间中可拾取.jpg`;
+const PICKUP_ANIMATION_SCREENSHOT = `${EVIDENCE_DIR}/02-山屋惊魂-女孩单位-拾取动画中.jpg`;
+const EXPLORER_STATE_SCREENSHOT = `${EVIDENCE_DIR}/03-山屋惊魂-女孩单位-探索者持有.jpg`;
+const GIVE_ANIMATION_SCREENSHOT = `${EVIDENCE_DIR}/04-山屋惊魂-女孩单位-交出动画中.jpg`;
+const MUMMY_STATE_SCREENSHOT = `${EVIDENCE_DIR}/05-山屋惊魂-女孩单位-木乃伊持有.jpg`;
 
 function createMummyGirlUnitReadyRuntimeCore(): {
   core: BetrayalCore;

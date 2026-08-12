@@ -26,21 +26,10 @@ metadata:
 | 引擎、共享层、传输、AI、后端、接口、状态同步、系统能力 | [`引擎与共享架构`](routes/architecture.md) |
 | 部署、反馈、worktree、合并、交接、规划、AI 规范结构整理 | [`协作与运行事务`](routes/operations.md) |
 
-## UI 与截图职责总览
-
-这张表只说明职责归属和下一跳；可执行正文仍在对应的系统 skill、项目标准或项目 skill 中。
-
-| 要回答的问题 | 唯一执行正文 | 本项目其它入口只做什么 |
-| --- | --- | --- |
-| UI 布局、空间、主交互槽位和 BoardGame 改动门禁 | [`ui-change-gates`](standards/ui-change-gates.md) | `ui-ux` 承载审美与组件范式，`ui-responsive-layout` 承载双端专项。 |
-| E2E 从哪里起跑、状态如何触发、截图能证明哪些业务状态 | [`e2e-verification`](standards/e2e-verification.md) | [`automated-testing`](../../docs/automated-testing.md) 只承载运行命令、API、启动链和产物目录。 |
-| AI 如何看真实图并作出 `PASS/REVISE`，不通过如何返工 | 系统 [`ui-audit-loop`](D:/codex-home/skills/ui-audit-loop/SKILL.md) | 项目标准只补 BoardGame 的布局和证据增量。 |
-| 如何把最终图展示给用户 | 系统 [`show-image-to-user`](D:/codex-home/skills/show-image-to-user/SKILL.md) | 项目 `screenshot-delivery` 只补路径、脚本和授权边界。 |
-| BoardGame 截图证据目录、项目脚本和相册授权 | 项目 [`screenshot-delivery`](../skills/screenshot-delivery/SKILL.md) | 不定义截图是否通过，也不定义用户是否已经看到图。 |
-
 ## 边界
 
 - 项目标准正文只在 [`standards/`](standards/README.md)；路由不复制正文。
 - 可执行步骤只在 [`skills/`](../skills/README.md)；产品需求和任务编排只在 `openspec/`。
 - 不确定属于哪个域时，先进入最接近的路由；路由会指出需要再转到的入口。
 - AI 规范结构本身的迁移裁决看 [`document-consolidation.md`](../decisions/document-consolidation.md)，不要把它当成产品 OpenSpec。
+- UI/截图交付链的职责总览和迁移矩阵见 [`document-merge-ledger.md`](../decisions/document-merge-ledger.md) 的 P1.3；本 README 只保留导航，不复制职责正文。

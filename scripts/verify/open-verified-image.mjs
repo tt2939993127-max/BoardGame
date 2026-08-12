@@ -185,6 +185,23 @@ const resolveTargetImages = ({ path: imagePath, paths, latest }) => {
     return [images[0]];
 };
 
+const validatePureRefSequence = (imagePaths) => {
+    if (imagePaths.length <= 1) {
+        return;
+    }
+
+    const indexImages = imagePaths.filter((imagePath) => path.basename(imagePath) === '00-sequence-index.png');
+    const labeledImages = imagePaths.filter((imagePath) => /^\d{2}-labeled-.+\.png$/i.test(path.basename(imagePath)));
+    const invalidImages = imagePaths.filter((imagePath) => (
+        path.basename(imagePath) !== '00-sequence-index.png'
+        && !/^\d{2}-labeled-.+\.png$/i.test(path.basename(imagePath))
+    ));
+
+    if (indexImages.length !== 1 || labeledImages.length !== imagePaths.length - 1 || invalidImages.length > 0) {
+        throw new Error(`PureRef 多图必须先生成带序号标记组：参数中必须恰好包含 00-sequence-index.png 和每张对应的 NN-labeled-*.png；禁止直接传原始截图或混合原图。`);
+    }
+};
+
 const openImage = (imagePath) => {
     if (process.platform === 'win32') {
         const openResult = spawnSync(
@@ -264,6 +281,10 @@ const main = () => {
     const normalizedViewer = parsed.viewer.toLowerCase();
     if (!['system', 'pureref'].includes(normalizedViewer)) {
         throw new Error(`不支持的 viewer: ${parsed.viewer}`);
+    }
+
+    if (normalizedViewer === 'pureref') {
+        validatePureRefSequence(resolvedImages);
     }
 
     if (parsed.dryRun) {

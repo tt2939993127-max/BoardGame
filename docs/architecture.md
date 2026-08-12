@@ -675,5 +675,5 @@ runner.runAll([
 | 游戏服务入口 | `server.ts` |
 | REST API 入口 | `apps/api/src/main.ts` |
 | 测试规范 | `docs/automated-testing.md` |
-| 引擎系统规范 | `docs/ai-rules/engine-systems.md` |
+| 引擎系统规范 | `.spec/knowledge/standards/engine-systems.md` |
 | 架构可视化数据 | `src/pages/devtools/arch/archData.ts` |

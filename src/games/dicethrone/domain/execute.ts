@@ -60,7 +60,7 @@ import {
     buildAfterRollConfirmedSignature,
 } from './responseWindowGuards';
 import { buildCompareRollChoiceEvent, findCurrentRollDie, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
-import { buildCurrentRollRerollEvents } from './reroll';
+import { buildCurrentRollRerollEvents, shouldRequireAbilityReselectionForCurrentRoll } from './reroll';
 
 // ============================================================================
 // 辅助函数
@@ -748,9 +748,7 @@ export function execute(
                 
                 // 规则 3.3 步骤 3：如果骰面被修改且已选择技能，触发重选。
                 // 终极技能只有正式发动后才行动锁定；发动前仍可被改骰取消。
-                if (phase === 'offensiveRoll'
-                    && state.pendingAttack
-                    && dieTarget === 'activeDie'
+                if (shouldRequireAbilityReselectionForCurrentRoll(state, phase)
                     && die
                     && newValue !== die.value) {
                     events.push({

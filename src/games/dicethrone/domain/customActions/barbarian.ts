@@ -63,6 +63,7 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp, {
         customResolutionId: BARBARIAN_SUPPRESS_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
     }));
 
     return events;
@@ -99,6 +100,7 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp, {
         customResolutionId: BARBARIAN_SUPPRESS_2_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
     }));
     return events;
 }
@@ -217,6 +219,7 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         customResolutionId: BARBARIAN_LUCKY_SETTLEMENT_ID,
         summaryEffectKey: 'bonusDie.effect.luckyRoll.result',
         summaryEffectParams: { heartCount, healAmount: 1 + 2 * heartCount },
+        continuation: { kind: 'complete' },
     }));
 
     return events;
@@ -254,6 +257,7 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp + 5, {
         customResolutionId: BARBARIAN_MORE_PLEASE_SETTLEMENT_ID,
         summaryEffectKey: 'bonusDie.effect.morePleaseRoll.result',
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
     }));
 
     return events;

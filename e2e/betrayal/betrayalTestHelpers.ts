@@ -54,6 +54,7 @@ import {
   setChineseLocale,
   waitForTestHarness,
 } from "../helpers/common";
+import { EVIDENCE_SCREENSHOT_QUALITY } from "../framework/evidenceScreenshots";
 
 type BetrayalHarnessSnapshot = {
   core: BetrayalCore;
@@ -232,7 +233,12 @@ export const warmBetrayalFrontend = async (
 
 export const saveScreenshot = async (page: Page, path: string) => {
   mkdirSync(dirname(path), { recursive: true });
-  const image = await page.screenshot({ fullPage: false });
+  const image = await page.screenshot({
+    fullPage: false,
+    ...( /\.jpe?g$/i.test(path)
+      ? { type: "jpeg" as const, quality: EVIDENCE_SCREENSHOT_QUALITY }
+      : { type: "png" as const }),
+  });
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const tempPath = `${path}.${process.pid}.${Date.now()}.${attempt}.tmp`;

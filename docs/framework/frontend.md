@@ -192,7 +192,7 @@ src/
   - 注册：`registerChoiceEffectHandler(customId, handler)`
 - **Token 效果处理器**：`src/games/dicethrone/domain/tokenResponse.ts`
   - 注册：`registerEffectProcessor(effectType, processor)`
-- **Token 定义驱动 UI**：`DiceThroneCore.tokenDefinitions` → `TokenResponseModal` / `LeftSidebar`
+- **Token 定义驱动 UI**：`DiceThroneCore.tokenDefinitions` → `LeftSidebar` 的 Token 本体与手牌上方共享响应提示；`TokenResponseModal` 不再是响应入口。
 
 > 新增效果请优先添加定义与注册处理器，避免在 reducer/UI 内硬编码 ID。
 

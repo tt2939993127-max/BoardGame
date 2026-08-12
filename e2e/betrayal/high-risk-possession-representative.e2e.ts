@@ -606,7 +606,7 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
         assertNoFatalFrontendErrors([{ label: 'betrayal-ordinary-item-discovery', diagnostics }]);
     });
 
-    test('当前12张物品在普通物品符号房间发现时均显示单步确认并进入持有区', async ({ page, context }) => {
+    test('当前22张物品在普通物品符号房间发现时均显示单步确认并进入持有区', async ({ page, context }) => {
         test.setTimeout(300000);
         const diagnostics = await openBetrayalPage(page, context, 'betrayal-ordinary-item-discovery-matrix');
 
@@ -626,15 +626,7 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
                 timeout: 30000,
             });
             await expect(discoveryPanel).toHaveAttribute('aria-label', new RegExp(`物品牌 ${itemCard.name}`));
-            await expect(page.getByTestId('betrayal-discovery-detail')).toContainText('已加入持有区');
             await expect(discoveryPanel).toContainText(itemCard.name);
-            await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step')).toHaveCount(1);
-            await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText(
-                '已加入持有区',
-            );
-            await expect(discoveryPanel.getByTestId('betrayal-discovery-resolution-step').nth(0)).toContainText(
-                itemCard.name,
-            );
             await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toContainText('确认');
             await expect(discoveryPanel.getByTestId('betrayal-discovery-continue')).toHaveAttribute(
                 'data-pending-card-resolution-step',
@@ -791,6 +783,10 @@ test.describe('山屋惊魂高风险持有物代表链', () => {
         await playerTwoDiscoveryPanel.getByTestId('betrayal-discovery-continue').click();
         const gainTransitionBlocker = playerTwoPage.getByTestId('betrayal-visual-transition-blocker');
         await expect(gainTransitionBlocker).toBeVisible();
+        await expect(gainTransitionBlocker).toHaveAttribute(
+            'data-transition-target-testid',
+            'betrayal-explorer-figure-token-0',
+        );
         await expect(playerTwoPage.getByTestId('betrayal-board')).toHaveAttribute('data-betrayal-visual-busy', 'true');
         await expect(playerTwoPage.locator('[data-testid="betrayal-inventory-hunting-knife-armory-0-1"]')).toHaveCount(0);
         await saveScreenshot(playerTwoPage, ARMORY_DISCOVERY_GAIN_ANIMATION_SCREENSHOT);

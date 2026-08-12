@@ -16,7 +16,7 @@
 ## 启动前默认询问
 
 1. 是否先同步 `main`，再从最新基线开 `feat/game-<gameId>`。
-2. 是否先执行 `npm run assets:download -- --check` 或 `npm run assets:download` 拉本地缺失资源。
+2. 是否先执行 `npm run assets:download -- --game <gameId> --dry-run` 检查并按游戏拉本地缺失运行时资源。
 3. 本轮主真相源是什么，是否要把 Wiki / 官网 / 用户指定站点作为对照源一起比。
 4. 是否允许 AI 根据图片内容自动重命名、自动移动、自动压缩素材。
    默认只对明显随机名/默认名自动改名；如果原名看起来就是用户有意命名，先询问，默认不改。

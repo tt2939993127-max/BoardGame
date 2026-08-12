@@ -3,6 +3,7 @@ import { test, expect } from '../framework';
 import type { GameTestContext } from '../framework';
 import { getEvidenceScreenshotPath, withJpegEvidenceScreenshotOptions } from '../framework/evidenceScreenshots';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { settleCurrentBonusDice } from './bonus-dice-flow';
 import {
     setupOnlineMatch,
     readCoreState,
@@ -669,12 +670,12 @@ test.describe('Token 响应窗口真实入口', () => {
 
             await backStrikeToken.click();
             await guestPage.getByTestId('dicethrone-response-pass-button').click();
-            const bonusDiceConfirmButton = guestPage.locator('[data-tutorial-id="dice-confirm-button"]');
-            await expect(bonusDiceConfirmButton).toBeEnabled({ timeout: 10000 });
-            await expect(guestPage.getByTestId('dicethrone-2d-dice-tray')).toBeVisible();
-            await expect(guestPage.getByTestId('bonus-die-overlay')).toHaveCount(0);
             await saveEvidenceScreenshot(guestPage, testInfo, '武士背击-右侧骰盘确认前');
-            await bonusDiceConfirmButton.click();
+            await settleCurrentBonusDice(
+                guestPage,
+                () => guestPage.evaluate(() => (window as HarnessWindow).__BG_TEST_HARNESS__?.state?.get?.() as Record<string, any>),
+                { sourceAbilityId: 'samurai-back-strike-reflect' },
+            );
             await guestPage.waitForFunction(() => {
                 const state = (window as HarnessWindow).__BG_TEST_HARNESS__?.state?.get?.();
                 return !state?.core?.pendingDamage

@@ -1,6 +1,6 @@
 # SmashUp 消灭触发链与 pendingSave 机制
 
-> 来源：从 `docs/ai-rules/engine-systems.md` 无损下沉。该规则只约束 SmashUp 当前消灭触发 runtime；通用审计维度见 `docs/ai-rules/testing-audit-dimensions.md`。
+> 来源：从 `.spec/knowledge/standards/engine-systems.md` 无损下沉。该规则只约束 SmashUp 当前消灭触发 runtime；通用审计维度见 `.spec/knowledge/standards/testing-audit-dimensions.md`。
 
 ## SmashUp 消灭触发链与 pendingSave 机制（强制）
 

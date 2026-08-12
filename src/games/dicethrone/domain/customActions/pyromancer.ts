@@ -636,6 +636,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
                 const effect = getPyroBlastDieEffect(die.face ?? '');
                 return Object.keys(effect).length > 0;
             }),
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
         },
         (dice) => buildPyroBlastDieEvents({
             state: ctx.state,
@@ -684,7 +685,10 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
         opponentId,
         [{ index: 0, value, face: face as any, effectKey }],
         timestamp + 1,
-        { customResolutionId: PYRO_GET_FIRED_UP_SETTLEMENT_ID },
+        {
+            customResolutionId: PYRO_GET_FIRED_UP_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     )];
 };
 
@@ -796,7 +800,10 @@ const resolveInfernalEmbraceRoll = (ctx: CustomActionContext): DiceThroneEvent[]
         attackerId,
         [{ index: 0, value, face: face as any, effectKey }],
         timestamp + 1,
-        { customResolutionId: PYRO_INFERNAL_EMBRACE_SETTLEMENT_ID },
+        {
+            customResolutionId: PYRO_INFERNAL_EMBRACE_SETTLEMENT_ID,
+            continuation: { kind: 'complete' },
+        },
     )];
 };
 

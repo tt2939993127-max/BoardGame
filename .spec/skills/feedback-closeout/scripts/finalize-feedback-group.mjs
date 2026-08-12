@@ -6,7 +6,7 @@ const VALID_STATUSES = new Set(['resolved', 'closed']);
 
 function parseArgs(argv) {
     const options = {
-        baseUrl: process.env.BOARDGAME_FEEDBACK_BASE_URL || 'http://127.0.0.1:3000',
+        baseUrl: process.env.BOARDGAME_FEEDBACK_BASE_URL || 'https://api.easyboardgame.top',
         token: process.env.BOARDGAME_FEEDBACK_TOKEN || '',
         summaryPath: '',
         feedbackId: '',
@@ -54,6 +54,12 @@ function parseArgs(argv) {
     }
     if (!VALID_STATUSES.has(options.status)) {
         throw new Error(`非法终态: ${options.status}`);
+    }
+    if (options.status === 'resolved' && !options.resolvedMethod.trim()) {
+        throw new Error('resolved 状态必须提供面向用户的 --resolved-method');
+    }
+    if (options.status === 'closed' && !options.closedReason.trim()) {
+        throw new Error('closed 状态必须提供面向用户的 --closed-reason');
     }
 
     return options;
