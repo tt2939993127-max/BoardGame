@@ -906,9 +906,20 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             && dtEvent.type === 'CARD_DISCARDED';
                         if (isStatusSelectionCompleted || isHandCardSelectionCompleted) {
                             statusInteractionCompleted = true;
+                            const completedInteractionId = current.id;
+                            const completedPlayerId = current.playerId;
                             newState = markCurrentAttackReadyAfterInteraction(newState, interactionData);
-                            // 业务完成事件已经由领域层生成；系统层只清理当前交互。
+                            // 状态选择完成和骰子选择完成一样，必须通知响应窗口解除同一交互锁。
                             newState = syncCurrentChoiceAnchorWithInteraction(resolveInteraction(newState));
+                            nextEvents.push({
+                                type: INTERACTION_EVENTS.CONFIRMED,
+                                payload: {
+                                    interactionId: completedInteractionId,
+                                    playerId: completedPlayerId,
+                                    sourceId: interactionData.sourceCardId,
+                                },
+                                timestamp: dtEvent.timestamp,
+                            });
                         }
                     }
                 }

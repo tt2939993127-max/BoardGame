@@ -1104,14 +1104,14 @@ describe('伏击 (Sneak Attack) 执行逻辑', () => {
         expect(handler).toBeDefined();
     });
 
-    it('伏击掷骰增加伤害到 pendingDamageBonus', () => {
+    it('伏击确认奖励骰后，才按最终骰面增加伤害', () => {
         const handler = getCustomActionHandler('shadow_thief-sneak-attack-use')!;
         expect(handler).toBeDefined();
 
         // 构造最小上下文
         const state = {
             players: {
-                '0': { id: '0', resources: {}, tokens: {}, statusEffects: {}, hand: [], deck: [], discard: [] },
+                '0': { id: '0', characterId: 'shadow_thief', resources: {}, tokens: {}, statusEffects: {}, hand: [], deck: [], discard: [] },
                 '1': { id: '1', resources: {}, tokens: {}, statusEffects: {}, hand: [], deck: [], discard: [] },
             },
             pendingAttack: { attackerId: '0', defenderId: '1', damage: 3, isDefendable: true, sourceAbilityId: 'test' },
@@ -1126,10 +1126,24 @@ describe('伏击 (Sneak Attack) 执行逻辑', () => {
             action: { type: 'custom', customActionId: 'shadow_thief-sneak-attack-use' },
         });
 
-        // 应产生 BONUS_DIE_ROLLED 事件
-        const bonusEvents = events.filter((e: any) => e.type === 'BONUS_DIE_ROLLED');
+        // 初始骰面仍可被改写，因此此时只打开奖励骰结算，不得先写入伤害。
+        expect(events.filter((e: any) => e.type === 'BONUS_DICE_REROLL_REQUESTED')).toHaveLength(1);
+        expect(events.filter((e: any) => e.type === 'BONUS_DIE_ROLLED')).toHaveLength(0);
+
+        const opened = applyEvents(state, events, reduce);
+        const settlement = opened.pendingBonusDiceSettlement;
+        expect(settlement).toBeDefined();
+        if (!settlement) return;
+
+        const settled = buildBonusDiceSettlementEvents({
+            state: opened,
+            settlement,
+            random: { d: () => 1 } as any,
+            timestamp: 2,
+            sourceCommandType: 'TEST_CONFIRM_BONUS_DICE',
+        });
+        const bonusEvents = settled.filter((e: any) => e.type === 'BONUS_DIE_ROLLED');
         expect(bonusEvents).toHaveLength(1);
-        // 掷骰值 4 → pendingDamageBonus = 4
         expect((bonusEvents[0] as any).payload.pendingDamageBonus).toBe(4);
         expect((bonusEvents[0] as any).payload.value).toBe(4);
     });

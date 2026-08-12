@@ -277,11 +277,14 @@ const TokenChoiceIcon = ({
     );
 
     return (
-        <div
-            className="relative flex flex-col items-center gap-2 cursor-pointer"
+        <button
+            type="button"
+            aria-label={name}
+            disabled={!canResolve}
+            className="relative flex flex-col items-center gap-2 border-0 bg-transparent p-0 cursor-pointer disabled:cursor-not-allowed"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            onClick={() => canResolve && onResolve(option.id)}
+            onClick={() => onResolve(option.id)}
         >
             <div
                 className={`
@@ -305,7 +308,7 @@ const TokenChoiceIcon = ({
                 isVisible={isHovered}
                 position="bottom"
             />
-        </div>
+        </button>
     );
 };
 

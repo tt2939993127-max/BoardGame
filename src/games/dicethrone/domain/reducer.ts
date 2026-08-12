@@ -1035,11 +1035,13 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
     const attackSnapshotDieIndex = getAttackSnapshotDieIndex(dieId);
     const pendingAttack = state.pendingAttack
         && target !== 'pendingBonusDie'
-        && ownerId === state.pendingAttack.attackerId
         && isAttackSnapshotDieId(dieId)
         && Array.isArray(state.pendingAttack.attackDiceValues)
         && attackSnapshotDieIndex >= 0
         && attackSnapshotDieIndex < state.pendingAttack.attackDiceValues.length
+        // target 已由 execute 根据 attackSnapshotDieId 明确标注；防御骰上下文的
+        // ownerId 属于当前防御骰，不能再反过来否决攻击快照的实际写入。
+        && (target === 'attackSnapshot' || ownerId === state.pendingAttack.attackerId)
         ? (() => {
             const attackDiceValues = state.pendingAttack!.attackDiceValues!.map((value, index) => (
                 index === attackSnapshotDieIndex ? newValue : value

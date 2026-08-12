@@ -34,7 +34,7 @@ export interface GameHintsProps {
 
     /** 当前响应提示。卡牌与 Token 响应共用同一个手牌上方提示框。 */
     responsePrompt?: {
-        onPass: () => void;
+        onPass?: () => void;
         kind: 'card' | 'token';
         passLabel?: string;
     };
@@ -365,7 +365,7 @@ export const GameHints: React.FC<GameHintsProps> = ({
             )}
 
             {/* 响应窗口：当前玩家可响应 */}
-            {responsePrompt && (
+            {responsePrompt?.onPass && (
                 <ResponseWindowHint
                     onResponsePass={responsePrompt.onPass}
                     kind={responsePrompt.kind}

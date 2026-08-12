@@ -3,7 +3,7 @@
  *
  * 卡牌规则：选择对手的1颗骰子，强制他重掷该骰子
  * - 费用：1 CP
- * - timing: roll（通常在投掷阶段使用；非投掷阶段若仍保留已确认骰子判定结果，也可响应骰面）
+ * - timing: roll（只能在投掷阶段，或已正式打开的骰面响应窗口使用）
  * - playCondition:
  *   - requireIsNotRoller: 不能是当前投掷方（只能在对手投掷时使用）
  *   - requireRollConfirmed: 对手必须已确认骰面
@@ -42,6 +42,7 @@ const makeCore = (overrides: Partial<DiceThroneCore> = {}): DiceThroneCore => ({
     players: {
         '0': {
             heroId: 'monk',
+            characterId: 'monk',
             health: 50,
             resources: { cp: 10 },
             hand: [],
@@ -54,6 +55,7 @@ const makeCore = (overrides: Partial<DiceThroneCore> = {}): DiceThroneCore => ({
         } as any,
         '1': {
             heroId: 'monk',
+            characterId: 'monk',
             health: 50,
             resources: { cp: 10 },
             hand: [giveHandCard],
@@ -125,22 +127,25 @@ describe('抬一手（card-give-hand）边界测试', () => {
             expect((result as any).reason).toBe('requireIsNotRoller');
         });
 
-        it('main1 阶段有已确认骰子判定结果时可以打出', () => {
+        it('main1 阶段即使残留已确认骰子结果也不能绕过响应窗口打出', () => {
             const core = makeCore({ rollConfirmed: true, rollCount: 1 });
             const result = checkPlayCard(core, '1', giveHandCard, 'main1');
-            expect(result.ok).toBe(true);
+            expect(result.ok).toBe(false);
+            expect((result as any).reason).toBe('wrongPhaseForRoll');
         });
 
-        it('main2 阶段有已确认骰子判定结果时可以打出', () => {
+        it('main2 阶段即使残留已确认骰子结果也不能绕过响应窗口打出', () => {
             const core = makeCore({ rollConfirmed: true, rollCount: 1 });
             const result = checkPlayCard(core, '1', giveHandCard, 'main2');
-            expect(result.ok).toBe(true);
+            expect(result.ok).toBe(false);
+            expect((result as any).reason).toBe('wrongPhaseForRoll');
         });
 
-        it('upkeep 阶段有已确认骰子判定结果时可以打出', () => {
+        it('upkeep 阶段即使残留已确认骰子结果也不能绕过响应窗口打出', () => {
             const core = makeCore({ rollConfirmed: true, rollCount: 1 });
             const result = checkPlayCard(core, '1', giveHandCard, 'upkeep');
-            expect(result.ok).toBe(true);
+            expect(result.ok).toBe(false);
+            expect((result as any).reason).toBe('wrongPhaseForRoll');
         });
 
         it('main1 阶段骰面未确认时不能打出', () => {

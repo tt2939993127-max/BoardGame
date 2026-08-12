@@ -175,7 +175,7 @@ describe('圣骑士 Token 定义', () => {
         expect(acc!.activeUse!.timing).toContain('onOffensiveRollEnd');
     });
 
-    it('精准尚未花费前，对手可以在确认骰面响应窗口使用拜拜了您嘞移除它', () => {
+    it('拜拜了您嘞不是改骰牌，确认骰面响应窗口不能打出', () => {
         const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
         const paladin = state.core.players['0'];
         const opponent = state.core.players['1'];
@@ -192,7 +192,45 @@ describe('圣骑士 Token 定义', () => {
             'offensiveRoll',
             'afterRollConfirmed',
         );
-        expect(result.ok).toBe(true);
+        expect(result).toEqual({ ok: false, reason: 'wrongPhaseForCard' });
+    });
+
+    it('确认骰面窗口只放行改骰牌，受伤响应牌只能在对应伤害窗口使用', () => {
+        const state = createHeroMatchup('monk', 'gunslinger')(['0', '1'], fixedRandom);
+        const attacker = state.core.players['0'];
+        const defender = state.core.players['1'];
+        const flick = getCardById('card-flick');
+        const nextTime = getCardById('card-next-time');
+
+        attacker.hand = [];
+        defender.hand = [flick, nextTime];
+        defender.resources.cp = 5;
+        state.core.rollCount = 1;
+        state.core.rollConfirmed = true;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'fist-attack',
+            isDefendable: true,
+        } as any;
+        state.core.pendingDamage = {
+            id: 'next-time-damage',
+            sourcePlayerId: '0',
+            targetPlayerId: '1',
+            originalDamage: 6,
+            currentDamage: 6,
+            responseType: 'beforeDamageReceived',
+            responderId: '1',
+            isFullyEvaded: false,
+        };
+
+        expect(checkPlayCard(state.core, '1', flick, 'offensiveRoll', 'afterRollConfirmed'))
+            .toEqual({ ok: true });
+        expect(checkPlayCard(state.core, '1', nextTime, 'offensiveRoll', 'afterRollConfirmed'))
+            .toEqual({ ok: false, reason: 'wrongPhaseForCard' });
+
+        expect(checkPlayCard(state.core, '1', nextTime, 'main2', 'afterAttackResolved'))
+            .toEqual({ ok: true });
     });
 
     it('精准被拜拜了您嘞移除后，进攻投掷阶段收口不会再请求精准', () => {

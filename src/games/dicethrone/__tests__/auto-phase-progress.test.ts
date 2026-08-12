@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { diceThroneFlowHooks } from '../domain/flowHooks';
 import { TOKEN_IDS } from '../domain/ids';
 import type { DiceThroneCore } from '../domain/types';
+import { shouldShowManualPhaseAdvance } from '../ui/viewMode';
 import { createHeroMatchup, fixedRandom } from './test-utils';
 
 describe('DiceThrone 开局自动推进门禁', () => {
@@ -31,6 +32,12 @@ describe('DiceThrone 开局自动推进门禁', () => {
         } as Parameters<NonNullable<typeof diceThroneFlowHooks.onAutoContinueCheck>>[0]);
 
         expect(auto).toEqual({ autoContinue: true, playerId: '0' });
+    });
+
+    it('维护与收入阶段不应给玩家手动阶段推进入口', () => {
+        expect(shouldShowManualPhaseAdvance('upkeep', false)).toBe(false);
+        expect(shouldShowManualPhaseAdvance('income', false)).toBe(false);
+        expect(shouldShowManualPhaseAdvance('main1', false)).toBe(true);
     });
 
     it('工匠在 upkeep 有可点纳米机器人时应停住等待玩家', () => {

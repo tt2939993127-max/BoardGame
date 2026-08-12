@@ -2116,6 +2116,50 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         expect(checkPlayCard(state.core, '0', getArtificerCard('upgrade-artificer-shock-bot-2'), 'defensiveRoll')).toEqual({ ok: true });
     });
 
+    it('工匠受击响应牌在攻击结算后的伤害窗口仍可用，不会被改骰窗口收紧误伤', () => {
+        const state = createHeroMatchup('artificer', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'main2';
+        state.core.activePlayerId = '1';
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 5;
+        state.core.players['0'].hand = [
+            getArtificerCard('card-artificer-mechanical-strike'),
+            getArtificerCard('upgrade-artificer-shock-bot-2'),
+        ];
+        state.core.pendingAttack = {
+            attackerId: '1',
+            defenderId: '0',
+            sourceAbilityId: 'fist-technique',
+            isDefendable: true,
+        } as DiceThroneCore['pendingAttack'];
+        state.core.pendingDamage = {
+            id: 'artificer-response-damage',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            sourceAbilityId: 'fist-technique',
+            damageScope: 'attack',
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+
+        expect(checkPlayCard(
+            state.core,
+            '0',
+            getArtificerCard('card-artificer-mechanical-strike'),
+            'main2',
+            'afterAttackResolved',
+        )).toEqual({ ok: true });
+        expect(checkPlayCard(
+            state.core,
+            '0',
+            getArtificerCard('upgrade-artificer-shock-bot-2'),
+            'main2',
+            'afterAttackResolved',
+        )).toEqual({ ok: true });
+    });
+
     it('电能脉冲选择治疗机器人时会按工匠骰面真实治疗并继续伤害前链路', () => {
         const state = createHeroMatchup('artificer', 'monk')(['0', '1'], fixedRandom);
         state.core.players['0'].tokens[TOKEN_IDS.SYNTH] = 2;

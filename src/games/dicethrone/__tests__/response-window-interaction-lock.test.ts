@@ -7,11 +7,14 @@
  * 直到交互完成或取消。
  */
 import { describe, expect, it } from 'vitest';
+import { resolveNextAiAction } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
 import { execute as executeDomainCommand } from '../domain/execute';
+import { TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { ATTACK_SNAPSHOT_DIE_ID_OFFSET, getResponderQueue } from '../domain/rules';
 import { diceModifyReducer, diceModifyToCommands, diceSelectReducer, diceSelectToCommands } from '../domain/systems';
+import { engineConfig } from '../game';
 import {
     advanceTo,
     cmd,
@@ -782,5 +785,69 @@ describe('响应窗口交互锁定：取消交互', () => {
 
         expect(result2.finalState.sys.interaction?.current).toBeUndefined();
         expect(result2.finalState.core.players['1'].hand.some((c: any) => c.id === 'card-flick')).toBe(true);
+    });
+});
+
+describe('AI 私有状态选择的唯一执行入口', () => {
+    it('本地 AI 打出拜拜了您嘞后应移除状态，不得退回为 RESPONSE_PASS', async () => {
+        const runner = createRunner(fixedRandom, true);
+        const played = runner.run({
+            name: '本地 AI 在主阶段打出拜拜了您嘞并选择移除战术优势',
+            setup: (playerIds, random) => {
+                const state = createSetupWithHand(['card-bye-bye'], {
+                    playerId: '1',
+                    cp: 10,
+                    mutate: (core) => {
+                        core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] = 1;
+                        core.players['0'].hand = [];
+                        core.players['0'].deck = [];
+                        core.players['1'].deck = [];
+                        core.activePlayerId = '1';
+                        core.turnPhase = 'main1';
+                    },
+                })(playerIds, random);
+                state.sys.phase = 'main1';
+                return state;
+            },
+            commands: [cmd('PLAY_CARD', '1', { cardId: 'card-bye-bye' })],
+        });
+
+        expect(played.assertionErrors).toEqual([]);
+        expect(played.finalState.sys.interaction?.current?.playerId).toBe('1');
+        expect(played.finalState.sys.interaction?.current?.kind).toBe('dt:card-interaction');
+
+        const resolution = await resolveNextAiAction({
+            engineConfig,
+            state: played.finalState,
+            matchId: 'dicethrone-bye-bye-private-ai-choice',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai', minimumActionDelayMs: 0 },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('interaction-remove-status');
+        expect(resolution?.action.commands).toEqual([
+            {
+                type: 'REMOVE_STATUS',
+                payload: {
+                    targetPlayerId: '0',
+                    statusId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+                },
+            },
+        ]);
+        expect(resolution?.action.commands.some((command) => command.type === 'RESPONSE_PASS')).toBe(false);
+
+        runner.setState(played.finalState);
+        const removed = runner.dispatch('REMOVE_STATUS', {
+            playerId: '1',
+            targetPlayerId: '0',
+            statusId: TOKEN_IDS.TACTICAL_ADVANTAGE,
+        });
+
+        expect(removed.success).toBe(true);
+        expect(removed.finalState.core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE]).toBe(0);
+        expect(removed.finalState.sys.interaction?.current).toBeUndefined();
     });
 });

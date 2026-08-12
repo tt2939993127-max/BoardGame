@@ -77,6 +77,7 @@ import {
     resolveManualResponseEnabledForWindow,
     resolveResponseAutoViewTransition,
     shouldAutoPassResponseWindow,
+    shouldShowManualPhaseAdvance,
 } from './ui/viewMode';
 import { isDirectDiceInterferenceActor } from './domain/responseWindowGuards';
 import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
@@ -96,7 +97,6 @@ import { InteractionOverlay } from './ui/InteractionOverlay';
 import { ChoiceModal } from './ui/ChoiceModal';
 import { CompareRollOverlay } from './ui/CompareRollOverlay';
 import { DefenderChoiceModal } from './ui/DefenderChoiceModal';
-import { findMatchPlayerInfo } from '../../engine/transport/matchPlayers';
 import { canRerollBonusDiceSettlement } from './domain/bonusDiceSettlement';
 
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
@@ -721,6 +721,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         () => choice.options.find(option => !option.tokenId && option.customId === 'skip'),
         [choice.options],
     );
+    const shouldUseDirectTokenChoice = directTokenChoiceOptions.length > 0 && Boolean(directTokenChoiceSkip);
 
     const handleDirectTokenResponse = React.useCallback((tokenId: string) => {
         if (!isTokenResponseInteraction || !pendingDamage || !isTokenResponder) return;
@@ -761,7 +762,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             };
         }
 
-        if (directTokenChoiceOptions.length > 0) {
+        if (shouldUseDirectTokenChoice) {
             return {
                 tokenIds: directTokenChoiceOptions.map(option => option.tokenId!).filter(Boolean),
                 onTokenClick: handleDirectTokenChoice,
@@ -789,6 +790,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         isTokenResponder,
         isTokenResponseInteraction,
         pendingDamage,
+        shouldUseDirectTokenChoice,
         sysInteraction?.id,
         t,
     ]);
@@ -832,7 +834,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const responseWindow = access.responseWindow;
     const isResponder = isManualSelfResponseWindow;
     const sharedResponsePrompt = tokenInteraction
-        ? { onPass: tokenInteraction.onSkip, kind: 'token' as const, passLabel: tokenInteraction.passLabel }
+        ? (tokenInteraction.onSkip
+            ? { onPass: tokenInteraction.onSkip, kind: 'token' as const, passLabel: tokenInteraction.passLabel }
+            : undefined)
         : isResponder
             ? { onPass: () => engineMoves.responsePass(currentResponderId), kind: 'card' as const }
             : undefined;
@@ -869,27 +873,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return undefined;
     }, [isResponseWindowOpen, currentResponderId, rootPid, isDirectDiceActor, responseWindow?.windowType, G, currentPhase]);
 
-    // 检测当前响应者是否离线，如果离线则自动跳过
-    const isResponderOffline = React.useMemo(() => {
-        if (!isResponseWindowOpen || !currentResponderId) return false;
-        const responderData = findMatchPlayerInfo(matchData, currentResponderId);
-        // 如果找不到或者 isConnected 为 false，认为离线
-        return responderData ? responderData.isConnected === false : false;
-    }, [isResponseWindowOpen, currentResponderId, matchData]);
-
-    // 当检测到当前响应者离线时，自动代替他跳过响应
-    // 注：只有当自己是活跃玩家时才执行（避免双方都发送 pass）
-    React.useEffect(() => {
-        if (isResponderOffline && isActivePlayer && currentResponderId && currentResponderId !== rootPid) {
-            console.warn('[Board] offline auto-pass triggered', { isResponderOffline, isActivePlayer, currentResponderId, rootPid });
-            // 延迟一小段时间确保 UI 状态同步
-            const timer = setTimeout(() => {
-                engineMoves.responsePass(currentResponderId);
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [isResponderOffline, isActivePlayer, currentResponderId, rootPid, engineMoves]);
-
     // 教学模式：若响应窗口轮到“非本地玩家”，自动跳过，避免卡在对手思考中
     React.useEffect(() => {
         if (gameMode?.mode !== 'tutorial') return;
@@ -905,8 +888,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }, 100);
         return () => clearTimeout(timer);
     }, [gameMode?.mode, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
-    // 切换到对手视角时也显示下一阶段按钮（禁用状态），保持 UI 一致性
-    const showAdvancePhaseButton = !isSpectator;
+    // upkeep/income 是规则自动阶段，玩家不应取得阶段推进入口。
+    const showAdvancePhaseButton = shouldShowManualPhaseAdvance(currentPhase, isSpectator);
     const handleCancelInteraction = React.useCallback(() => {
         if (pendingInteraction?.sourceCardId) {
             setLastUndoCardId(pendingInteraction.sourceCardId);
@@ -1512,7 +1495,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     });
 
     useSyncedModalStackEntry({
-        enabled: Boolean(choice.hasChoice && directTokenChoiceOptions.length === 0),
+        enabled: Boolean(choice.hasChoice && !shouldUseDirectTokenChoice),
         entryId: 'dicethrone_choice',
         entry: choiceModalEntry,
     });

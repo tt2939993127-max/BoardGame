@@ -324,6 +324,62 @@ describe('AI legal actions', () => {
         )).toBe(true);
     });
 
+    it('在线 AI 尚未选角和准备时，房主开始命令必须被拒绝，AI 仍能生成选角动作', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['0'] = 'monk';
+        core.seatControllers = {
+            '1': { type: 'local-ai', minimumActionDelayMs: 2000 },
+        };
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [], isBlocked: false },
+                undo: { aiSeatIds: ['1'] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        expect(DiceThroneDomain.validate(state, {
+            type: 'HOST_START_GAME',
+            playerId: '0',
+            payload: {},
+            timestamp: 0,
+        } as never)).toEqual({ valid: false, error: 'players_not_ready' });
+
+        const actions = buildDiceThroneAiLegalActions({ playerId: '1', state });
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'setup-select-character',
+            commands: [expect.objectContaining({ type: 'SELECT_CHARACTER' })],
+        }));
+    });
+
+    it('在线 AI 房主只在全员选角并准备后生成一次开始动作', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['0'] = 'monk';
+        core.seatControllers = {
+            '0': { type: 'local-ai', minimumActionDelayMs: 2000 },
+        };
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [], isBlocked: false },
+                undo: { aiSeatIds: ['0'] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        expect(buildDiceThroneAiLegalActions({ playerId: '0', state }))
+            .not.toContainEqual(expect.objectContaining({ kind: 'setup-host-start' }));
+
+        core.selectedCharacters['1'] = 'barbarian';
+        core.readyPlayers['1'] = true;
+        const startActions = buildDiceThroneAiLegalActions({ playerId: '0', state })
+            .filter((action) => action.kind === 'setup-host-start');
+
+        expect(startActions).toHaveLength(1);
+        expect(startActions[0]?.commands).toEqual([{ type: 'HOST_START_GAME', payload: {} }]);
+    });
+
     it('主流程阶段应生成推进回合动作', () => {
         const state = createInitializedState(['0', '1'], fixedRandom);
 

@@ -32,6 +32,7 @@ describe('gunslinger take-cover vs samurai stand-tall', () => {
                 cmd('SELECT_ABILITY', '0', { abilityId: 'take-cover' }),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd(interactionRespondCommandType, '0', { optionId: 'option-0' }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
                 cmd('RESPONSE_PASS', '0'),

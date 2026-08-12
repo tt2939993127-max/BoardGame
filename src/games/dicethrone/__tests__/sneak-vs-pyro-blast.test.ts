@@ -92,7 +92,8 @@ describe('潜行 vs 高温爆破 — 额外投掷触发', () => {
                 cmd('ROLL_DICE', '0'),      // 5 × d(6) → [1,1,1,6,5]
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'pyro-blast' }),
-                cmd('ADVANCE_PHASE', '0'),  // offensiveRoll → 潜行判定 → main2
+                cmd('ADVANCE_PHASE', '0'),  // offensiveRoll → 潜行判定 → 奖励骰确认
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
             ],
             expect: {
                 turnPhase: 'main2',

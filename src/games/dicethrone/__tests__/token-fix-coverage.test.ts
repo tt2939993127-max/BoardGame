@@ -134,6 +134,7 @@ describe('Sneak Attack USE_TOKEN 端到端', () => {
             name: 'sneak-attack-use-token-trigger',
             commands: [
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
             ],
             setup: (playerIds, random) => {
                 const state = baseSetup(playerIds, random);
@@ -171,14 +172,16 @@ describe('Sneak Attack USE_TOKEN 端到端', () => {
         // 验证 sneak_attack token 被消耗
         expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK]).toBe(0);
 
-        // 验证 custom action 被触发：pendingAttack.damage 应增加掷骰值
-        // queuedRandom d(6) = 4，所以 damage 从 5 增加到 9
-        // 注意：如果 pendingDamage 已被清理（finalize），检查 steps 中的事件
+        // 使用 Token 先打开临时奖励骰；确认后才按最终骰面结算伤害。
         const steps = result.steps;
         const useTokenStep = steps[0];
-        // 应包含 TOKEN_USED 和 BONUS_DIE_ROLLED 事件
+        // queuedRandom d(6) = 4，所以确认后 damage 从 5 增加到 9。
         expect(useTokenStep.events).toContain('TOKEN_USED');
-        expect(useTokenStep.events).toContain('BONUS_DIE_ROLLED');
+        expect(useTokenStep.events).toContain('BONUS_DICE_REROLL_REQUESTED');
+        expect(useTokenStep.events).not.toContain('BONUS_DIE_ROLLED');
+        expect(steps[1].events).toContain('BONUS_DICE_SETTLED');
+        expect(steps[1].events).toContain('BONUS_DIE_ROLLED');
+        expect(result.finalState.core.pendingAttack?.damage).toBe(9);
     });
 
     it('transferred sneak_attack still triggers original custom action', () => {
@@ -190,6 +193,7 @@ describe('Sneak Attack USE_TOKEN 端到端', () => {
             name: 'transferred-sneak-attack-still-triggers-original-custom-action',
             commands: [
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+                cmd('SKIP_BONUS_DICE_REROLL', '0'),
             ],
             setup: (playerIds, random) => {
                 const state = baseSetup(playerIds, random);
@@ -225,7 +229,10 @@ describe('Sneak Attack USE_TOKEN 端到端', () => {
         const useTokenStep = result.steps[0];
         expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK]).toBe(0);
         expect(useTokenStep.events).toContain('TOKEN_USED');
-        expect(useTokenStep.events).toContain('BONUS_DIE_ROLLED');
+        expect(useTokenStep.events).toContain('BONUS_DICE_REROLL_REQUESTED');
+        expect(useTokenStep.events).not.toContain('BONUS_DIE_ROLLED');
+        expect(result.steps[1].events).toContain('BONUS_DICE_SETTLED');
+        expect(result.steps[1].events).toContain('BONUS_DIE_ROLLED');
         expect(result.finalState.core.pendingAttack?.damage).toBe(12);
     });
 });

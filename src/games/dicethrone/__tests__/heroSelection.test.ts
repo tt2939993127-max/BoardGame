@@ -125,6 +125,21 @@ describe('选角流程', () => {
             expect(result.valid).toBe(false);
             expect(result.error).toBe('player_mismatch');
         });
+
+        it('有人未选角或未准备时，房主不能提前开始', () => {
+            const state = createInitialState();
+            state.selectedCharacters['0'] = 'monk';
+
+            const cmd: HostStartGameCommand = {
+                type: 'HOST_START_GAME',
+                playerId: '0',
+                payload: {},
+            };
+
+            const result = validateCommand(state, cmd, 'setup');
+            expect(result.valid).toBe(false);
+            expect(result.error).toBe('players_not_ready');
+        });
     });
 
     describe('SELECT_CHARACTER 命令', () => {

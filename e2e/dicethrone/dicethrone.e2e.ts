@@ -222,10 +222,10 @@ test.describe('DiceThrone 核心 E2E', () => {
         expect(unlockedState.core.dice[0].isKept).toBe(false);
     });
 
-    test('regression: 武僧连段冲拳②两颗太极奖励骰结算为5伤害加4气', async ({ page, game }, testInfo) => {
+    test('regression: 武僧连段冲拳②奖励骰后可选择闪避或净化，且不显示无效让过按钮', async ({ page, game }, testInfo) => {
         test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
-        await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+        await game.openTestGame('dicethrone', { playerID: '0' }, DICETHRONE_OPEN_TIMEOUT_MS);
         await game.setupScene({
             gameId: 'dicethrone',
             player0: {
@@ -263,6 +263,13 @@ test.describe('DiceThrone 核心 E2E', () => {
                 },
             },
         });
+
+        const upgradedSetupState = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
+        const upgradedTaijiCombo = upgradedSetupState.core.players['0'].abilities.find(
+            ability => ability.id === 'taiji-combo',
+        );
+        expect(upgradedSetupState.core.players['0'].abilityLevels['taiji-combo']).toBe(2);
+        expect((upgradedTaijiCombo?.effects[0]?.action as { diceCount?: number } | undefined)?.diceCount).toBe(2);
 
         await waitForDiceThronePhase(page, 'main1');
         await dispatchDiceThroneCommand(page, {
@@ -340,42 +347,45 @@ test.describe('DiceThrone 核心 E2E', () => {
             payload: { abilityId: 'meditation' },
         });
 
-        await setDiceThroneBonusDiceValues(page, [4, 5]);
+        await setDiceThroneBonusDiceValues(page, [6, 2]);
         await dispatchDiceThroneCommand(page, {
             type: 'ADVANCE_PHASE',
             playerId: '1',
             payload: {},
         });
 
-        await expect(page.getByTestId('dicethrone-response-window-hint')).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId(`dt-player-0-token-${TOKEN_IDS.TAIJI}`)).toHaveAttribute('data-token-clickable', 'true');
+        await dispatchDiceThroneCommand(page, {
+            type: 'SKIP_BONUS_DICE_REROLL',
+            playerId: '0',
+            payload: {},
+        });
 
-        const bonusDiceResponseState = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
-        expect(bonusDiceResponseState.core.pendingDamage?.responderId).toBe('0');
-        expect(bonusDiceResponseState.core.pendingDamage?.responseType).toBe('beforeDamageDealt');
-        expect(bonusDiceResponseState.core.pendingDamage?.currentDamage).toBe(5);
-        expect(bonusDiceResponseState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
-        expect(bonusDiceResponseState.core.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(4);
-        expect(bonusDiceResponseState.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
-        expect(bonusDiceResponseState.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(0);
+        await expect.poll(async () => {
+            const state = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
+            return state.sys.interaction?.current?.data?.sourceId ?? null;
+        }).toBe('taiji-combo');
 
-        const bonusDiceEvents = bonusDiceResponseState.sys.eventStream?.entries.map(entry => entry.event) ?? [];
+        const tokenChoiceState = await readDiceThroneHarnessState<DiceThroneMatchState>(page);
+        expect(tokenChoiceState.core.pendingAttack?.sourceAbilityId).toBe('taiji-combo');
+        expect(tokenChoiceState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+        expect(tokenChoiceState.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
+        expect(tokenChoiceState.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(0);
+
+        const bonusDiceEvents = tokenChoiceState.sys.eventStream?.entries.map(entry => entry.event) ?? [];
         const taijiBonusDice = bonusDiceEvents
             .filter(event => event.type === 'BONUS_DIE_ROLLED' && event.payload.playerId === '0')
             .map(event => event.payload);
         expect(taijiBonusDice).toEqual(expect.arrayContaining([
-            expect.objectContaining({ value: 4, face: 'taiji' }),
-            expect.objectContaining({ value: 5, face: 'taiji' }),
+            expect.objectContaining({ value: 6, face: 'lotus' }),
+            expect.objectContaining({ value: 2, face: 'fist' }),
         ]));
 
-        await expect(page.getByTestId('dt-player-0-token-taiji')).toHaveAttribute('data-token-amount', '4', { timeout: 15000 });
-        await game.screenshot('07-武僧连段冲拳二-奖励骰后-当前5伤害4气', testInfo);
+        await expect(page.getByRole('button', { name: '闪避', exact: true })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('button', { name: '净化', exact: true })).toBeVisible();
+        await expect(page.getByTestId('dicethrone-response-window-hint')).toHaveCount(0);
+        await game.screenshot('07-武僧连段冲拳二-奖励骰后-选择闪避或净化-无让过按钮', testInfo);
 
-        await dispatchDiceThroneCommand(page, {
-            type: 'SKIP_TOKEN_RESPONSE',
-            playerId: '0',
-            payload: {},
-        });
+        await page.getByRole('button', { name: '闪避', exact: true }).click();
 
         await dispatchDiceThroneCommand(page, {
             type: 'SKIP_BONUS_DICE_REROLL',
@@ -391,8 +401,8 @@ test.describe('DiceThrone 核心 E2E', () => {
                 return state?.sys?.phase === 'main2'
                     && state?.core?.pendingBonusDiceSettlement === undefined
                     && !state?.core?.pendingDamage
-                    && defenderHp === 45
-                    && (state?.core?.players?.['0']?.tokens?.taiji ?? 0) === 4;
+                    && defenderHp === 43
+                    && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
             },
             { timeout: 15000, polling: 200 },
         );
@@ -401,10 +411,10 @@ test.describe('DiceThrone 核心 E2E', () => {
         expect(finalState.sys.phase).toBe('main2');
         expect(finalState.core.pendingBonusDiceSettlement).toBeUndefined();
         expect(finalState.core.pendingDamage).toBeUndefined();
-        expect(finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(45);
-        expect(finalState.core.players['0'].tokens[TOKEN_IDS.TAIJI] ?? 0).toBe(4);
+        expect(finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(43);
+        expect(finalState.core.players['0'].tokens[TOKEN_IDS.TAIJI] ?? 0).toBe(0);
         expect(finalState.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(0);
-        expect(finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(0);
+        expect(finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(1);
         expect(finalState.sys.interaction?.current).toBeFalsy();
 
         const finalEvents = finalState.sys.eventStream?.entries.map(entry => entry.event) ?? [];
@@ -412,15 +422,15 @@ test.describe('DiceThrone 核心 E2E', () => {
             type: 'DAMAGE_DEALT',
             payload: expect.objectContaining({
                 targetId: '1',
-                amount: 5,
-                actualDamage: 5,
+                amount: 7,
+                actualDamage: 7,
                 sourceAbilityId: 'taiji-combo',
             }),
         }));
 
         await expect(page.getByTestId('flying-effect-damage')).toHaveCount(0, { timeout: 15000 });
-        await expect(page.getByTestId('dt-top-header-1-hp')).toHaveText('45', { timeout: 15000 });
-        await expect(page.getByTestId('dt-player-0-token-taiji')).toHaveAttribute('data-token-amount', '4', { timeout: 15000 });
-        await game.screenshot('08-武僧连段冲拳二-最终45血4气无遮挡', testInfo);
+        await expect(page.getByTestId('dt-top-header-1-hp')).toHaveText('43', { timeout: 15000 });
+        await expect(page.getByTestId(`dt-player-0-token-${TOKEN_IDS.EVASIVE}`)).toHaveAttribute('data-token-amount', '1', { timeout: 15000 });
+        await game.screenshot('08-武僧连段冲拳二-选择闪避后-伤害已结算', testInfo);
     });
 });

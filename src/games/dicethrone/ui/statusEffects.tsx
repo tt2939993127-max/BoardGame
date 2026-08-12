@@ -232,8 +232,10 @@ const orderStatusAtlasImageCandidates = (candidateUrls: string[]): string[] => {
 
     return dedupeUrls([
         ...customOrPackageCandidates,
+        // 棋盘状态必须优先使用随当前站点发布的正式素材；外部 CDN 只能后备。
+        // 否则网络请求悬挂时不会触发 error，候选链无法到达本地图集，选择 UI 只剩空圈。
+        ...localPublicCandidates,
         ...officialCandidates,
-        ...(officialCandidates.length > 0 ? [] : localPublicCandidates),
     ]);
 };
 

@@ -26,6 +26,7 @@ import {
 import type { PlayerId } from '../../../engine/types';
 import clsx from 'clsx';
 import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
+import { isSetupReadyToStart } from '../domain/rules';
 
 export interface DiceThroneHeroSelectionProps {
     isOpen: boolean;
@@ -93,11 +94,11 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const isFourPlayerMode = playerIds.length === 4;
     const inlineUnit = buildRuntimeInlineUnitValue;
 
-    const everyoneReady = playerIds.every(pid => {
-        const char = selectedCharacters[pid as PlayerId];
-        const hasSelected = char && char !== 'unselected';
-        if (pid === hostPlayerId) return hasSelected;
-        return hasSelected && readyPlayers[pid as PlayerId];
+    const everyoneReady = isSetupReadyToStart({
+        playerIds,
+        hostPlayerId,
+        selectedCharacters,
+        readyPlayers,
     });
 
     const hasSelectedChar = selectedCharacters[currentPlayerId] && selectedCharacters[currentPlayerId] !== 'unselected';

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import type { DiceThroneMoveMap } from '../ui/resolveMoves';
+import { isSetupReadyToStart } from '../domain/rules';
 
 interface AutoSkipSelectionParams {
     currentPhase: string;
@@ -61,13 +62,10 @@ export function useAutoSkipSelection({
             return false;
         };
 
-        let timer: number | undefined;
         const attemptAutoSkip = () => {
             if (isAutoSkipDone()) {
                 autoSkipStageRef.current = 'completed';
-                if (timer !== undefined) {
-                    window.clearInterval(timer);
-                }
+                window.clearInterval(timer);
                 return;
             }
 
@@ -83,7 +81,13 @@ export function useAutoSkipSelection({
 
             if (gameMode?.mode === 'online') {
                 if (rootPid === hostPlayerId) {
-                    if (!hostStarted) {
+                    const canStart = isSetupReadyToStart({
+                        playerIds: Object.keys(selectedCharacters),
+                        hostPlayerId: hostPlayerId ?? rootPid,
+                        selectedCharacters,
+                        readyPlayers: readyPlayers ?? {},
+                    });
+                    if (!hostStarted && canStart) {
                         engineMoves.hostStartGame();
                     }
                 } else if (!readyPlayers?.[rootPid]) {
@@ -99,13 +103,11 @@ export function useAutoSkipSelection({
             }
         };
 
+        const timer = window.setInterval(attemptAutoSkip, 800);
         attemptAutoSkip();
-        timer = window.setInterval(attemptAutoSkip, 800);
 
         return () => {
-            if (timer !== undefined) {
-                window.clearInterval(timer);
-            }
+            window.clearInterval(timer);
         };
     }, [
         selectedCharacters,

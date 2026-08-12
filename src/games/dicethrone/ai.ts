@@ -34,6 +34,7 @@ import {
     RESOURCE_IDS,
     STATUS_IDS,
     canAdvancePhase,
+    isSetupReadyToStart,
     canSellCard,
     checkPlayCard,
     checkPlayUpgradeCard,
@@ -1954,7 +1955,12 @@ const buildSetupActions = (state: DiceThroneState, playerId: PlayerId): AiLegalA
         });
     }
 
-    if (isHost) {
+    if (isHost && isSetupReadyToStart({
+        playerIds: Object.keys(state.core.players),
+        hostPlayerId: state.core.hostPlayerId,
+        selectedCharacters: state.core.selectedCharacters,
+        readyPlayers: state.core.readyPlayers,
+    })) {
         appendAction(actions, state, playerId, {
             actionId: createAiLegalActionId('setup', 'host-start'),
             kind: 'setup-host-start',

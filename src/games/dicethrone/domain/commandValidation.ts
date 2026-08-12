@@ -52,6 +52,7 @@ import {
     getRollerId,
     isMoveAllowed,
     canAdvancePhase,
+    isSetupReadyToStart,
     checkPlayCard,
     checkPlayUpgradeCard,
     getAvailableAbilityIds,
@@ -389,6 +390,15 @@ const validateHostStartGame = (
 
     if (state.seatSwapRequest) {
         return fail('seat_swap_request_pending');
+    }
+
+    if (!isSetupReadyToStart({
+        playerIds: Object.keys(state.players),
+        hostPlayerId: state.hostPlayerId,
+        selectedCharacters: state.selectedCharacters,
+        readyPlayers: state.readyPlayers,
+    })) {
+        return fail('players_not_ready');
     }
 
     return ok();

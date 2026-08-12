@@ -582,6 +582,24 @@ export const getRollerId = (state: DiceThroneCore, phase?: TurnPhase): PlayerId 
 // ============================================================================
 
 /**
+ * 选角阶段是否已满足房主开始对局的前置条件。
+ *
+ * 房主无需准备；其余所有席位必须先选角并准备完成。
+ * 该判断同时被领域校验、AI 调度和选角 UI 消费，避免它们各自
+ * 生成或放行不可能成功的开始命令。
+ */
+export const isSetupReadyToStart = (args: {
+    playerIds: readonly PlayerId[];
+    hostPlayerId: PlayerId;
+    selectedCharacters: Record<PlayerId, CharacterId>;
+    readyPlayers: Record<PlayerId, boolean>;
+}): boolean => args.playerIds.every((playerId) => {
+    const characterId = args.selectedCharacters[playerId];
+    const hasSelectedCharacter = typeof characterId === 'string' && characterId !== 'unselected';
+    return hasSelectedCharacter && (playerId === args.hostPlayerId || args.readyPlayers[playerId] === true);
+});
+
+/**
  * 检查是否可以推进阶段
  */
 export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolean => {
@@ -609,10 +627,13 @@ export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolea
             return state.hostStarted;
         }
         
-        // 正常模式：检查所有玩家
-        const allSelected = playerIds.every(pid => state.selectedCharacters[pid] && state.selectedCharacters[pid] !== 'unselected');
-        const allNonHostReady = playerIds.every(pid => pid === state.hostPlayerId || state.readyPlayers[pid]);
-        return allSelected && allNonHostReady && state.hostStarted;
+        // 正常模式：所有玩家选角且非房主准备完成后，才可由房主开始。
+        return isSetupReadyToStart({
+            playerIds,
+            hostPlayerId: state.hostPlayerId,
+            selectedCharacters: state.selectedCharacters,
+            readyPlayers: state.readyPlayers,
+        }) && state.hostStarted;
     }
 
     // 防御阶段：默认需“先选技能 → 掷骰 → 确认”后才能推进。
@@ -855,8 +876,8 @@ const getAttackModifierPlayFailureReason = (
 };
 
 /**
- * 当前骰区只回答“骰子牌能否把它作为效果目标”。
- * 卡牌的阶段时机必须由 checkStandardCardPlay 独立裁决，不能由当前骰区越权放行。
+ * 仅临时骰上下文可以代替主骰的“已投掷 / 已确认”前提。
+ * 普通攻击、防御与目标骰仍必须遵守自身的确认时机；当前骰区不能越权放行。
  */
 const hasCurrentDiceTargetForCard = (
     state: DiceThroneCore,
@@ -873,6 +894,7 @@ const hasCurrentDiceTargetForCard = (
     const currentRollContext = resolveCurrentRollContext(state, phase);
     return Boolean(
         currentRollContext
+        && currentRollContext.kind === 'bonus'
         && currentRollContext.policy.allowDiceCardTargeting === true
         && currentRollContext.display.replayOnly !== true
         && currentRollContext.dice.length > 0,
@@ -1015,8 +1037,10 @@ const checkStandardCardPlay = (
         const isAfterAttackRollResponse =
             responseWindowType === 'afterAttackResolved'
             && card.playCondition?.requireMinDamageDealt !== undefined;
+        const isAfterRollConfirmedResponse = responseWindowType === 'afterRollConfirmed';
         if (
             !isAfterAttackRollResponse
+            && !isAfterRollConfirmedResponse
             && phase !== 'offensiveRoll'
             && phase !== 'targetingRoll'
             && phase !== 'defensiveRoll'
@@ -1200,11 +1224,6 @@ const checkResponseWindowCardPlay = (
 
     switch (windowType) {
         case 'afterRollConfirmed': {
-            // FAQ：精准要到进攻投掷阶段结束才花费；在此之前，对手可以用“拜拜了您嘞”移除它。
-            // 这张牌是状态移除型瞬时行动，不属于改骰牌，但必须能进入该响应窗口。
-            if (card.id === 'card-bye-bye' && card.timing === 'instant') {
-                return { ok: true };
-            }
             if (card.timing !== 'instant' && card.timing !== 'roll') {
                 return failResponseWindow();
             }

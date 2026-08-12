@@ -799,7 +799,7 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
     // 伏击
     // ========================================================================
     describe('shadow_thief-sneak-attack-use (伏击：骰值加伤)', () => {
-        it('投出5时增加5点伤害到pendingAttack', () => {
+        it('确认奖励骰后，按最终骰面增加伤害到pendingAttack', () => {
             const state = createState({});
             // 设置 pendingAttack（伏击 token 在攻击阶段使用）
             state.pendingAttack = {
@@ -814,9 +814,13 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
                 random: () => 5 / 6, // d(6)→5
             }));
 
-            expect(eventsOfType(events, 'BONUS_DIE_ROLLED')).toHaveLength(1);
-            // 伤害通过 BONUS_DIE_ROLLED 事件的 pendingDamageBonus 传递（由 reducer 处理）
-            const bonusEvent = eventsOfType(events, 'BONUS_DIE_ROLLED')[0] as any;
+            // 初始骰面还可被修改，打开结算窗口时不能先写伤害。
+            expect(eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED')).toHaveLength(1);
+            expect(eventsOfType(events, 'BONUS_DIE_ROLLED')).toHaveLength(0);
+
+            const settled = settlePendingBonusDice(state, events);
+            const bonusEvent = eventsOfType(settled, 'BONUS_DIE_ROLLED')[0] as any;
+            expect(eventsOfType(settled, 'BONUS_DIE_ROLLED')).toHaveLength(1);
             expect(bonusEvent.payload.pendingDamageBonus).toBe(5);
             expect(bonusEvent.payload.value).toBe(5);
         });

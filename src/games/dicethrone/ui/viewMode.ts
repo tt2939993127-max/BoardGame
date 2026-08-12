@@ -70,6 +70,11 @@ export const shouldAutoPassResponseWindow = (
     params: ResponseWindowPreferenceParams,
 ): boolean => !resolveManualResponseEnabledForWindow(params);
 
+export const shouldShowManualPhaseAdvance = (
+    phase: TurnPhase,
+    isSpectator: boolean,
+): boolean => !isSpectator && phase !== 'upkeep' && phase !== 'income';
+
 export const getResponseViewSuggestionKey = (
     params: ResponseViewSuggestionKeyParams,
 ): string | null => {

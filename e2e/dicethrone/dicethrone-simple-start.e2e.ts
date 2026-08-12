@@ -217,6 +217,77 @@ const waitForHandCardVisualReady = async (page: Page, cardId: string) => {
     await page.waitForTimeout(900);
 };
 
+const dragHandCardToPlay = async (page: Page, cardId: string) => {
+    const handCard = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+    await expect(handCard).toBeVisible({ timeout: 10000 });
+    await expect(handCard).toHaveAttribute('data-can-drag', 'true', { timeout: 10000 });
+    const cardBox = await handCard.boundingBox();
+    if (!cardBox) {
+        throw new Error(`未能获取手牌 ${cardId} 的拖拽区域`);
+    }
+
+    const startX = cardBox.x + (cardBox.width / 2);
+    const startY = cardBox.y + (cardBox.height * 0.78);
+    const endY = Math.max(24, startY - 240);
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, endY, { steps: 12 });
+    const draggedCardBox = await handCard.boundingBox();
+    if (!draggedCardBox || cardBox.y - draggedCardBox.y < 180) {
+        throw new Error(`手牌 ${cardId} 没有真正拖到打出距离`);
+    }
+    await page.mouse.up();
+    await page.mouse.move(2, 2);
+};
+
+const waitForStatusIconImage = async (page: Page, testId: string) => {
+    const statusOption = page.getByTestId(testId);
+    await expect(statusOption).toBeVisible({ timeout: 10000 });
+    await expect.poll(async () => statusOption.evaluate((node) => {
+        const image = node.querySelector<HTMLImageElement>('img[data-status-source-url]');
+        return {
+            sourceUrl: image?.getAttribute('data-status-source-url') ?? null,
+            naturalWidth: image?.naturalWidth ?? 0,
+            naturalHeight: image?.naturalHeight ?? 0,
+            renderedWidth: image?.getBoundingClientRect().width ?? 0,
+            renderedHeight: image?.getBoundingClientRect().height ?? 0,
+        };
+    })).toMatchObject({
+        sourceUrl: expect.any(String),
+        naturalWidth: expect.any(Number),
+        naturalHeight: expect.any(Number),
+    });
+    await expect.poll(async () => statusOption.evaluate((node) => {
+        const image = node.querySelector<HTMLImageElement>('img[data-status-source-url]');
+        return Boolean(
+            image
+            && image.naturalWidth > 0
+            && image.naturalHeight > 0
+            && image.getBoundingClientRect().width > 0
+            && image.getBoundingClientRect().height > 0,
+        );
+    })).toBe(true);
+};
+
+const closeBoardMagnifyIfOpen = async (page: Page) => {
+    const magnifyOverlay = page.getByTestId('board-magnify-overlay');
+    if (!await magnifyOverlay.isVisible({ timeout: 1000 }).catch(() => false)) {
+        return;
+    }
+
+    await magnifyOverlay.getByRole('button', { name: /关闭预览|close preview/i }).click();
+    await expect(magnifyOverlay).toBeHidden({ timeout: 5000 });
+};
+
+const waitForCardSpotlightToClose = async (page: Page) => {
+    const spotlight = page.getByTestId('card-spotlight-overlay');
+    if (!await spotlight.isVisible({ timeout: 1000 }).catch(() => false)) {
+        return;
+    }
+
+    await expect(spotlight).toBeHidden({ timeout: 5000 });
+};
+
 const readAfterAttackResolvedProbeState = async (page: Page) => {
     const state = await readHarnessState<any>(page);
     const responseWindow = state?.sys?.responseWindow?.current;
@@ -1092,7 +1163,7 @@ const advanceHostTurnToMain1 = async (
     page: Page,
     expectedPlayerId = '0',
 ) => {
-    for (let step = 0; step < 3; step += 1) {
+    for (let step = 0; step < 12; step += 1) {
         const state = await getMatchState(matchId, page);
         const phase = state.sys?.phase ?? null;
         const activePlayerId = state.core?.activePlayerId ?? null;
@@ -1107,13 +1178,11 @@ const advanceHostTurnToMain1 = async (
         }
 
         const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
-        await expect(advanceButton).toBeVisible({ timeout: 10000 });
-        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
-        await advanceButton.click();
-        await page.waitForTimeout(300);
+        await expect(advanceButton).toHaveCount(0);
+        await page.waitForTimeout(250);
     }
 
-    throw new Error('已回到真人回合，但在 3 次内仍未能推进到 main1，说明链路仍可能卡住');
+    throw new Error('已回到真人回合，但维护/收入阶段未在 3 秒内自动推进到 main1，说明链路仍可能卡住');
 };
 
 const buildTargetingRollState = (state: any, targetingValue: number) => {
@@ -1307,6 +1376,97 @@ const buildTwoPlayerByeByeBountyState = (state: any) => {
         ...(next.core.players['1'].statusEffects ?? {}),
     };
     return next;
+};
+
+const buildOnlineAiByeByeBountyState = (state: any) => {
+    const next = buildTwoPlayerByeByeBountyState(state);
+    const byeByeCard = BYE_BYE_CARD;
+    if (!byeByeCard) {
+        throw new Error(`未找到拜拜您卡 ${BYE_BYE_CARD_ID}，无法构造 AI 私有状态选择场景`);
+    }
+
+    next.core.activePlayerId = '1';
+    next.core.currentPlayerIndex = 1;
+    next.sys.currentPlayerIndex = 1;
+    next.sys.phase = 'main1';
+    next.core.phase = 'main1';
+    next.core.players['0'].hand = [];
+    next.core.players['1'].hand = [structuredClone(byeByeCard)];
+    next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 5);
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.BOUNTY]: 1,
+    };
+    next.core.players['1'].tokens = {
+        ...(next.core.players['1'].tokens ?? {}),
+        [TOKEN_IDS.BOUNTY]: 0,
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-bye-bye', next);
+};
+
+const installOnlineCommandRecorder = async (page: Page) => {
+    await page.evaluate(async () => {
+        const globalWindow = window as Window & {
+            __DT_ONLINE_COMMAND_RECORDER__?: {
+                installed: boolean;
+                entries: Array<{ playerId: string | null; type: string }>;
+            };
+        };
+        if (globalWindow.__DT_ONLINE_COMMAND_RECORDER__?.installed) {
+            globalWindow.__DT_ONLINE_COMMAND_RECORDER__.entries = [];
+            return;
+        }
+
+        const transportModule = await import('/src/engine/transport/client.ts');
+        const proto = transportModule.GameTransportClient?.prototype as {
+            sendCommand?: (this: { config?: { playerID?: string | null } }, type: string, payload: unknown, context?: unknown) => boolean;
+            sendBatch?: (this: { config?: { playerID?: string | null } }, batchId: string, commands: Array<{ type: string; payload: unknown }>, onConfirmed?: (state: unknown) => void, onRejected?: (reason: string) => void, context?: unknown) => void;
+        } | undefined;
+        if (!proto?.sendCommand || !proto.sendBatch) {
+            throw new Error('GameTransportClient command recorder unavailable');
+        }
+
+        const originalSendCommand = proto.sendCommand;
+        const originalSendBatch = proto.sendBatch;
+        globalWindow.__DT_ONLINE_COMMAND_RECORDER__ = { installed: true, entries: [] };
+        proto.sendCommand = function recordedSendCommand(type, payload, context) {
+            globalWindow.__DT_ONLINE_COMMAND_RECORDER__?.entries.push({
+                playerId: this.config?.playerID ?? null,
+                type,
+            });
+            return originalSendCommand.call(this, type, payload, context);
+        };
+        proto.sendBatch = function recordedSendBatch(batchId, commands, onConfirmed, onRejected, context) {
+            for (const command of commands) {
+                globalWindow.__DT_ONLINE_COMMAND_RECORDER__?.entries.push({
+                    playerId: this.config?.playerID ?? null,
+                    type: command.type,
+                });
+            }
+            return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected, context);
+        };
+    });
+};
+
+const readOnlineCommandRecorder = async (page: Page) => page.evaluate(() => {
+    const globalWindow = window as Window & {
+        __DT_ONLINE_COMMAND_RECORDER__?: { entries: Array<{ playerId: string | null; type: string }> };
+    };
+    return globalWindow.__DT_ONLINE_COMMAND_RECORDER__?.entries ?? [];
+});
+
+const waitForOnlineAiSeatToReceiveState = async (
+    page: Page,
+    predicate: (state: any) => boolean,
+    message: string,
+) => {
+    await expect.poll(async () => {
+        const state = await page.evaluate(() => (
+            (window as any).__BG_ONLINE_AI_DEBUG__?.getSeatLatestState?.('1') ?? null
+        ));
+        return predicate(state);
+    }, { timeout: 10000, message }).toBe(true);
 };
 
 const buildTwoPlayerMeteorState = (state: any) => {
@@ -3719,7 +3879,7 @@ test.describe('DiceThrone Simple Start', () => {
         }
     });
 
-    test('Online AI 在 DiceThrone main2 阶段持续卡死时，服务端 watchdog 应自动多步收口到我方回合且不再弹失败提示', async ({ browser }, testInfo) => {
+    test('Online AI 结束 main2 后应自动穿过维护与收入阶段回到我方主要阶段', async ({ browser }, testInfo) => {
         test.setTimeout(120000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -3747,32 +3907,11 @@ test.describe('DiceThrone Simple Start', () => {
                 message: '等待 DiceThrone host/AI 一起完成 watchdog 测试前置条件',
             }).toBe(true);
 
-            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
-            await expect(startButton).toBeEnabled({ timeout: 10000 });
-            await startButton.click();
-            await hostPage.waitForTimeout(500);
-            await installAiBatchRejectPatch(hostPage, {
-                targetPlayerId: '1',
-                rejectLimit: 99,
-                minCommandCount: 1,
-            });
-            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiStalledMain2State);
             await waitForGameBoard(hostPage, 30000);
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiStalledMain2State);
             await waitForTestHarness(hostPage, 15000);
 
             await expect.poll(async () => {
-                const status = await readAiBatchRejectPatchStatus(hostPage);
-                return status?.rejectedCount ?? 0;
-            }, {
-                timeout: 15000,
-                message: '等待 AI main2 卡死场景至少出现一次本地 batch 拒绝',
-            }).toBeGreaterThanOrEqual(1);
-
-            await clearEvidenceScreenshotsForTest(testInfo);
-            await saveEvidenceScreenshot(hostPage, testInfo, '19-online-ai-main2-stalled-before-watchdog');
-
-            await expect.poll(async () => {
-                const status = await readAiBatchRejectPatchStatus(hostPage);
                 const state = await getMatchState(matchId, hostPage);
                 const failureToastVisible = await hostPage.evaluate(() => {
                     return Array.from(document.querySelectorAll('*')).some((node) => {
@@ -3782,7 +3921,6 @@ test.describe('DiceThrone Simple Start', () => {
                     });
                 });
                 return {
-                    rejectedCount: status?.rejectedCount ?? 0,
                     phase: state.sys?.phase ?? null,
                     activePlayerId: state.core?.activePlayerId ?? null,
                     hasGameOver: Boolean(state.sys?.gameover),
@@ -3790,9 +3928,8 @@ test.describe('DiceThrone Simple Start', () => {
                 };
             }, {
                 timeout: 25000,
-                message: '等待服务端 watchdog 多步推进 main2 → discard → 人类回合起始阶段',
+                message: '等待 AI 正常推进 main2 → discard → 人类回合起始阶段',
             }).toMatchObject({
-                rejectedCount: expect.any(Number),
                 activePlayerId: '0',
                 hasGameOver: false,
                 failureToastVisible: false,
@@ -3804,13 +3941,15 @@ test.describe('DiceThrone Simple Start', () => {
                 return ['upkeep', 'income', 'main1'].includes(String(phase));
             }, {
                 timeout: 5000,
-                message: 'watchdog 收口后应进入真人回合的 upkeep/income/main1',
+                message: 'AI 推进后应进入真人回合的 upkeep/income/main1',
             }).toBe(true);
 
             await advanceHostTurnToMain1(matchId, hostPage, '0');
 
             await expect(hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 10000 });
-            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-main2-stalled-after-watchdog');
+            await closeBoardMagnifyIfOpen(hostPage);
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-main2-auto-progressed-to-human-main1');
         } finally {
             await setup.hostContext.close();
         }
@@ -5962,9 +6101,6 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'main1');
         await waitForHandCardVisualReady(hostPage, BYE_BYE_CARD_ID);
 
-        const byeByeCard = hostPage.locator(`[data-testid="hand-area"] [data-card-id="${BYE_BYE_CARD_ID}"]`).first();
-        await expect(byeByeCard).toBeVisible({ timeout: 10000 });
-
         await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(hostPage, testInfo, '01-bye-bye-bounty-before-play');
 
@@ -5972,11 +6108,16 @@ test.describe('DiceThrone Simple Start', () => {
             (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
         });
 
-        await byeByeCard.click({ force: true });
+        await dragHandCardToPlay(hostPage, BYE_BYE_CARD_ID);
 
         const bountyOption = hostPage.getByTestId('dt-status-effect-1-bounty');
         const confirmButton = hostPage.getByRole('button', { name: /Confirm|确认/i }).last();
-        await expect(bountyOption).toBeVisible({ timeout: 10000 });
+        await waitForStatusIconImage(hostPage, 'dt-status-effect-1-bounty');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.interaction?.current?.playerId === '0'
+                && state?.sys?.interaction?.current?.kind === 'dt:card-interaction';
+        }, undefined, { timeout: 10000 });
         await saveEvidenceScreenshot(hostPage, testInfo, '02-bye-bye-bounty-selectable');
 
         await bountyOption.click();
@@ -5990,6 +6131,73 @@ test.describe('DiceThrone Simple Start', () => {
         expect(afterState.sys.interaction?.current).toBeUndefined();
 
         await cleanupDTMatch(setup);
+    });
+
+    test('Online AI private status removal stays AI-owned and never sends a human response pass', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+            await installOnlineCommandRecorder(hostPage);
+            await selectCharacter(hostPage, 'monk');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return state.core?.selectedCharacters?.['0'] === 'monk'
+                    && state.core?.selectedCharacters?.['1'] !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, { timeout: 30000, message: '等待 AI 用自己的座位完成选角和准备' }).toBe(true);
+
+            // AI 准备完成后由房主自动发起开始，不能再把旧的手动开始按钮当作必经入口。
+            await waitForTestHarness(hostPage, 15000);
+            await installOnlineCommandRecorder(hostPage);
+
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiByeByeBountyState);
+            await waitForOnlineAiSeatToReceiveState(
+                hostPage,
+                (state) => state?.core?.activePlayerId === '1'
+                    && state?.sys?.phase === 'main1'
+                    && (state?.core?.players?.['0']?.tokens?.[TOKEN_IDS.BOUNTY] ?? 0) === 1
+                    && (state?.core?.players?.['1']?.hand ?? []).some((card: any) => card.id === BYE_BYE_CARD_ID),
+                '等待 AI 座位同步到拜拜了您嘞的私有选择前态',
+            );
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const recorder = await readOnlineCommandRecorder(hostPage);
+                return {
+                    bounty: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.BOUNTY] ?? 0,
+                    interaction: state.sys?.interaction?.current?.kind ?? null,
+                    responseWindow: state.sys?.responseWindow?.current?.id ?? null,
+                    aiDiscarded: (state.core?.players?.['1']?.discard ?? []).some((card: any) => card.id === BYE_BYE_CARD_ID),
+                    commands: recorder,
+                };
+            }, { timeout: 30000, message: '等待 AI 自行完成拜拜您的私有状态选择' }).toMatchObject({
+                bounty: 0,
+                interaction: null,
+                responseWindow: null,
+                aiDiscarded: true,
+            });
+
+            // AI 使用独立 seat transport，真人浏览器只能观察自己的发送记录。
+            // AI 的服务端最终状态在上面的 poll 中已证明：出牌、移除状态并完成私有交互。
+            expect(await readOnlineCommandRecorder(hostPage))
+                .not.toContainEqual({ playerId: '0', type: 'RESPONSE_PASS' });
+
+            await closeBoardMagnifyIfOpen(hostPage);
+            await waitForCardSpotlightToClose(hostPage);
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '21-online-ai-private-status-removal-complete');
+        } finally {
+            await cleanupDTMatch(setup);
+        }
     });
 
     test('Online 4-player remove all status: remove-all-status blocks empty targets and clears enemy removable effects', async ({ browser }, testInfo) => {
