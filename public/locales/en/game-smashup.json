@@ -2307,6 +2307,10 @@
       "name": "Action Heroes",
       "description": "Big solo minions, one-minion bases, and breakpoint pressure."
     },
+    "action_heroes_pod": {
+      "name": "Action Heroes (POD)",
+      "description": "A standalone POD atlas and base identity for Action Heroes, sharing the classic big-solo-minion and breakpoint-pressure gameplay."
+    },
     "backtimers": {
       "name": "Backtimers",
       "description": "Put cards into stasis and cash them in when the future arrives."
@@ -10927,6 +10931,74 @@
       "effectText": "Play an extra minion on a base where you have no minions. Play an extra action."
     },
     "action_heroes_walk_away_slowly": {
+      "name": "Walk Away... Slowly",
+      "effectText": "Special: Play after a base scores. Return one of your minions there to its owner's hand."
+    },
+    "action_heroes_commandbro_pod": {
+      "name": "Commandbro",
+      "abilityText": "Ongoing: At the end of your turn, if this is your only minion here, draw a card."
+    },
+    "action_heroes_gracie_brones_pod": {
+      "name": "Gracie Brones",
+      "abilityText": "Ongoing: At the start of your turn, if this is your only minion here, you may place a +1 power counter on this minion and give it an additional +1 power until the end of the turn for each +1 power counter on it."
+    },
+    "action_heroes_kickboxbro_pod": {
+      "name": "Kickboxbro",
+      "abilityText": "Ongoing: At the end of your turn, you may store a card from your hand under this card. Talent: Play an action stored under this card as an extra action. Special: Before this base scores, if this is your only minion here, you may use this minion's talent."
+    },
+    "action_heroes_robobro_pod": {
+      "name": "Robobro",
+      "abilityText": "Ongoing: After another player plays or moves a minion to here, you may place a +1 power counter on this minion."
+    },
+    "action_heroes_rumbro_pod": {
+      "name": "Rumbro",
+      "abilityText": "Ongoing: During your turn, if this is your only minion here, the breakpoint of this base is reduced by 4."
+    },
+    "action_heroes_warbro_pod": {
+      "name": "Warbro",
+      "abilityText": "Talent: Reduce the breakpoint of a different base where you have exactly one minion by 3 until the end of the turn."
+    },
+    "action_heroes_all_out_of_bubblegum_pod": {
+      "name": "All Out of Bubblegum",
+      "effectText": "Give one of your minions +2 power until the end of the turn. If it is your only minion at that base, you may play an extra action."
+    },
+    "action_heroes_collateral_damage_pod": {
+      "name": "Collateral Damage",
+      "effectText": "Reduce the breakpoint of a base by 5 until the end of the turn."
+    },
+    "action_heroes_final_stand_pod": {
+      "name": "Final Stand",
+      "effectText": "Special: Play before a base scores where you have exactly one minion. Destroy a minion of printed power 3 or less there controlled by each other player."
+    },
+    "action_heroes_friends_through_eternity_pod": {
+      "name": "Friends Through Eternity",
+      "effectText": "Discard a card to play two extra actions."
+    },
+    "action_heroes_get_to_the_choppa_pod": {
+      "name": "Get to the Choppa!",
+      "effectText": "Move one of your minions from one base to another. If it is your only minion there, you may play an extra action."
+    },
+    "action_heroes_hostage_rescue_pod": {
+      "name": "Hostage Rescue",
+      "effectText": "Search your deck for a minion and place it on top of your deck."
+    },
+    "action_heroes_lone_wolf_pod": {
+      "name": "Lone Wolf",
+      "effectText": "Play on a minion. Ongoing: This minion has +2 power. If it is your only minion here, it has +4 power instead."
+    },
+    "action_heroes_pushing_the_limit_pod": {
+      "name": "Pushing the Limit",
+      "effectText": "For each base where you have exactly one minion, either place two +1 power counters on that minion or draw a card."
+    },
+    "action_heroes_slo_mo_attack_pod": {
+      "name": "Slo-Mo Attack",
+      "effectText": "Play on a base. Talent: If you have exactly one minion here, reduce this base's breakpoint by 3 until the end of the turn. Ongoing: Your minions here are not affected by other players' actions."
+    },
+    "action_heroes_the_right_person_pod": {
+      "name": "The Right Person",
+      "effectText": "Play an extra minion on a base where you have no minions. Play an extra action."
+    },
+    "action_heroes_walk_away_slowly_pod": {
       "name": "Walk Away... Slowly",
       "effectText": "Special: Play after a base scores. Return one of your minions there to its owner's hand."
     },

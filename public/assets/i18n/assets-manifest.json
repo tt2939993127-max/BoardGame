@@ -13,6 +13,15 @@
         }
       }
     },
+    "en/smashup/cards/action_heroes_pod": {
+      "variants": {
+        "png": {
+          "sha256": "eda3c17d9c5483e0930ab5d8cdfb3ae632c6d1004699c98b79298302d21954bc",
+          "bytes": 7080408,
+          "mime": "image/png"
+        }
+      }
+    },
     "en/smashup/cards/anansi_tales_pod": {
       "variants": {
         "png": {
@@ -28,6 +37,15 @@
           "sha256": "802767737cbf0fea175ab2c3ee7efad82576035361518e3f3e027e306b02a761",
           "bytes": 6565353,
           "mime": "image/png"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/action_heroes_pod": {
+      "variants": {
+        "webp": {
+          "sha256": "ac94ce38b8e1522f01a2544dceeb91284199be50b446d866c5ef88030dc0c721",
+          "bytes": 1877054,
+          "mime": "image/webp"
         }
       }
     },

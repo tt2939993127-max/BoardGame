@@ -149,6 +149,7 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.GRANNIES, nameKey: 'factions.grannies.name', icon: Flower2, color: '#a16207', descriptionKey: 'factions.grannies.description', implementationStatus: 'in_progress', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.EXPLORERS, nameKey: 'factions.explorers.name', icon: Pyramid, color: '#ca8a04', descriptionKey: 'factions.explorers.description', implementationStatus: 'in_progress', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.ACTION_HEROES, nameKey: 'factions.action_heroes.name', icon: Medal, color: '#dc2626', descriptionKey: 'factions.action_heroes.description', locales: ['zh-CN'] },
+    { id: SMASHUP_FACTION_IDS.ACTION_HEROES_POD, nameKey: 'factions.action_heroes_pod.name', icon: Medal, color: '#dc2626', descriptionKey: 'factions.action_heroes_pod.description' },
     { id: SMASHUP_FACTION_IDS.BACKTIMERS, nameKey: 'factions.backtimers.name', icon: Orbit, color: '#0d9488', descriptionKey: 'factions.backtimers.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.EXTRAMORPHS, nameKey: 'factions.extramorphs.name', icon: OctopusHeadIcon, color: '#16a34a', descriptionKey: 'factions.extramorphs.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.TEENS, nameKey: 'factions.teens.name', icon: Theater, color: '#db2777', descriptionKey: 'factions.teens.description', locales: ['zh-CN'] },

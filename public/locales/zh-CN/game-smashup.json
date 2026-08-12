@@ -2265,6 +2265,10 @@
       "name": "动作英雄",
       "description": "高战力单兵、单基地独行和临界点压低。"
     },
+    "action_heroes_pod": {
+      "name": "动作英雄（POD）",
+      "description": "动作英雄 POD 版，使用独立卡图与基地身份，并沿用高战力单兵、单基地独行和临界点压低的经典打法。"
+    },
     "backtimers": {
       "name": "返时者",
       "description": "将牌送入停滞区，等待未来时点释放。"
@@ -10885,6 +10889,74 @@
       "effectText": "在一个你没有佣兵的基地打出 1 个额外佣兵。打出 1 张额外行动。"
     },
     "action_heroes_walk_away_slowly": {
+      "name": "慢慢走开……",
+      "effectText": "特殊：一个基地计分后打出。将你在那里的 1 个佣兵返回其拥有者手牌。"
+    },
+    "action_heroes_commandbro_pod": {
+      "name": "突击兄弟",
+      "abilityText": "持续：在你的回合结束时，若这是你在此处唯一的佣兵，抓 1 张牌。"
+    },
+    "action_heroes_gracie_brones_pod": {
+      "name": "格蕾西·布朗斯",
+      "abilityText": "持续：在你的回合开始时，若这是你在此处唯一的佣兵，你可以在此佣兵上放置 1 个 +1 战力标记；此佣兵直到回合结束额外获得等同于其 +1 战力标记数量的战力。"
+    },
+    "action_heroes_kickboxbro_pod": {
+      "name": "踢拳兄弟",
+      "abilityText": "持续：在你的回合结束时，你可以将 1 张手牌储存于此牌下方。天赋：将储存在此牌下方的 1 张行动作为额外行动打出。特殊：本基地计分前，若这是你在此处唯一的佣兵，你可以使用此佣兵的天赋。"
+    },
+    "action_heroes_robobro_pod": {
+      "name": "机械兄弟",
+      "abilityText": "持续：另一位玩家打出或移动一个佣兵到此处后，你可以在此佣兵上放置 1 个 +1 战力标记。"
+    },
+    "action_heroes_rumbro_pod": {
+      "name": "乱斗兄弟",
+      "abilityText": "持续：你的回合中，若这是你在此处唯一的佣兵，本基地临界点降低 4。"
+    },
+    "action_heroes_warbro_pod": {
+      "name": "战争兄弟",
+      "abilityText": "天赋：选择另一个你恰好有 1 个佣兵的基地，其临界点降低 3 直到回合结束。"
+    },
+    "action_heroes_all_out_of_bubblegum_pod": {
+      "name": "泡泡糖用完了",
+      "effectText": "令你的 1 个佣兵获得 +2 战力直到回合结束。若它是你在该基地唯一的佣兵，你可以打出 1 张额外行动。"
+    },
+    "action_heroes_collateral_damage_pod": {
+      "name": "附带伤害",
+      "effectText": "选择一个基地，其临界点降低 5 直到回合结束。"
+    },
+    "action_heroes_final_stand_pod": {
+      "name": "最后一搏",
+      "effectText": "特殊：在一个你恰好有 1 个佣兵的基地计分前打出。摧毁其他每位玩家各自控制的 1 个印制力量 3 或更低的佣兵。"
+    },
+    "action_heroes_friends_through_eternity_pod": {
+      "name": "永恒挚友",
+      "effectText": "弃 1 张牌，以打出 2 张额外行动。"
+    },
+    "action_heroes_get_to_the_choppa_pod": {
+      "name": "快上直升机！",
+      "effectText": "将你的 1 个佣兵从一个基地移动到另一个基地。若它是你在目的基地唯一的佣兵，你可以打出 1 张额外行动。"
+    },
+    "action_heroes_hostage_rescue_pod": {
+      "name": "人质救援",
+      "effectText": "从你的牌库中检索 1 张佣兵，并将其置于你的牌库顶。"
+    },
+    "action_heroes_lone_wolf_pod": {
+      "name": "独狼",
+      "effectText": "打出到一个佣兵上。持续：此佣兵 +2 战力。若它是你在此处唯一的佣兵，改为 +4 战力。"
+    },
+    "action_heroes_pushing_the_limit_pod": {
+      "name": "突破极限",
+      "effectText": "你每有一个恰好有 1 个佣兵的基地，选择在该佣兵上放置 2 个 +1 战力标记，或抓 1 张牌。"
+    },
+    "action_heroes_slo_mo_attack_pod": {
+      "name": "慢动作攻击",
+      "effectText": "打出到一个基地上。天赋：若你在此处恰好有 1 个佣兵，本基地临界点降低 3 直到回合结束。持续：你在此处的佣兵不受其他玩家行动影响。"
+    },
+    "action_heroes_the_right_person_pod": {
+      "name": "正确人选",
+      "effectText": "在一个你没有佣兵的基地打出 1 个额外佣兵。打出 1 张额外行动。"
+    },
+    "action_heroes_walk_away_slowly_pod": {
       "name": "慢慢走开……",
       "effectText": "特殊：一个基地计分后打出。将你在那里的 1 个佣兵返回其拥有者手牌。"
     },
