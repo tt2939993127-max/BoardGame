@@ -91,7 +91,11 @@ import { getCurrentRollDice, isCurrentBonusRollSettlement } from './domain/rollC
 import { getAutoResponseEnabled, getBonusDiceResponseEnabled } from './ui/responsePreferences';
 import { getAbilityChoiceText } from './ui/abilityChoiceText';
 import { canInteractDiceForCurrentBoard, getRailDiceForCurrentBoard, shouldShowRailDiceTray } from './ui/diceStagePolicy';
-import { canInteractHandForCurrentBoard, canPlayHandCardsForCurrentBoard } from './ui/handPlayPolicy';
+import {
+    canInteractHandForCurrentBoard,
+    canPlayHandCardsForCurrentBoard,
+    canSellHandCardsForCurrentBoard,
+} from './ui/handPlayPolicy';
 import { useSyncedModalStackEntry } from '../../hooks/ui/useSyncedModalStackEntry';
 import { InteractionOverlay } from './ui/InteractionOverlay';
 import { ChoiceModal } from './ui/ChoiceModal';
@@ -848,6 +852,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         currentPhase,
         rootPid,
         rollerId,
+    });
+    const canSellHandCards = canSellHandCardsForCurrentBoard({
+        isSpectator,
+        isActivePlayer,
     });
     const canInteractHand = canInteractHandForCurrentBoard({ isSpectator });
 
@@ -2116,6 +2124,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 onError={(msg) => { playDeniedSound(); toast.warning(msg, undefined, { dedupeKey: 'dicethrone.handArea.error' }); }}
                                 canInteract={canInteractHand}
                                 canPlayCards={canPlayHandCards}
+                                canSellCards={canSellHandCards}
                                 drawDeckRef={drawDeckRef}
                                 discardPileRef={discardPileRef}
                                 undoCardId={lastUndoCardId}

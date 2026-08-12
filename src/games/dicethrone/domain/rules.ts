@@ -1227,7 +1227,9 @@ const checkResponseWindowCardPlay = (
             if (card.timing !== 'instant' && card.timing !== 'roll') {
                 return failResponseWindow();
             }
-            if (!hasAnyDiceEffect(card)) {
+            // “确认骰后”只承接直接改写当前骰区的牌。单纯产生一颗新骰子
+            // （例如治疗、资源或奖励骰效果）同样带有 dice 分类，却不是改骰响应。
+            if (!hasExistingDiceToolEffect(card)) {
                 return failResponseWindow();
             }
             const currentRollContext = resolveCurrentRollContext(state, phase);
@@ -1547,7 +1549,12 @@ const EXISTING_DICE_TOOL_CUSTOM_ACTION_IDS = new Set([
     'reroll-die-5',
 ]);
 
-const hasExistingDiceToolEffect = (card: AbilityCard): boolean => {
+/**
+ * 是否直接修改或重掷当前已经存在的骰子。
+ *
+ * 这是“确认骰后”响应窗口的唯一资格；投出一颗新的奖励骰不属于改骰。
+ */
+export const hasExistingDiceToolEffect = (card: AbilityCard): boolean => {
     if (!card.effects || card.effects.length === 0) return false;
 
     return card.effects.some(effect => {

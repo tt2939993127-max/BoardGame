@@ -1378,6 +1378,14 @@ const buildTwoPlayerByeByeBountyState = (state: any) => {
     return next;
 };
 
+const buildTwoPlayerOffTurnByeByeBountyState = (state: any) => {
+    const next = buildTwoPlayerByeByeBountyState(state);
+    next.core.activePlayerId = '1';
+    next.core.currentPlayerIndex = 1;
+    next.sys.currentPlayerIndex = 1;
+    return next;
+};
+
 const buildOnlineAiByeByeBountyState = (state: any) => {
     const next = buildTwoPlayerByeByeBountyState(state);
     const byeByeCard = BYE_BYE_CARD;
@@ -6076,7 +6084,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 2-player Bye Bye: real hand play should remove Bounty from target player', async ({ browser, workerPorts }, testInfo) => {
+    test('Online 2-player Bye Bye: off-turn instant card can play but cannot sell', async ({ browser, workerPorts }, testInfo) => {
         test.setTimeout(90000);
         const baseURL = `http://127.0.0.1:${workerPorts.frontend}`;
         const gameServerBaseURL = `http://127.0.0.1:${workerPorts.gameServer}`;
@@ -6097,16 +6105,40 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForGameBoard(guestPage);
         await waitForHarnessPages([hostPage, guestPage]);
 
-        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerByeByeBountyState);
+        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerOffTurnByeByeBountyState);
         await waitForPhase(hostPage, 'main1');
         await waitForHandCardVisualReady(hostPage, BYE_BYE_CARD_ID);
 
+        const beforeState = await readHarnessState<any>(hostPage);
+        expect(beforeState.core.activePlayerId).toBe('1');
+
         await clearEvidenceScreenshotsForTest(testInfo);
-        await saveEvidenceScreenshot(hostPage, testInfo, '01-bye-bye-bounty-before-play');
+        await saveEvidenceScreenshot(hostPage, testInfo, '01-非当前回合即时牌仍可从手牌发起');
 
         await hostPage.evaluate(() => {
             (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
         });
+
+        const byeByeCard = hostPage.locator(`[data-testid="hand-area"] [data-card-id="${BYE_BYE_CARD_ID}"]`).first();
+        const discardPile = hostPage.getByTestId('discard-pile');
+        const cardBox = await byeByeCard.boundingBox();
+        const discardBox = await discardPile.boundingBox();
+        if (!cardBox || !discardBox) {
+            throw new Error('无法获取即时牌或弃牌堆的真实页面位置');
+        }
+
+        await hostPage.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height * 0.78);
+        await hostPage.mouse.down();
+        await hostPage.mouse.move(discardBox.x + discardBox.width / 2, discardBox.y + discardBox.height / 2, { steps: 12 });
+        await hostPage.mouse.up();
+        await hostPage.waitForTimeout(300);
+        const afterSellAttempt = await readHarnessState<any>(hostPage);
+        expect(afterSellAttempt.core.players['0'].hand.some((card: any) => card.id === BYE_BYE_CARD_ID)).toBe(true);
+        expect(afterSellAttempt.core.players['0'].discard.some((card: any) => card.id === BYE_BYE_CARD_ID)).toBe(false);
+        const rejectedSellToast = hostPage.getByText(/不是你的回合|not your turn/i).last();
+        await expect(rejectedSellToast).toBeVisible({ timeout: 5000 });
+        await hostPage.getByRole('button', { name: /关闭|close/i }).last().click();
+        await expect(rejectedSellToast).toBeHidden({ timeout: 5000 });
 
         await dragHandCardToPlay(hostPage, BYE_BYE_CARD_ID);
 
@@ -6118,13 +6150,13 @@ test.describe('DiceThrone Simple Start', () => {
             return state?.sys?.interaction?.current?.playerId === '0'
                 && state?.sys?.interaction?.current?.kind === 'dt:card-interaction';
         }, undefined, { timeout: 10000 });
-        await saveEvidenceScreenshot(hostPage, testInfo, '02-bye-bye-bounty-selectable');
+        await saveEvidenceScreenshot(hostPage, testInfo, '02-非当前回合打出拜拜了您嘞后可选择状态');
 
         await bountyOption.click();
         await expect(confirmButton).toBeEnabled({ timeout: 5000 });
         await confirmButton.click();
         await hostPage.waitForTimeout(1200);
-        await saveEvidenceScreenshot(hostPage, testInfo, '03-bye-bye-bounty-after-confirm');
+        await saveEvidenceScreenshot(hostPage, testInfo, '03-非当前回合即时牌结算后赏金已移除');
 
         const afterState = await readHarnessState<any>(hostPage);
         expect(afterState.core.players['1'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(0);

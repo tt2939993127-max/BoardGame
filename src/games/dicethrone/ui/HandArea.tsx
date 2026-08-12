@@ -180,6 +180,7 @@ export const HandArea = ({
     onError,
     canInteract = true,
     canPlayCards = true,
+    canSellCards = canPlayCards,
     drawDeckRef,
     discardPileRef,
     undoCardId,
@@ -203,6 +204,7 @@ export const HandArea = ({
     onError?: (message: string) => void;
     canInteract?: boolean;
     canPlayCards?: boolean;
+    canSellCards?: boolean;
     drawDeckRef?: RefObject<HTMLDivElement | null>;
     discardPileRef?: RefObject<HTMLDivElement | null>;
     undoCardId?: string;
@@ -670,7 +672,7 @@ export const HandArea = ({
         }
 
         if (overDiscard) {
-            if (!canPlayCards && onError) {
+            if (!canSellCards && onError) {
                 onError(t('error.notYourTurn'));
             } else if (onSellCard) {
                 // 记录拖拽操作，防止后续点击事件重复触发
@@ -703,7 +705,7 @@ export const HandArea = ({
         onSellButtonChange?.(false);
     }, [
         canInteract,
-        canPlayCards,
+        canSellCards,
         clearLongPressState,
         clearPendingPlay,
         handEntries,

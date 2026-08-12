@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { canInteractDiceForCurrentBoard, getRailDiceForCurrentBoard, shouldShowRailDiceTray } from '../diceStagePolicy';
-import { canInteractHandForCurrentBoard, canPlayHandCardsForCurrentBoard } from '../handPlayPolicy';
+import {
+    canInteractHandForCurrentBoard,
+    canPlayHandCardsForCurrentBoard,
+    canSellHandCardsForCurrentBoard,
+} from '../handPlayPolicy';
 
 const baseParams = {
     isSpectator: false,
@@ -82,7 +86,7 @@ describe('handPlayPolicy', () => {
         })).toBe(true);
     });
 
-    it('非掷骰方且非响应者不应因为防御阶段而被放行打手牌', () => {
+    it('非当前行动者也能尝试打即时牌，具体合法性由领域规则裁定', () => {
         expect(canPlayHandCardsForCurrentBoard({
             isSpectator: false,
             isActivePlayer: false,
@@ -91,6 +95,12 @@ describe('handPlayPolicy', () => {
             currentPhase: 'defensiveRoll',
             rootPid: '0',
             rollerId: '1',
-        })).toBe(false);
+        })).toBe(true);
+        expect(canSellHandCardsForCurrentBoard({ isSpectator: false, isActivePlayer: false })).toBe(false);
+    });
+
+    it('仅当前行动者能卖牌，观察者不能卖牌', () => {
+        expect(canSellHandCardsForCurrentBoard({ isSpectator: false, isActivePlayer: true })).toBe(true);
+        expect(canSellHandCardsForCurrentBoard({ isSpectator: true, isActivePlayer: true })).toBe(false);
     });
 });
