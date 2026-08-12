@@ -2162,6 +2162,10 @@
       "name": "Anansi Tales",
       "description": "Give stories and cards away, then profit when those borrowed gifts travel through other players' hands."
     },
+    "anansi_tales_pod": {
+      "name": "Anansi Tales (POD)",
+      "description": "The POD card set with its own atlas, sharing the classic Anansi Tales card-gifting gameplay and bases."
+    },
     "grimms_fairy_tales": {
       "name": "Grimms' Fairy Tales",
       "description": "Pair storybook characters, chain names, and turn classic duos into extra plays."
@@ -2169,6 +2173,10 @@
     "russian_fairy_tales": {
       "name": "Russian Fairy Tales",
       "description": "Transform minions through decks, retrieve story counterparts, and recycle threats at tricky timings."
+    },
+    "russian_fairy_tales_pod": {
+      "name": "Russian Fairy Tales (POD)",
+      "description": "The POD card set with its own atlas, sharing the classic transformation gameplay and bases."
     },
     "ancient_incas": {
       "name": "Ancient Incas",
@@ -8843,6 +8851,122 @@
       "abilityText": "You may give control of this minion to another player to shuffle another one of their minions here into its owner’s deck."
     },
     "russian_fairy_tales_mass_transformation": {
+      "name": "Mass Transformation",
+      "effectText": "Each player places their hand on the bottom of their deck and draws an equal number of cards."
+    },
+    "anansi_tales_anansi_the_spider_pod": {
+      "name": "Anansi the Spider",
+      "abilityText": "Talent: Search your deck for a standard action and play it as an extra action. Then place it into another player’s hand instead of where it would normally go. You cannot play any copy of that action again this turn."
+    },
+    "anansi_tales_osebo_the_leopard_pod": {
+      "name": "Osebo the Leopard",
+      "abilityText": "Ongoing: After you place a card into another player’s hand, place a +1 power counter on this minion."
+    },
+    "anansi_tales_onini_the_python_pod": {
+      "name": "Onini the Python",
+      "abilityText": "Ongoing: After another player plays or discards a card they don't own from a hand or deck, you may place a +1 power counter on one of your minions."
+    },
+    "anansi_tales_akye_the_turtle_pod": {
+      "name": "Akye the Turtle",
+      "abilityText": "You may place a card from your hand into another player’s hand to draw two cards."
+    },
+    "anansi_tales_mboro_hornet_pod": {
+      "name": "Mboro Hornet",
+      "abilityText": "Special: After another player plays or discards a card they don't own from a hand or deck, you may play this minion as an extra minion."
+    },
+    "anansi_tales_the_perfect_gift_pod": {
+      "name": "The Perfect Gift",
+      "effectText": "Search your deck for a standard action and play it as an extra action. Then place it into another player’s hand instead of where it would normally go."
+    },
+    "anansi_tales_pot_of_beans_pod": {
+      "name": "Pot of Beans",
+      "effectText": "Place two +1 power counters total on minions. Place this card into another player’s hand."
+    },
+    "anansi_tales_collecting_stories_pod": {
+      "name": "Collecting Stories",
+      "effectText": "Look at another player’s hand. You may play a card you own from their hand as an extra card."
+    },
+    "anansi_tales_ear_of_corn_pod": {
+      "name": "Ear of Corn",
+      "effectText": "Shuffle up to three actions from your discard pile into your deck and play an extra action. Place this card into another player’s hand."
+    },
+    "anansi_tales_pot_of_wisdom_pod": {
+      "name": "Pot of Wisdom",
+      "effectText": "Draw a card for each other player, then place a card from your hand into each other player’s hand. Play an extra action."
+    },
+    "anansi_tales_trading_stories_pod": {
+      "name": "Trading Stories",
+      "effectText": "You may place up to three cards from your hand into other players’ hands. For each one placed, draw a card."
+    },
+    "anansi_tales_let_it_be_full_and_eat_pod": {
+      "name": "Let it be Full and Eat",
+      "effectText": "Draw two cards. Place this card into another player’s hand."
+    },
+    "anansi_tales_feather_gifts_pod": {
+      "name": "Feather Gifts",
+      "effectText": "Move one of your minions to another base. Place this card into another player’s hand."
+    },
+    "russian_fairy_tales_the_birch_woman_pod": {
+      "name": "The Birch Woman",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, you may search your hand, deck, and/or discard pile for The Birch, and add it to your hand or play it as an extra minion."
+    },
+    "russian_fairy_tales_finist_the_falcon_pod": {
+      "name": "Finist the Falcon",
+      "abilityText": "Special: Before a base scores, you may move this minion to there, or return this minion from there to your hand and play it on another base as an extra minion."
+    },
+    "russian_fairy_tales_baba_yaga_pod": {
+      "name": "Baba Yaga",
+      "abilityText": "Talent: Place another minion here on the bottom of its owner’s deck to have them play a minion off the top of their deck here as an extra minion, then shuffle their deck."
+    },
+    "russian_fairy_tales_the_frog_princess_pod": {
+      "name": "The Frog Princess",
+      "effectText": "Play on one of your minions. Talent: Place this minion on the bottom of its owner’s deck to play a minion off the top of your deck here as an extra minion and transfer this action to it, then shuffle your deck."
+    },
+    "russian_fairy_tales_the_water_of_life_pod": {
+      "name": "The Water of Life",
+      "effectText": "Place a minion from your discard pile on top of your deck. You may play an extra action."
+    },
+    "russian_fairy_tales_fetch_i_know_not_what_pod": {
+      "name": "Fetch I Know Not What",
+      "effectText": "Reveal cards from your deck until you reveal two actions. You may place any number of those actions into your hand. Shuffle the rest into your deck."
+    },
+    "russian_fairy_tales_go_i_know_not_whither_pod": {
+      "name": "Go I Know Not Whither",
+      "effectText": "Choose a base. Shuffle a random minion there controlled by each other player into its owner’s deck."
+    },
+    "russian_fairy_tales_go_see_my_sister_pod": {
+      "name": "Go See My Sister",
+      "effectText": "Play on a base. Ongoing: After you play or move one of your minions to here, you may draw a card."
+    },
+    "russian_fairy_tales_bewitched_pod": {
+      "name": "Bewitched",
+      "effectText": "Play on a minion. Ongoing: This minion has +2 power. When this minion leaves play, transfer this action to another minion."
+    },
+    "russian_fairy_tales_transformation_pod": {
+      "name": "Transformation",
+      "effectText": "Place a minion on the bottom of its owner’s deck to have them play a minion off the top of their deck there as an extra minion, then shuffle their deck."
+    },
+    "russian_fairy_tales_the_birch_pod": {
+      "name": "The Birch",
+      "abilityText": "Ongoing: At the start of your turn, you may destroy this minion to search your hand, deck, and/or discard pile for The Birch Woman, and add it to your hand or play it here as an extra minion."
+    },
+    "russian_fairy_tales_tsar_eagle_pod": {
+      "name": "Tsar Eagle",
+      "abilityText": "Draw a card OR place a minion from another player’s discard pile on top of their deck."
+    },
+    "russian_fairy_tales_the_gray_wolf_pod": {
+      "name": "The Gray Wolf",
+      "abilityText": "Talent: Place this minion on top of its owner’s deck to play an extra minion here and place a +1 power counter on it."
+    },
+    "russian_fairy_tales_foolish_magician_pod": {
+      "name": "Foolish Magician",
+      "abilityText": "Draw three cards, then place three cards from your hand on the top and/or bottom of your deck in any order."
+    },
+    "russian_fairy_tales_toad_pod": {
+      "name": "Toad",
+      "abilityText": "You may give control of this minion to another player to shuffle another one of their minions here into its owner’s deck."
+    },
+    "russian_fairy_tales_mass_transformation_pod": {
       "name": "Mass Transformation",
       "effectText": "Each player places their hand on the bottom of their deck and draws an equal number of cards."
     },
