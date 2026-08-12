@@ -13,6 +13,14 @@ const readPendingBonusSettlement = async (readState: ReadGameState) => {
     return state?.core?.pendingBonusDiceSettlement ?? state?.G?.core?.pendingBonusDiceSettlement ?? null;
 };
 
+const closeDebugPanelIfVisible = async (page: Page): Promise<void> => {
+    const panel = page.getByTestId('debug-panel');
+    if (!await panel.isVisible().catch(() => false)) return;
+
+    await page.getByTestId('debug-toggle').click({ timeout: 5000 });
+    await expect(panel).toBeHidden({ timeout: 5000 });
+};
+
 const rightTrayRail = (page: Page) => {
     const diceTray = page.locator('[data-testid="dicethrone-2d-dice-tray"]:visible').first();
     return {
@@ -44,6 +52,7 @@ export const expectRightTrayBonusDiceConfirmation = async (
         const settlement = await readPendingBonusSettlement(readState);
         return settlement?.sourceAbilityId ?? null;
     }, { timeout: 10000 }).toBe(sourceAbilityId);
+    await closeDebugPanelIfVisible(page);
 
     const { diceTray, rail } = rightTrayRail(page);
     const confirmButton = rail.locator('[data-tutorial-id="dice-confirm-button"]').first();
@@ -68,6 +77,7 @@ export const expectRightTrayBonusDiceAwaitingResponse = async (
         const settlement = await readPendingBonusSettlement(readState);
         return settlement?.sourceAbilityId ?? null;
     }, { timeout: 10000 }).toBe(sourceAbilityId);
+    await closeDebugPanelIfVisible(page);
 
     const { diceTray, rail } = rightTrayRail(page);
     await expect(page.getByTestId('bonus-die-overlay')).toHaveCount(0);
@@ -96,4 +106,5 @@ export const settleCurrentBonusDice = async (
     await expect.poll(async () => {
         return readPendingBonusSettlement(readState);
     }, { timeout: 10000 }).toBeNull();
+    await closeDebugPanelIfVisible(page);
 };
