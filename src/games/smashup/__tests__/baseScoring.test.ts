@@ -10,6 +10,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { SmashUpDomain, scoreOneBase } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
+import { createSmashUpEventSystem } from '../domain/systems';
 import type {
     SmashUpCore, SmashUpEvent, MinionOnBase, BaseInPlay,
     OngoingActionOnBase, AttachedActionOnMinion,
@@ -26,6 +27,14 @@ import {
 } from '../../../engine';
 import type { MatchState } from '../../../engine/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
+import {
+    getPromptOption,
+    getPromptOptions,
+    getPromptPlayerId,
+    getPromptSourceId,
+    getSimpleChoicePrompt,
+    respondToPrompt,
+} from './helpers';
 
 const PLAYER_IDS = ['0', '1'];
 
@@ -525,6 +534,53 @@ describe('基地记分与力量计算', () => {
             ) as any;
 
             expect(drawEvent).toBeDefined();
+        });
+
+        it('scoreOneBase 会先清场再让 Samurai-Chan POD 从空牌库重洗弃牌堆抽牌', () => {
+            const state: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0', {
+                        factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                        deck: [],
+                        discard: [
+                            { uid: 'discard-draw-1', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' },
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'base_shoguns_palace_pod',
+                    minions: [
+                        { uid: 'chan-pod-1', defId: 'samurai_samurai_chan_pod', controller: '0', owner: '0', basePower: 23, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const result = scoreOneBase(state, 0, [], '0', 1000);
+            const clearIndex = result.events.findIndex((event) => event.type === SU_EVENTS.BASE_CLEARED);
+            const reshuffleIndex = result.events.findIndex((event) =>
+                event.type === SU_EVENTS.DECK_RESHUFFLED
+                && (event as any).payload?.playerId === '0'
+            );
+            const drawIndex = result.events.findIndex((event) =>
+                event.type === SU_EVENTS.CARDS_DRAWN
+                && (event as any).payload?.playerId === '0'
+                && ((event as any).payload?.cardUids ?? []).includes('discard-draw-1')
+            );
+
+            expect(clearIndex).toBeGreaterThanOrEqual(0);
+            expect(reshuffleIndex).toBeGreaterThan(clearIndex);
+            expect(drawIndex).toBeGreaterThan(reshuffleIndex);
+
+            const finalState = result.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), state);
+            expect(finalState.players['0'].hand.map((card: any) => card.uid)).toContain('discard-draw-1');
+            expect(finalState.players['0'].discard.map((card: any) => card.uid)).not.toContain('discard-draw-1');
         });
 
         it('scoreOneBase 会让 Sleeping Beauty 在基地计分弃牌后洗回拥有者牌库', () => {
@@ -1604,6 +1660,7 @@ describe('基地记分与力量计算', () => {
                         defId: 'base_great_library',
                         minions: [
                             { uid: 'igor-other-base-ally', defId: 'werewolf_alpha', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                            { uid: 'igor-other-base-ally-b', defId: 'werewolf_howler', controller: '0', owner: '0', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                         ],
                         ongoingActions: [],
                     },
@@ -1614,6 +1671,7 @@ describe('基地记分与力量计算', () => {
             };
             const systems = [
                 createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+                createSmashUpEventSystem(),
                 ...createBaseSystems<SmashUpCore>(),
             ];
             const matchState: MatchState<SmashUpCore> = {
@@ -1622,14 +1680,32 @@ describe('基地记分与力量计算', () => {
             };
 
             const result = scoreOneBase(state, 0, [], '0', 1000, undefined, matchState);
-            const current = result.matchState?.sys.interaction.current as any;
-            const optionUids = (current?.data?.options ?? []).map((option: any) => option?.value?.minionUid);
+            const reactionPrompt = getSimpleChoicePrompt(result.matchState!, 'smashup_reaction_choose');
+            const triggerById = new Map((result.matchState?.core.triggerQueue ?? []).map((trigger: any) => [trigger.id, trigger]));
+            const igorDiscardTriggerOption = getPromptOption(
+                reactionPrompt,
+                (option: any) => triggerById.get(option?.value?.triggerId)?.triggerMinionUid === 'igor-score-a',
+                'Igor scoring discard trigger option',
+            );
+            expect(getPromptSourceId(reactionPrompt)).toBe('smashup_reaction_choose');
 
-            expect(current?.data?.sourceId).toBe('frankenstein_igor');
-            expect(current?.playerId).toBe('0');
-            expect(optionUids).toContain('igor-same-base-ally');
+            const resolvedTrigger = respondToPrompt(
+                result.matchState!,
+                igorDiscardTriggerOption.id,
+                '0',
+                createSeededRandom('igor-scoring-discard-target-prompt'),
+            );
+            expect(resolvedTrigger.success).toBe(true);
+
+            const current = getSimpleChoicePrompt(resolvedTrigger.finalState, 'frankenstein_igor');
+            const optionUids = getPromptOptions(current).map((option: any) => option?.value?.minionUid);
+
+            expect(getPromptSourceId(current)).toBe('frankenstein_igor');
+            expect(getPromptPlayerId(current)).toBe('0');
             expect(optionUids).toContain('igor-other-base-ally');
+            expect(optionUids).toContain('igor-other-base-ally-b');
             expect(optionUids).not.toContain('igor-score-a');
+            expect(optionUids).not.toContain('igor-same-base-ally');
         });
 
         it('scoreOneBase 会让 Death on Six Legs 在己方随从计分弃牌后获得 1 个力量指示物', () => {

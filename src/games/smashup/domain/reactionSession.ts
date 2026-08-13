@@ -18,6 +18,7 @@ import {
     getDeferredReplacementBaseDefIdFromBaseDeckReorderEvents,
     replaceDeferredPostScoringReplacementBase,
 } from './scoringSession';
+import { isEarlyScoringCleanupSelfRecoveryTrigger } from './scoringFinalization';
 import type {
     ActionCardDef,
     FusionCardDef,
@@ -511,6 +512,20 @@ function getOptionalFrameTriggers(
     );
 }
 
+function getEarlyCleanupSelfRecoveryTriggersForScoreAfter(
+    state: MatchState<SmashUpCore>,
+    session: SmashUpReactionSession,
+): TriggerInstance[] {
+    if (session.frameKind !== 'score-after') {
+        return [];
+    }
+    return (state.core.triggerQueue ?? []).filter((trigger) => {
+        const frameId = trigger.frameId ?? trigger.id;
+        return frameId !== session.frameId
+            && isEarlyScoringCleanupSelfRecoveryTrigger(trigger);
+    });
+}
+
 function getMandatoryResolutionGroup(
     state: MatchState<SmashUpCore>,
     session: SmashUpReactionSession,
@@ -827,7 +842,17 @@ export function buildReactionOptions(
     }));
 
     const cardOptions = buildPlayableCardOptions(state, session, session.activePlayerId, now);
+    const hasBoardSpecialOption = cardOptions.some(option => option.value.kind === 'activate_special');
+    const earlyCleanupOptions = hasBoardSpecialOption
+        ? []
+        : getEarlyCleanupSelfRecoveryTriggersForScoreAfter(state, session).map(trigger => ({
+            id: `trigger:${trigger.id}`,
+            label: buildTriggerLabel(trigger),
+            value: { kind: 'trigger' as const, triggerId: trigger.id },
+            displayMode: 'button' as const,
+        }));
     return dedupeReactionOptions([
+        ...earlyCleanupOptions,
         ...mandatoryOptions,
         ...triggerOptions,
         ...cardOptions,
@@ -1220,6 +1245,20 @@ function buildReactionInteraction(
             autoResolveIfSingle: false,
         },
     );
+    const leadingTriggerId = initialOptions[0]?.value.kind === 'trigger'
+        ? initialOptions[0].value.triggerId
+        : undefined;
+    const leadingTrigger = leadingTriggerId
+        ? (state.core.triggerQueue ?? []).find(trigger => trigger.id === leadingTriggerId)
+        : undefined;
+    if (
+        leadingTrigger
+        && isEarlyScoringCleanupSelfRecoveryTrigger(leadingTrigger)
+        && leadingTrigger.frameId
+        && leadingTrigger.frameId !== session.frameId
+    ) {
+        interaction.resolutionFrameId = leadingTrigger.frameId;
+    }
     const interactionData = interaction.data as typeof interaction.data & {
         optionsGenerator?: (latestState: MatchState<SmashUpCore>) => ReactionOption[];
     };

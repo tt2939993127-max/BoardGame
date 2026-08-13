@@ -39,7 +39,6 @@ import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { registerTriggerProgramExecutor } from '../domain/triggerExecutors';
 import { reduce } from '../domain/reduce';
 import { getCardDef } from '../data/cards';
-import { SU_EVENTS } from '../domain/types';
 import type { MinionOnBase, SmashUpCore, SmashUpEvent } from '../domain/types';
 import { matchesDefId } from '../domain/utils';
 
@@ -60,6 +59,7 @@ type FrankensteinPromptContext = {
 type CounterPromptContext = FrankensteinPromptContext & {
     reasonDefId: string;
     excludeUid?: string;
+    excludeBaseIndex?: number;
 };
 
 type AngryMobCardContext = FrankensteinPromptContext & {
@@ -192,8 +192,9 @@ function buildCounterTargetOptions(
     core: SmashUpCore,
     playerId: PlayerId,
     excludeUid?: string,
+    filter?: (minion: MinionOnBase, baseIndex: number) => boolean,
 ): PromptOption<MinionChoiceValue>[] {
-    return buildFriendlyMinionPromptOptions(core, playerId, excludeUid);
+    return buildFriendlyMinionPromptOptions(core, playerId, excludeUid, filter);
 }
 
 function buildAngryMobCardOptions(
@@ -310,7 +311,7 @@ function runtimeResultToTriggerResult(
 function resolveCounterPlacement(
     state: SmashUpCore,
     playerId: PlayerId,
-    context: { reasonDefId: string; excludeUid?: string },
+    context: { reasonDefId: string; excludeUid?: string; excludeBaseIndex?: number },
     selected: Partial<MinionChoiceValue> | undefined,
     timestamp: number,
 ): SmashUpEvent[] {
@@ -318,7 +319,8 @@ function resolveCounterPlacement(
     const liveTarget = state.bases[selected.baseIndex]?.minions.find((minion) =>
         minion.uid === selected.minionUid
         && minion.controller === playerId
-        && minion.uid !== context.excludeUid,
+        && minion.uid !== context.excludeUid
+        && selected.baseIndex !== context.excludeBaseIndex
     );
     if (!liveTarget) return [];
     return [addPowerCounter(selected.minionUid, selected.baseIndex, 1, context.reasonDefId, timestamp)];
@@ -379,7 +381,14 @@ const frankensteinIgorPromptProgram = createPromptProgram<CounterPromptContext, 
             `frankenstein_igor_${context.playerId}_${context.now}`,
             context.playerId,
             '选择一个你的随从放置+1力量指示物（科学小怪蛋）',
-            buildCounterTargetOptions(context.matchState.core, context.playerId, context.excludeUid),
+            buildCounterTargetOptions(
+                context.matchState.core,
+                context.playerId,
+                context.excludeUid,
+                context.excludeBaseIndex === undefined
+                    ? undefined
+                    : (_minion, baseIndex) => baseIndex !== context.excludeBaseIndex,
+            ),
             {
                 sourceId: 'frankenstein_igor',
                 targetType: 'minion',
@@ -388,7 +397,14 @@ const frankensteinIgorPromptProgram = createPromptProgram<CounterPromptContext, 
             },
         );
         interaction.data.optionsGenerator = (state) =>
-            buildCounterTargetOptions(state.core as SmashUpCore, context.playerId, context.excludeUid);
+            buildCounterTargetOptions(
+                state.core as SmashUpCore,
+                context.playerId,
+                context.excludeUid,
+                context.excludeBaseIndex === undefined
+                    ? undefined
+                    : (_minion, baseIndex) => baseIndex !== context.excludeBaseIndex,
+            );
         return interaction;
     },
     onResolve: ({ context, state, playerId, value, timestamp }) => ({
@@ -890,6 +906,9 @@ function registerFrankensteinOngoingEffects(): void {
             ctx.state,
             controllerId,
             ctx.triggerMinionUid,
+            typeof ctx.sourceEventId === 'string' && ctx.sourceEventId.startsWith('base-clear-discard:')
+                ? (_minion, targetBaseIndex) => targetBaseIndex !== ctx.baseIndex
+                : undefined,
         );
         if (options.length === 0) return [];
 
@@ -909,6 +928,9 @@ function registerFrankensteinOngoingEffects(): void {
                 createPromptContext(ctx.matchState, controllerId, ctx.now, {
                     reasonDefId,
                     excludeUid: ctx.triggerMinionUid,
+                    ...(typeof ctx.sourceEventId === 'string' && ctx.sourceEventId.startsWith('base-clear-discard:')
+                        ? { excludeBaseIndex: ctx.baseIndex }
+                        : {}),
                 }),
             ),
             ctx.matchState,

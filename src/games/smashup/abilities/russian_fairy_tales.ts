@@ -42,6 +42,9 @@ import type {
     SmashUpEvent,
 } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
+function getVariantScopedDefId(sourceDefId: string | undefined, baseDefId: string): string {
+    return sourceDefId?.endsWith('_pod') ? `${baseDefId}_pod` : baseDefId;
+}
 
 type CardZone = 'hand' | 'deck' | 'discard';
 type CardChoice = {
@@ -503,7 +506,7 @@ function transformation(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(candidates, {
             state: ctx.state,
             sourcePlayerId: ctx.playerId,
-            sourceDefId: 'russian_fairy_tales_transformation',
+            sourceDefId: ctx.defId,
             sourceKind: 'action',
             effectType: 'return',
             semanticRole: 'primary',
@@ -515,6 +518,9 @@ function transformation(ctx: AbilityContext): AbilityResult {
             responseValidationMode: 'live',
         },
     );
+    (interaction.data as typeof interaction.data & { continuationContext?: { sourceDefId: string } }).continuationContext = {
+        sourceDefId: ctx.defId,
+    };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -541,7 +547,7 @@ function babaYaga(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(candidates, {
             state: ctx.state,
             sourcePlayerId: ctx.playerId,
-            sourceDefId: 'russian_fairy_tales_baba_yaga',
+            sourceDefId: ctx.defId,
             sourceKind: 'nonAction',
             effectType: 'return',
             semanticRole: 'primary',
@@ -553,6 +559,9 @@ function babaYaga(ctx: AbilityContext): AbilityResult {
             responseValidationMode: 'live',
         },
     );
+    (interaction.data as typeof interaction.data & { continuationContext?: { sourceDefId: string } }).continuationContext = {
+        sourceDefId: ctx.defId,
+    };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -568,12 +577,12 @@ function frogPrincessTalent(ctx: AbilityContext): AbilityResult {
             ctx.random,
             ctx.now,
             {
-                sourceDefId: 'russian_fairy_tales_the_frog_princess',
+                sourceDefId: ctx.defId,
                 sourceCardUid: ctx.cardUid,
                 sourceBaseIndex: host.baseIndex,
                 playFromPlayerId: ctx.playerId,
                 attachCardUid: ctx.cardUid,
-                attachDefId: 'russian_fairy_tales_the_frog_princess',
+                attachDefId: ctx.defId,
                 attachOwnerId: attached?.ownerId ?? ctx.playerId,
             },
         ),
@@ -909,25 +918,27 @@ function canGoSeeMySisterTrigger(ctx: TriggerContext): boolean {
 
 function birchWomanTrigger(ctx: TriggerContext): AbilityResult {
     if (!ctx.matchState || !ctx.sourceControllerId) return { events: [] };
+    const sourceDefId = ctx.sourceDefId ?? 'russian_fairy_tales_the_birch_woman';
     return queueSearchPrompt(
         ctx.matchState,
         ctx.sourceControllerId,
         ctx.now,
         '白桦木女神：寻找白桦木加入手牌或额外打出',
         {
-            sourceDefId: 'russian_fairy_tales_the_birch_woman',
+            sourceDefId,
             sourceCardUid: ctx.sourceCardUid,
             sourceBaseIndex: ctx.baseIndex,
-            searchDefId: 'russian_fairy_tales_the_birch',
+            searchDefId: getVariantScopedDefId(sourceDefId, 'russian_fairy_tales_the_birch'),
         },
     );
 }
 
 function canBirchWomanTrigger(ctx: TriggerContext): boolean {
+    const searchDefId = getVariantScopedDefId(ctx.sourceDefId, 'russian_fairy_tales_the_birch');
     return Boolean(
         ctx.sourceControllerId
         && ctx.triggerMinionUid === ctx.sourceCardUid
-        && buildSearchCards(ctx.state, ctx.sourceControllerId, 'russian_fairy_tales_the_birch').length > 0,
+        && buildSearchCards(ctx.state, ctx.sourceControllerId, searchDefId).length > 0,
     );
 }
 
@@ -935,16 +946,17 @@ function theBirchTurnStart(ctx: TriggerContext): AbilityResult {
     if (!ctx.matchState || !ctx.sourceControllerId || !ctx.sourceCardUid || ctx.sourceBaseIndex === undefined) return { events: [] };
     const source = ctx.state.bases[ctx.sourceBaseIndex]?.minions.find(minion => minion.uid === ctx.sourceCardUid);
     if (!source || ctx.playerId !== ctx.sourceControllerId) return { events: [] };
+    const sourceDefId = source.defId;
     const destroyEvents = buildValidatedDestroyEvents(ctx.matchState, {
         minionUid: source.uid,
         minionDefId: source.defId,
         fromBaseIndex: ctx.sourceBaseIndex,
         destroyerId: ctx.sourceControllerId,
-        reason: 'russian_fairy_tales_the_birch',
+        reason: sourceDefId,
         now: ctx.now,
         sourcePlayerId: ctx.sourceControllerId,
         sourceCardUid: source.uid,
-        sourceDefId: 'russian_fairy_tales_the_birch',
+        sourceDefId,
         sourceControllerId: ctx.sourceControllerId,
         sourceBaseIndex: ctx.sourceBaseIndex,
         sourceKind: 'nonAction',
@@ -955,10 +967,10 @@ function theBirchTurnStart(ctx: TriggerContext): AbilityResult {
         ctx.now,
         '白桦木：寻找白桦木女神加入手牌或打到这里',
         {
-            sourceDefId: 'russian_fairy_tales_the_birch',
+            sourceDefId,
             sourceCardUid: source.uid,
             sourceBaseIndex: ctx.sourceBaseIndex,
-            searchDefId: 'russian_fairy_tales_the_birch_woman',
+            searchDefId: getVariantScopedDefId(sourceDefId, 'russian_fairy_tales_the_birch_woman'),
             playBaseIndices: [ctx.sourceBaseIndex],
         },
     );
@@ -969,10 +981,11 @@ function theBirchTurnStart(ctx: TriggerContext): AbilityResult {
 }
 
 function canTheBirchTurnStart(ctx: TriggerContext): boolean {
+    const searchDefId = getVariantScopedDefId(ctx.sourceDefId, 'russian_fairy_tales_the_birch_woman');
     return Boolean(
         ctx.sourceControllerId
         && ctx.playerId === ctx.sourceControllerId
-        && buildSearchCards(ctx.state, ctx.sourceControllerId, 'russian_fairy_tales_the_birch_woman').length > 0,
+        && buildSearchCards(ctx.state, ctx.sourceControllerId, searchDefId).length > 0,
     );
 }
 
@@ -988,6 +1001,7 @@ function bewitchedTransferOnLeave(ctx: TriggerContext): AbilityResult {
     const ownerId = findOngoingOwner(ctx.state, ctx.sourceCardUid)
         ?? ctx.triggerMinion?.attachedActions.find(action => action.uid === ctx.sourceCardUid)?.ownerId
         ?? ctx.sourceControllerId;
+    const sourceDefId = ctx.sourceDefId ?? 'russian_fairy_tales_bewitched';
     const options = collectAllMinions(ctx.state).filter(minion => minion.minionUid !== ctx.triggerMinionUid);
     if (options.length === 0) return { events: [] };
     const interaction = createSimpleChoice<MinionChoice>(
@@ -997,7 +1011,7 @@ function bewitchedTransferOnLeave(ctx: TriggerContext): AbilityResult {
         buildMinionTargetOptions(options, {
             state: ctx.state,
             sourcePlayerId: ctx.sourceControllerId,
-            sourceDefId: 'russian_fairy_tales_bewitched',
+            sourceDefId,
             effectType: 'affect',
             semanticRole: 'primary',
         }),
@@ -1007,8 +1021,9 @@ function bewitchedTransferOnLeave(ctx: TriggerContext): AbilityResult {
             responseValidationMode: 'live',
         },
     );
-    (interaction.data as typeof interaction.data & { continuationContext?: { sourceCardUid: string; ownerId: PlayerId; triggerMinionUid: string } }).continuationContext = {
+    (interaction.data as typeof interaction.data & { continuationContext?: { sourceCardUid: string; sourceDefId: string; ownerId: PlayerId; triggerMinionUid: string } }).continuationContext = {
         sourceCardUid: ctx.sourceCardUid,
+        sourceDefId,
         ownerId,
         triggerMinionUid: ctx.triggerMinionUid,
     };
@@ -1084,9 +1099,10 @@ function finistSpecial(ctx: AbilityContext): AbilityResult {
 }
 
 export function registerRussianFairyTalesAbilities(): void {
-    registerPowerModifier('russian_fairy_tales_bewitched', (ctx) =>
-        ctx.minion.attachedActions.filter(action => action.defId === 'russian_fairy_tales_bewitched').length * 2,
-    { variantPolicy: 'baseOnly' });
+    registerPowerModifier('russian_fairy_tales_bewitched', (ctx) => {
+        const runtimeDefId = ctx.modifierSourceDefId ?? 'russian_fairy_tales_bewitched';
+        return ctx.minion.attachedActions.filter(action => action.defId === runtimeDefId).length * 2;
+    });
     registerCustomBreakpointModifiers([{
         sourceDefId: 'base_giant_turnip',
         runtimeIdentity: 'synthetic',
@@ -1176,8 +1192,11 @@ export function registerRussianFairyTalesInteractionHandlers(): void {
         };
     };
     registerInteractionHandler('russian_fairy_tales_transformation', transformHandler);
-    registerInteractionHandler('russian_fairy_tales_baba_yaga', (state, playerId, value, data, random, timestamp) =>
-        transformHandler(state, playerId, value, { ...(data ?? {}), continuationContext: { sourceDefId: 'russian_fairy_tales_baba_yaga' } }, random, timestamp));
+    registerInteractionHandler('russian_fairy_tales_baba_yaga', (state, playerId, value, data, random, timestamp) => {
+        const sourceDefId = (data as { continuationContext?: { sourceDefId?: string } } | undefined)?.continuationContext?.sourceDefId
+            ?? 'russian_fairy_tales_baba_yaga';
+        return transformHandler(state, playerId, value, { ...(data ?? {}), continuationContext: { sourceDefId } }, random, timestamp);
+    });
 
     registerInteractionHandler('russian_fairy_tales_the_water_of_life', (state, playerId, value, _data, _random, timestamp) => {
         const selected = value as CardChoice | undefined;
@@ -1364,7 +1383,7 @@ export function registerRussianFairyTalesInteractionHandlers(): void {
 
     registerInteractionHandler('russian_fairy_tales_bewitched_transfer', (state, playerId, value, data, _random, timestamp) => {
         const selected = value as MinionChoice | undefined;
-        const context = (data as { continuationContext?: { sourceCardUid: string; ownerId: PlayerId; triggerMinionUid: string } } | undefined)?.continuationContext;
+        const context = (data as { continuationContext?: { sourceCardUid: string; sourceDefId: string; ownerId: PlayerId; triggerMinionUid: string } } | undefined)?.continuationContext;
         if (!context || !selected?.minionUid || selected.baseIndex === undefined || selected.minionUid === context.triggerMinionUid) {
             return { state, events: [] };
         }
@@ -1372,7 +1391,7 @@ export function registerRussianFairyTalesInteractionHandlers(): void {
             state,
             events: buildSemanticOngoingAttachEvents(state, {
                 cardUid: context.sourceCardUid,
-                defId: 'russian_fairy_tales_bewitched',
+                defId: context.sourceDefId,
                 ownerId: context.ownerId,
                 ...(context.ownerId !== playerId ? { sourcePlayerId: playerId } : {}),
                 targetBaseIndex: selected.baseIndex,
