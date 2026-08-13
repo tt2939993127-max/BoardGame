@@ -49,6 +49,7 @@ const MARVEL_POD_DEFAULT_OVERRIDES = {
 } satisfies Partial<Record<SmashUpVariantSurface, SmashUpVariantRelation>>;
 
 export const SMASHUP_VARIANT_BINDING_PROFILES: readonly SmashUpFactionVariantProfile[] = [
+    createVariantProfile(SMASHUP_FACTION_IDS.ACTION_HEROES, SMASHUP_FACTION_IDS.ACTION_HEROES_POD),
     createVariantProfile(SMASHUP_FACTION_IDS.ALIENS, SMASHUP_FACTION_IDS.ALIENS_POD),
     createVariantProfile(SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.PIRATES_POD),
     createVariantProfile(SMASHUP_FACTION_IDS.NINJAS, SMASHUP_FACTION_IDS.NINJAS_POD, {

@@ -109,6 +109,7 @@ import { CEASE_AND_DESIST_BASES, CEASE_AND_DESIST_CARDS } from './factions/cease
 import { INTERNATIONAL_INCIDENT_BASES, INTERNATIONAL_INCIDENT_CARDS } from './factions/international_incident';
 import { WHAT_WERE_WE_THINKING_BASES, WHAT_WERE_WE_THINKING_CARDS } from './factions/what_were_we_thinking';
 import { EXCELLENT_MOVIES_TEENS_BASES, EXCELLENT_MOVIES_TEENS_CARDS } from './factions/excellent_movies_teens';
+import { ACTION_HEROES_POD_CARDS } from './factions/action_heroes_pod';
 import { DIY_KILLERS_BASES, DIY_KILLERS_CARDS } from './factions/diy_killers';
 import { DIY_CLOWNS_BASES, DIY_CLOWNS_CARDS } from './factions/diy_clowns';
 import { HALF_THE_BATTLE_BASES, HALF_THE_BATTLE_CARDS } from './factions/half_the_battle';
@@ -319,6 +320,7 @@ registerCards(INTERNATIONAL_INCIDENT_CARDS);
 registerCards(LUCHADORS_POD_CARDS);
 registerCards(WHAT_WERE_WE_THINKING_CARDS);
 registerCards(EXCELLENT_MOVIES_TEENS_CARDS);
+registerCards(ACTION_HEROES_POD_CARDS);
 registerCards(DIY_KILLERS_CARDS);
 registerCards(DIY_CLOWNS_CARDS);
 registerCards(HALF_THE_BATTLE_CARDS);

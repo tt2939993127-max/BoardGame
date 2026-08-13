@@ -106,6 +106,7 @@ export const SMASHUP_ATLAS_IDS = {
     ANANSI_TALES_POD_CARDS: 'smashup:anansi-tales-pod-cards',
     EXCELLENT_MOVIES_TEENS_CARDS: 'smashup:excellent-movies-teens-cards',
     EXCELLENT_MOVIES_TEENS_BASES: 'smashup:excellent-movies-teens-bases',
+    ACTION_HEROES_POD_CARDS: 'smashup:action-heroes-pod-cards',
     EXPLORERS_POD_CARDS: 'smashup:explorers-pod-cards',
     STAR_ROAMERS_POD_CARDS: 'smashup:star-roamers-pod-cards',
     VIGILANTES_POD_CARDS: 'smashup:vigilantes-pod-cards',
@@ -124,6 +125,7 @@ export const SMASHUP_CARD_BACK = {
 
 export const SMASHUP_FACTION_IDS = {
     ACTION_HEROES: 'action_heroes',
+    ACTION_HEROES_POD: 'action_heroes_pod',
     AVENGERS: 'avengers',
     BACKTIMERS: 'backtimers',
     SHIELD: 'shield',
@@ -340,6 +342,7 @@ export function isSmashUpFactionImplementationInProgress(factionId: string): boo
 /** 派系中文显示名（domain 层使用，避免依赖 i18n） */
 export const FACTION_DISPLAY_NAMES: Record<string, string> = {
     [SMASHUP_FACTION_IDS.ACTION_HEROES]: '动作英雄',
+    [SMASHUP_FACTION_IDS.ACTION_HEROES_POD]: '动作英雄 (POD版)',
     [SMASHUP_FACTION_IDS.AVENGERS]: '复仇者',
     [SMASHUP_FACTION_IDS.BACKTIMERS]: '返时者',
     [SMASHUP_FACTION_IDS.AVENGERS_POD]: '复仇者 (POD版)',
