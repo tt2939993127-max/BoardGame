@@ -1832,6 +1832,18 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 && !(state.core.triggerQueue ?? []).some(trigger => trigger.frameId?.startsWith('turn-end:'));
 
             if (resumedAfterTurnEndReactionResolution) {
+                const gameResult = evaluateSmashUpVictory(core);
+                if (gameResult) {
+                    return {
+                        events: [],
+                        halt: true,
+                        updatedState: {
+                            ...state,
+                            core: { ...core, gameResult },
+                        },
+                    } as PhaseExitResult;
+                }
+
                 const advance = buildTurnEndAdvancePayload(core);
                 return [{
                     type: SU_EVENTS.TURN_ENDED,
@@ -1902,12 +1914,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 }
             }
 
-            // 鍒囨崲鍒颁笅涓€涓帺瀹?
-            if (hasPendingTurnEndResolution) {
+            // 即使 onTurnEnd 触发已自动结算，也先让 pipeline 真正归约这一批事件；
+            // 下一轮 endTurn 会走 resumed 分支，再基于最终 core 判胜。
+            if (hasPendingTurnEndResolution || hasQueuedTurnEndResolution) {
                 return {
                     events,
                     halt: true,
                     updatedState: keepSysUpdatesOnly(state, currentMatchState),
+                } as PhaseExitResult;
+            }
+
+            const gameResult = evaluateSmashUpVictory(currentMatchState.core);
+            if (gameResult) {
+                return {
+                    events: [],
+                    halt: true,
+                    updatedState: {
+                        ...state,
+                        core: { ...core, gameResult },
+                    },
                 } as PhaseExitResult;
             }
 
@@ -2536,10 +2561,7 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
 // isGameOver
 // ============================================================================
 
-function isGameOver(state: SmashUpCore): GameOverResult | undefined {
-    if (state.gameResult) return state.gameResult;
-    if (state.turnPhase && state.turnPhase !== 'draw' && state.turnPhase !== 'endTurn') return undefined;
-
+function evaluateSmashUpVictory(state: SmashUpCore): GameOverResult | undefined {
     if (isSmashUpTwoVsTwoMode(state)) {
         const rawTeamTotals = getSmashUpRawTeamVpTotals(state);
         const candidateTeams = Object.entries(rawTeamTotals)
@@ -2596,6 +2618,15 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     if (winners.length === 1) return { winner: winners[0], scores };
 
     return { winner: winners[0], winners, scores };
+}
+
+function isGameOver(state: SmashUpCore): GameOverResult | undefined {
+    if (state.gameResult) return state.gameResult;
+
+    // 正常运行态只发布 endTurn 收口后锁定的结果，避免 draw/endTurn 能力尚未结算时抢跑。
+    // 无 turnPhase 的旧快照/纯规则测试保留直接计算兼容路径。
+    if (state.turnPhase !== undefined) return undefined;
+    return evaluateSmashUpVictory(state);
 }
 
 export function getScores(state: SmashUpCore): Record<PlayerId, number> {
