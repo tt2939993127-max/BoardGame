@@ -109,7 +109,6 @@ export function useMatchRoomSessionState(args: {
 
     const {
         onlineAiSeatControllers,
-        onlineAiSeatCredentials,
         hasOnlineAiSeat,
         onlineAiRematchAutoAcceptedPlayerIds,
     } = useOnlineAiSeatStateLoader({
@@ -132,7 +131,6 @@ export function useMatchRoomSessionState(args: {
         shouldAutoJoin,
         hasOnlineAiSeat,
         onlineAiSeatControllers,
-        onlineAiSeatCredentials,
         effectivePlayerID,
         statusPlayerID,
     });
@@ -154,7 +152,6 @@ export function useMatchRoomSessionState(args: {
         shouldUseTransportSeatValidation,
         handleTransportSeatValidationSnapshotChange,
         onlineAiSeatControllers,
-        onlineAiSeatCredentials,
         hasOnlineAiSeat,
         onlineAiRematchAutoAcceptedPlayerIds,
     };

@@ -238,7 +238,10 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
         targetId,
         [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
         timestamp + 1,
-        { customResolutionId: SHADOW_DANCE_SETTLEMENT_ID, continuation: { kind: 'complete' } },
+        {
+            customResolutionId: SHADOW_DANCE_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     )];
 }
 
@@ -464,7 +467,10 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
         targetId,
         [{ index: 0, value: dieValue, face: face as any, effectKey: 'bonusDie.effect.shadowDamage', effectParams: { value: dieValue, damage: damageAmt } }],
         timestamp + 1,
-        { customResolutionId: SHADOW_DANCE_2_SETTLEMENT_ID, continuation: { kind: 'complete' } },
+        {
+            customResolutionId: SHADOW_DANCE_2_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
+        },
     )];
 }
 

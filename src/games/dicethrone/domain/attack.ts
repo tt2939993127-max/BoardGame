@@ -4,6 +4,7 @@ import type {
     DiceThroneEvent,
     AttackPreDefenseResolvedEvent,
     AttackDefenseResolvedEvent,
+    AttackResolvedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
@@ -79,7 +80,9 @@ export const resolveOffensivePreDefenseEffects = (
 
     const events: DiceThroneEvent[] = [];
     events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx, { random }));
-    if (events.some(isBlockingInteractionEvent)) {
+    if (events.some(isBlockingInteractionEvent) || events.some(isInteractiveBonusDiceRerollEvent)) {
+        // 记录已完成的前置位置，但不能继续进入防御或主伤害。
+        // 奖励骰确认后从这个位置恢复，既不会重掷，也不会提前结算父攻击。
         events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp));
         return events;
     }
@@ -125,7 +128,7 @@ const resolveDefenseEffects = (
 export const resolveAttack = (
     state: DiceThroneCore,
     random: RandomFn,
-    options?: { includePreDefense?: boolean; skipTokenResponse?: boolean },
+    options?: { includePreDefense?: boolean; skipTokenResponse?: boolean; skipDefense?: boolean },
     timestamp: number = 0
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
@@ -178,13 +181,19 @@ export const resolveAttack = (
         events.push(...preDefenseEvents);
 
         const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
-        if (hasChoice) return events;
+        const hasInteractiveBonusDiceReroll = preDefenseEvents.some(isInteractiveBonusDiceRerollEvent);
+        if (hasChoice || hasInteractiveBonusDiceReroll) return events;
 
         stateAfterPreDefense = applyEvents(state, preDefenseEvents as DiceThroneEvent[], reduce);
     }
 
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
-    const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(stateAfterPreDefense, random, timestamp);
+    // 奖励骰可以在防御效果中暂停。确认后恢复到 afterDefense，
+    // 防御已经生效，不能再掷一次或重复授予防御结果。
+    const shouldSkipDefense = options?.skipDefense === true || pending.settlementStage === 'afterDefense';
+    const { defenseEvents, stateAfterDefense } = shouldSkipDefense
+        ? { defenseEvents: [] as DiceThroneEvent[], stateAfterDefense: stateAfterPreDefense }
+        : resolveDefenseEffects(stateAfterPreDefense, random, timestamp);
     const bonusDamage = stateAfterDefense.pendingAttack?.bonusDamage ?? pending.bonusDamage ?? 0;
     events.push(...defenseEvents);
     const hasDefenseChoice = defenseEvents.some(isBlockingInteractionEvent);

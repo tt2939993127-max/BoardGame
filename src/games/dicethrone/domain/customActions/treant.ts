@@ -794,6 +794,7 @@ function handleLifeSapUse({ attackerId, sourceAbilityId, state, timestamp, rando
             summaryEffectKey: 'bonusDie.effect.treantLifeSapResult',
             summaryEffectParams: { value, heal: Math.ceil(value / 2) },
             customResolutionId: TREANT_LIFE_SAP_SETTLEMENT_ID,
+            continuation: { kind: 'complete' },
         }),
     ];
 }
@@ -1053,6 +1054,7 @@ function handleWildGrowth2Main(ctx: CustomActionContext): DiceThroneEvent[] {
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, rollDice, timestamp + 5, {
         summaryEffectKey: 'bonusDie.effect.treantWildGrowth2.result',
         customResolutionId: TREANT_WILD_GROWTH_2_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
     }));
     return events;
 }
@@ -1188,6 +1190,7 @@ function handleTrample(ctx: CustomActionContext): DiceThroneEvent[] {
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, dice, timestamp + 5, {
         summaryEffectKey: 'bonusDie.effect.treantTrample.result',
         customResolutionId: TREANT_TRAMPLE_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
     }));
     return events;
 }
@@ -1223,6 +1226,7 @@ function handleSoulfire(ctx: CustomActionContext): DiceThroneEvent[] {
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, ctx.targetId, dice, timestamp + 3, {
         summaryEffectKey: 'bonusDie.effect.treantSoulfire.result',
         customResolutionId: TREANT_SOULFIRE_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
     }));
     return events;
 }
@@ -1254,6 +1258,7 @@ function handleMotherTree(ctx: CustomActionContext): DiceThroneEvent[] {
         timestamp,
     } as BonusDieRolledEvent, createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, [die], timestamp + 1, {
         customResolutionId: TREANT_MOTHER_TREE_SETTLEMENT_ID,
+        continuation: { kind: 'complete' },
     })];
     return events;
 }
@@ -1287,6 +1292,7 @@ function handleRootedDefense(ctx: CustomActionContext): DiceThroneEvent[] {
 
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, rollDice, timestamp, {
         customResolutionId: TREANT_ROOTED_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'afterDefense', markBonusDiceResolved: false },
     }));
     return events;
 }

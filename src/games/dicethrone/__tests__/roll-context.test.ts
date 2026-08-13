@@ -227,7 +227,7 @@ describe('DiceThrone 单槽当前骰区', () => {
         expect(modified.dice[0].value).toBe(1);
     });
 
-    it('奖励骰确认后结算最终骰面，并自动恢复被挂起的主攻击骰', () => {
+    it('奖励骰确认后保留最终骰面作为右侧只读回看，不恢复被挂起的主攻击骰', () => {
         const settlement: PendingBonusDiceSettlement = {
             ...createBonusSettlement(),
             dice: [
@@ -262,12 +262,21 @@ describe('DiceThrone 单槽当前骰区', () => {
 
         expect(settled.pendingBonusDiceSettlement).toBeUndefined();
         expect(settled.currentRollContext).toMatchObject({
-            id: parent.currentRollContext?.id,
-            kind: 'offensive',
+            id: `bonus:${settlement.id}`,
+            kind: 'bonus',
             ownerPlayerId: '0',
-            phase: 'offensiveRoll',
-            dice: [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }, { value: 5 }],
+            status: 'settled',
+            policy: {
+                modifiableBy: 'none',
+                rerollableBy: 'none',
+                allowPassiveReroll: false,
+                allowDiceCardTargeting: false,
+                blocksPhaseFlow: false,
+            },
+            display: { replayOnly: true },
+            dice: [{ value: 6 }, { value: 4 }],
         });
+        expect(settled.currentRollContext?.suspendedParent).toBeUndefined();
     });
 
     it('临时奖励骰未确认时禁止推进原攻击阶段', () => {

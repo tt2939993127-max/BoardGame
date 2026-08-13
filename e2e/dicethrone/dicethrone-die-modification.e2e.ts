@@ -75,6 +75,110 @@ async function openActionLogPanel(page: any): Promise<any> {
 }
 
 test.describe('DiceThrone - 选择骰子修改', () => {
+    test('AI 遇到全同骰面的复制交互应取消空操作并解除交互锁', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone', { playerID: '0', seat0: 'local-ai', seat0Delay: 0, seat1: 'human' });
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                hand: ['card-me-too'],
+                resources: { CP: 2, HP: 50 },
+            },
+            player1: {
+                resources: { HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'monk', '1': 'barbarian' },
+                seatControllers: {
+                    '0': { type: 'local-ai', difficulty: 'expert', minimumActionDelayMs: 0 },
+                    '1': { type: 'human' },
+                },
+                hostStarted: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 4, isKept: false },
+                    { id: 1, value: 4, isKept: false },
+                    { id: 2, value: 4, isKept: false },
+                    { id: 3, value: 4, isKept: false },
+                    { id: 4, value: 4, isKept: false },
+                ],
+            },
+        });
+
+        await page.evaluate(() => {
+            const harness = (window as Window & {
+                __BG_TEST_HARNESS__?: {
+                    state?: { get?: () => any; set?: (state: any) => void | Promise<void> };
+                };
+            }).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            if (!state || !harness?.state?.set) {
+                throw new Error('TestHarness state 注入入口不可用');
+            }
+
+            return harness.state.set({
+                ...state,
+                core: {
+                    ...state.core,
+                    activePlayerId: '0',
+                    dice: state.core.dice.map((die: any) => ({ ...die, value: 4 })),
+                },
+                sys: {
+                    ...state.sys,
+                    phase: 'offensiveRoll',
+                    interaction: {
+                        current: {
+                            id: 'ai-copy-die-no-effective-target-e2e',
+                            kind: 'multistep-choice',
+                            playerId: '0',
+                            data: {
+                                title: '复制骰面',
+                                sourceId: 'card-me-too',
+                                maxSteps: 2,
+                                initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
+                                meta: {
+                                    dtType: 'modifyDie',
+                                    dieModifyConfig: { mode: 'copy' },
+                                    selectCount: 2,
+                                    diceOwnerId: '0',
+                                    targetOpponentDice: false,
+                                },
+                            },
+                        },
+                        queue: [],
+                        isBlocked: false,
+                    },
+                    responseWindow: { current: undefined },
+                },
+            });
+        });
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const entries = state?.sys?.eventStream?.entries ?? [];
+            return {
+                interactionId: state?.sys?.interaction?.current?.id ?? null,
+                diceValues: (state?.core?.dice ?? []).map((die: any) => die.value),
+                hasInteractionCancelled: entries.some((entry: any) => (
+                    entry.event?.type === 'INTERACTION_CANCELLED'
+                    || entry.event?.type === 'SYS_INTERACTION_CANCELLED'
+                )),
+                hasDieModified: entries.some((entry: any) => entry.event?.type === 'DIE_MODIFIED'),
+            };
+        }, { timeout: 10000 }).toEqual(expect.objectContaining({
+            interactionId: null,
+            hasInteractionCancelled: true,
+            hasDieModified: false,
+        }));
+
+        const finalState = await game.getState();
+        expect((finalState?.core?.dice ?? []).map((die: any) => die.value)).toEqual([4, 4, 4, 4, 4]);
+        await game.screenshot('AI全同骰复制无变化自动取消并解除交互', testInfo);
+    });
+
     test('card-me-too 复制骰面时重复点源骰不会提前完成，点目标骰后才结算', async ({ page, game }, testInfo) => {
         await game.openTestGame('dicethrone', { playerID: '0' });
 

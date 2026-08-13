@@ -45,15 +45,15 @@ export function isOnlineAiWatchdogPublicPregameLegalActionPhase(args: {
         : typeof args.state.sys?.phase === 'string'
             ? args.state.sys.phase
             : '';
-    const core = args.state.core as { hostStarted?: unknown } | undefined;
-    if (core?.hostStarted !== false) {
-        return false;
-    }
-
     const configuredPhases = resolveConfiguredPhaseSet(
         args.engineConfig?.onlineAiRecovery?.publicPregameLegalActionPhases,
     );
-    return configuredPhases.has(currentPhase);
+    if (!configuredPhases.has(currentPhase)) {
+        return false;
+    }
+
+    const core = args.state.core as { hostStarted?: unknown } | undefined;
+    return core?.hostStarted !== true;
 }
 
 export function isOnlineAiWatchdogActiveTurnLegalActionOnlyPhase(args: {

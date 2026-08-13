@@ -98,6 +98,21 @@ export interface CommandDispatchMeta extends OnlineAiDispatchMeta {
     expectedStateID?: number;
 }
 
+/**
+ * 人类请求服务端替开启“人工准备选择”的 AI seat 落定一个已展示的选择。
+ * 该请求不携带游戏命令或游戏 payload；服务端必须从当前权威状态重新生成合法动作。
+ */
+export interface ManualSetupSelectionRequest {
+    targetPlayerId: string;
+    actionKind: string;
+    selectionId: string;
+}
+
+export interface ManualSetupSelectionResult {
+    accepted: boolean;
+    reason?: 'unauthorized' | 'rejected';
+}
+
 // ============================================================================
 // 客户端 → 服务端 事件
 // ============================================================================
@@ -122,6 +137,14 @@ export interface ClientToServerEvents {
         commands: Array<{ type: string; payload: unknown }>,
         credentials?: string,
         meta?: BatchDispatchMeta,
+    ) => void;
+
+    /** 请求服务端执行 AI seat 的公开准备阶段人工选择。 */
+    'manual-setup-selection': (
+        matchID: string,
+        request: ManualSetupSelectionRequest,
+        credentials?: string,
+        acknowledge?: (result: ManualSetupSelectionResult) => void,
     ) => void;
 
     /** 临时 UI 事件：只转发给同局客户端，不进入权威游戏状态 */

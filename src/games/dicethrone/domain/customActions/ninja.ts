@@ -17,11 +17,15 @@ import type {
     PendingAttackUpdatedEvent,
     TokenGrantedEvent,
 } from '../events';
+import type { BonusDieInfo, DieFace, PendingBonusDiceSettlement } from '../core-types';
 
 const GOING_FORWARD_2_SETTLEMENT_ID = 'ninja-going-forward-2';
 const GOING_FORWARD_SETTLEMENT_ID = 'ninja-going-forward';
 const DEATH_BLOSSOM_SETTLEMENT_ID = 'ninja-death-blossom';
 const DEATH_BLOSSOM_2_SETTLEMENT_ID = 'ninja-death-blossom-2';
+const GOING_FORWARD_BLEED_SETTLEMENT_ID = 'ninja-going-forward-bleed';
+const POISON_BLADE_2_SETTLEMENT_ID = 'ninja-poison-blade-2';
+const NINJUTSU_SETTLEMENT_ID = 'ninja-ninjutsu';
 const NINJA_SMOKE_SCREEN_2_CHOICE_ID = 'ninja-smoke-screen-2-choice';
 const NINJA_SMOKE_SCREEN_KUJI_KIRI_CHOICE_ID = 'ninja-smoke-screen-kuji-kiri-choice';
 const NINJA_NINJUTSU_BONUS_DAMAGE_CHOICE_ID = 'ninja-ninjutsu-bonus-damage';
@@ -147,7 +151,7 @@ function createUnblockableDamageEvents(
             payload.damageScope = damageScope;
         }
     });
-    return damageEvents;
+    return damageEvents as DiceThroneEvent[];
 }
 
 function createBlinkDamageEvents(
@@ -185,10 +189,14 @@ function buildDisplayOnlySingleDie(
     actingPlayerId: string,
     targetId: string,
     value: number,
-    face: string,
+    face: DieFace,
     effectKey: string,
     timestamp: number,
     effectParams?: Record<string, string | number>,
+    options?: {
+        customResolutionId?: string;
+        continuation: NonNullable<PendingBonusDiceSettlement['continuation']>;
+    },
 ): DiceThroneEvent[] {
     return [
         {
@@ -214,8 +222,13 @@ function buildDisplayOnlySingleDie(
                 ? {
                     summaryEffectKey: effectKey,
                     summaryEffectParams: effectParams,
+                    customResolutionId: options?.customResolutionId,
+                    continuation: options?.continuation ?? { kind: 'complete' },
                 }
-                : undefined,
+                : {
+                    customResolutionId: options?.customResolutionId,
+                    continuation: options?.continuation ?? { kind: 'complete' },
+                },
         ),
     ];
 }
@@ -323,12 +336,13 @@ function handleGoingForward(ctx: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, targetId, state, timestamp, random } = ctx;
     if (!random) return [];
 
-    const dice = [];
+    const dice: BonusDieInfo[] = [];
     const events: DiceThroneEvent[] = [];
 
     for (let index = 0; index < 2; index += 1) {
         const value = random.d(6);
-        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        const face = getPlayerDieFace(state, attackerId, value);
+        if (!face) throw new Error(`Ninja Going Forward rolled an unmapped die value: ${value}`);
         dice.push({ index, value, face, effectKey: 'bonusDie.effect.ninjaGoingForward', effectParams: { value, index } });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -358,7 +372,8 @@ function handleGoingForwardBleed(ctx: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
     const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    const face = getPlayerDieFace(state, attackerId, value);
+    if (!face) throw new Error(`Ninja Going Forward Bleed rolled an unmapped die value: ${value}`);
     const events = buildDisplayOnlySingleDie(
         sourceAbilityId,
         attackerId,
@@ -368,9 +383,11 @@ function handleGoingForwardBleed(ctx: CustomActionContext): DiceThroneEvent[] {
         'bonusDie.effect.ninjaGoingForwardBleed',
         timestamp,
         { value, damage: value },
+        {
+            customResolutionId: GOING_FORWARD_BLEED_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
+        },
     );
-    events.push(...createUnblockableDamageEvents(state, attackerId, sourceAbilityId, targetId, value, timestamp + 2));
-    events.push(closeoutNonAttackVariant(attackerId, timestamp + 3));
     return events;
 }
 
@@ -397,8 +414,8 @@ function handlePoisonBlade2(ctx: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
     const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
-    const poisonAmount = face === NINJA_DICE_FACE_IDS.KATANA ? 1 : 2;
+    const face = getPlayerDieFace(state, attackerId, value);
+    if (!face) throw new Error(`Ninja Poison Blade rolled an unmapped die value: ${value}`);
     const events = buildDisplayOnlySingleDie(
         sourceAbilityId,
         attackerId,
@@ -407,10 +424,12 @@ function handlePoisonBlade2(ctx: CustomActionContext): DiceThroneEvent[] {
         face,
         'bonusDie.effect.ninjaPoisonBlade2',
         timestamp,
-        { value, poisonAmount },
+        { value },
+        {
+            customResolutionId: POISON_BLADE_2_SETTLEMENT_ID,
+            continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
+        },
     );
-    const poisonEvent = delayedPoisonEvent(state, sourceAbilityId, targetId, poisonAmount, timestamp + 2);
-    if (poisonEvent) events.push(poisonEvent);
     return events;
 }
 
@@ -437,11 +456,12 @@ function handleDeathBlossom(ctx: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, targetId, state, timestamp, random } = ctx;
     if (!random) return [];
 
-    const dice = [];
+    const dice: BonusDieInfo[] = [];
     const events: DiceThroneEvent[] = [];
     for (let index = 0; index < 5; index += 1) {
         const value = random.d(6);
-        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        const face = getPlayerDieFace(state, attackerId, value);
+        if (!face) throw new Error(`Ninja Death Blossom rolled an unmapped die value: ${value}`);
         dice.push({ index, value, face, effectKey: 'bonusDie.effect.ninjaDeathBlossom2', effectParams: { value, index, face } });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -548,7 +568,8 @@ function handleNinjutsuUse(ctx: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
     const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    const face = getPlayerDieFace(state, attackerId, value);
+    if (!face) throw new Error(`Ninja Ninjutsu rolled an unmapped die value: ${value}`);
     const targetId = state.pendingAttack?.defenderId ?? ctx.targetId;
     const events: DiceThroneEvent[] = [{
         type: 'BONUS_DIE_ROLLED',
@@ -563,76 +584,18 @@ function handleNinjutsuUse(ctx: CustomActionContext): DiceThroneEvent[] {
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent];
-    const remainingNinjutsuAfterUse = Math.max(0, (state.players[attackerId]?.tokens[TOKEN_IDS.NINJUTSU] ?? 0) - 1);
-    const continueOptions = [
-        ...(remainingNinjutsuAfterUse > 0 ? [{
-            tokenId: TOKEN_IDS.NINJUTSU,
-            value: 1,
-            customId: 'use-ninjutsu',
-            labelKey: `tokens.${TOKEN_IDS.NINJUTSU}.name`,
-        }] : []),
-        {
-            value: 0,
-            customId: 'skip',
-            labelKey: 'tokenResponse.skip',
-        },
-    ];
-
-    if (value <= 3) {
-        events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, [{ index: 0, value, face, effectKey: 'bonusDie.effect.ninjaNinjutsu', effectParams: { value, bonusDamage: 1 } }], timestamp + 1, {
-            summaryEffectKey: 'bonusDie.effect.ninjaNinjutsuResult',
-            summaryEffectParams: { value, bonusDamage: 1 },
-        }));
-        events.push(bonusDamageEvent(attackerId, 1, sourceAbilityId, timestamp + 2));
-        events.push({
-            type: 'CHOICE_REQUESTED',
-            payload: {
-                playerId: attackerId,
-                sourceAbilityId,
-                titleKey: 'offensiveRollEndToken.title',
-                options: continueOptions,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 3,
-        } as ChoiceRequestedEvent);
-        return events;
-    }
-
-    if (value <= 5) {
-        events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, [{ index: 0, value, face, effectKey: 'bonusDie.effect.ninjaNinjutsu', effectParams: { value, bonusDamage: 2 } }], timestamp + 1, {
-            summaryEffectKey: 'bonusDie.effect.ninjaNinjutsuResult',
-            summaryEffectParams: { value, bonusDamage: 2 },
-        }));
-        events.push(bonusDamageEvent(attackerId, 2, sourceAbilityId, timestamp + 2));
-        events.push({
-            type: 'CHOICE_REQUESTED',
-            payload: {
-                playerId: attackerId,
-                sourceAbilityId,
-                titleKey: 'offensiveRollEndToken.title',
-                options: continueOptions,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 3,
-        } as ChoiceRequestedEvent);
-        return events;
-    }
-
-    events.push({
-        type: 'CHOICE_REQUESTED',
-        payload: {
-            playerId: attackerId,
-            sourceAbilityId,
-            titleKey: 'choices.ninjaNinjutsu.title',
-        options: [
-                { value: 1, customId: NINJA_NINJUTSU_BONUS_DAMAGE_CHOICE_ID, labelKey: 'choices.ninjaNinjutsu.bonusDamage' },
-                { value: 1, customId: 'ninja-ninjutsu-poison', labelKey: 'choices.ninjaNinjutsu.poison' },
-                { value: 1, customId: 'ninja-ninjutsu-undefendable', labelKey: 'choices.ninjaNinjutsu.undefendable' },
-            ],
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 1,
-    } as ChoiceRequestedEvent);
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, [{
+        index: 0,
+        value,
+        face,
+        effectKey: 'bonusDie.effect.ninjaNinjutsu',
+        effectParams: { value },
+    }], timestamp + 1, {
+        summaryEffectKey: 'bonusDie.effect.ninjaNinjutsuResult',
+        summaryEffectParams: { value },
+        customResolutionId: NINJUTSU_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
+    }));
 
     return events;
 }
@@ -689,6 +652,79 @@ function buildNinjutsuContinueChoiceEvents(
 }
 
 export function registerNinjaCustomActions(): void {
+    registerBonusDiceSettlementHandler(GOING_FORWARD_BLEED_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const totalDamage = getPendingBonusSettlementDice(settlement).reduce((sum, die) => sum + die.value, 0);
+        return {
+            totalDamage: 0,
+            followupEvents: createUnblockableDamageEvents(
+                state,
+                settlement.attackerId,
+                settlement.sourceAbilityId,
+                settlement.targetId,
+                totalDamage,
+                timestamp,
+                'attack',
+            ),
+        };
+    });
+
+    registerBonusDiceSettlementHandler(POISON_BLADE_2_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const die = getPendingBonusSettlementDice(settlement)[0];
+        if (!die) return { totalDamage: 0 };
+        const poisonAmount = die.face === NINJA_DICE_FACE_IDS.KATANA ? 1 : 2;
+        const poisonEvent = delayedPoisonEvent(
+            state,
+            settlement.sourceAbilityId,
+            settlement.targetId,
+            poisonAmount,
+            timestamp,
+        );
+        return {
+            totalDamage: 0,
+            followupEvents: poisonEvent ? [poisonEvent] : [],
+        };
+    });
+
+    registerBonusDiceSettlementHandler(NINJUTSU_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {
+        const dieValue = getPendingBonusSettlementDice(settlement)[0]?.value ?? 0;
+        if (dieValue <= 3) {
+            return {
+                totalDamage: 0,
+                followupEvents: [
+                    bonusDamageEvent(settlement.attackerId, 1, settlement.sourceAbilityId, timestamp),
+                    ...buildNinjutsuContinueChoiceEvents(state, settlement.attackerId, settlement.sourceAbilityId, timestamp + 1),
+                ],
+            };
+        }
+        if (dieValue <= 5) {
+            return {
+                totalDamage: 0,
+                followupEvents: [
+                    bonusDamageEvent(settlement.attackerId, 2, settlement.sourceAbilityId, timestamp),
+                    ...buildNinjutsuContinueChoiceEvents(state, settlement.attackerId, settlement.sourceAbilityId, timestamp + 1),
+                ],
+            };
+        }
+        return {
+            totalDamage: 0,
+            followupEvents: [{
+                type: 'CHOICE_REQUESTED',
+                payload: {
+                    playerId: settlement.attackerId,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                    titleKey: 'choices.ninjaNinjutsu.title',
+                    options: [
+                        { value: 1, customId: NINJA_NINJUTSU_BONUS_DAMAGE_CHOICE_ID, labelKey: 'choices.ninjaNinjutsu.bonusDamage' },
+                        { value: 1, customId: 'ninja-ninjutsu-poison', labelKey: 'choices.ninjaNinjutsu.poison' },
+                        { value: 1, customId: 'ninja-ninjutsu-undefendable', labelKey: 'choices.ninjaNinjutsu.undefendable' },
+                    ],
+                },
+                sourceCommandType: 'BONUS_DICE_SETTLED',
+                timestamp,
+            } as ChoiceRequestedEvent],
+        };
+    });
+
     registerBonusDiceSettlementHandler(GOING_FORWARD_SETTLEMENT_ID, ({ settlement, timestamp }) => {
         const totalDamage = getPendingBonusSettlementDice(settlement).reduce((sum, die) => sum + die.value, 0);
         return {

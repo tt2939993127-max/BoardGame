@@ -1588,6 +1588,7 @@ export const engineConfig = {
     resolveLocalPregameControlledPlayerId: resolveDiceThroneLocalPregameControlledPlayerId,
     resolveLocalRuntimeControlledPlayerId: resolveDiceThroneLocalRuntimeControlledPlayerId,
     onlineAiRecovery: {
+        publicPregameLegalActionPhases: ['setup'],
         activeTurnLegalActionOnlyPhases: ['offensiveRoll', 'targetingRoll', 'defensiveRoll'],
         humanTurnLegalActionProbePhases: ['defensiveRoll', 'targetingRoll'],
         resolveCurrentPlayerId: resolveDiceThroneOnlineAiCurrentPlayerId,

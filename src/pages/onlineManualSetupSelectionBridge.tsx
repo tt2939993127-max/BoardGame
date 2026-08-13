@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameClientOverrideProvider, useGameClient } from '../engine/transport/react';
 import type { MatchState } from '../engine/types';
-import type {
-    ManualSetupSeatDispatch,
-    OnlineManualSetupSelectionBridgeProps,
-} from './onlineManualSetup.types';
+import type { OnlineManualSetupSelectionBridgeProps } from './onlineManualSetup.types';
 import {
     resolveOnlineManualSetupTakeoverPlayerId,
     resolveManualSetupSelectionActionKindFromCommand,
@@ -23,20 +20,21 @@ type PendingManualSetupSelection = {
 export const OnlineManualSetupSelectionBridge = ({
     children,
     seatControllers,
-    dispatchManualSetupCommand,
+    dispatchManualSetupCommand: _dispatchManualSetupCommand,
     engineConfig,
 }: OnlineManualSetupSelectionBridgeProps) => {
-    const { state, dispatch } = useGameClient();
+    const { state, dispatch, requestManualSetupSelection } = useGameClient();
     const sharedState = state as MatchState<unknown> | null;
     const manualSetupPlayerId = resolveOnlineManualSetupTakeoverPlayerId({
         sharedState,
         seatControllers,
-        hasManualDispatch: Boolean(dispatchManualSetupCommand),
+        // 在线 AI 的准备阶段人工选择通过当前人类连接请求服务端代执行，
+        // 不再领取或使用 AI seat 凭据。
+        hasManualDispatch: true,
         engineConfig,
     });
     const shouldTakeOver = manualSetupPlayerId !== null;
     const latestSharedStateRef = useRef<MatchState<unknown> | null>(sharedState);
-    const latestManualDispatchRef = useRef<ManualSetupSeatDispatch | null>(dispatchManualSetupCommand);
     const pendingManualSetupSelectionRef = useRef<PendingManualSetupSelection | null>(null);
     const [pendingManualSetupSelection, setPendingManualSetupSelectionState] = useState<PendingManualSetupSelection | null>(null);
 
@@ -59,10 +57,6 @@ export const OnlineManualSetupSelectionBridge = ({
         latestSharedStateRef.current = sharedState;
     }, [sharedState]);
 
-    useEffect(() => {
-        latestManualDispatchRef.current = dispatchManualSetupCommand;
-    }, [dispatchManualSetupCommand]);
-
     const manualDispatch = useCallback((type: string, payload: unknown) => {
         const latestSharedState = latestSharedStateRef.current;
         const pending = pendingManualSetupSelectionRef.current;
@@ -83,7 +77,7 @@ export const OnlineManualSetupSelectionBridge = ({
         const latestManualSetupPlayerId = resolveOnlineManualSetupTakeoverPlayerId({
             sharedState: latestSharedState,
             seatControllers,
-            hasManualDispatch: Boolean(latestManualDispatchRef.current),
+            hasManualDispatch: true,
             engineConfig,
         });
         if (latestManualSetupPlayerId) {
@@ -102,14 +96,25 @@ export const OnlineManualSetupSelectionBridge = ({
                     selectionId,
                 });
             }
-            const submitted = latestManualDispatchRef.current?.(latestManualSetupPlayerId, type, payload) === true;
-            if (!submitted && pendingManualSetupSelectionRef.current?.playerId === latestManualSetupPlayerId) {
+            if (!actionKind || !selectionId) {
+                return;
+            }
+            const accepted = requestManualSetupSelection?.({
+                targetPlayerId: latestManualSetupPlayerId,
+                actionKind,
+                selectionId,
+            }, (result) => {
+                if (!result.accepted) {
+                    setPendingManualSetupSelection(null);
+                }
+            }) ?? false;
+            if (!accepted) {
                 setPendingManualSetupSelection(null);
             }
             return;
         }
         dispatch(type, payload);
-    }, [dispatch, engineConfig, seatControllers, setPendingManualSetupSelection]);
+    }, [dispatch, engineConfig, requestManualSetupSelection, seatControllers, setPendingManualSetupSelection]);
 
     return (
         <GameClientOverrideProvider

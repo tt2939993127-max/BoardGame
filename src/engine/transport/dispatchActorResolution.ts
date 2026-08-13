@@ -2,6 +2,7 @@ export type DispatchPayloadMeta = {
     internalOverrideId?: string;
     tutorialOverrideId?: string;
     aiTraceToken?: string;
+    legacyManualAiSeatId?: string;
     isTutorialAiCommand: boolean;
     normalizedPayload: unknown;
 };
@@ -19,6 +20,9 @@ export function parseDispatchPayloadMeta(payload: unknown): DispatchPayloadMeta 
     const aiTraceToken = typeof payloadRecord?.__aiTraceToken === 'string'
         ? payloadRecord.__aiTraceToken
         : undefined;
+    const legacyManualAiSeatId = typeof payloadRecord?.__manualAiSeatId === 'string'
+        ? payloadRecord.__manualAiSeatId
+        : undefined;
     const isTutorialAiCommand = payloadRecord?.__tutorialAiCommand === true;
     const normalizedPayload = payloadRecord && (
         '__internalPlayerId' in payloadRecord
@@ -26,6 +30,7 @@ export function parseDispatchPayloadMeta(payload: unknown): DispatchPayloadMeta 
         || '__tutorialPlayerId' in payloadRecord
         || '__tutorialAiCommand' in payloadRecord
         || '__aiTraceToken' in payloadRecord
+        || '__manualAiSeatId' in payloadRecord
     )
         ? (() => {
             const {
@@ -34,6 +39,7 @@ export function parseDispatchPayloadMeta(payload: unknown): DispatchPayloadMeta 
                 __tutorialPlayerId: _ignored2,
                 __tutorialAiCommand: _ignored3,
                 __aiTraceToken: _ignored4,
+                __manualAiSeatId: _ignored5,
                 ...rest
             } = payloadRecord;
             return rest;
@@ -44,6 +50,7 @@ export function parseDispatchPayloadMeta(payload: unknown): DispatchPayloadMeta 
         internalOverrideId,
         tutorialOverrideId,
         aiTraceToken,
+        legacyManualAiSeatId,
         isTutorialAiCommand,
         normalizedPayload,
     };

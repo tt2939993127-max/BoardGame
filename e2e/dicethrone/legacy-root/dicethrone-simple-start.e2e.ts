@@ -1512,6 +1512,64 @@ const buildFourPlayerMeteorAllOpponentsState = (state: any) => {
 };
 
 test.describe('DiceThrone Simple Start', () => {
+    test('Online AI setup: host 选完角色后普通 AI 应自动选角色并 ready', async ({ browser }, testInfo) => {
+        test.setTimeout(150000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL, {
+            minimumActionDelayMs: 0,
+        });
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await resolveOnlineAiRoomEntry(hostPage, 30000);
+            await waitForCharacterSelection(hostPage, 20000);
+            await selectCharacter(hostPage, 'tianshi');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const aiSelected = state.core?.selectedCharacters?.['1'] ?? null;
+                return state.core?.selectedCharacters?.['0'] === 'tianshi'
+                    && typeof aiSelected === 'string'
+                    && aiSelected.length > 0
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true
+                    && state.core?.players?.['1']?.characterId === aiSelected;
+            }, {
+                timeout: 30000,
+                intervals: [250, 500, 800, 1000],
+                message: '等待 DiceThrone 真人选角后普通 AI 自动完成选角与 ready',
+            }).toBe(true);
+
+            const afterSetupState = await getMatchState(matchId, hostPage);
+            const aiSelected = afterSetupState.core?.selectedCharacters?.['1'];
+            expect(aiSelected).toBeTruthy();
+            expect(aiSelected).not.toBe('unselected');
+            expect(afterSetupState.core?.players?.['1']?.characterId).toBe(aiSelected);
+
+            if (afterSetupState.core?.hostStarted === false) {
+                const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+                await expect(startButton).toBeEnabled({ timeout: 10000 });
+            } else {
+                await waitForGameBoard(hostPage, 30000);
+                const boardState = await getMatchState(matchId, hostPage);
+                expect(Object.keys(boardState.core?.players ?? {})).toContain('1');
+            }
+        } finally {
+            await setup.hostPage.close({ runBeforeUnload: false }).catch(() => undefined);
+            await Promise.race([
+                setup.hostContext.close(),
+                new Promise<void>((resolve) => {
+                    setTimeout(resolve, 5000);
+                }),
+            ]).catch(() => undefined);
+        }
+    });
+
     test('Online HUD: transport 未就绪时不应误报离线横幅', async ({ browser }, testInfo) => {
         test.setTimeout(60000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;

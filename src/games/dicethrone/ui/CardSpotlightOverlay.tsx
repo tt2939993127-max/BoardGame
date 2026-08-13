@@ -11,15 +11,12 @@ import React from 'react';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import type { CardPreviewRef } from '../../../core';
 import { UI_Z_INDEX } from '../../../core';
-import type { DieFace } from '../types';
 import SpotlightContainer from './SpotlightContainer';
-import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 
 const SPOTLIGHT_CARD_WIDTH = '16vw';
 const SPOTLIGHT_CARD_ASPECT_RATIO = 0.61;
-const BONUS_DIE_VISIBLE_ROLL_DURATION_MS = 1600;
 
 /** 汇总文本组件（显示伤害加成等信息） */
 const SummaryText: React.FC<{
@@ -141,7 +138,6 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
         return null;
     }
     const currentCardId = getCardIdFromSpotlightItem(currentItem);
-    const hasBonusDice = !!currentItem.bonusDice && currentItem.bonusDice.length > 0;
     const hasSummaryText = !!currentItem.summaryText;
 
 
@@ -167,7 +163,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                 data-card-id={currentCardId}
                 data-player-id={String(currentItem.playerId)}
                 data-spotlight-item-id={currentItem.id}
-                className={hasBonusDice || hasSummaryText ? 'flex items-center gap-[1.5vw]' : undefined}
+                className={hasSummaryText ? 'flex items-center gap-[1.5vw]' : undefined}
             >
                 {/* 卡牌（左） */}
                 <CardPreview
@@ -182,37 +178,9 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                     }}
                 />
 
-                {/* 额外骰子（右）- 支持多颗骰子横向排列；无骰子时仍可显示首次结果说明 */}
-                {(hasBonusDice || hasSummaryText) && (
+                {/* 奖励骰不再进入中央特写；右侧骰盘是唯一的骰子展示与确认入口。 */}
+                {hasSummaryText && (
                     <div className="flex flex-col items-center gap-[1vw] relative z-[1]">
-                        {/* 骰子行 */}
-                        {hasBonusDice && (
-                            <div className="flex items-center gap-[1vw]" data-testid="card-spotlight-bonus-dice">
-                                {currentItem.bonusDice!.map((die, index) => {
-                                    const dieIdentityKey = typeof die.index === 'number'
-                                        ? `die-${die.index}`
-                                        : `die-pos-${index}`;
-                                    return (
-                                        <div key={dieIdentityKey} data-testid="card-spotlight-die">
-                                            <BonusDieSpotlightContent
-                                                value={die.value}
-                                                face={die.face}
-                                                effectKey={die.effectKey}
-                                                effectParams={die.effectParams}
-                                                locale={locale}
-                                                size="10vw"
-                                                rollingDurationMs={BONUS_DIE_VISIBLE_ROLL_DURATION_MS + index * 120}
-                                                presentationKey={die.presentationKey}
-                                                animateOnMount={die.presentationKind !== 'choice'}
-                                                characterId={die.characterId}
-                                                compact={true}
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        
                         {/* 汇总文本（如"2个弓面：伤害+2"） */}
                         {currentItem.summaryText && (
                             <SummaryText

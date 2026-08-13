@@ -1,6 +1,5 @@
 import { getGameServerUrl } from '../config/server';
 import type {
-    MatchRoomOnlineAiRuntimeModel,
     MatchRoomOnlineBoardRuntimeModel,
     MatchRoomOnlineConnectionModel,
     MatchRoomOnlineOverlayBridgesModel,
@@ -14,34 +13,6 @@ import type {
     MatchRoomOnlineStageAdapter,
     MatchRoomTutorialStageAdapter,
 } from './useMatchRoomPageRuntimeModel';
-
-function buildMatchRoomOnlineAiRuntimeModel(args: {
-    matchId: string;
-    seatRuntime: MatchRoomOnlineSeatRuntimeAdapter;
-}): MatchRoomOnlineAiRuntimeModel | null {
-    const { matchId, seatRuntime: ai } = args;
-
-    if (
-        !ai.enabled
-        || !ai.engineConfig
-        || Object.keys(ai.seatControllers).length === 0
-    ) {
-        return null;
-    }
-
-    return {
-        enabled: true,
-        server: getGameServerUrl(),
-        matchId,
-        engineConfig: ai.engineConfig,
-        seatControllers: ai.seatControllers,
-        seatCredentials: ai.seatCredentials,
-        autoAcceptedPlayerIds: ai.autoAcceptedPlayerIds,
-        onForceEndAiPhaseReady: ai.onForceEndAiPhaseReady,
-        onManualSetupDispatchReady: ai.onManualSetupDispatchReady,
-        dispatchManualSetupCommand: ai.dispatchManualSetupCommand,
-    };
-}
 
 function buildMatchRoomOnlineOverlayBridgesModel(args: {
     matchId: string;
@@ -77,20 +48,13 @@ function buildMatchRoomOnlineOverlayBridgesModel(args: {
 }
 
 function buildMatchRoomOnlineSeatBridgeModel(args: {
-    matchId: string;
     seatRuntime: MatchRoomOnlineSeatRuntimeAdapter;
 }): MatchRoomOnlineSeatBridgeModel {
-    const { matchId, seatRuntime } = args;
-    const aiRuntime = buildMatchRoomOnlineAiRuntimeModel({
-        matchId,
-        seatRuntime,
-    });
+    const { seatRuntime } = args;
 
     return {
         seatControllers: seatRuntime.seatControllers,
-        dispatchManualSetupCommand: seatRuntime.dispatchManualSetupCommand,
         engineConfig: seatRuntime.engineConfig,
-        ai: aiRuntime,
     };
 }
 
@@ -185,7 +149,6 @@ export function buildMatchRoomOnlineBoardRuntimeModel(args: {
     }
 
     const seatBridge = buildMatchRoomOnlineSeatBridgeModel({
-        matchId,
         seatRuntime: stage.seatRuntime,
     });
 
@@ -195,7 +158,7 @@ export function buildMatchRoomOnlineBoardRuntimeModel(args: {
             gameId,
             matchId,
             connection: stage.connection,
-            autoAcceptedPlayerIds: seatBridge.ai?.autoAcceptedPlayerIds ?? [],
+            autoAcceptedPlayerIds: stage.seatRuntime.autoAcceptedPlayerIds,
             tLobby,
         }),
         overlays: buildMatchRoomOnlineOverlayBridgesModel({

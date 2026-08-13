@@ -158,7 +158,16 @@ export const handleAttackDefenseResolved: EventHandler<Extract<DiceThroneEvent, 
         && (!defenseAbilityId || pa.defenseAbilityId === defenseAbilityId);
 
     return matches
-        ? { ...state, pendingAttack: { ...pa, defenseResolved: true } }
+        ? {
+            ...state,
+            pendingAttack: {
+                ...pa,
+                defenseResolved: true,
+                // 防御效果已完成；若其奖励骰仍待确认，确认后从主伤害继续，
+                // 不得再次执行防御技能。
+                settlementStage: pa.settlementStage === 'preDamage' ? 'afterDefense' : pa.settlementStage,
+            },
+        }
         : state;
 };
 

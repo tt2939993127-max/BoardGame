@@ -2917,7 +2917,7 @@ describe('王权骰铸流程测试', () => {
             expect(passed.finalState.core.players[attackerId].resources[RESOURCE_IDS.CP]).toBe(attackerStartingCp + 2);
         });
 
-        it('奖励骰有可重投能力时先开放响应，能力重投并让过后必须自动结算', () => {
+        it('奖励骰有可重投能力时先开放响应，能力重投并让过后必须等待骰主普通确认', () => {
             const runner = createRunner(createQueuedRandom([3, 6]));
             const rolled = runner.run({
                 name: '教皇税可重投奖励骰',
@@ -2955,19 +2955,30 @@ describe('王权骰铸流程测试', () => {
             runner.setState(rerolled.finalState);
             const passed = runner.dispatch('RESPONSE_PASS', { playerId: '0' });
             expect(passed.success).toBe(true);
-            expect(passed.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(passed.finalState.core.pendingBonusDiceSettlement?.dice[0]?.value).toBe(6);
             expect(passed.finalState.sys.responseWindow?.current).toBeUndefined();
-            expect(getCurrentInteractionSummary(passed.finalState).id).toBeUndefined();
+            expect(getCurrentInteractionSummary(passed.finalState)).toMatchObject({
+                kind: 'dt:bonus-dice',
+                playerId: '0',
+            });
+            const cpBeforeConfirm = passed.finalState.core.players['0'].resources[RESOURCE_IDS.CP] ?? 0;
+
+            runner.setState(passed.finalState);
+            const confirmed = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+            expect(confirmed.success).toBe(true);
+            expect(confirmed.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(getCurrentInteractionSummary(confirmed.finalState).id).toBeUndefined();
+            expect(confirmed.finalState.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(cpBeforeConfirm + 3);
         });
 
         it.each([
             { attackerId: '0' as PlayerId, responderId: '1' as PlayerId },
             { attackerId: '1' as PlayerId, responderId: '0' as PlayerId },
-        ])('一掷千金没有合法改骰响应时按当前骰面自动结算，不创建空的确认交互', ({ attackerId, responderId }) => {
+        ])('一掷千金没有合法改骰响应时仍等待骰主普通确认，不自动结算', ({ attackerId, responderId }) => {
             const runner = createRunner(createQueuedRandom([3]));
             const attackerStartingCp = 5;
             const rolled = runner.run({
-                name: '一掷千金无响应自动结算',
+                name: '一掷千金无响应等待普通确认',
                 setup: createSetupWithHand(['card-one-throw-fortune'], {
                     playerId: attackerId,
                     cp: attackerStartingCp,
@@ -2988,10 +2999,22 @@ describe('王权骰铸流程测试', () => {
             });
 
             expect(rolled.assertionErrors).toEqual([]);
-            expect(rolled.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(rolled.finalState.core.pendingBonusDiceSettlement?.sourceAbilityId).toBe('card-one-throw-fortune');
             expect(rolled.finalState.sys.responseWindow?.current).toBeUndefined();
-            expect(getCurrentInteractionSummary(rolled.finalState).id).toBeUndefined();
-            expect(rolled.finalState.core.players[attackerId].resources[RESOURCE_IDS.CP]).toBe(attackerStartingCp + 2);
+            expect(getCurrentInteractionSummary(rolled.finalState)).toMatchObject({
+                kind: 'dt:bonus-dice',
+                playerId: attackerId,
+            });
+            expect(rolled.finalState.core.players[attackerId].resources[RESOURCE_IDS.CP]).toBe(attackerStartingCp);
+
+            runner.setState(rolled.finalState);
+            const confirmed = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: attackerId });
+            expect(confirmed.success).toBe(true);
+            expect(confirmed.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(getCurrentInteractionSummary(confirmed.finalState).id).toBeUndefined();
+            expect(confirmed.finalState.core.currentRollContext?.kind).toBe('bonus');
+            expect(confirmed.finalState.core.currentRollContext?.display.replayOnly).toBe(true);
+            expect(confirmed.finalState.core.players[attackerId].resources[RESOURCE_IDS.CP]).toBe(attackerStartingCp + 2);
         });
 
         it('响应窗口：对手仅持有真正只能改自己骰子的卡时不应打开 afterRollConfirmed', () => {
@@ -4468,7 +4491,7 @@ describe('王权骰铸流程测试', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
-        it('无太极时直接结算伤害', () => {
+        it('无太极时仍等待确认，并在确认后按最终骰面结算伤害', () => {
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
 
@@ -4481,9 +4504,7 @@ describe('王权骰铸流程测试', () => {
                 assertFn: assertState,
                 silent: true,
             });
-            const result = runner.run({
-                name: '无太极时直接结算',
-                commands: [
+            const commands = [
                     ...advanceTo('offensiveRoll'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -4492,54 +4513,31 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // -> 按当前骰面自动结算 → main2
-                ],
-                expect: {
-                    turnPhase: 'main2',
-                    pendingBonusDiceSettlement: null,
-                    players: {
-                        '1': { hp: 41 },
-                    },
-                },
-            });
-            expect(result.assertionErrors).toEqual([]);
-        });
+                    cmd('ADVANCE_PHASE', '1'), // -> 展示奖励骰，等待攻击方确认
+                ];
 
-        it('无重投权的 displayOnly 奖励骰会自动结算，不留下任何人可确认的交互', () => {
-            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
-            const random = createQueuedRandom(diceValues);
+            for (const command of commands) {
+                const result = runner.dispatch(command.type, { playerId: command.playerId, ...command.payload as object });
+                expect(result.success).toBe(true);
+            }
 
-            const runner = new GameTestRunner({
-                domain: DiceThroneDomain,
-                systems: testSystems,
-                playerIds: ['0', '1'],
-                random,
-                setup: createThunderStrikeSetup({ taiji: 0 }),
-                assertFn: assertState,
-                silent: true,
+            const awaitingConfirmation = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '1' });
+            expect(awaitingConfirmation.success).toBe(false);
+            expect(awaitingConfirmation.error).toBe('player_mismatch');
+            expect(awaitingConfirmation.finalState.core.pendingBonusDiceSettlement).toMatchObject({
+                sourceAbilityId: 'thunder-strike',
+                attackerId: '0',
+                displayOnly: true,
             });
-            const result = runner.run({
-                name: 'displayOnly 自动结算',
-                commands: [
-                    ...advanceTo('offensiveRoll'),
-                    cmd('ROLL_DICE', '0'),
-                    cmd('CONFIRM_ROLL', '0'),
-                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
-                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击并自动收口
-                ],
-                expect: {
-                    turnPhase: 'main2',
-                    pendingBonusDiceSettlement: null,
-                    players: {
-                        '1': { hp: 41 },
-                    },
-                },
-            });
-            expect(result.assertionErrors).toEqual([]);
+            expect(awaitingConfirmation.finalState.core.pendingBonusDiceSettlement?.dice.map((die) => die.value)).toEqual([2, 3, 4]);
+            expect(awaitingConfirmation.finalState.core.players['1'].resources.hp).toBe(50);
+            expect(awaitingConfirmation.finalState.sys.phase).toBe('defensiveRoll');
+
+            const settled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+            expect(settled.success).toBe(true);
+            expect(settled.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
+            expect(settled.finalState.core.players['1'].resources.hp).toBe(41);
+            expect(settled.finalState.sys.phase).toBe('main2');
         });
 
         it('非 displayOnly 结算仍只允许攻击方确认', () => {

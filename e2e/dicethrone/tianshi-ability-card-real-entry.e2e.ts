@@ -2,7 +2,7 @@
  * DiceThrone 炽天使技能与专属卡真实入口补证。
  *
  * 本文件只走当前 /play/dicethrone 测试入口：技能点击玩家板槽位，卡牌从真实手牌拖拽，
- * 目标选择点击真实玩家卡片，奖励骰通过真实浮层完成重掷/确认，最后回读 TestHarness 权威状态。
+ * 目标选择点击真实玩家卡片，奖励骰始终由右侧骰盘完成重掷/确认，最后回读 TestHarness 权威状态。
  */
 
 import type { Page } from '@playwright/test';
@@ -12,7 +12,7 @@ import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { ALL_TOKEN_DEFINITIONS } from '../../src/games/dicethrone/domain/characters';
 import { setDiceThroneBonusDiceValues } from '../helpers/dicethrone';
-import { expectBonusDiceAutoSettled, getRightTrayDie, settleCurrentBonusDice } from './bonus-dice-flow';
+import { expectRightTrayBonusDiceConfirmation, getRightTrayDie, settleCurrentBonusDice, waitForDiceThroneVisualIdle } from './bonus-dice-flow';
 import '../../src/games/dicethrone/domain';
 
 type JsonRecord = Record<string, any>;
@@ -347,7 +347,7 @@ const waitForAttackResolved = async (game: GameTestContext, sourceAbilityId: str
 };
 
 test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
-    test('神圣惩戒应从真实槽位投出 4 个额外骰并收口到最终伤害、Token 和状态', async ({ page, game }, testInfo) => {
+    test('神圣惩戒应先在右侧显示 4 个额外骰，确认后才收口到最终伤害、Token 和状态', async ({ page, game }, testInfo) => {
         await setupTianshiScene(game, {
             phase: 'offensiveRoll',
             dice: [1, 4, 5, 6, 2],
@@ -361,7 +361,31 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             .toBe('divine-punishment');
 
         await advancePhase(page);
-        await expectBonusDiceAutoSettled(page, () => readState(game), { expectedDiceCount: 4 });
+        await expectRightTrayBonusDiceConfirmation(page, () => readState(game), { sourceAbilityId: 'divine-punishment' });
+        const diceTray = page.getByTestId('dicethrone-2d-dice-tray');
+        await expect(diceTray.getByTestId('dice-2d')).toHaveCount(4);
+        await expect(diceTray.getByTestId('die-button-0')).toHaveAttribute('data-clickable', 'false');
+        await expect.poll(async () => {
+            const state = await readState(game);
+            return {
+                pendingSettlement: state.core?.pendingBonusDiceSettlement ?? null,
+                pendingAttack: state.core?.pendingAttack ?? null,
+                opponentHp: state.core?.players?.['1']?.resources?.[RESOURCE_IDS.HP] ?? null,
+                flight: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.FLIGHT] ?? 0,
+                purify: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.PURIFY] ?? 0,
+                dazzle: state.core?.players?.['1']?.statusEffects?.[STATUS_IDS.DAZZLE] ?? 0,
+            };
+        }, { timeout: 10000 }).toMatchObject({
+            pendingSettlement: expect.any(Object),
+            opponentHp: 50,
+            flight: 0,
+            purify: 0,
+            dazzle: 0,
+        });
+        // 骰子翻转结束后才截图，保证玩家能读到四个最终骰面而不是动画中间帧。
+        await waitForDiceThroneVisualIdle(page);
+        await game.screenshot('tianshi-divine-punishment-right-tray-before-confirm', testInfo);
+        await settleCurrentBonusDice(page, () => readState(game), { sourceAbilityId: 'divine-punishment' });
         await expect.poll(async () => {
             const state = await readState(game);
             return {
@@ -380,7 +404,9 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             purify: 1,
             dazzle: 1,
         });
-        await game.screenshot('tianshi-divine-punishment-after-auto-settle', testInfo);
+        await expect(page.getByTestId('dt-top-header-1-hp')).toHaveText('48', { timeout: 10000 });
+        await waitForDiceThroneVisualIdle(page);
+        await game.screenshot('tianshi-divine-punishment-after-confirm', testInfo);
     });
 
     test('圣刃应从真实技能槽位结算基础攻击并回到无临时攻击状态', async ({ page, game }, testInfo) => {
@@ -492,7 +518,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await game.screenshot('tianshi-heavenly-severing-after-closeout', testInfo);
     });
 
-    test('凯旋归来奖励骰掷出 6 时应使攻击不可防御并直接结算', async ({ page, game }, testInfo) => {
+    test('凯旋归来奖励骰掷出 6 时应在右侧确认后使攻击不可防御并结算', async ({ page, game }, testInfo) => {
         await setupTianshiScene(game, {
             phase: 'offensiveRoll',
             dice: [1, 2, 3, 4, 5],
@@ -504,7 +530,11 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await expect.poll(async () => (await readState(game)).core?.pendingAttack?.sourceAbilityId ?? null, { timeout: 10000 })
             .toBe('triumphant-return');
         await advancePhase(page);
-        await expectBonusDiceAutoSettled(page, () => readState(game), { expectedDiceCount: 1 });
+        await expectRightTrayBonusDiceConfirmation(page, () => readState(game), { sourceAbilityId: 'triumphant-return' });
+        await expect(page.getByTestId('dicethrone-2d-dice-tray').getByTestId('dice-2d')).toHaveCount(1);
+        await waitForDiceThroneVisualIdle(page);
+        await game.screenshot('tianshi-triumphant-return-right-tray-before-confirm', testInfo);
+        await settleCurrentBonusDice(page, () => readState(game), { sourceAbilityId: 'triumphant-return' });
         await expect.poll(async () => {
             const state = await readState(game);
             return {

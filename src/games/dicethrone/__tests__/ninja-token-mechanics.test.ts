@@ -53,6 +53,20 @@ const injectNinjutsuOffensiveRollEndPrompt = (state: ReturnType<ReturnType<typeo
     });
 };
 
+const confirmBonusDice = (state: ReturnType<ReturnType<typeof createHeroMatchup>>) => {
+    const runner = new GameTestRunner({
+        domain: DiceThroneDomain,
+        systems: testSystems,
+        playerIds: ['0', '1'],
+        random: createQueuedRandom([1]),
+        setup: () => state,
+    });
+    runner.setState(state);
+    const result = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+    expect(result.success).toBe(true);
+    return result.finalState;
+};
+
 describe('DiceThrone Ninja Token 机制', () => {
     it('已有烟雾弹时，瞬身 II 的第二个烟雾弹应延迟到旧烟雾弹使用后获得', () => {
         const state = createHeroMatchup('ninja', 'treant')(['0', '1'], createQueuedRandom([1]));
@@ -224,10 +238,13 @@ describe('DiceThrone Ninja Token 机制', () => {
 
         expect(result.events.some(event => event.type === 'BONUS_DIE_ROLLED')).toBe(true);
         expect(result.state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(0);
-        expect(result.state.core.pendingAttack?.bonusDamage).toBe(2);
+        expect(result.state.core.pendingAttack?.bonusDamage).toBeUndefined();
         expect(result.state.core.pendingAttack?.isDefendable).toBe(true);
         expect(result.state.core.pendingDamage).toBeUndefined();
         expect(result.state.core.pendingAttack?.settlementStage).toBe('preDamage');
+
+        const settledState = confirmBonusDice(result.state);
+        expect(settledState.core.pendingAttack?.bonusDamage).toBe(2);
     });
 
     it('斩击 II postDamage 应使用攻击骰快照判断三个相同数字，防御阶段不读取当前防御骰', () => {
@@ -276,13 +293,14 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(useResult.success).toBe(true);
         if (!useResult.success) return;
 
-        const followupPrompt = getSimpleChoicePrompt(useResult.state, 'slash');
+        const settledState = confirmBonusDice(useResult.state);
+        const followupPrompt = getSimpleChoicePrompt(settledState, 'slash');
         expect(followupPrompt.options.map(option => option.value?.customId)).toContain('ninja-ninjutsu-poison');
 
         const poisonOption = followupPrompt.options.find(option => option.value?.customId === 'ninja-ninjutsu-poison');
         expect(poisonOption).toBeTruthy();
 
-        const resolveResult = respondToPrompt(useResult.state, poisonOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
+        const resolveResult = respondToPrompt(settledState, poisonOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
 
         expect(resolveResult.success).toBe(true);
         if (!resolveResult.success) return;
@@ -311,11 +329,12 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(useResult.success).toBe(true);
         if (!useResult.success) return;
 
-        const followupPrompt = getSimpleChoicePrompt(useResult.state, 'slash');
+        const settledState = confirmBonusDice(useResult.state);
+        const followupPrompt = getSimpleChoicePrompt(settledState, 'slash');
         const bonusOption = followupPrompt.options.find(option => option.value?.customId === 'ninja-ninjutsu-bonus-damage');
         expect(bonusOption).toBeTruthy();
 
-        const resolveResult = respondToPrompt(useResult.state, bonusOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
+        const resolveResult = respondToPrompt(settledState, bonusOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
         expect(resolveResult.success).toBe(true);
         if (!resolveResult.success) return;
 
@@ -341,11 +360,12 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(useResult.success).toBe(true);
         if (!useResult.success) return;
 
-        const followupPrompt = getSimpleChoicePrompt(useResult.state, 'slash');
+        const settledState = confirmBonusDice(useResult.state);
+        const followupPrompt = getSimpleChoicePrompt(settledState, 'slash');
         const undefendableOption = followupPrompt.options.find(option => option.value?.customId === 'ninja-ninjutsu-undefendable');
         expect(undefendableOption).toBeTruthy();
 
-        const resolveResult = respondToPrompt(useResult.state, undefendableOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
+        const resolveResult = respondToPrompt(settledState, undefendableOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
 
         expect(resolveResult.success).toBe(true);
         if (!resolveResult.success) return;
@@ -494,9 +514,7 @@ describe('DiceThrone Ninja Token 机制', () => {
 
         expect(secondSettledState.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(0);
         expect(secondSettledState.core.pendingAttack?.bonusDamage).toBe(4);
-
-        const finalPrompt = getSimpleChoicePrompt(secondSettledState, 'slash');
-        expect(finalPrompt.options.map(option => option.value?.customId)).toContain('skip');
+        expect(secondSettledState.sys.interaction.current).toBeUndefined();
     });
 
     it('忍术掷出 6 并选择不可防御后，若仍有剩余忍术应继续允许再用一次', () => {
@@ -515,11 +533,12 @@ describe('DiceThrone Ninja Token 机制', () => {
         expect(firstUse.success).toBe(true);
         if (!firstUse.success) return;
 
-        const followupPrompt = getSimpleChoicePrompt(firstUse.state, 'slash');
+        const firstSettledState = confirmBonusDice(firstUse.state);
+        const followupPrompt = getSimpleChoicePrompt(firstSettledState, 'slash');
         const undefendableOption = followupPrompt.options.find(option => option.value?.customId === 'ninja-ninjutsu-undefendable');
         expect(undefendableOption).toBeTruthy();
 
-        const resolveResult = respondToPrompt(firstUse.state, undefendableOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
+        const resolveResult = respondToPrompt(firstSettledState, undefendableOption!.id, '0', createQueuedRandom([1]), ['0', '1']);
         expect(resolveResult.success).toBe(true);
         if (!resolveResult.success) return;
 

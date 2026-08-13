@@ -1016,7 +1016,18 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             playerIds,
         );
         expect(responded.success).toBe(true);
-        expect(responded.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(responded.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            customResolutionId: 'artificer-wrench-strike-branch',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 6,
+                face: 'electricity',
+                effectKey: 'bonusDie.effect.artificerWrenchStrikeElectricity',
+                presentationKind: 'choice',
+            }],
+        });
 
         const bonusDie = eventsOfType(responded.events as DiceThroneEvent[], 'BONUS_DIE_ROLLED')[0];
         expect(bonusDie?.payload).toMatchObject({
@@ -1025,7 +1036,15 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             effectKey: 'bonusDie.effect.artificerWrenchStrikeElectricity',
             presentationKind: 'choice',
         });
-        const settled = responded;
+        const settled = executePipeline(
+            pipelineConfig,
+            responded.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            playerIds,
+        );
+        expect(settled.success).toBe(true);
+        if (!settled.success) return;
         expect(settled.state.sys.phase).toBe('defensiveRoll');
         expect(getCurrentInteractionId(settled.state)).toBeUndefined();
         expect(settled.state.core.pendingBonusDiceSettlement).toBeUndefined();
@@ -1416,10 +1435,33 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         expect(selectedTarget.success).toBe(true);
         if (!selectedTarget.success) return;
         const next = selectedTarget.state.core;
-        expect(next.pendingBonusDiceSettlement).toBeUndefined();
-
+        expect(next.pendingBonusDiceSettlement).toMatchObject({
+            sourceAbilityId: 'card-artificer-overdrive',
+            targetId: '3',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 6,
+                face: 'electricity',
+                effectKey: 'bonusDie.effect.artificerOverdriveElectricity',
+            }],
+        });
         expect(next.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
-        expect(next.players['3'].statusEffects[STATUS_IDS.NANOBOMB]).toBe(1);
+        expect(next.players['3'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
+
+        const confirmed = executePipeline(
+            pipelineConfig,
+            selectedTarget.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            ['0', '1', '2', '3'],
+        );
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+
+        expect(confirmed.state.core.players['1'].statusEffects[STATUS_IDS.NANOBOMB] ?? 0).toBe(0);
+        expect(confirmed.state.core.players['3'].statusEffects[STATUS_IDS.NANOBOMB]).toBe(1);
     });
 
     it('万能电流作为红色即时牌在普通对方回合也可打出并结算合成器', () => {
@@ -1441,11 +1483,34 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerOverdriveGear',
         });
-        expect(played.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            sourceAbilityId: 'card-artificer-overdrive',
+            attackerId: '1',
+            targetId: '0',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 4,
+                face: 'gear',
+                effectKey: 'bonusDie.effect.artificerOverdriveGear',
+            }],
+        });
         expect(played.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-overdrive');
         expect(played.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-overdrive');
+        expect(played.state.core.players['1'].tokens[TOKEN_IDS.SYNTH] ?? 0).toBe(0);
 
-        expect(played.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(confirmed.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(1);
     });
 
     it('这玩意儿真棒在奖励骰确认后按骰值一半向上取整获得合成器', () => {
@@ -1465,8 +1530,33 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
         });
-        expect(played.state.core.pendingBonusDiceSettlement).toBeUndefined();
-        expect(played.state.core.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            customResolutionId: 'artificer-perfectly-calibrated-roll',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 5,
+                face: 'gear',
+                effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
+                effectParams: { value: 5, synth: 3 },
+            }],
+        });
+        expect(played.state.core.players['0'].tokens[TOKEN_IDS.SYNTH] ?? 0).toBe(0);
+
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(eventsOfType(confirmed.events as DiceThroneEvent[], 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(confirmed.state.core.players['0'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
     });
 
     it('这玩意儿真棒作为红色即时牌在普通对方回合也可打出，并在奖励骰确认后结算合成器', () => {
@@ -1488,11 +1578,35 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
             face: 'gear',
             effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
         });
-        expect(played.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(played.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            customResolutionId: 'artificer-perfectly-calibrated-roll',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 5,
+                face: 'gear',
+                effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated',
+                effectParams: { value: 5, synth: 3 },
+            }],
+        });
         expect(played.state.core.players['1'].hand.map(card => card.id)).not.toContain('card-artificer-perfectly-calibrated');
         expect(played.state.core.players['1'].discard.map(card => card.id)).toContain('card-artificer-perfectly-calibrated');
+        expect(played.state.core.players['1'].tokens[TOKEN_IDS.SYNTH] ?? 0).toBe(0);
 
-        expect(played.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            played.state,
+            command('SKIP_BONUS_DICE_REROLL', '1'),
+            fixedRandom,
+            ['0', '1'],
+        );
+
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(eventsOfType(confirmed.events as DiceThroneEvent[], 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(confirmed.state.core.players['1'].tokens[TOKEN_IDS.SYNTH]).toBe(3);
     });
 
     it('电路图 II 额外获得 2 CP', () => {
@@ -2151,7 +2265,7 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         });
     });
 
-    it('治疗机器人通过正式响应命令掷骰后，无人可改骰会自动治疗并释放攻击流程', () => {
+    it('治疗机器人通过正式响应命令掷骰后，需普通确认奖励骰再治疗并释放攻击流程', () => {
         const playerIds: PlayerId[] = ['0', '1'];
         const state = createHeroMatchup('artificer', 'monk')(playerIds, fixedRandom);
         state.sys = createInitialSystemState(playerIds, testSystems, undefined);
@@ -2188,11 +2302,36 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         );
 
         expect(used.success).toBe(true);
-        expect(used.state.core.pendingBonusDiceSettlement).toBeUndefined();
-        expect(getCurrentInteractionId(used.state)).toBeUndefined();
-        expect(used.state.sys.responseWindow?.current).toBeUndefined();
-        expect(used.state.core.players['0'].resources[RESOURCE_IDS.HP]).toBe(42);
-        expect(used.state.core.players['0'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]).toMatchObject({
+        expect(used.state.core.pendingBonusDiceSettlement).toMatchObject({
+            displayOnly: true,
+            customResolutionId: 'artificer-heal-bot-use',
+            maxRerollCount: 0,
+            allowDiceModification: true,
+            dice: [{
+                value: 4,
+                face: 'gear',
+                effectKey: 'bonusDie.effect.artificerHealBot',
+                effectParams: { value: 4, heal: 2 },
+            }],
+        });
+        expect(used.state.core.players['0'].resources[RESOURCE_IDS.HP]).toBe(40);
+
+        const confirmed = executePipeline(
+            { domain: DiceThroneDomain, systems: testSystems },
+            used.state,
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            fixedRandom,
+            playerIds,
+        );
+
+        expect(confirmed.success).toBe(true);
+        if (!confirmed.success) return;
+        expect(eventsOfType(confirmed.events as DiceThroneEvent[], 'BONUS_DICE_SETTLED')).toHaveLength(1);
+        expect(confirmed.state.core.pendingBonusDiceSettlement).toBeUndefined();
+        expect(getCurrentInteractionId(confirmed.state)).toBeUndefined();
+        expect(confirmed.state.sys.responseWindow?.current).toBeUndefined();
+        expect(confirmed.state.core.players['0'].resources[RESOURCE_IDS.HP]).toBe(42);
+        expect(confirmed.state.core.players['0'].artificerBotState?.[TOKEN_IDS.HEAL_BOT]).toMatchObject({
             built: true,
             upgraded: false,
             activationsUsedThisTurn: 1,

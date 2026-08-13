@@ -225,7 +225,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const currentPendingBonusDiceSettlement = isCurrentBonusRollSettlement(G)
         ? G.pendingBonusDiceSettlement
         : undefined;
-    // 奖励骰的唯一展示载体是右侧骰盘。自动结算后 pending 会被清掉，
+    // 奖励骰的唯一展示载体是右侧骰盘。普通确认结算后 pending 会被清掉，
     // 但 currentRollContext 仍保留最终骰面供回看，因此不能再以 pending
     // 是否存在来决定旧事件流特写是否应出现。
     const isRightTrayBonusDiceContext = G.currentRollContext?.kind === 'bonus';
@@ -389,7 +389,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // Atlas 配置（状态图标仍需异步加载）
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
 
-    // 使用 useCardSpotlight Hook 管理卡牌和额外骰子特写
+    // 卡牌特写只承接卡牌；所有奖励骰始终由右侧 2D 骰盘承接。
     const {
         cardSpotlightQueue,
         handleCardSpotlightClose,
@@ -399,7 +399,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         opponentName,
         isSpectator,
         selectedCharacters: G.selectedCharacters,
-        suppressBonusDiceInCardSpotlight: isRightTrayBonusDiceContext,
+        suppressStandaloneBonusDie: true,
+        suppressBonusDiceInCardSpotlight: true,
         cacheScope: rawG.sys.matchId
             ?? `${Object.entries(G.selectedCharacters ?? {})
                 .map(([pid, characterId]) => `${pid}:${characterId}`)
@@ -656,12 +657,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const isViewRolling = viewPid === rollerId;
     const rollConfirmed = G.rollConfirmed;
     const isCompareRoll = G.currentRollContext?.kind === 'compare';
+    const isCurrentBonusDiceSettlementActive = isCurrentBonusRollSettlement(G, G.pendingBonusDiceSettlement);
     
     // availableAbilityIds 计算：
     // 1. 响应窗口打开时，显示响应者的可用技能（不限于掷骰阶段）
     // 2. 掷骰阶段，显示掷骰者的可用技能
     // 3. 其他情况，不显示技能
     const availableAbilityIds = React.useMemo(() => {
+        // 奖励骰结算期由右侧 2D 骰盘承接；不能用奖励骰面重新点亮普通攻击技能。
+        if (isCurrentBonusDiceSettlementActive) {
+            return [];
+        }
         // 响应窗口打开时，显示当前响应者的可用技能
         if (isResponseWindowOpen && currentResponderId) {
             // 如果当前视角是响应者，显示响应者的可用技能
@@ -674,9 +680,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }
         // 掷骰阶段，显示掷骰者的可用技能
         return isViewRolling ? access.availableAbilityIds : [];
-    }, [isResponseWindowOpen, currentResponderId, viewPid, isViewRolling, access.availableAbilityIds, G, currentPhase]);
+    }, [isCurrentBonusDiceSettlementActive, isResponseWindowOpen, currentResponderId, viewPid, isViewRolling, access.availableAbilityIds, G, currentPhase]);
     
-    const availableAbilityIdsForRoller = access.availableAbilityIds;
+    const availableAbilityIdsForRoller = isCurrentBonusDiceSettlementActive ? [] : access.availableAbilityIds;
     const selectedAbilityId = currentPhase === 'defensiveRoll'
         ? (isViewRolling ? G.pendingAttack?.defenseAbilityId : undefined)
         : currentPhase === 'offensiveRoll'
@@ -825,11 +831,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const canHighlightAbility = (
         (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' || hasRolled))
         || isManualSelfResponseWindow
-    ) && !hasBlockingAttackShowcase;
+    ) && !hasBlockingAttackShowcase && !isCurrentBonusDiceSettlementActive;
     const canSelectAbility = (
         (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed))
         || isManualSelfResponseWindow
-    ) && !hasBlockingAttackShowcase;
+    ) && !hasBlockingAttackShowcase && !isCurrentBonusDiceSettlementActive;
 
     // 同一 slot 多 variant 选择：玩家点击 slot 时，如果该 slot 有多个 variant 同时满足，弹窗让玩家选
     const [abilityChoiceOptions, setAbilityChoiceOptions] = React.useState<AbilityChoiceOption[]>([]);
@@ -1125,23 +1131,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         hasKeptDice: currentRollDice.some((die) => die.isKept),
     });
     const pendingBonusDiceRoutedToRightTray = shouldUseRightTrayForPendingBonusDice(currentPendingBonusDiceSettlement);
+    const isCurrentBonusDiceContext = G.currentRollContext?.kind === 'bonus';
     const bonusDiceTrayDice = React.useMemo(() => {
-        const settlement = currentPendingBonusDiceSettlement;
-        if (!settlement) {
+        // 普通确认结算会清掉 pending settlement，但当前 bonus 上下文仍负责右侧只读回看。
+        // 这里必须按当前骰上下文路由，不能把 pending 是否存在当成显示资格。
+        if (!isCurrentBonusDiceContext) {
             return null;
         }
 
-        if (!pendingBonusDiceRoutedToRightTray && !diceMultistepInteraction) {
-            return null;
-        }
-
-        // currentRollDice 是当前唯一骰槽的领域投影。不要从 pending settlement
-        // 和 G.dice 再拼第二份骰子，否则新投掷覆盖后 UI 可能继续显示旧骰面或错误骰子皮肤。
         return currentRollDice.map((die) => ({
             ...die,
             displayOnly: !diceMultistepInteraction || die.displayOnly === true,
         }));
-    }, [currentPendingBonusDiceSettlement, currentRollDice, diceMultistepInteraction, pendingBonusDiceRoutedToRightTray]);
+    }, [currentRollDice, diceMultistepInteraction, isCurrentBonusDiceContext]);
     const attackSnapshotInteractionDice = React.useMemo(() => {
         if (!diceMultistepInteraction || currentPhase !== 'defensiveRoll') return null;
         const data = diceMultistepInteraction.data as { allowedDieIds?: number[] } | undefined;

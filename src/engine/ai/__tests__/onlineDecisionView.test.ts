@@ -163,6 +163,53 @@ function buildSmashUpReactionChoiceState(args: {
     } as MatchState<unknown>;
 }
 
+function buildPendingResponseWindowState(args?: {
+    pendingInteractionId?: string;
+    includeInteraction?: boolean;
+    interactionId?: string;
+    interactionPlayerId?: string;
+}): MatchState<unknown> {
+    const pendingInteractionId = args?.pendingInteractionId ?? 'dt-interaction-card-bye-bye-1';
+    return {
+        core: {
+            currentPlayerId: '0',
+        },
+        sys: {
+            phase: 'offensiveRoll',
+            turnNumber: 5,
+            eventStream: {
+                nextId: 100,
+                entries: [],
+            },
+            interaction: {
+                current: args?.includeInteraction
+                    ? {
+                        id: args.interactionId ?? pendingInteractionId,
+                        kind: 'dt:card-interaction',
+                        playerId: args.interactionPlayerId ?? '1',
+                        data: {
+                            sourceCardId: 'card-bye-bye',
+                            interactionType: 'selectStatus',
+                        },
+                    }
+                    : null,
+                queue: [],
+                isBlocked: args?.includeInteraction ? true : false,
+            },
+            responseWindow: {
+                current: {
+                    id: 'response-window-after-roll-1',
+                    windowType: 'afterRollConfirmed',
+                    sourceId: 'attack-1',
+                    responderQueue: ['1'],
+                    currentResponderIndex: 0,
+                    pendingInteractionId,
+                },
+            },
+        },
+    } as MatchState<unknown>;
+}
+
 describe('resolveOnlineAiDecisionView', () => {
     it('phase 为空但 event/currentPlayer 对齐时，不应把私有视角误判为过期', async () => {
         const gameId = '__test_online_ai_phase_less_private_overlay__';
@@ -383,6 +430,42 @@ describe('resolveOnlineAiDecisionView', () => {
         expect(
             resolved.visibleState.sys?.interaction?.current?.data?.options,
         ).toHaveLength(2);
+    });
+
+    it('响应窗口被 pendingInteractionId 锁住时，seat 视图缺少同一个私有交互应判为过期', () => {
+        const sharedState = buildPendingResponseWindowState();
+        const staleSeatState = buildPendingResponseWindowState({
+            includeInteraction: false,
+        });
+
+        const resolved = resolveOnlineAiDecisionView({
+            sharedState,
+            privateOverlay: staleSeatState,
+            playerId: '1',
+        });
+
+        expect(resolved.visibility).toBe('private-required');
+        expect(resolved.canDecide).toBe(false);
+        expect(resolved.blockedReason).toBe('stale-private-overlay');
+        expect(resolved.visibleState).toBe(sharedState);
+    });
+
+    it('响应窗口被 pendingInteractionId 锁住时，seat 视图带同一个私有交互才允许 AI 决策', () => {
+        const sharedState = buildPendingResponseWindowState();
+        const freshSeatState = buildPendingResponseWindowState({
+            includeInteraction: true,
+        });
+
+        const resolved = resolveOnlineAiDecisionView({
+            sharedState,
+            privateOverlay: freshSeatState,
+            playerId: '1',
+        });
+
+        expect(resolved.visibility).toBe('private-required');
+        expect(resolved.canDecide).toBe(true);
+        expect(resolved.blockedReason).toBeNull();
+        expect(resolved.visibleState).toBe(freshSeatState);
     });
 
     it('compare-roll contestants 变化时，离开可见集合的 seat 必须清掉旧 current，新进入者必须拿到新 current', () => {

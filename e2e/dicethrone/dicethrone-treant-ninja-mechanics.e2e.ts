@@ -2278,10 +2278,14 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 await expect(attackShowcaseContinue).toBeHidden({ timeout: 10000 });
             }
             await clickAdvancePhase(match.guestPage, '1');
-            const bleedBonusDieOverlay = match.guestPage.locator('[data-testid="bonus-die-overlay"]').first();
-            await expect(bleedBonusDieOverlay).toBeVisible({ timeout: 10000 });
-            await expect(bleedBonusDieOverlay.getByText(/刀尖舔血：造成 \d+ 点真实伤害/)).toBeVisible({ timeout: 10000 });
-            await screenshotLocator(bleedBonusDieOverlay, testName, '06-going-forward-2-bleed-bonus-die-overlay.png');
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage), {
+                sourceAbilityId: 'going-forward-2-bleed',
+            });
+            await expect(match.guestPage.getByTestId('dicethrone-2d-dice-tray').getByTestId('dice-2d')).toHaveCount(1);
+            await screenshot(match.guestPage, testName, '06-going-forward-2-bleed-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {
+                sourceAbilityId: 'going-forward-2-bleed',
+            });
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
                 const players = asRecordMap(core.players);

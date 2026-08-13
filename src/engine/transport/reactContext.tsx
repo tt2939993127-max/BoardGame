@@ -5,7 +5,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import type { MatchState } from '../types';
-import type { MatchPlayerInfo, GameBoardProps, MatchUiEvent } from './protocol';
+import type { MatchPlayerInfo, GameBoardProps, ManualSetupSelectionRequest, ManualSetupSelectionResult, MatchUiEvent } from './protocol';
 import type { AiSeatController } from '../ai/types';
 
 export interface GameClientContextValue {
@@ -13,6 +13,11 @@ export interface GameClientContextValue {
     state: MatchState<unknown> | null;
     /** 发送命令 */
     dispatch: (type: string, payload: unknown) => void;
+    /** 请求服务端为人工准备选择执行当前 AI seat 的权威合法动作。 */
+    requestManualSetupSelection?: (
+        request: ManualSetupSelectionRequest,
+        onResult?: (result: ManualSetupSelectionResult) => void,
+    ) => boolean;
     /** 当前玩家 ID */
     playerId: string | null;
     /** 对局玩家信息 */
@@ -49,6 +54,10 @@ export function useGameClient<
     return ctx as {
         state: MatchState<TCore> | null;
         dispatch: <K extends string & keyof TCommandMap>(type: K, payload: TCommandMap[K]) => void;
+        requestManualSetupSelection?: (
+            request: ManualSetupSelectionRequest,
+            onResult?: (result: ManualSetupSelectionResult) => void,
+        ) => boolean;
         playerId: string | null;
         matchPlayers: MatchPlayerInfo[];
         seatControllers?: Record<string, AiSeatController>;

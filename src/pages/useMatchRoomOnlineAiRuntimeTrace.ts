@@ -10,7 +10,6 @@ export function useMatchRoomOnlineAiRuntimeTrace(args: {
     shouldAutoJoin: boolean;
     hasOnlineAiSeat: boolean;
     onlineAiSeatControllers: Record<string, AiSeatController>;
-    onlineAiSeatCredentials: Record<string, string>;
     effectivePlayerID?: string | null;
     statusPlayerID?: string | null;
 }): void {
@@ -22,8 +21,6 @@ export function useMatchRoomOnlineAiRuntimeTrace(args: {
             .filter(([, type]) => type !== 'human')
             .map(([playerId]) => playerId)
             .sort((leftId, rightId) => leftId.localeCompare(rightId));
-        const aiCredentialSeatIds = Object.keys(args.onlineAiSeatCredentials)
-            .sort((leftId, rightId) => leftId.localeCompare(rightId));
         const payload = {
             mode: args.isTutorialRoute ? 'tutorial-local' : 'online',
             source: 'MatchRoom',
@@ -31,7 +28,7 @@ export function useMatchRoomOnlineAiRuntimeTrace(args: {
             matchId: args.matchId ?? null,
             hasOnlineAiSeat: args.hasOnlineAiSeat,
             aiSeatIds,
-            aiCredentialSeatIds,
+            authority: 'server-online-ai-executor',
             effectivePlayerID: args.effectivePlayerID ?? null,
             statusPlayerID: args.statusPlayerID ?? null,
             route: {
@@ -68,7 +65,6 @@ export function useMatchRoomOnlineAiRuntimeTrace(args: {
         args.isTutorialRoute,
         args.matchId,
         args.onlineAiSeatControllers,
-        args.onlineAiSeatCredentials,
         args.shouldAutoJoin,
         args.statusPlayerID,
     ]);

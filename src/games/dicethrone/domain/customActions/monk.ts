@@ -14,7 +14,12 @@ import type {
     RollLimitChangedEvent,
 } from '../types';
 import { CP_MAX } from '../types';
-import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
+import {
+    registerCustomActionHandler,
+    createBonusDiceWithReroll,
+    type BonusDiceRollConfig,
+    type CustomActionContext,
+} from '../effects';
 import {
     registerBonusDiceSettlementHandler,
     type BonusDiceSettlementHandlerContext,
@@ -94,7 +99,7 @@ function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timesta
         timestamp,
     });
 
-    return damageCalc.toEvents();
+    return damageCalc.toEvents() as DiceThroneEvent[];
 }
 
 /** 一掷千金：投掷1骰子，获得½数值的CP（向上取整） */
@@ -234,18 +239,7 @@ function handleFistTechnique3KnockdownIfFourKind({ targetId, sourceAbilityId, st
     } as StatusAppliedEvent];
 }
 
-type ThunderStrikeBonusConfig = {
-    diceCount: number;
-    rerollCostTokenId: string;
-    rerollCostAmount: number;
-    maxRerollCount?: number;
-    dieEffectKey: string;
-    rerollEffectKey: string;
-    threshold?: number;
-    thresholdEffect?: 'knockdown';
-    allowDiceModification?: boolean;
-    opensAfterRollConfirmedResponseWindow?: boolean;
-};
+type ThunderStrikeBonusConfig = BonusDiceRollConfig;
 
 const THUNDER_STRIKE_SETTLEMENT_ID = 'monk-thunder-strike-settlement';
 const THUNDER_STRIKE_2_SETTLEMENT_ID = 'monk-thunder-strike-2-settlement';
@@ -258,43 +252,13 @@ import type {
 
 /**
  * 雷霆万钧/雷霆一击通用：投掷多骰 + 可选重掷 + 总和伤害 + 阈值效果
- * 使用通用 createBonusDiceWithReroll，仅提供"无 token 时的结算逻辑"
+ * 使用通用 createBonusDiceWithReroll；最终伤害统一等到奖励骰确认后产生。
  */
 const createThunderStrikeRollDamageEvents = (
     ctx: CustomActionContext,
     config: ThunderStrikeBonusConfig
 ): DiceThroneEvent[] => {
-    const { targetId, attackerId, sourceAbilityId, state, timestamp } = ctx;
-
-    return createBonusDiceWithReroll(ctx, config, (dice: BonusDieInfo[]) => {
-        const events: DiceThroneEvent[] = [];
-        // 总和伤害
-        const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
-        const damageCalc = createDamageCalculation({
-            source: { playerId: attackerId, abilityId: sourceAbilityId },
-            target: { playerId: targetId },
-            baseDamage: totalDamage,
-            state,
-            timestamp,
-        });
-        events.push(...damageCalc.toEvents());
-
-        // 阈值效果（如 >=12 施加倒地）
-        if (config.threshold !== undefined && totalDamage >= config.threshold && config.thresholdEffect === 'knockdown') {
-            const target = state.players[targetId];
-            const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-            const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
-            const maxStacks = def?.stackLimit || 99;
-            const newTotal = Math.min(currentStacks + 1, maxStacks);
-            events.push({
-                type: 'STATUS_APPLIED',
-                payload: { targetId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as StatusAppliedEvent);
-        }
-        return events;
-    });
+    return createBonusDiceWithReroll(ctx, config, () => []);
 };
 
 function resolveThunderStrikeSettlement({
@@ -314,7 +278,7 @@ function resolveThunderStrikeSettlement({
             baseDamage: totalDamage,
             state,
             timestamp,
-        }).toEvents());
+        }).toEvents() as DiceThroneEvent[]);
 
         if (settlement.threshold !== undefined && totalDamage >= settlement.threshold && settlement.thresholdEffect === 'knockdown') {
             const target = state.players[settlement.targetId];
@@ -351,6 +315,7 @@ function handleThunderStrikeRollDamage(context: CustomActionContext): DiceThrone
         dieEffectKey: 'bonusDie.effect.thunderStrikeDie',
         rerollEffectKey: 'bonusDie.effect.thunderStrikeReroll',
         customResolutionId: THUNDER_STRIKE_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
         allowDiceModification: true,
         opensAfterRollConfirmedResponseWindow: true,
     });
@@ -368,6 +333,7 @@ function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThron
         dieEffectKey: 'bonusDie.effect.thunderStrike2Die',
         rerollEffectKey: 'bonusDie.effect.thunderStrike2Reroll',
         customResolutionId: THUNDER_STRIKE_2_SETTLEMENT_ID,
+        continuation: { kind: 'attack', settlementStage: 'readyToResolve', markBonusDiceResolved: true },
         threshold: 12,
         thresholdEffect: 'knockdown',
         allowDiceModification: true,

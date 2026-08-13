@@ -72,8 +72,9 @@ const normalizeBonusDiceFollowupEvents = (
 /**
  * 按当前奖励骰面生成最终结算事件。
  *
- * 奖励骰既可以由玩家明确结束重投时结算，也可以在没有合法改骰响应后自动结算；
- * 两条路径必须共用同一份规则，避免改骰后的骰面被另一套旧逻辑忽略。
+ * 奖励骰只在骰主通过右侧 2D 骰盘普通确认时结算。
+ * 响应窗口、内置重投和调试改骰都只负责更新同一份 pending 骰面；
+ * 最终副作用必须统一从这里按确认后的骰面生成。
  */
 export function buildBonusDiceSettlementEvents({
     state,

@@ -9,7 +9,7 @@ import type { MatchState } from '../types';
 import type { EngineSystem } from '../systems/types';
 import { TestHarness, isTestEnvironment } from '../testing';
 import { refreshInteractionOptions } from '../systems/InteractionSystem';
-import type { MatchPlayerInfo } from './protocol';
+import type { ManualSetupSelectionRequest, ManualSetupSelectionResult, MatchPlayerInfo } from './protocol';
 import type { GameEngineConfig } from './server';
 import { GameTransportClient } from './client';
 import type { LatencyOptimizationConfig } from './latency/types';
@@ -287,6 +287,13 @@ export function useGameProviderRuntime(args: {
         }
     }, [playerId]);
 
+    const requestManualSetupSelection = useCallback((
+        request: ManualSetupSelectionRequest,
+        onResult?: (result: ManualSetupSelectionResult) => void,
+    ): boolean => (
+        clientRef.current?.requestManualSetupSelection(request, onResult) ?? false
+    ), []);
+
     const sendUiEvent = useCallback((type: string, payload: unknown) => {
         clientRef.current?.sendUiEvent(type, payload);
     }, []);
@@ -315,6 +322,7 @@ export function useGameProviderRuntime(args: {
     const value = useMemo<GameClientContextValue>(() => ({
         state,
         dispatch,
+        requestManualSetupSelection,
         playerId,
         matchPlayers,
         seatControllers: undefined,
@@ -322,7 +330,7 @@ export function useGameProviderRuntime(args: {
         isMultiplayer: true,
         sendUiEvent,
         subscribeUiEvent,
-    }), [dispatch, isConnected, matchPlayers, playerId, sendUiEvent, state, subscribeUiEvent]);
+    }), [dispatch, isConnected, matchPlayers, playerId, requestManualSetupSelection, sendUiEvent, state, subscribeUiEvent]);
 
     return {
         rollbackSignal,

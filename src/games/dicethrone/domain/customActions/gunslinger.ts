@@ -114,8 +114,9 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                     index,
                     bonusDamage: Math.ceil(value / 2),
                 }),
-                // Loaded 自己的攻击末 Token 选择已在父攻击状态中收口；这里不能改写阶段。
-                continuation: { kind: 'complete' },
+                // Loaded 是攻击掷骰结束后的加成。确认后必须回到同一攻击，
+                // 由父流程继续处理余下 Token 选择和防御阶段。
+                continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
             },
             () => [],
         );
@@ -151,7 +152,10 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
                 effectParams: { value: roll, index: 0, bonusDamage },
             }],
             timestamp + 1,
-            { customResolutionId: GUNSLINGER_LOADED_SETTLEMENT_ID, continuation: { kind: 'complete' } },
+            {
+                customResolutionId: GUNSLINGER_LOADED_SETTLEMENT_ID,
+                continuation: { kind: 'attack', settlementStage: 'preDamage', markBonusDiceResolved: false },
+            },
         ),
     ];
 }

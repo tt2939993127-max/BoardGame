@@ -789,6 +789,51 @@ describe('响应窗口交互锁定：取消交互', () => {
 });
 
 describe('AI 私有状态选择的唯一执行入口', () => {
+    it('AI 在 afterRollConfirmed 响应窗口不能打出拜拜了您嘞，非法出牌不得破坏响应窗口', () => {
+        const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1]), true);
+        const windowOpened = runner.run({
+            name: '确认攻击骰后的响应窗口拒绝拜拜了您嘞',
+            setup: createSetupWithHand(['card-bye-bye', 'card-flick'], {
+                playerId: '1',
+                cp: 10,
+                mutate: (core) => {
+                    core.players['0'].tokens[TOKEN_IDS.TACTICAL_ADVANTAGE] = 1;
+                    core.players['0'].hand = [];
+                    core.players['0'].deck = [];
+                    core.players['1'].deck = [];
+                },
+            }),
+            commands: [
+                ...advanceTo('offensiveRoll'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: fistAttackAbilityId }),
+            ],
+        });
+
+        expect(windowOpened.assertionErrors).toEqual([]);
+        expect(windowOpened.finalState.sys.phase).toBe('offensiveRoll');
+        const responseWindowBefore = windowOpened.finalState.sys.responseWindow?.current;
+        expect(responseWindowBefore).toMatchObject({
+            windowType: 'afterRollConfirmed',
+            responderQueue: ['1'],
+        });
+        expect(windowOpened.finalState.sys.interaction?.current).toBeUndefined();
+
+        runner.setState(windowOpened.finalState);
+        const blocked = runner.dispatch('PLAY_CARD', {
+            playerId: '1',
+            cardId: 'card-bye-bye',
+        });
+
+        expect(blocked.success).toBe(false);
+        expect(blocked.error).toBe('wrongPhaseForCard');
+        expect(blocked.finalState.core.players['1'].hand.map((card: any) => card.id)).toContain('card-bye-bye');
+        expect(blocked.finalState.core.players['1'].discard.map((card: any) => card.id)).not.toContain('card-bye-bye');
+        expect(blocked.finalState.sys.interaction?.current).toBeUndefined();
+        expect(blocked.finalState.sys.responseWindow?.current).toEqual(responseWindowBefore);
+    });
+
     it('本地 AI 打出拜拜了您嘞后应移除状态，不得退回为 RESPONSE_PASS', async () => {
         const runner = createRunner(fixedRandom, true);
         const played = runner.run({

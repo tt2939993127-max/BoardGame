@@ -70,23 +70,6 @@ async function dismissAttackShowcaseIfVisible(page: any): Promise<void> {
     }
 }
 
-async function closeBonusDieOverlayIfVisible(page: any): Promise<void> {
-    const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
-    if (!await overlay.isVisible({ timeout: 1200 }).catch(() => false)) {
-        return;
-    }
-
-    const confirmDamageButton = page.getByRole('button', { name: /^(确认伤害|Confirm Damage)$/i }).first();
-    if (await confirmDamageButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmDamageButton.click();
-    } else {
-        const closeButton = page.getByLabel(/关闭|Close/i).first();
-        await expect(closeButton).toBeVisible({ timeout: 5000 });
-        await closeButton.click();
-    }
-    await expect(overlay).toBeHidden({ timeout: 5000 });
-}
-
 async function readHarnessState(page: any): Promise<any> {
     return await page.evaluate(() => window.__BG_TEST_HARNESS__?.state?.get?.());
 }
@@ -236,9 +219,17 @@ async function resolvePaladinDefenseIfNeeded(page: any): Promise<void> {
 
 async function settleAfterChoice(page: any, playerId: '0' | '1' = '0'): Promise<void> {
     for (let round = 0; round < 8; round += 1) {
-        await closeBonusDieOverlayIfVisible(page);
-
         const state = await readHarnessState(page);
+        if (state?.core?.pendingBonusDiceSettlement) {
+            const confirmButton = page.locator('[data-testid="dicethrone-2d-dice-tray"]:visible')
+                .locator('xpath=ancestor::*[@data-player-seat-anchor][1]')
+                .locator('[data-tutorial-id="dice-confirm-button"]')
+                .first();
+            await expect(confirmButton).toBeVisible({ timeout: 5000 });
+            await confirmButton.click();
+            await page.waitForTimeout(250);
+            continue;
+        }
         if (!state?.core?.pendingAttack && !state?.core?.pendingDamage && !state?.core?.pendingBonusDiceSettlement) {
             return;
         }

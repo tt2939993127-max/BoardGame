@@ -40,6 +40,11 @@ vi.mock('react-i18next', () => ({
                 'choices.cursedCoinGain.title': '是否获得诅咒金币？',
                 'choices.cursedCoinGain.accept': '获得诅咒金币',
                 'choices.cursedCoinGain.decline': '不获得',
+                'choices.evasiveOrPurifyToken': '选择获得的状态',
+                'tokens.evasive.name': '闪避',
+                'tokens.evasive.description': '花费 1 个闪避，掷 1 颗骰子；若为 1-2，防止所有伤害。',
+                'tokens.purify.name': '净化',
+                'tokens.purify.description': '移除 1 个负面状态效果。',
             };
             return translations[key] || key;
         },
@@ -1198,6 +1203,66 @@ describe('useSyncedModalStackEntry', () => {
         expect(screen.getByRole('button', { name: '不获得' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: '获得诅咒金币' }));
+        expect(onResolve).toHaveBeenCalledWith('option-0');
+    });
+
+    it('simple-choice modal 应能渲染太极连招奖励骰后的闪避/净化 Token 选项', async () => {
+        const onResolve = vi.fn();
+
+        const ChoiceModalHarness = () => {
+            const entry = React.useMemo(() => ({
+                owner: {
+                    system: 'interaction' as const,
+                    id: 'choice-taiji-combo-1786549271013',
+                    gameId: 'dicethrone',
+                    namespace: 'dicethrone',
+                    blocksProgress: true,
+                },
+                closeOnBackdrop: false,
+                closeOnEsc: false,
+                onClose: undefined,
+                render: () => (
+                    <ChoiceModal
+                        choice={{
+                            title: 'choices.evasiveOrPurifyToken',
+                            options: [
+                                { id: 'option-0', label: 'tokens.evasive.name', tokenId: 'evasive', value: 1 },
+                                { id: 'option-1', label: 'tokens.purify.name', tokenId: 'purify', value: 1 },
+                            ],
+                        }}
+                        canResolve={true}
+                        onResolve={onResolve}
+                    />
+                ),
+            }), []);
+
+            useSyncedModalStackEntry({
+                enabled: true,
+                entryId: 'dicethrone_choice',
+                entry,
+            });
+
+            return null;
+        };
+
+        render(
+            <MemoryRouter>
+                <ModalStackProvider>
+                    <ChoiceModalHarness />
+                    <ModalStackRoot />
+                </ModalStackProvider>
+            </MemoryRouter>,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(screen.getByText('选择获得的状态')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '闪避' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '净化' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '闪避' }));
         expect(onResolve).toHaveBeenCalledWith('option-0');
     });
 });

@@ -1,6 +1,10 @@
 import type { MatchState } from '../types';
 import type { GameAiRuntime } from './types';
 import { resolveCurrentDecisionPlayerId, resolveCurrentTurnPlayerIdFromState } from '../sessionContext';
+import {
+    resolveResponseWindowCurrent,
+    resolveResponseWindowPrivateInteractionLockConsistency,
+} from '../responseWindowInteractionLock';
 
 export type OnlineAiDecisionVisibility = 'shared' | 'private-required';
 
@@ -124,10 +128,8 @@ function resolveVisibilityByDefault(args: {
         return 'private-required';
     }
 
-    const sharedResponseWindow = args.sharedState.sys?.responseWindow as {
-        current?: unknown;
-    } | undefined;
-    if (sharedResponseWindow?.current) {
+    const sharedResponseWindow = resolveResponseWindowCurrent(args.sharedState);
+    if (sharedResponseWindow) {
         return 'private-required';
     }
 
@@ -143,19 +145,8 @@ function resolveVisibilityByDefault(args: {
         return 'private-required';
     }
 
-    const privateResponseWindow = args.privateOverlay?.sys?.responseWindow as {
-        current?: {
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        } | null;
-    } | undefined;
-    const responderQueue = Array.isArray(privateResponseWindow?.current?.responderQueue)
-        ? privateResponseWindow.current.responderQueue
-        : [];
-    const responderIndex = typeof privateResponseWindow?.current?.currentResponderIndex === 'number'
-        ? privateResponseWindow.current.currentResponderIndex
-        : 0;
-    if (responderQueue[responderIndex] === args.playerId) {
+    const privateResponseWindow = resolveResponseWindowCurrent(args.privateOverlay);
+    if (privateResponseWindow?.currentResponderId === args.playerId) {
         return 'private-required';
     }
 
@@ -244,41 +235,6 @@ function hasCompatibleCurrentInteractionOptions(args: {
     return sharedSignature === privateSignature;
 }
 
-function resolveResponseWindowCurrent(state: MatchState<unknown> | null | undefined): {
-    id: string | null;
-    windowType: string | null;
-    sourceId: string | null;
-    currentResponderId: string | null;
-} | null {
-    const current = (state?.sys?.responseWindow as {
-        current?: {
-            id?: unknown;
-            windowType?: unknown;
-            sourceId?: unknown;
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        } | null;
-    } | undefined)?.current;
-    if (!current) {
-        return null;
-    }
-
-    const responderQueue = Array.isArray(current.responderQueue) ? current.responderQueue : [];
-    const responderIndex = typeof current.currentResponderIndex === 'number'
-        ? current.currentResponderIndex
-        : 0;
-    const currentResponderId = typeof responderQueue[responderIndex] === 'string'
-        ? responderQueue[responderIndex]
-        : null;
-
-    return {
-        id: typeof current.id === 'string' ? current.id : null,
-        windowType: typeof current.windowType === 'string' ? current.windowType : null,
-        sourceId: typeof current.sourceId === 'string' ? current.sourceId : null,
-        currentResponderId,
-    };
-}
-
 function isPrivateOverlayFreshEnough(args: {
     sharedState: MatchState<unknown>;
     privateOverlay: MatchState<unknown>;
@@ -296,40 +252,34 @@ function isPrivateOverlayFreshEnough(args: {
     }
 
     const sharedHasHiddenInteractionBlocker = hasSharedHiddenInteractionBlocker(args.sharedState, args.playerId);
-    const sharedResponseWindow = resolveResponseWindowCurrent(args.sharedState);
-    const privateResponseWindow = resolveResponseWindowCurrent(args.privateOverlay);
-    const isResponseWindowDecision = !!sharedResponseWindow || !!privateResponseWindow;
+    const responseWindowLockConsistency = resolveResponseWindowPrivateInteractionLockConsistency({
+        sharedState: args.sharedState,
+        privateOverlay: args.privateOverlay,
+        playerId: args.playerId,
+    });
+    const isResponseWindowDecision = responseWindowLockConsistency.isResponseWindowDecision;
 
-    if (isResponseWindowDecision) {
-        if (!sharedResponseWindow || !privateResponseWindow) {
-            return false;
-        }
-        if (sharedResponseWindow.currentResponderId !== privateResponseWindow.currentResponderId) {
-            return false;
-        }
-        if (sharedResponseWindow.id !== privateResponseWindow.id) {
-            return false;
-        }
-        if (sharedResponseWindow.windowType !== privateResponseWindow.windowType) {
-            return false;
-        }
-        if (sharedResponseWindow.sourceId !== privateResponseWindow.sourceId) {
-            return false;
-        }
+    if (isResponseWindowDecision && !responseWindowLockConsistency.ok) {
+        return false;
     }
 
     const sharedInteractionPlayerId = resolveInteractionPlayerId(args.sharedState);
-    const privateInteractionPlayerId = resolveInteractionPlayerId(args.privateOverlay);
+    const privateInteractionPlayerId = responseWindowLockConsistency.privateInteractionPlayerId;
+    const sharedInteractionId = resolveInteractionId(args.sharedState);
+    const privateInteractionId = responseWindowLockConsistency.privateInteractionId;
+    const isResponseWindowLockedPrivateInteraction = responseWindowLockConsistency.isLockedPrivateInteraction;
     const isInteractionDecision = sharedInteractionPlayerId === args.playerId
-        || privateInteractionPlayerId === args.playerId;
+        || privateInteractionPlayerId === args.playerId
+        || isResponseWindowLockedPrivateInteraction;
 
     if (isInteractionDecision) {
-        const sharedInteractionId = resolveInteractionId(args.sharedState);
-        const privateInteractionId = resolveInteractionId(args.privateOverlay);
         if (sharedHasHiddenInteractionBlocker) {
             if (privateInteractionPlayerId !== args.playerId || !privateInteractionId) {
                 return false;
             }
+        } else if (isResponseWindowLockedPrivateInteraction) {
+            // 共享态只公开“响应窗口被哪个交互锁住”，交互本体只存在于对应 seat 私有视图。
+            // 上面的 pendingInteractionId 校验已经证明二者是同一个生命周期，不再要求 shared.current 也存在。
         } else {
             if (sharedInteractionPlayerId !== privateInteractionPlayerId) {
                 return false;

@@ -50,7 +50,6 @@ import {
     markCurrentRollContextStatus,
     openTemporaryRollContext,
     replaceCurrentRollContext,
-    restoreSuspendedParentRollContext,
     setCurrentRollContextDice,
     isCurrentBonusRollSettlement,
 } from './rollContext';
@@ -357,22 +356,32 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
             continuation.settlementStage,
         )
         : state.pendingAttack;
-    const currentBonusContextId = settlement
-        ? `bonus:${settlement.id}`
-        : undefined;
     const restoredSettlement = settlement?.suspendedParentSettlement;
     const nextState = {
         ...state,
         pendingBonusDiceSettlement: restoredSettlement,
         pendingAttack,
     };
-    if (currentBonusContextId && nextState.currentRollContext?.id === currentBonusContextId) {
-        return restoreSuspendedParentRollContext(nextState, currentBonusContextId);
-    }
-    if (restoredSettlement) {
+    if (settlement) {
+        const settledBonusContext = createBonusRollContextFromSettlement(nextState, settlement);
         return {
             ...nextState,
-            currentRollContext: createBonusRollContextFromSettlement(nextState, restoredSettlement),
+            currentRollContext: {
+                ...settledBonusContext,
+                status: 'settled',
+                policy: {
+                    ...settledBonusContext.policy,
+                    modifiableBy: 'none',
+                    rerollableBy: 'none',
+                    allowPassiveReroll: false,
+                    allowDiceCardTargeting: false,
+                    blocksPhaseFlow: false,
+                },
+                display: {
+                    ...settledBonusContext.display,
+                    replayOnly: true,
+                },
+            },
         };
     }
     return clearCurrentRollContext(nextState);

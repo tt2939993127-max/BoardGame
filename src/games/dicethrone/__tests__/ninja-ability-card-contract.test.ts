@@ -15,6 +15,7 @@ import { NINJA_CARDS } from '../heroes/ninja/cards';
 import { BLINK_2, DEATH_BLOSSOM_2, GOING_FORWARD_2, POISON_BLADE_2, SHADOW_FANG_2, SHADOW_STEP_2, SLASH_2, SMOKE_SCREEN_2 } from '../heroes/ninja/abilities';
 import { DiceThroneDomain } from '../domain';
 import { executePipeline } from '../../../engine/pipeline';
+import { GameTestRunner } from '../../../engine/testing';
 import { createHeroMatchup, createQueuedRandom, getSimpleChoicePrompt, respondToPrompt, testSystems } from './test-utils';
 import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
 import en from '../../../../public/locales/en/game-dicethrone.json';
@@ -1013,15 +1014,23 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
         const next = applyEvents(state.core, events);
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
-        const damageEvent = events.find(event => event.type === 'DAMAGE_DEALT');
+        expect(events.some(event => event.type === 'DAMAGE_DEALT')).toBe(false);
+        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(30);
+
+        const settled = execute(
+            { core: next, sys: { phase: 'offensiveRoll' } },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+        );
+        const settledState = applyEvents(next, settled);
+        const damageEvent = settled.find(event => event.type === 'DAMAGE_DEALT');
         expect(damageEvent?.payload).toMatchObject({
             targetId: '1',
             amount: 5,
             unblockable: true,
-            damageScope: 'direct',
+            damageScope: 'attack',
         });
-        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(25);
-        expect(next.pendingAttack?.isDefendable).toBe(false);
+        expect(settledState.players['1'].resources[RESOURCE_IDS.HP]).toBe(25);
     });
 
     it('斩击 II 在 3 忍刀时应造成 4 点伤害，并在攻击骰为 3 个同点后于 postDamage 获得 1 忍术', () => {
@@ -1167,9 +1176,19 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
         expect(useResult.success).toBe(true);
         if (!useResult.success) return;
 
-        expect(useResult.events.some(event => event.type === 'CHOICE_REQUESTED')).toBe(true);
+        expect(useResult.events.some(event => event.type === 'CHOICE_REQUESTED')).toBe(false);
         expect(useResult.state.core.players['0'].tokens[TOKEN_IDS.NINJUTSU]).toBe(1);
-        const ninjutsuPrompt = getSimpleChoicePrompt(useResult.state, 'shadow-fang-2-main');
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: createQueuedRandom([1]),
+            setup: () => useResult.state,
+        });
+        runner.setState(useResult.state);
+        const settled = runner.dispatch('SKIP_BONUS_DICE_REROLL', { playerId: '0' });
+        expect(settled.success).toBe(true);
+        const ninjutsuPrompt = getSimpleChoicePrompt(settled.finalState, 'shadow-fang-2-main');
         expect(ninjutsuPrompt.options.map(option => option.value?.customId)).toContain('ninja-ninjutsu-undefendable');
     });
 
@@ -1222,10 +1241,18 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(events.filter(event => event.type === 'BONUS_DICE_REROLL_REQUESTED')).toHaveLength(1);
-        expect(events.some(event => event.type === 'ATTACK_PRE_DEFENSE_RESOLVED')).toBe(true);
-        expect(events.some(event => event.type === 'ATTACK_RESOLVED')).toBe(true);
-        expect(next.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(1);
-        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(25);
+        expect(events.some(event => event.type === 'ATTACK_RESOLVED')).toBe(false);
+        expect(next.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(0);
+        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(30);
+
+        const settled = execute(
+            { core: next, sys: { phase: 'offensiveRoll' } },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+        );
+        const settledState = applyEvents(next, settled);
+        expect(settledState.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(1);
+        expect(settledState.players['1'].resources[RESOURCE_IDS.HP]).toBe(30);
     });
 
     it('毒刃 II 在奖励骰投出手里剑或面具时应完成 2 个慢性中毒 + 5 点伤害的完整攻击收口', () => {
@@ -1249,10 +1276,18 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
 
         expect(events.filter(event => event.type === 'BONUS_DIE_ROLLED')).toHaveLength(1);
         expect(events.filter(event => event.type === 'BONUS_DICE_REROLL_REQUESTED')).toHaveLength(1);
-        expect(events.some(event => event.type === 'ATTACK_PRE_DEFENSE_RESOLVED')).toBe(true);
-        expect(events.some(event => event.type === 'ATTACK_RESOLVED')).toBe(true);
-        expect(next.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(2);
-        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(25);
+        expect(events.some(event => event.type === 'ATTACK_RESOLVED')).toBe(false);
+        expect(next.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(0);
+        expect(next.players['1'].resources[RESOURCE_IDS.HP]).toBe(30);
+
+        const settled = execute(
+            { core: next, sys: { phase: 'offensiveRoll' } },
+            command('SKIP_BONUS_DICE_REROLL', '0'),
+            createQueuedRandom([1]),
+        );
+        const settledState = applyEvents(next, settled);
+        expect(settledState.players['1'].tokens[TOKEN_IDS.DELAYED_POISON]).toBe(2);
+        expect(settledState.players['1'].resources[RESOURCE_IDS.HP]).toBe(30);
     });
 
     it('死亡盛放 II 应通过共享奖励骰链限制为至多重掷 2 次，并在双面具时施加慢性中毒且改成不可防御', () => {
@@ -1286,6 +1321,8 @@ describe('DiceThrone Ninja 能力与卡牌合同', () => {
             sourceAbilityId: 'death-blossom-2',
             attackerId: '0',
             targetId: '1',
+            rerollCostTokenId: '',
+            rerollCostAmount: 0,
             maxRerollCount: 2,
             rerollCount: 0,
             customResolutionId: 'ninja-death-blossom-2',

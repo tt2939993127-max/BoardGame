@@ -15,7 +15,6 @@ import { HudPortal } from '../core';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { RematchProvider } from '../contexts/RematchContext';
 import { navigateBackToLobbyWithModalCleanup } from '../lib/navigation/navigateBackToLobbyWithModalCleanup';
-import { OnlineAiSeatBridge } from './onlineAiSeatBridge';
 import { OnlineGameHudBridge } from './matchRoomOnlineGameHudBridge';
 import {
     MatchRoomOnlineRuntimeDebugBridge,
@@ -23,7 +22,6 @@ import {
     type MatchRoomSeatValidationSnapshot,
 } from './matchRoomBridges';
 import type { MatchRoomOnlineHudBridgeProps } from './useMatchRoomOnlineHudModel';
-import type { ManualSetupSeatDispatch } from './onlineManualSetup.types';
 import {
     OnlineManualSetupSelectionBridge,
 } from './onlineManualSetupSelectionBridge';
@@ -52,15 +50,9 @@ export type MatchRoomOnlineDebugModel = {
 
 export type MatchRoomOnlineAiRuntimeModel = {
     enabled: boolean;
-    server: string;
-    matchId: string;
     engineConfig: GameEngineConfig;
     seatControllers: Record<string, AiSeatController>;
-    seatCredentials: Record<string, string>;
     autoAcceptedPlayerIds: string[];
-    onForceEndAiPhaseReady?: (handler: (() => Promise<boolean>) | null) => void;
-    onManualSetupDispatchReady?: (handler: ManualSetupSeatDispatch | null) => void;
-    dispatchManualSetupCommand: ManualSetupSeatDispatch | null;
 };
 
 export type MatchRoomOnlineProviderModel = {
@@ -104,9 +96,7 @@ export type MatchRoomOnlineOverlayBridgesModel = {
 
 export type MatchRoomOnlineSeatBridgeModel = {
     seatControllers: Record<string, AiSeatController>;
-    dispatchManualSetupCommand: ManualSetupSeatDispatch | null;
     engineConfig: GameEngineConfig | null;
-    ai: MatchRoomOnlineAiRuntimeModel | null;
 };
 
 export type MatchRoomOnlineBoardRuntimeModel = {
@@ -300,26 +290,13 @@ const MatchRoomOnlineConnectionBridge = ({
 
 const MatchRoomOnlineOverlayBridges = ({
     overlays,
-    seatBridge,
 }: {
     overlays: MatchRoomOnlineOverlayBridgesModel;
-    seatBridge: MatchRoomOnlineSeatBridgeModel;
 }) => {
     return (
         <>
             <MatchRoomOnlineRuntimeDebugBridge debug={overlays.debug} />
             <OnlineGameHudBridge {...overlays.hud} />
-            {seatBridge.ai && (
-                <OnlineAiSeatBridge
-                    server={seatBridge.ai.server}
-                    matchId={seatBridge.ai.matchId}
-                    engineConfig={seatBridge.ai.engineConfig}
-                    seatControllers={seatBridge.ai.seatControllers}
-                seatCredentials={seatBridge.ai.seatCredentials}
-                onForceEndAiPhaseReady={seatBridge.ai.onForceEndAiPhaseReady}
-                onManualSetupDispatchReady={seatBridge.ai.onManualSetupDispatchReady}
-            />
-            )}
         </>
     );
 };
@@ -336,7 +313,7 @@ const MatchRoomOnlineSeatBridge = ({
             {/* Keep the board inside the manual-setup seam so seat overrides apply to board commands. */}
             <OnlineManualSetupSelectionBridge
                 seatControllers={seatBridge.seatControllers}
-                dispatchManualSetupCommand={seatBridge.dispatchManualSetupCommand}
+                dispatchManualSetupCommand={null}
                 engineConfig={seatBridge.engineConfig}
             >
                 {children}
@@ -351,7 +328,7 @@ export function MatchRoomOnlineBoardRuntime({ runtime }: { runtime: MatchRoomOnl
     return (
         <MatchRoomOnlineConnectionBridge connection={runtime.connection}>
             <>
-                <MatchRoomOnlineOverlayBridges overlays={runtime.overlays} seatBridge={runtime.seatBridge} />
+                <MatchRoomOnlineOverlayBridges overlays={runtime.overlays} />
                 <MatchRoomOnlineSeatBridge seatBridge={runtime.seatBridge}>
                     {boardBridge}
                 </MatchRoomOnlineSeatBridge>

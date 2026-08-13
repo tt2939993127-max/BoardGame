@@ -153,7 +153,8 @@ export const hasPendingBonusDiceSettlement = (
 );
 
 /**
- * 只有奖励骰自身明确允许骰主继续重投时，才需要右侧骰盘的确认收口。
+ * 奖励骰始终需要右侧骰盘的普通确认收口。
+ * 这里仅判断骰主是否还能先执行奖励骰自身声明的内置重投；
  * 通用改骰牌的响应资格由 afterRollConfirmed 窗口决定，不能反推为骰主免费重投。
  */
 export const canOwnerRerollPendingBonusDiceSettlement = (
@@ -1577,7 +1578,8 @@ export const hasRespondableContent = (
     }
 
     // 奖励骰已投出后，只有实际能重投当前骰区的被动能力才算响应手段。
-    // 抽牌、建造等“任意时刻”动作不能凭 timing 字样阻止奖励骰自动结算。
+    // 抽牌、建造等“任意时刻”动作不能凭 timing 字样插入奖励骰响应窗口；
+    // 无响应时仍回到右侧骰盘普通确认，而不是自动结算。
     if (hasUsableDiceRerollPassiveAction(state, playerId, phase)) {
         return true;
     }

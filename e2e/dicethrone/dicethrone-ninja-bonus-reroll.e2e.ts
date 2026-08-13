@@ -4,7 +4,7 @@ import { getHeroDieFace } from '../../src/games/dicethrone/domain/rules';
 import type { Die } from '../../src/games/dicethrone/domain/types';
 import { DEATH_BLOSSOM_2, GOING_FORWARD_2 } from '../../src/games/dicethrone/heroes/ninja/abilities';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
-import { expectRightTrayBonusDiceConfirmation, getRightTrayDie, settleCurrentBonusDice } from './bonus-dice-flow';
+import { expectRightTrayBonusDiceConfirmation, getRightTrayDie, settleCurrentBonusDice, waitForDiceThroneVisualIdle } from './bonus-dice-flow';
 import '../../src/games/dicethrone/domain';
 
 const createNinjaDiceWithValues = (values: number[]) =>
@@ -106,6 +106,47 @@ async function clickResolvedAbilitySlot(
 
     expect(clickPoint, `${slotId} 槽位必须存在真实可点击点`).not.toBeNull();
     await page.mouse.click(clickPoint!.x, clickPoint!.y);
+}
+
+async function clearIncidentalHandHover(page: any): Promise<void> {
+    await page.mouse.move(8, 8);
+    await expect.poll(async () => (
+        page.locator('[data-testid="hand-area"]').evaluateAll((nodes: Element[]) => {
+            return nodes.every((node) => (
+                node.getAnimations({ subtree: true }).every((animation) => animation.playState !== 'running')
+            ));
+        })
+    ), { timeout: 10000 }).toBe(true);
+    await expect.poll(async () => (
+        page.locator('[data-testid="hand-area"] [data-testid="hand-card-visual"]').evaluateAll((nodes: Element[]) => {
+            return nodes.every((node) => {
+                const transform = window.getComputedStyle(node).transform;
+                if (!transform || transform === 'none') return true;
+                const matrix = new DOMMatrixReadOnly(transform);
+                const scale = Math.hypot(matrix.a, matrix.b);
+                return scale <= 1.05;
+            });
+        })
+    ), { timeout: 5000 }).toBe(true);
+}
+
+async function expectNinjaDeathBlossomReadyVisualAnchor(page: any): Promise<void> {
+    const deathBlossomSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="sky"]').first();
+    await expect(deathBlossomSlot).toHaveAttribute('data-resolved-ability-id', 'death-blossom', { timeout: 10000 });
+    await expect(deathBlossomSlot.locator('[data-testid="dt-ability-highlight-sky"], [data-testid="dt-ability-selected-sky"]').first()).toBeVisible({ timeout: 5000 });
+
+    const smokeScreenSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="lotus"]').first();
+    await expect(smokeScreenSlot).toHaveAttribute('data-base-ability-id', 'smoke-screen', { timeout: 10000 });
+    await expect(smokeScreenSlot.locator('[data-testid="dt-ability-highlight-lotus"], [data-testid="dt-ability-selected-lotus"]')).toHaveCount(0);
+}
+
+async function expectNinjaDeathBlossomSourceSlotStillMapped(page: any): Promise<void> {
+    const deathBlossomSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="sky"]').first();
+    await expect(deathBlossomSlot).toHaveAttribute('data-base-ability-id', 'death-blossom', { timeout: 10000 });
+
+    const smokeScreenSlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="lotus"]').first();
+    await expect(smokeScreenSlot).toHaveAttribute('data-base-ability-id', 'smoke-screen', { timeout: 10000 });
+    await expect(smokeScreenSlot.locator('[data-testid="dt-ability-highlight-lotus"], [data-testid="dt-ability-selected-lotus"]')).toHaveCount(0);
 }
 
 async function setupNinjaBonusRerollScene(
@@ -402,6 +443,8 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             randomValues: [1, 1, 1, 4, 4, 6, 6],
         });
 
+        await clearIncidentalHandHover(page);
+        await expectNinjaDeathBlossomReadyVisualAnchor(page);
         await game.screenshot('ninja-death-blossom-2-before-click', testInfo);
         await clickResolvedAbilitySlot(page, 'sky', 'death-blossom');
         await dismissAttackShowcaseIfVisible(page);
@@ -423,6 +466,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             maxRerollCount: 2,
             diceValues: [1, 1, 1, 4, 4],
         });
+        await waitForDiceThroneVisualIdle(page);
         await game.screenshot('ninja-death-blossom-2-right-tray-initial', testInfo);
 
         await page.evaluate(() => {
@@ -440,6 +484,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             rerollCount: 1,
             diceValues: [6, 1, 1, 4, 4],
         });
+        await waitForDiceThroneVisualIdle(page);
         await game.screenshot('ninja-death-blossom-2-after-first-reroll', testInfo);
 
         await page.evaluate(() => {
@@ -461,6 +506,9 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
         });
         await expect(getRightTrayDie(page, 0)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
         await expect(getRightTrayDie(page, 4)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
+        await waitForDiceThroneVisualIdle(page);
+        await clearIncidentalHandHover(page);
+        await expectNinjaDeathBlossomSourceSlotStillMapped(page);
         await game.screenshot('ninja-death-blossom-2-limit-reached', testInfo);
 
         await settleCurrentBonusDice(page, () => game.getState(), { sourceAbilityId: 'death-blossom' });
@@ -480,6 +528,9 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             delayedPoison: 1,
             defenderHp: 25,
         });
+        await waitForDiceThroneVisualIdle(page);
+        await clearIncidentalHandHover(page);
+        await expectNinjaDeathBlossomSourceSlotStillMapped(page);
         await game.screenshot('ninja-death-blossom-2-after-closeout', testInfo);
     });
 });

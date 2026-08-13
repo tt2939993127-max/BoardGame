@@ -2096,6 +2096,18 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     }
                     return resolvePostAttackFollowUp(core, events, command.type, timestamp, from as TurnPhase);
                 }
+
+                if (pendingAttackStage === 'afterDefense') {
+                    const attackEvents = resolveAttack(core, random, { skipDefense: true }, timestamp);
+                    events.push(...attackEvents);
+                    const hasAttackChoice = attackEvents.some(isBlockingInteractionEvent);
+                    const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
+                    const hasBonusDiceReroll = attackEvents.some(isInteractiveBonusDiceRerollEvent);
+                    if (hasAttackChoice || hasTokenResponse || hasBonusDiceReroll) {
+                        return { events, halt: true };
+                    }
+                    return resolvePostAttackFollowUp(core, events, command.type, timestamp, from as TurnPhase);
+                }
                 
                 // 直接结算攻击
                 if (!core.pendingAttack.defenderId) {

@@ -8,10 +8,6 @@ type RightTrayBonusDiceOptions = {
     sourceAbilityId?: string;
 };
 
-type AutoSettledBonusDiceOptions = {
-    expectedDiceCount: number;
-};
-
 const readPendingBonusSettlement = async (readState: ReadGameState) => {
     const state = await readState();
     return state?.pendingBonusDiceSettlement
@@ -45,6 +41,24 @@ export const getRightTrayDiceTray = (page: Page) => rightTrayRail(page).diceTray
 export const getRightTrayDie = (page: Page, dieId: number | string) => (
     getRightTrayDiceTray(page).locator(`[data-testid="die-button-${dieId}"]`).first()
 );
+
+/**
+ * 截图前等待玩家实际看见的骰盘静置。
+ * 领域结算已完成不代表视觉结算已完成：飞行特效和 2D 骰子翻滚都必须退场，
+ * 否则证据会截到伤害飘字或翻转残影，不能证明最终玩家画面。
+ */
+export const waitForDiceThroneVisualIdle = async (page: Page): Promise<void> => {
+    await expect(page.locator('[data-testid^="flying-effect-"]')).toHaveCount(0, { timeout: 10000 });
+    await expect(page.locator('[data-floating-text-preset="dicethrone-damage"]')).toHaveCount(0, { timeout: 10000 });
+    await expect.poll(async () => {
+        return page.locator('[data-testid="dice-2d"]').evaluateAll((dice) => (
+            dice.every((die) => (
+                die.getAttribute('data-roll-animation') === 'settled'
+                && die.getAnimations({ subtree: true }).every((animation) => animation.playState !== 'running')
+            ))
+        ));
+    }, { timeout: 10000 }).toBe(true);
+};
 
 /**
  * 奖励骰只能由右侧 2D 骰盘确认。这里仅承接所有来源共有的 UI 生命周期；
@@ -101,26 +115,6 @@ export const expectRightTrayBonusDiceAwaitingResponse = async (
     await expect(page.getByTestId('bonus-die-overlay')).toHaveCount(0);
     await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
     await expect(diceTray).toBeVisible({ timeout: 10000 });
-    await expect(rail.locator('[data-tutorial-id="dice-confirm-button"]')).toHaveCount(0);
-};
-
-/**
- * 无合法介入手段的奖励骰由领域层自动结算，但最终骰面仍要在右侧骰盘只读回看。
- * 这不是确认流程，调用方仍须断言自己的伤害、资源或阶段结果。
- */
-export const expectBonusDiceAutoSettled = async (
-    page: Page,
-    readState: ReadGameState,
-    { expectedDiceCount }: AutoSettledBonusDiceOptions,
-): Promise<void> => {
-    await expect.poll(() => readPendingBonusSettlement(readState), { timeout: 10000 }).toBeNull();
-    await closeDebugPanelIfVisible(page);
-
-    const { diceTray, rail } = rightTrayRail(page);
-    await expect(page.getByTestId('bonus-die-overlay')).toHaveCount(0);
-    await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
-    await expect(diceTray).toBeVisible({ timeout: 10000 });
-    await expect(diceTray.getByTestId('dice-2d')).toHaveCount(expectedDiceCount);
     await expect(rail.locator('[data-tutorial-id="dice-confirm-button"]')).toHaveCount(0);
 };
 

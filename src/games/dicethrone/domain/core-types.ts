@@ -232,6 +232,8 @@ export interface AbilityCard {
 export type PendingAttackSettlementStage =
     | 'targeting'
     | 'preDamage'
+    /** 防御效果已完成，等待继续本次攻击的主伤害。 */
+    | 'afterDefense'
     | 'withDamageChoicePending'
     | 'postDamagePending'
     | 'readyToResolve';

@@ -21,6 +21,7 @@ import type {
     MatchPlayerInfo,
     BatchDispatchMeta,
     CommandDispatchMeta,
+    ManualSetupSelectionRequest,
     OnlineAiClientTransportDiagnostics,
 } from './protocol';
 import type {
@@ -94,6 +95,10 @@ import {
     type OnlineAiCircuitSnapshot,
     type OnlineAiCircuitSource,
 } from './onlineAiCircuitBreaker';
+import {
+    isOnlineAiWatchdogPublicPregameLegalActionPhase,
+    shouldProbeOnlineAiLegalActionOnlyCandidateForHumanTurn,
+} from './onlineAiWatchdogGameSemantics';
 
 // 离线裁决：按交互 kind 选择最小语义正确的兜底命令
 // - simple-choice: 走通用系统取消
@@ -218,6 +223,72 @@ const normalizeOnlineAiWatchdogSeatControllerType = (
 };
 
 type OnlineAiWatchdogSeatController = aiModule.AiSeatController;
+
+type OnlineAiExecutionTrace = {
+    matchId: string;
+    gameId: string;
+    playerId: string;
+    stateIdBefore: number;
+    candidateReason: ForceEndTurnStalledAiResolution['reason'];
+    decisionMs: number;
+    executionMs: number;
+    actionKind: string | null;
+    commandTypes: string[];
+    outcome: string;
+    blockedReason?: string | null;
+    commandFailureReason?: string | null;
+};
+
+function isAuthorizedManualAiSeatDispatch(match: ActiveMatch, requesterPlayerId: string, targetPlayerId: string): boolean {
+    const controllers = extractTrustedSetupSeatControllers(match.metadata.setupData);
+    if (controllers?.[targetPlayerId]?.type === 'human') {
+        return false;
+    }
+    const setupData = match.metadata.setupData;
+    const ownerKey = setupData && typeof setupData === 'object' && !Array.isArray(setupData)
+        ? (setupData as { ownerKey?: unknown }).ownerKey
+        : undefined;
+    const requesterOwnerKey = match.metadata.players[requesterPlayerId]?.ownerKey;
+    return typeof ownerKey === 'string'
+        && ownerKey.length > 0
+        && requesterOwnerKey === ownerKey;
+}
+
+function isManualSetupSelectionRequest(value: unknown): value is ManualSetupSelectionRequest {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return false;
+    }
+    const request = value as Record<string, unknown>;
+    return typeof request.targetPlayerId === 'string' && request.targetPlayerId.trim().length > 0
+        && typeof request.actionKind === 'string' && request.actionKind.trim().length > 0
+        && typeof request.selectionId === 'string' && request.selectionId.trim().length > 0;
+}
+
+function resolveManualSetupSelectionIdFromAction(
+    engineConfig: GameEngineConfig,
+    action: aiModule.AiLegalAction,
+): string | null {
+    const command = action.commands.length === 1 ? action.commands[0] : null;
+    const configured = engineConfig.onlineAiRecovery?.resolveManualSetupSelectionIdFromAction?.({
+        actionKind: action.kind,
+        actionId: action.actionId,
+        command,
+    });
+    if (configured !== undefined) {
+        return typeof configured === 'string' && configured.trim().length > 0 ? configured : null;
+    }
+    if (!command?.payload || typeof command.payload !== 'object' || Array.isArray(command.payload)) {
+        return null;
+    }
+    const payload = command.payload as Record<string, unknown>;
+    if (action.kind === 'setup-select-character') {
+        return typeof payload.characterId === 'string' ? payload.characterId : null;
+    }
+    if (action.kind === 'select-faction' || action.kind === 'setup-select-faction') {
+        return typeof payload.factionId === 'string' ? payload.factionId : null;
+    }
+    return null;
+}
 
 const DEFAULT_TRAINING_CAPTURE_POLICY = 'human-only' as const;
 const DEFAULT_ONLINE_AI_RECOVERY_TICK_MS = 500;
@@ -715,6 +786,11 @@ export interface GameEngineConfig<
             actionId: string;
             commandTypes: string[];
         }) => boolean | undefined;
+        resolveManualSetupSelectionIdFromAction?: (args: {
+            actionKind: string;
+            actionId: string;
+            command: aiModule.AiCommandSpec | null;
+        }) => string | null | undefined;
         buildPregameSelectionProgressSignature?: (args: {
             state: MatchState<unknown>;
             phase: string;
@@ -1174,6 +1250,14 @@ export class GameTransportServer {
                 // 仅在教程模式激活时生效，防止普通玩家伪造 playerId
                 const meta = parseDispatchPayloadMeta(payload);
                 const match = this.activeMatches.get(matchID);
+                if (meta.legacyManualAiSeatId) {
+                    socket.emit('error', matchID, 'online_ai_server_authority');
+                    return;
+                }
+                if (match && this.resolveOnlineAiSeatControllerType(match, info.playerID) !== 'human') {
+                    socket.emit('error', matchID, 'online_ai_server_authority');
+                    return;
+                }
                 const isTutorialActive = !!(match?.state?.sys as Record<string, unknown> | undefined)
                     ?.tutorial && !!(match?.state?.sys as { tutorial?: { active?: boolean } })?.tutorial?.active;
                 const resolvedPlayerId = resolveDispatchActorPlayerId({
@@ -1234,7 +1318,42 @@ export class GameTransportServer {
                     socket.emit('batch:rejected', matchID, batchId, 'unauthorized');
                     return;
                 }
+                const match = this.activeMatches.get(matchID);
+                if (match && this.resolveOnlineAiSeatControllerType(match, info.playerID) !== 'human') {
+                    socket.emit('batch:rejected', matchID, batchId, 'online_ai_server_authority');
+                    return;
+                }
                 await this.handleBatch(socket, matchID, info.playerID, batchId, commands, meta);
+            });
+
+            socket.on('manual-setup-selection', async (
+                matchID: string,
+                request: ManualSetupSelectionRequest,
+                credentials?: string,
+                acknowledge?: (result: { accepted: boolean; reason?: 'unauthorized' | 'rejected' }) => void,
+            ) => {
+                if (!matchID || !isManualSetupSelectionRequest(request)) return;
+                const info = this.socketIndex.get(socket.id);
+                if (!info || info.matchID !== matchID || !info.playerID) return;
+                const authorized = await this.validateCommandAuth(matchID, info.playerID, info.credentials ?? credentials);
+                if (!authorized) {
+                    socket.emit('error', matchID, 'unauthorized');
+                    acknowledge?.({ accepted: false, reason: 'unauthorized' });
+                    return;
+                }
+                const match = this.activeMatches.get(matchID);
+                if (!match || this.resolveOnlineAiSeatControllerType(match, info.playerID) !== 'human') {
+                    socket.emit('error', matchID, 'unauthorized');
+                    acknowledge?.({ accepted: false, reason: 'unauthorized' });
+                    return;
+                }
+                const accepted = await this.handleManualSetupSelection(match, info.playerID, request);
+                if (!accepted) {
+                    socket.emit('error', matchID, 'manual_setup_selection_rejected');
+                    acknowledge?.({ accepted: false, reason: 'rejected' });
+                    return;
+                }
+                acknowledge?.({ accepted: true });
             });
 
             socket.on('ui:event', (
@@ -1553,6 +1672,108 @@ export class GameTransportServer {
         );
     }
 
+    private buildOnlineAiSeatControllers(match: ActiveMatch): Record<string, OnlineAiWatchdogSeatController> {
+        const rawSeatControllers = resolveRawOnlineAiWatchdogSeatControllers(
+            match.state,
+            match.metadata.setupData,
+        );
+        return Object.fromEntries(
+            Object.keys(match.metadata.players).map((playerId) => {
+                const controller = rawSeatControllers?.[playerId];
+                const normalizedType = normalizeOnlineAiWatchdogSeatControllerType(
+                    match.gameId,
+                    controller,
+                    this.gameManifests,
+                );
+                return [
+                    playerId,
+                    normalizedType === 'human'
+                        ? { type: 'human' as const }
+                        : {
+                            ...(controller as { policyId?: string; fallbackPolicyId?: string }),
+                            type: normalizedType,
+                        },
+                ];
+            }),
+        ) as Record<string, OnlineAiWatchdogSeatController>;
+    }
+
+    /**
+     * 人类只提交准备阶段的选择意图；正式命令必须由服务端从当前权威状态重新生成。
+     */
+    private async handleManualSetupSelection(
+        match: ActiveMatch,
+        requesterPlayerId: string,
+        request: ManualSetupSelectionRequest,
+    ): Promise<boolean> {
+        const targetPlayerId = request.targetPlayerId.trim();
+        const actionKind = request.actionKind.trim();
+        const selectionId = request.selectionId.trim();
+        if (!targetPlayerId || !actionKind || !selectionId) {
+            return false;
+        }
+        if (!isAuthorizedManualAiSeatDispatch(match, requesterPlayerId, targetPlayerId)) {
+            return false;
+        }
+
+        const rawSeatControllers = resolveRawOnlineAiWatchdogSeatControllers(
+            match.state,
+            match.metadata.setupData,
+        );
+        const rawController = rawSeatControllers?.[targetPlayerId];
+        const controllerType = normalizeOnlineAiWatchdogSeatControllerType(
+            match.gameId,
+            rawController,
+            this.gameManifests,
+        );
+        if (controllerType === 'human' || !aiModule.isManualSetupSelectionEnabledForSeat(rawController)) {
+            return false;
+        }
+
+        const controller: OnlineAiWatchdogSeatController = {
+            ...(rawController as Omit<OnlineAiWatchdogSeatController, 'type'>),
+            type: controllerType,
+        } as OnlineAiWatchdogSeatController;
+        const visibleState = this.applyPlayerView(match, targetPlayerId) as MatchState<unknown>;
+        const legalActions = buildAiDecisionContext({
+            gameId: match.engineConfig.gameId,
+            matchId: match.matchID,
+            playerId: targetPlayerId,
+            visibleState,
+            rulesVersion: this.rulesVersion,
+            decisionBudgetMs: 250,
+            source: 'online',
+        }).legalActions;
+        const matchingActions = legalActions.filter((action) => {
+            if (action.kind !== actionKind || action.commands.length !== 1) {
+                return false;
+            }
+            const configured = match.engineConfig.onlineAiRecovery?.shouldTreatActionAsManualSetupSelection?.({
+                actionKind: action.kind,
+                actionId: action.actionId,
+                commandTypes: action.commands.map((command) => command.type),
+            });
+            const isManualSetupAction = configured ?? aiModule.shouldPlayerManuallyResolveSetupSelection(
+                match.engineConfig,
+                match.state,
+                targetPlayerId,
+                controller,
+                action,
+            );
+            return isManualSetupAction
+                && resolveManualSetupSelectionIdFromAction(match.engineConfig, action) === selectionId;
+        });
+        if (matchingActions.length !== 1) {
+            return false;
+        }
+
+        const [command] = matchingActions[0].commands;
+        return this.handleCommand(match.matchID, targetPlayerId, command.type, command.payload, {
+            expectedStateID: match.stateID,
+            onlineAiCircuitSource: 'watchdog',
+        });
+    }
+
     private buildOnlineAiCircuitQueueDiagnostic(match: ActiveMatch): Array<Record<string, unknown>> {
         return match.commandQueue.slice(0, 8).map((queued) => {
             if ('_batch' in queued) {
@@ -1730,17 +1951,12 @@ export class GameTransportServer {
             return null;
         }
 
-        const currentPhase = typeof match.state.sys?.phase === 'string' ? match.state.sys.phase : '';
-        const core = match.state.core as { hostStarted?: unknown } | undefined;
-        const isPublicPregameSetup = core?.hostStarted === false && (
-            currentPhase === 'factionSelect'
-            || (match.gameId === 'summonerwars' && currentPhase === 'summon')
-        );
-        // 通用保护：当真人是当前操作者时，seat-legal-only 仅允许在两类公开场景触发：
-        // 1. defensiveRoll / targetingRoll 这类 off-turn 真人阶段；
-        // 2. hostStarted=false 的公开预开局 setup，此时 AI 选阵营/准备不会越权代真人推进。
-        const isHumanActiveOffTurnRollPhase = currentPhase === 'defensiveRoll' || currentPhase === 'targetingRoll';
-        if (!isHumanActiveOffTurnRollPhase && !isPublicPregameSetup) {
+        if (!shouldProbeOnlineAiLegalActionOnlyCandidateForHumanTurn({
+            state: match.state,
+            currentPlayerId: visibleTurnPlayerId,
+            engineConfig: match.engineConfig,
+            gameId: match.gameId,
+        })) {
             return null;
         }
 
@@ -1994,26 +2210,128 @@ export class GameTransportServer {
         match: ActiveMatch,
         candidate: ForceEndTurnStalledAiResolution,
     ): number {
-        const liveSeatConnectionCount = match.connections.get(candidate.playerId)?.size ?? 0;
-        const currentPhase = typeof match.state.sys?.phase === 'string' ? match.state.sys.phase : '';
-        const core = match.state.core as { hostStarted?: unknown } | undefined;
-        const publicPregameLegalActionPhases = match.engineConfig.onlineAiRecovery?.publicPregameLegalActionPhases ?? [];
-        const isPublicPregameLegalAction = candidate.reason === 'seat-legal-only'
-            && core?.hostStarted === false
-            && publicPregameLegalActionPhases.includes(currentPhase);
-        // 商业口径：在线 AI 不应依赖宿主页保持前台/存活。
-        // 一旦对应 AI seat 没有 live socket，watchdog 立即接管真正的“对局中 AI 回合/交互”。
-        // 公开预开局选择同样不依赖宿主页：这里只执行 AI 自己的合法选择，不会推进真人操作。
-        const shouldImmediateTakeover = candidate.reason === 'active-turn'
-            || candidate.reason === 'response-window'
-            || candidate.reason === 'response-loop'
-            || candidate.reason === 'visible-interaction'
-            || candidate.reason === 'hidden-interaction'
-            || isPublicPregameLegalAction;
-        if (liveSeatConnectionCount === 0 && shouldImmediateTakeover) {
-            return 0;
+        void match;
+        void candidate;
+        // 在线 AI 的正式执行权固定在服务端；浏览器是否有 AI seat socket
+        // 不能再决定 AI 何时开始执行。
+        return 0;
+    }
+
+    private async runOnlineAiImmediateExecution(
+        match: ActiveMatch,
+        trigger: 'command-succeeded' | 'sync',
+    ): Promise<void> {
+        if (match.unloaded || match.executing || this.onlineAiRecoveryInFlight.has(match.matchID)) {
+            return;
         }
-        return this.onlineAiRecoveryTimeoutMs;
+
+        const seatControllers = this.buildOnlineAiSeatControllers(match);
+        const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+        if (!hasAiSeat) {
+            this.onlineAiRecoveryTrackers.delete(match.matchID);
+            this.onlineAiCircuitBreaker.clearMatch(match.matchID);
+            this.clearOnlineAiRepeatedRecoveryAttemptsForMatch(match.matchID);
+            return;
+        }
+
+        for (const [playerId, controller] of Object.entries(seatControllers)) {
+            if (controller.type === 'human') {
+                this.onlineAiCircuitBreaker.clearSeat(match.matchID, playerId);
+            }
+        }
+
+        match.executing = true;
+        this.onlineAiRecoveryInFlight.add(match.matchID);
+        try {
+            const seenStepKeys = new Set<string>();
+            const aiSeatCount = Object.values(seatControllers)
+                .filter((controller) => controller.type !== 'human')
+                .length;
+            const publicPregameStepBudget = Math.min(
+                this.onlineAiRecoveryMaxAdvanceSteps,
+                Math.max(this.onlineAiRecoveryMaxStepsPerSlice, aiSeatCount * 4),
+            );
+            for (let step = 0; step < this.onlineAiRecoveryMaxAdvanceSteps; step += 1) {
+                if (match.unloaded) {
+                    return;
+                }
+
+                const candidate = await this.resolveOnlineAiRecoveryCandidate(match, seatControllers);
+                if (!candidate) {
+                    this.onlineAiRecoveryTrackers.delete(match.matchID);
+                    this.clearOnlineAiRepeatedRecoveryAttemptsForMatch(match.matchID);
+                    return;
+                }
+                const publicPregameCandidate = candidate.reason === 'seat-legal-only'
+                    && isOnlineAiWatchdogPublicPregameLegalActionPhase({
+                        state: match.state,
+                        engineConfig: match.engineConfig,
+                        gameId: match.gameId,
+                    });
+                const stepBudget = publicPregameCandidate
+                    ? publicPregameStepBudget
+                    : this.onlineAiRecoveryMaxStepsPerSlice;
+                if (step >= stepBudget) {
+                    return;
+                }
+
+                const progressMarker = buildAiProgressMarker(match.state, {
+                    engineConfig: match.engineConfig,
+                    gameId: match.gameId,
+                });
+                const recoveryFingerprint = this.buildOnlineAiRecoveryFingerprint(match, candidate, progressMarker);
+                const stepKey = candidate.legalActionOnly === true
+                    ? `${candidate.playerId}:${candidate.reason}:${recoveryFingerprint}:${progressMarker}`
+                    : `${candidate.playerId}:${candidate.reason}:${recoveryFingerprint}`;
+                if (seenStepKeys.has(stepKey)) {
+                    return;
+                }
+                seenStepKeys.add(stepKey);
+
+                const tracker: OnlineAiRecoveryTracker = {
+                    key: stepKey,
+                    firstSeenAt: Date.now(),
+                    autoSubmittedAt: Date.now(),
+                    lastReportedFailureReason: null,
+                    failureCount: 0,
+                };
+                this.onlineAiRecoveryTrackers.set(match.matchID, tracker);
+
+                const stepStateIdBefore = match.stateID;
+                const stepStartedAt = Date.now();
+                const actionRecovery = await this.tryRecoverOnlineAiWithLegalAction(
+                    match,
+                    candidate,
+                    tracker,
+                    seatControllers,
+                );
+                if (!actionRecovery.applied) {
+                    this.onlineAiRecoveryTrackers.delete(match.matchID);
+                    return;
+                }
+
+                this.logOnlineAiExecutionTrace({
+                    matchId: match.matchID,
+                    gameId: match.gameId,
+                    playerId: candidate.playerId,
+                    stateIdBefore: stepStateIdBefore,
+                    candidateReason: candidate.reason,
+                    decisionMs: Date.now() - stepStartedAt,
+                    executionMs: 0,
+                    actionKind: actionRecovery.reportedAction?.actionKind ?? null,
+                    commandTypes: actionRecovery.executedCommandTypes,
+                    outcome: `normal:${trigger}`,
+                    blockedReason: null,
+                    commandFailureReason: null,
+                });
+            }
+        } finally {
+            this.onlineAiRecoveryInFlight.delete(match.matchID);
+            if (!match.unloaded) {
+                await this.drainCommandQueue(match);
+            }
+            match.executing = false;
+        }
     }
 
     private async runOnlineAiRecoveryTick(): Promise<void> {
@@ -2034,29 +2352,7 @@ export class GameTransportServer {
                 continue;
             }
 
-            const rawSeatControllers = resolveRawOnlineAiWatchdogSeatControllers(
-                match.state,
-                match.metadata.setupData,
-            );
-            const seatControllers = Object.fromEntries(
-                Object.keys(match.metadata.players).map((playerId) => {
-                    const controller = rawSeatControllers?.[playerId];
-                    const normalizedType = normalizeOnlineAiWatchdogSeatControllerType(
-                        match.gameId,
-                        controller,
-                        this.gameManifests,
-                    );
-                    return [
-                        playerId,
-                        normalizedType === 'human'
-                            ? { type: 'human' as const }
-                            : {
-                                ...(controller as { policyId?: string; fallbackPolicyId?: string }),
-                                type: normalizedType,
-                            },
-                    ];
-                }),
-            ) as Record<string, OnlineAiWatchdogSeatController>;
+            const seatControllers = this.buildOnlineAiSeatControllers(match);
 
             const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
             if (!hasAiSeat) {
@@ -2527,6 +2823,8 @@ export class GameTransportServer {
                     engineConfig: match.engineConfig,
                     gameId: match.gameId,
                 });
+                const stepStateIdBefore = match.stateID;
+                const stepStartedAt = Date.now();
                 const currentPlayerIdBeforeStep = resolveWatchdogCurrentPlayerId();
                 const stepKeyBefore = buildRecoverySequenceStepKey(currentCandidate.playerId, markerBeforeStep);
                 const interactionFingerprintBeforeStep = readCurrentAiInteractionSemanticFingerprint(currentCandidate.playerId);
@@ -2537,6 +2835,20 @@ export class GameTransportServer {
                     tracker,
                     seatControllers,
                 );
+                this.logOnlineAiExecutionTrace({
+                    matchId: match.matchID,
+                    gameId: match.gameId,
+                    playerId: currentCandidate.playerId,
+                    stateIdBefore: stepStateIdBefore,
+                    candidateReason: currentCandidate.reason,
+                    decisionMs: Date.now() - stepStartedAt,
+                    executionMs: 0,
+                    actionKind: actionRecovery.reportedAction?.actionKind ?? null,
+                    commandTypes: actionRecovery.executedCommandTypes,
+                    outcome: actionRecovery.outcome,
+                    blockedReason: actionRecovery.blockedReason,
+                    commandFailureReason: actionRecovery.commandFailureReason,
+                });
                 const blockedFailureReason = actionRecovery.blockedReason === 'stale-private-overlay'
                     ? 'private_overlay_stale'
                     : actionRecovery.blockedReason === 'missing-private-overlay'
@@ -2834,21 +3146,14 @@ export class GameTransportServer {
                             }),
                     }
                     : nextCandidate;
-                const hasLiveSeatConnection = (match.connections.get(candidate.playerId)?.size ?? 0) > 0;
-                const shouldContinueOfflineLegalOnlyActiveTurnRecovery =
+                const shouldContinueLegalOnlyActiveTurnExecution =
                     actionRecoveryApplied
                     && candidate.reason === 'active-turn-legal-only'
                     && normalizedNextCandidate.reason === 'active-turn'
-                    && !hasLiveSeatConnection
                     && normalizedNextCandidate.resolution.action.commands.length > 0;
-                if (shouldContinueOfflineLegalOnlyActiveTurnRecovery) {
+                if (shouldContinueLegalOnlyActiveTurnExecution) {
                     currentCandidate = normalizedNextCandidate;
                     continue;
-                }
-                // 仅在 AI seat 在线时才交给自然链路继续；离线时需继续 watchdog 收口，避免停在 AI 半回合。
-                if (actionRecoveryApplied && normalizedNextCandidate.reason === 'active-turn' && hasLiveSeatConnection) {
-                    allowNaturalAiContinuation = true;
-                    break;
                 }
                 if (normalizedNextCandidate.legalActionOnly === true) {
                     syncRecoveryTrackerToCandidate(normalizedNextCandidate);
@@ -2993,6 +3298,10 @@ export class GameTransportServer {
             }
             match.executing = false;
         }
+    }
+
+    private logOnlineAiExecutionTrace(trace: OnlineAiExecutionTrace): void {
+        logger.info('[GameTransport] online-ai-execution', trace);
     }
 
     private async handleOnlineAiRecoveryFailure(
@@ -4915,6 +5224,9 @@ export class GameTransportServer {
         // 通知其他玩家（旁观者不触发玩家连接事件）
         if (playerID !== null) {
             socket.to(`game:${matchID}`).emit('player:connected', matchID, playerID);
+            if (this.resolveOnlineAiSeatControllerType(match, playerID) === 'human') {
+                await this.runOnlineAiImmediateExecution(match, 'sync');
+            }
         }
     }
 
@@ -4949,9 +5261,10 @@ export class GameTransportServer {
             });
         }
 
+        let success = false;
         match.executing = true;
         try {
-            const success = await this.executeCommandInternal(
+            success = await this.executeCommandInternal(
                 match,
                 playerID,
                 commandType,
@@ -4964,10 +5277,13 @@ export class GameTransportServer {
                 },
             );
             await this.drainCommandQueue(match);
-            return success;
         } finally {
             match.executing = false;
         }
+        if (success) {
+            await this.runOnlineAiImmediateExecution(match, 'command-succeeded');
+        }
+        return success;
     }
 
     /**
@@ -5016,6 +5332,7 @@ export class GameTransportServer {
             return;
         }
 
+        let batchSucceeded = false;
         match.executing = true;
         // 在执行前保存内存快照，用于批次失败时回滚
         // rollbackToStateID 依赖存储层，但存储层只保存最新状态，无法回到中间状态
@@ -5079,9 +5396,13 @@ export class GameTransportServer {
                 stateID: match.stateID,
             });
             socket.emit('batch:confirmed', matchID, batchId, authoritative);
+            batchSucceeded = true;
         } finally {
             await this.drainCommandQueue(match);
             match.executing = false;
+        }
+        if (batchSucceeded) {
+            await this.runOnlineAiImmediateExecution(match, 'command-succeeded');
         }
     }
 

@@ -110,7 +110,11 @@ function handleBackStrikeUse({ ctx, state, random, timestamp }: CustomActionCont
         originalAttackerId,
         [{ index: 0, value: roll, face: face as any, effectKey: 'bonusDie.effect.samuraiBackStrikeDie', effectParams: { value: roll, damage } }],
         timestamp + 1,
-        { customResolutionId: SAMURAI_BACK_STRIKE_SETTLEMENT_ID, continuation: { kind: 'complete' } },
+        {
+            customResolutionId: SAMURAI_BACK_STRIKE_SETTLEMENT_ID,
+            // 反击发生在防御窗口；确认后仍要继续原攻击的主伤害，不能独立收口。
+            continuation: { kind: 'attack', settlementStage: 'afterDefense', markBonusDiceResolved: false },
+        },
     )];
 }
 

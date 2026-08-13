@@ -395,7 +395,7 @@ export function createBonusDiceWithReroll(
             timestamp,
         } as BonusDiceRerollRequestedEvent);
     } else {
-        // 没有免费重掷也仍是未结算的当前骰，必须等待确认后再用最终骰面结算。
+        // 即使没有可用的奖励骰内置重投，也仍是未结算的当前骰，必须等待确认后再用最终骰面结算。
         events.push({
             type: 'BONUS_DICE_REROLL_REQUESTED',
             payload: {

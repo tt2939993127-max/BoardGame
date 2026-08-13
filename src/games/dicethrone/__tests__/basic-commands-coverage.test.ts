@@ -31,7 +31,7 @@ import {
     advanceTo,
     getCurrentInteractionId,
 } from './test-utils';
-import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore, type TransferStatusCommand } from '../domain/types';
+import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore, type PendingBonusDiceSettlement, type TransferStatusCommand } from '../domain/types';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
@@ -40,7 +40,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import type { InteractionDescriptor } from '../domain/core-types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { diceThroneCheatModifier } from '../domain/cheatModifier';
-import { createMainRollContext, getCurrentRollDice } from '../domain/rollContext';
+import { createBonusRollContextFromSettlement, createMainRollContext, getCurrentRollDice } from '../domain/rollContext';
 import { ZHANSHUJIA_PASSIVE_ABILITIES } from '../heroes/zhanshujia/tokens';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
@@ -1437,6 +1437,37 @@ describe('AI legal actions', () => {
             '2:4,0:4',
             '2:4,1:4',
         ]);
+    });
+
+    it('copy 交互不能把同值骰当作源骰和目标骰，避免 AI 消耗牌但骰面不变', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: 4,
+        }));
+
+        injectPendingInteraction(state, {
+            id: 'ai-copy-die-no-effective-target',
+            playerId: '0',
+            sourceCardId: 'copy-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToCopy',
+            selectCount: 2,
+            selected: [],
+            dieModifyConfig: { mode: 'copy' },
+        });
+
+        const actions = buildDiceThroneAiLegalActions({ playerId: '0', state });
+        expect(actions).toHaveLength(1);
+        expect(actions[0]).toMatchObject({
+            kind: 'interaction-cancel',
+            metadata: { reason: 'no-effective-copy-target' },
+        });
+        expect(actions[0]?.commands).toEqual([expect.objectContaining({
+                type: 'SYS_INTERACTION_CANCEL',
+                payload: expect.objectContaining({ reason: 'no-effective-copy-target' }),
+            })]);
     });
 
     it('targetOpponentDice 的 copy 交互应优先复制低点数压制对手骰面', async () => {
@@ -4250,6 +4281,58 @@ describe('调试改骰与当前骰区一致', () => {
 
         expect(nextCore.dice.map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
         expect(getCurrentRollDice(nextCore, 'offensiveRoll').map((die) => die.value)).toEqual([6, 5, 4, 3, 2]);
+    });
+
+    it('奖励骰当前骰区存在时，调试改骰必须同步奖励骰骰面和结算参数', () => {
+        const core = createHeroMatchup('pyromancer', 'barbarian')(['0', '1'], fixedRandom).core;
+        core.dice = core.dice.map((die, index) => ({
+            ...die,
+            id: index,
+            value: 1,
+            symbol: 'fire',
+            symbols: ['fire'],
+            ownerId: '0',
+        }));
+        const settlement: PendingBonusDiceSettlement = {
+            id: 'debug-pyro-blast-bonus',
+            sourceAbilityId: 'pyro-blast-2-roll',
+            attackerId: '0',
+            targetId: '1',
+            dice: [{
+                index: 0,
+                value: 1,
+                face: 'fire',
+                effectKey: 'bonusDie.effect.pyroBlast2Die',
+                effectParams: { value: 1 },
+            }],
+            rerollCostTokenId: TOKEN_IDS.TAIJI,
+            rerollCostAmount: 0,
+            rerollCount: 0,
+            readyToSettle: false,
+            customResolutionId: 'pyro-blast-roll',
+            resolutionMode: 'attackBonus',
+        };
+        const coreWithBonus: DiceThroneCore = {
+            ...core,
+            pendingBonusDiceSettlement: settlement,
+        };
+
+        const nextCore = diceThroneCheatModifier.setDice!({
+            ...coreWithBonus,
+            currentRollContext: createBonusRollContextFromSettlement(coreWithBonus, settlement),
+        }, [6]);
+
+        expect(nextCore.pendingBonusDiceSettlement?.dice[0]).toMatchObject({
+            value: 6,
+            face: 'meteor',
+            effectParams: { value: 6 },
+        });
+        expect(nextCore.currentRollContext?.dice[0]).toMatchObject({
+            value: 6,
+            symbol: 'meteor',
+            symbols: ['meteor'],
+        });
+        expect(nextCore.dice.map((die) => die.value)).toEqual([1, 1, 1, 1, 1]);
     });
 });
 

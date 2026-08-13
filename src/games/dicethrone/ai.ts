@@ -1797,7 +1797,12 @@ const buildInteractionActions = (
             if (selectableDice.length < 2) {
                 return [buildEmergencyInteractionCancelAction(interactionId, 'empty-options')];
             }
-            const orderedSelections = enumerateOrderedSelections(selectableDice, Math.min(2, selectCount));
+            const orderedSelections = enumerateOrderedSelections(selectableDice, Math.min(2, selectCount))
+                // 复制同值骰不会改变目标骰面；这不是可用的 AI 行动。
+                .filter(([sourceDie, targetDie]) => sourceDie?.value !== targetDie?.value);
+            if (orderedSelections.length === 0) {
+                return [buildEmergencyInteractionCancelAction(interactionId, 'no-effective-copy-target')];
+            }
             return orderedSelections.map((selection) => {
                 const sourceDie = selection[0];
                 const targetDice = selection.slice(1);

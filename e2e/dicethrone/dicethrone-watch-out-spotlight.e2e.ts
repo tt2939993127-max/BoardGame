@@ -27,6 +27,7 @@ import {
     waitForGameBoard,
 } from '../helpers/dicethrone';
 import { setChineseLocale, waitForTestHarness } from '../helpers/common';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
 const DICETHRONE_TEST_TIMEOUT_MS = 300000;
@@ -2884,7 +2885,7 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     await game.screenshot('09-samurai-righteousness-vs-monk', testInfo);
 });
 
-test('online samurai righteousness bonus-die spotlight should close through force-dismiss panel', async ({ browser }, testInfo) => {
+test('online samurai righteousness bonus dice should remain in the right tray until ordinary confirm', async ({ browser }, testInfo) => {
     test.setTimeout(DICETHRONE_ONLINE_TEST_TIMEOUT_MS);
     await clearEvidenceScreenshotsForTest(testInfo);
 
@@ -3010,15 +3011,15 @@ test('online samurai righteousness bonus-die spotlight should close through forc
         await dragHandCardToPlay(guestPage, 'card-righteousness');
         await closeCardSpotlightByRealClickIfVisible(guestPage);
 
-        const guestBonusDieOverlay = guestPage.locator('[data-testid="bonus-die-overlay"]');
-        await expect(guestBonusDieOverlay).toBeVisible({ timeout: 10000 });
-        await guestPage.waitForTimeout(250);
-        await expect(guestBonusDieOverlay).toBeVisible({ timeout: 1000 });
+        await expectRightTrayBonusDiceConfirmation(guestPage, async () => (
+            await guestPage.evaluate(() => (window as any).__BG_TEST_HARNESS__?.state?.get?.())
+        ), { sourceAbilityId: 'card-righteousness' });
+        await expect(guestPage.getByTestId('dicethrone-2d-dice-tray').getByTestId('dice-2d')).toHaveCount(2);
         await savePageEvidenceScreenshot(
             guestPage,
             testInfo,
-            'online-samurai-righteousness-force-dismiss-before',
-            '11-online-samurai-righteousness-force-dismiss-before.png',
+            'online-samurai-righteousness-right-tray-before-confirm',
+            '11-online-samurai-righteousness-right-tray-before-confirm.png',
         );
 
         await guestPage.waitForFunction(() => {
@@ -3027,25 +3028,9 @@ test('online samurai righteousness bonus-die spotlight should close through forc
                 && state?.core?.pendingBonusDiceSettlement?.displayOnly === true;
         }, { timeout: 10000, polling: 200 });
 
-        await openForceActionsPanel(guestPage);
-        await savePageEvidenceScreenshot(
-            guestPage,
-            testInfo,
-            'online-samurai-righteousness-force-dismiss-panel-open',
-            '11b-online-samurai-righteousness-force-dismiss-panel-open.png',
-        );
-        const forceDismissButton = guestPage.getByTestId('hud-force-dismiss-popup');
-        await expect(forceDismissButton).toBeVisible({ timeout: 5000 });
-        await saveLocatorEvidenceScreenshot(
-            forceDismissButton,
-            testInfo,
-            'online-samurai-righteousness-force-dismiss-button',
-            '11c-online-samurai-righteousness-force-dismiss-button.png',
-        );
-        await forceDismissButton.click();
-
-        await expect(guestPage.getByTestId('fab-panel-force-actions')).toBeHidden({ timeout: 5000 });
-        await expect(guestBonusDieOverlay).toBeHidden({ timeout: 5000 });
+        await settleCurrentBonusDice(guestPage, async () => (
+            await guestPage.evaluate(() => (window as any).__BG_TEST_HARNESS__?.state?.get?.())
+        ), { sourceAbilityId: 'card-righteousness' });
 
         await expect.poll(async () => {
             const state = await guestPage.evaluate(() => (window as any).__BG_TEST_HARNESS__?.state?.get?.());
@@ -3061,8 +3046,8 @@ test('online samurai righteousness bonus-die spotlight should close through forc
         await savePageEvidenceScreenshot(
             guestPage,
             testInfo,
-            'online-samurai-righteousness-force-dismiss-after',
-            '12-online-samurai-righteousness-force-dismiss-after.png',
+            'online-samurai-righteousness-right-tray-after-confirm',
+            '12-online-samurai-righteousness-right-tray-after-confirm.png',
         );
     } finally {
         await guestContext.close();

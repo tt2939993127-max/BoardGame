@@ -10,6 +10,11 @@ import {
 } from '../systems/InteractionSystem';
 import type { MatchState } from '../types';
 import { resolveCurrentTurnPlayerIdFromState } from '../sessionContext';
+import {
+    hasPendingResponseWindowInteractionLock,
+    resolveResponseWindowCurrent,
+    responseWindowSeatViewBelongsToResponder,
+} from '../responseWindowInteractionLock';
 import type { GameEngineConfig } from './server';
 import {
     isOnlineAiWatchdogActiveTurnLegalActionOnlyPhase,
@@ -313,20 +318,10 @@ export function buildAiProgressMarker(
             })
             .join(',')
         : '';
-    const currentResponseWindow = state.sys?.responseWindow?.current as {
-        windowType?: unknown;
-        sourceId?: unknown;
-        currentResponderIndex?: unknown;
-    } | undefined;
-    const responseWindowType = typeof currentResponseWindow?.windowType === 'string'
-        ? currentResponseWindow.windowType
-        : '';
-    const responseWindowSourceId = typeof currentResponseWindow?.sourceId === 'string'
-        ? currentResponseWindow.sourceId
-        : '';
-    const responderIndex = typeof currentResponseWindow?.currentResponderIndex === 'number'
-        ? currentResponseWindow.currentResponderIndex
-        : '';
+    const currentResponseWindow = resolveResponseWindowCurrent(state);
+    const responseWindowType = currentResponseWindow?.windowType ?? '';
+    const responseWindowSourceId = currentResponseWindow?.sourceId ?? '';
+    const responderIndex = currentResponseWindow?.currentResponderIndex ?? '';
     const currentPlayerId = resolveOnlineAiCurrentPlayerId(state, options) ?? '';
     const pregameSelectionProgressSignature = resolvePregameSelectionProgressSignature(state, options);
 
@@ -517,26 +512,12 @@ export function buildResponseWindowRecoveryFingerprintHint(
     reason: 'response-window' | 'response-loop' | 'manual-response-window' = 'response-window',
 ): string {
     const phase = typeof state?.sys?.phase === 'string' ? state.sys.phase : '';
-    const current = (state?.sys?.responseWindow as { current?: unknown } | undefined)?.current as {
-        id?: unknown;
-        windowType?: unknown;
-        sourceId?: unknown;
-        responderQueue?: unknown;
-        currentResponderIndex?: unknown;
-    } | undefined;
-
-    const windowId = typeof current?.id === 'string' ? current.id : '';
-    const windowType = typeof current?.windowType === 'string' ? current.windowType : '';
-    const sourceId = typeof current?.sourceId === 'string' ? current.sourceId : '';
-    const responderQueue = Array.isArray(current?.responderQueue) ? current.responderQueue : [];
-    const responderIndex = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
-    const responderId = typeof responderQueue[responderIndex] === 'string'
-        ? responderQueue[responderIndex]
-        : fallbackPlayerId;
-    const queueSignature = responderQueue
-        .map((value) => (typeof value === 'string' ? value : ''))
-        .filter((value) => value.length > 0)
-        .join('|');
+    const current = resolveResponseWindowCurrent(state);
+    const windowId = current?.id ?? '';
+    const windowType = current?.windowType ?? '';
+    const sourceId = current?.sourceId ?? '';
+    const responderId = current?.currentResponderId ?? fallbackPlayerId;
+    const queueSignature = current?.responderQueue.join('|') ?? '';
 
     return `${reason}:${responderId}:${phase}:${windowType}:${sourceId}:${queueSignature}:${windowId}`;
 }
@@ -676,10 +657,7 @@ export function resolveForceAdvancePhaseAfterRecovery(args: {
         return null;
     }
 
-    const responseWindow = authoritativeState.sys?.responseWindow as {
-        current?: unknown;
-    } | undefined;
-    if (responseWindow?.current) {
+    if (resolveResponseWindowCurrent(authoritativeState)) {
         return null;
     }
 
@@ -834,18 +812,6 @@ function buildForceSkipPayloadFromSeatState(
     return null;
 }
 
-function hasPendingResponseWindowInteractionLock(
-    state: MatchState<unknown> | null | undefined,
-): boolean {
-    const currentWindow = (state?.sys?.responseWindow as {
-        current?: {
-            pendingInteractionId?: unknown;
-        };
-    } | undefined)?.current;
-    return typeof currentWindow?.pendingInteractionId === 'string'
-        && currentWindow.pendingInteractionId.length > 0;
-}
-
 export function shouldInspectSeatStatesForHiddenAiInteraction(
     state: MatchState<unknown> | null | undefined,
 ): boolean {
@@ -872,61 +838,11 @@ function shouldPreferResponderHiddenInteractionOverResponsePass(args: {
         return false;
     }
 
-    const sharedWindow = (args.sharedState?.sys?.responseWindow as {
-        current?: {
-            id?: unknown;
-            windowType?: unknown;
-            sourceId?: unknown;
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        };
-    } | undefined)?.current;
-    const seatWindow = (args.seatState?.sys?.responseWindow as {
-        current?: {
-            id?: unknown;
-            windowType?: unknown;
-            sourceId?: unknown;
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        };
-    } | undefined)?.current;
-    if (!sharedWindow || !seatWindow) {
-        return false;
-    }
-
-    const sharedQueue = Array.isArray(sharedWindow.responderQueue) ? sharedWindow.responderQueue : [];
-    const seatQueue = Array.isArray(seatWindow.responderQueue) ? seatWindow.responderQueue : [];
-    const sharedIndex = typeof sharedWindow.currentResponderIndex === 'number' ? sharedWindow.currentResponderIndex : 0;
-    const seatIndex = typeof seatWindow.currentResponderIndex === 'number' ? seatWindow.currentResponderIndex : 0;
-    const sharedResponderId = typeof sharedQueue[sharedIndex] === 'string' ? sharedQueue[sharedIndex] : null;
-    const seatResponderId = typeof seatQueue[seatIndex] === 'string' ? seatQueue[seatIndex] : null;
-    if (sharedResponderId !== args.responderId || seatResponderId !== args.responderId) {
-        return false;
-    }
-
-    const sharedId = typeof sharedWindow.id === 'string' ? sharedWindow.id : '';
-    const seatId = typeof seatWindow.id === 'string' ? seatWindow.id : '';
-    if (sharedId && seatId) {
-        return sharedId === seatId;
-    }
-
-    const sharedType = typeof sharedWindow.windowType === 'string' ? sharedWindow.windowType : '';
-    const seatType = typeof seatWindow.windowType === 'string' ? seatWindow.windowType : '';
-    if (sharedType && seatType && sharedType !== seatType) {
-        return false;
-    }
-
-    const sharedSourceId = typeof sharedWindow.sourceId === 'string' ? sharedWindow.sourceId : '';
-    const seatSourceId = typeof seatWindow.sourceId === 'string' ? seatWindow.sourceId : '';
-    if (sharedSourceId && seatSourceId && sharedSourceId !== seatSourceId) {
-        return false;
-    }
-
-    if (sharedQueue.length > 0 && seatQueue.length > 0 && sharedQueue.join('|') !== seatQueue.join('|')) {
-        return false;
-    }
-
-    return true;
+    return responseWindowSeatViewBelongsToResponder({
+        sharedWindow: resolveResponseWindowCurrent(args.sharedState),
+        seatWindow: resolveResponseWindowCurrent(args.seatState),
+        responderId: args.responderId,
+    });
 }
 
 export function resolveForceSkippableHiddenAiInteraction(args: {
@@ -1059,24 +975,34 @@ export function resolveForceEndTurnForStalledAi(args: {
             }
         }
         if (hasPendingResponseWindowInteractionLock(args.sharedState)) {
+            const responseWindow = resolveResponseWindowCurrent(args.sharedState);
+            const responderId = responseWindow?.currentResponderId;
+            if (responderId && args.seatControllers[responderId]?.type !== 'human') {
+                const windowId = responseWindow.id ?? `${responderId}:pending-response-window-interaction-lock`;
+                const fingerprintHint = buildResponseWindowRecoveryFingerprintHint(
+                    args.sharedState,
+                    responderId,
+                    'response-window',
+                );
+                return {
+                    playerId: responderId,
+                    reason: 'response-window',
+                    requiresConfirmedAdvancePhase: true,
+                    fingerprintHint,
+                    resolution: buildForceEndTurnResolution({
+                        playerId: responderId,
+                        suffix: `${fingerprintHint}:${windowId}:orphan-pending-interaction`,
+                        commands: [{ type: 'SYS_RESPONSE_WINDOW_FORCE_CLOSE', payload: {} }],
+                    }),
+                };
+            }
             return null;
         }
     }
 
-    const responseWindow = args.sharedState?.sys?.responseWindow as {
-        current?: {
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        };
-    } | undefined;
-    const responderQueue = Array.isArray(responseWindow?.current?.responderQueue)
-        ? responseWindow?.current?.responderQueue
-        : [];
-    const responderIndex = typeof responseWindow?.current?.currentResponderIndex === 'number'
-        ? responseWindow.current.currentResponderIndex
-        : 0;
-    const responderId = responderQueue[responderIndex];
-    if (typeof responderId === 'string' && args.seatControllers[responderId]?.type !== 'human') {
+    const responseWindow = resolveResponseWindowCurrent(args.sharedState);
+    const responderId = responseWindow?.currentResponderId;
+    if (responderId && args.seatControllers[responderId]?.type !== 'human') {
         const responderSeatState = args.seatStates[responderId];
         if (shouldPreferResponderHiddenInteractionOverResponsePass({
             sharedState: args.sharedState,
@@ -1111,7 +1037,7 @@ export function resolveForceEndTurnForStalledAi(args: {
             }),
         };
     }
-    if (typeof responderId === 'string' && args.seatControllers[responderId]?.type === 'human') {
+    if (responderId && args.seatControllers[responderId]?.type === 'human') {
         // 当前响应权在 human 手里时，无论 active player 是否为 AI，都应保持真人流程。
         // watchdog 不能替真人强制关窗，也不能回退成 active-turn-legal-only。
         return null;
@@ -1226,15 +1152,7 @@ export function resolveManualForceEndAiPhase(args: {
         return null;
     }
 
-    const currentWindow = (args.sharedState?.sys?.responseWindow as {
-        current?: {
-            id?: unknown;
-            windowType?: unknown;
-            sourceId?: unknown;
-            responderQueue?: unknown;
-            currentResponderIndex?: unknown;
-        };
-    } | undefined)?.current;
+    const currentWindow = resolveResponseWindowCurrent(args.sharedState);
 
     const visibleCurrent = (args.sharedState.sys?.interaction as { current?: unknown } | undefined)?.current as
         | HiddenSimpleChoiceInteraction
@@ -1306,20 +1224,12 @@ export function resolveManualForceEndAiPhase(args: {
     }
 
     if (currentWindow) {
-        const responderQueue = Array.isArray(currentWindow.responderQueue)
-            ? currentWindow.responderQueue.filter((value): value is string => typeof value === 'string')
-            : [];
-        const responderIndex = typeof currentWindow.currentResponderIndex === 'number'
-            ? currentWindow.currentResponderIndex
-            : 0;
-        const responderId = responderQueue[responderIndex];
-        if (typeof responderId === 'string' && args.seatControllers[responderId]?.type === 'human') {
+        const responderId = currentWindow.currentResponderId;
+        if (responderId && args.seatControllers[responderId]?.type === 'human') {
             return null;
         }
-        if (typeof responderId === 'string' && args.seatControllers[responderId]?.type !== 'human') {
-            const windowId = typeof currentWindow.id === 'string' && currentWindow.id.length > 0
-                ? currentWindow.id
-                : `${responderId}:manual-response-window`;
+        if (responderId && args.seatControllers[responderId]?.type !== 'human') {
+            const windowId = currentWindow.id ?? `${responderId}:manual-response-window`;
             const fingerprintHint = buildResponseWindowRecoveryFingerprintHint(
                 args.sharedState,
                 responderId,
@@ -1433,8 +1343,7 @@ export function resolveForceEndTurnRecoveryStep(args: {
         return null;
     }
 
-    const responseWindow = authoritativeState.sys?.responseWindow as { current?: unknown } | undefined;
-    if (responseWindow?.current) {
+    if (resolveResponseWindowCurrent(authoritativeState)) {
         return null;
     }
 

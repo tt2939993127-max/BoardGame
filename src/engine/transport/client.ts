@@ -411,6 +411,27 @@ export class GameTransportClient {
         return true;
     }
 
+    /**
+     * 请求服务端完成一个 AI seat 的人工准备选择。
+     * 请求只表达座位、动作类别与选择项，正式游戏命令由服务端按权威状态生成。
+     */
+    requestManualSetupSelection(
+        request: import('./protocol').ManualSetupSelectionRequest,
+        onResult?: (result: import('./protocol').ManualSetupSelectionResult) => void,
+    ): boolean {
+        if (!this.socket || this._destroyed || this._syncInFlight || this._connectionState !== 'connected') {
+            return false;
+        }
+        this.socket.emit(
+            'manual-setup-selection',
+            this.config.matchID,
+            request,
+            this.config.credentials,
+            onResult,
+        );
+        return true;
+    }
+
     /** 发送临时 UI 事件；不进入权威游戏状态。 */
     sendUiEvent(eventType: string, payload: unknown): void {
         if (!this.socket || this._destroyed || this._connectionState !== 'connected') return;

@@ -5,9 +5,10 @@
 
 import type { CheatResourceModifier } from '../../../engine';
 import { HEROES_DATA } from '../heroes';
-import type { AbilityCard, DiceThroneCore, Die } from './types';
+import type { AbilityCard, DiceThroneCore, DiceThroneEvent, Die } from './types';
 import { getDieFaceByDefinition } from './rules';
-import { setCurrentRollContextDice } from './rollContext';
+import { reduce } from './reducer';
+import { resolveCurrentRollContext } from './rollContext';
 
 const getCardSourceAtlasIndex = (card: { sourceAtlasIndex?: number; previewRef?: { type: string; index?: number } }) => (
     typeof card.sourceAtlasIndex === 'number'
@@ -31,6 +32,17 @@ const applyDiceValues = (dice: Die[], values: number[]): Die[] => (
         };
     })
 );
+
+const getCheatDieModifyTarget = (
+    kind: NonNullable<DiceThroneCore['currentRollContext']>['kind'],
+): Extract<
+    Extract<DiceThroneEvent, { type: 'DIE_MODIFIED' }>['payload']['target'],
+    'activeDie' | 'pendingBonusDie' | 'evasionDie'
+> => {
+    if (kind === 'bonus') return 'pendingBonusDie';
+    if (kind === 'evasion') return 'evasionDie';
+    return 'activeDie';
+};
 
 const getHeroCardPool = (characterId: string | null | undefined): AbilityCard[] => {
     if (!characterId) return [];
@@ -100,40 +112,43 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         return core;
     },
     setDice: (core, values) => {
-        let nextCore: DiceThroneCore = {
+        const currentRollContext = resolveCurrentRollContext(core);
+        if (currentRollContext?.dice.length) {
+            const target = getCheatDieModifyTarget(currentRollContext.kind);
+            const shouldPrimeMainRoll = target === 'activeDie';
+            const primedCore = shouldPrimeMainRoll
+                ? {
+                    ...core,
+                    rollCount: core.rollCount || 1,
+                    rollConfirmed: false,
+                }
+                : core;
+
+            return currentRollContext.dice.reduce<DiceThroneCore>((state, die, index) => {
+                const newValue = values[index] ?? die.value;
+                if (newValue === die.value) return state;
+                return reduce(state, {
+                    type: 'DIE_MODIFIED',
+                    payload: {
+                        dieId: die.id,
+                        oldValue: die.value,
+                        newValue,
+                        playerId: currentRollContext.ownerPlayerId,
+                        ownerId: die.ownerId ?? currentRollContext.ownerPlayerId,
+                        target,
+                    },
+                    sourceCommandType: 'SYS_CHEAT_SET_DICE',
+                    timestamp: 0,
+                } as DiceThroneEvent);
+            }, primedCore);
+        }
+
+        return {
             ...core,
             dice: applyDiceValues(core.dice, values),
-            rollCount: core.rollCount || 1, // 确保至少有一次 roll
-            rollConfirmed: false, // 允许用户重新确认
+            rollCount: core.rollCount || 1,
+            rollConfirmed: false,
         };
-
-        if (core.currentRollContext) {
-            nextCore = setCurrentRollContextDice(
-                nextCore,
-                applyDiceValues(core.currentRollContext.dice, values),
-            );
-        }
-
-        const isCurrentBonusRoll = core.currentRollContext?.kind === 'bonus'
-            || (!core.currentRollContext && Boolean(core.pendingBonusDiceSettlement));
-        if (isCurrentBonusRoll && core.pendingBonusDiceSettlement) {
-            nextCore = {
-                ...nextCore,
-                pendingBonusDiceSettlement: {
-                    ...core.pendingBonusDiceSettlement,
-                    dice: core.pendingBonusDiceSettlement.dice.map((die, index) => ({
-                        ...die,
-                        value: values[index] ?? die.value,
-                        effectParams: {
-                            ...die.effectParams,
-                            value: values[index] ?? die.value,
-                        },
-                    })),
-                },
-            };
-        }
-
-        return nextCore;
     },
     setToken: (core, playerId, tokenId, amount) => {
         const player = core.players[playerId];

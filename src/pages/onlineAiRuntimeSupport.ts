@@ -1,17 +1,7 @@
-import type { MatchState } from '../engine/types';
 import type { AiSeatController } from '../engine/ai';
 import { createScopedLogger } from '../lib/logger';
 
 export type OnlineAiDebugWindow = Window & {
-    __BG_ONLINE_AI_DEBUG__?: {
-        getSeatLatestState: (playerId: string) => MatchState<unknown> | null;
-        getSeatDecisionState: (playerId: string) => Record<string, unknown> | null;
-        getTransportLog: () => Array<Record<string, unknown>>;
-        getPerfLog: () => Array<Record<string, unknown>>;
-        setSeatLatestStateOverride: (playerId: string, state: MatchState<unknown> | null) => void;
-        clearSeatLatestStateOverride: (playerId: string) => void;
-        clearAllSeatLatestStateOverrides: () => void;
-    };
     __BG_MATCHROOM_DEBUG__?: {
         getLiveSnapshot: () => Record<string, unknown> | null;
     };

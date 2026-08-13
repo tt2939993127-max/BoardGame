@@ -765,7 +765,7 @@ function handlePerfectlyCalibratedRoll({ attackerId, sourceAbilityId, state, tim
             sourceAbilityId,
             attackerId,
             attackerId,
-            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated', effectParams: { value } }],
+            [{ index: 0, value, face: face as any, effectKey: 'bonusDie.effect.artificerPerfectlyCalibrated', effectParams: { value, synth: synthGain } }],
             timestamp + 0.001,
             {
                 customResolutionId: ARTIFICER_PERFECTLY_CALIBRATED_SETTLEMENT_ID,
