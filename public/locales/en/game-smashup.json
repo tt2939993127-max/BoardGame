@@ -2003,6 +2003,10 @@
       "name": "Kaiju",
       "description": "Devastate bases with titan support, play-on-base actions, and breakpoint pressure."
     },
+    "kaiju_pod": {
+      "name": "Kaiju (POD)",
+      "description": "A POD-ready Kaiju deck with its own card atlas while sharing the ordinary Kaiju gameplay, bases, and titan."
+    },
     "magical_girls": {
       "name": "Magical Girls",
       "description": "Scale talents and recovery effects with the number of your minions at a base."

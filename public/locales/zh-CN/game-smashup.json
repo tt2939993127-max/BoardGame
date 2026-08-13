@@ -1961,6 +1961,10 @@
       "name": "怪兽",
       "description": "围绕泰坦、基地行动与破坏点压制，逐步把基地变成怪兽战场。"
     },
+    "kaiju_pod": {
+      "name": "怪兽（POD）",
+      "description": "POD 版怪兽，使用独立卡图，并沿用普通怪兽的玩法、基地与泰坦。"
+    },
     "magical_girls": {
       "name": "魔法少女",
       "description": "依靠同基地随从数量放大天赋、回收与移动效果。"
