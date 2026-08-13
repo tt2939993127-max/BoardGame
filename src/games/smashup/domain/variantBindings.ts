@@ -144,6 +144,18 @@ export const SMASHUP_VARIANT_BINDING_PROFILES: readonly SmashUpFactionVariantPro
     }),
     createVariantProfile(SMASHUP_FACTION_IDS.SHARKS, SMASHUP_FACTION_IDS.SHARKS_POD),
     createVariantProfile(SMASHUP_FACTION_IDS.TORNADOS, SMASHUP_FACTION_IDS.TORNADOS_POD),
+    createVariantProfile(
+        SMASHUP_FACTION_IDS.ANANSI_TALES,
+        SMASHUP_FACTION_IDS.ANANSI_TALES_POD,
+        undefined,
+        { basePool: 'shared' },
+    ),
+    createVariantProfile(
+        SMASHUP_FACTION_IDS.RUSSIAN_FAIRY_TALES,
+        SMASHUP_FACTION_IDS.RUSSIAN_FAIRY_TALES_POD,
+        undefined,
+        { basePool: 'shared' },
+    ),
 ];
 
 const profileByFactionId = new Map<string, SmashUpFactionVariantProfile>();

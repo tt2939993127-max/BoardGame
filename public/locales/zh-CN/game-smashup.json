@@ -2125,6 +2125,10 @@
       "name": "阿南西传说",
       "description": "把故事与手牌送给别人，再借由外来卡牌流转、抽牌和力量指示物获得收益。"
     },
+    "anansi_tales_pod": {
+      "name": "阿南西传说（POD）",
+      "description": "使用独立 POD 卡图，并沿用经典阿南西传说的赠牌玩法与基地池。"
+    },
     "grimms_fairy_tales": {
       "name": "格林童话",
       "description": "让童话角色成双成对登场，通过名称关联、配对增益和额外打出编织连锁。"
@@ -2132,6 +2136,10 @@
     "russian_fairy_tales": {
       "name": "俄罗斯童话",
       "description": "把随从送回牌库、翻出新的故事角色，并用变形与检索在关键时机重塑局面。"
+    },
+    "russian_fairy_tales_pod": {
+      "name": "俄罗斯童话（POD）",
+      "description": "使用独立 POD 卡图，并沿用经典俄罗斯童话的变形玩法与基地池。"
     },
     "ancient_incas": {
       "name": "古代印加人",
@@ -8806,6 +8814,122 @@
       "abilityText": "你可以将此随从的控制权交给另一名玩家，以将他们在这里的另一个随从洗入其拥有者的牌库。"
     },
     "russian_fairy_tales_mass_transformation": {
+      "name": "弥撒变化",
+      "effectText": "每名玩家将其手牌放到其牌库底，然后抽同等数量的牌。"
+    },
+    "anansi_tales_anansi_the_spider_pod": {
+      "name": "蜘蛛阿南西",
+      "abilityText": "天赋：从你的牌库中搜索一张标准行动并作为额外行动打出。然后将其放入另一名玩家手中，而不是放到它通常会去的地方。本回合你不能再次打出任何同名行动。"
+    },
+    "anansi_tales_osebo_the_leopard_pod": {
+      "name": "奥塞波豹",
+      "abilityText": "持续：你将一张牌放入另一名玩家手中后，在此随从上放置一个 +1 力量指示物。"
+    },
+    "anansi_tales_onini_the_python_pod": {
+      "name": "奥尼尼巨蟒",
+      "abilityText": "持续：另一名玩家从手牌或牌库打出或弃置一张不属于他们的牌后，你可以在你的一个随从上放置一个 +1 力量指示物。"
+    },
+    "anansi_tales_akye_the_turtle_pod": {
+      "name": "阿克耶海龟",
+      "abilityText": "你可以将你手中的一张牌放入另一名玩家手中，以抽两张牌。"
+    },
+    "anansi_tales_mboro_hornet_pod": {
+      "name": "马布罗大黄蜂",
+      "abilityText": "特殊：另一名玩家从手牌或牌库打出或弃置一张不属于他们的牌后，你可以将此随从作为额外随从打出。"
+    },
+    "anansi_tales_the_perfect_gift_pod": {
+      "name": "完美的礼物",
+      "effectText": "从你的牌库中搜索一张标准行动并作为额外行动打出。然后将其放入另一名玩家手中，而不是放到它通常会去的地方。"
+    },
+    "anansi_tales_pot_of_beans_pod": {
+      "name": "一锅豆子",
+      "effectText": "在随从上合计放置两个 +1 力量指示物。将此牌放入另一名玩家手中。"
+    },
+    "anansi_tales_collecting_stories_pod": {
+      "name": "收集故事",
+      "effectText": "查看另一名玩家的手牌。你可以从其手牌中将一张你拥有的牌作为额外牌打出。"
+    },
+    "anansi_tales_ear_of_corn_pod": {
+      "name": "玉米穗",
+      "effectText": "将你的弃牌堆中至多三张行动洗回你的牌库，并打出一个额外行动。将此牌放入另一名玩家手中。"
+    },
+    "anansi_tales_pot_of_wisdom_pod": {
+      "name": "智慧之锅",
+      "effectText": "每有一名其他玩家便抽一张牌，然后将你手中的一张牌放入每名其他玩家手中。打出一个额外行动。"
+    },
+    "anansi_tales_trading_stories_pod": {
+      "name": "交易故事",
+      "effectText": "你可以将你手中的至多三张牌放入其他玩家手中。每放入一张，抽一张牌。"
+    },
+    "anansi_tales_let_it_be_full_and_eat_pod": {
+      "name": "让它吃饱",
+      "effectText": "抽两张牌。将此牌放入另一名玩家手中。"
+    },
+    "anansi_tales_feather_gifts_pod": {
+      "name": "羽毛礼物",
+      "effectText": "移动你的一个随从到另一个基地。将此牌放入另一名玩家手中。"
+    },
+    "russian_fairy_tales_the_birch_woman_pod": {
+      "name": "白桦木女神",
+      "abilityText": "持续：此随从从场上进入弃牌堆后，你可以搜索你的手牌、牌库和/或弃牌堆寻找白桦木，并将其加入手牌或作为额外随从打出。"
+    },
+    "russian_fairy_tales_finist_the_falcon_pod": {
+      "name": "芬尼斯特猎鹰",
+      "abilityText": "特殊：基地计分前，你可以将此随从移动到那里，或者将此随从从那里返回你的手牌并作为额外随从打到另一个基地。"
+    },
+    "russian_fairy_tales_baba_yaga_pod": {
+      "name": "芭芭雅嘎",
+      "abilityText": "天赋：将这里另一个随从放到其拥有者的牌库底，让其将其牌库顶的一张随从作为额外随从打到这里，然后洗其牌库。"
+    },
+    "russian_fairy_tales_the_frog_princess_pod": {
+      "name": "青蛙公主",
+      "effectText": "打在你的一个随从上。天赋：将此随从放到其拥有者的牌库底，从你的牌库顶将一个随从作为额外随从打到这里并将此行动转移给它，然后洗你的牌库。"
+    },
+    "russian_fairy_tales_the_water_of_life_pod": {
+      "name": "生命之水",
+      "effectText": "将你弃牌堆中的一个随从放到你的牌库顶。你可以打出一个额外行动。"
+    },
+    "russian_fairy_tales_fetch_i_know_not_what_pod": {
+      "name": "我不知道要拿什么",
+      "effectText": "从你的牌库展示牌，直到展示出两张行动。你可以将其中任意数量的行动加入手牌。将其余牌洗回你的牌库。"
+    },
+    "russian_fairy_tales_go_i_know_not_whither_pod": {
+      "name": "我不知道去何处",
+      "effectText": "选择一个基地。将那里每名其他玩家控制的随机一个随从洗入其拥有者的牌库。"
+    },
+    "russian_fairy_tales_go_see_my_sister_pod": {
+      "name": "去看看我妹妹",
+      "effectText": "打在一个基地上。持续：你将你的一个随从打出或移动到这里后，你可以抽一张牌。"
+    },
+    "russian_fairy_tales_bewitched_pod": {
+      "name": "着魔",
+      "effectText": "打在一个随从上。持续：此随从获得 +2 力量。当此随从离场时，将此行动转移给另一个随从。"
+    },
+    "russian_fairy_tales_transformation_pod": {
+      "name": "变化",
+      "effectText": "将一个随从放到其拥有者的牌库底，让其从其牌库顶将一个随从作为额外随从打到那里，然后洗其牌库。"
+    },
+    "russian_fairy_tales_the_birch_pod": {
+      "name": "白桦木",
+      "abilityText": "持续：在你的回合开始时，你可以摧毁此随从，搜索你的手牌、牌库和/或弃牌堆寻找白桦木女神，并将其加入手牌或作为额外随从打到这里。"
+    },
+    "russian_fairy_tales_tsar_eagle_pod": {
+      "name": "沙皇之鹰",
+      "abilityText": "抽一张牌；或者将另一名玩家弃牌堆中的一个随从放到其牌库顶。"
+    },
+    "russian_fairy_tales_the_gray_wolf_pod": {
+      "name": "灰色之狼",
+      "abilityText": "天赋：将此随从放到其拥有者的牌库顶，以在这里打出一个额外随从并在其上放置一个 +1 力量指示物。"
+    },
+    "russian_fairy_tales_foolish_magician_pod": {
+      "name": "愚蠢的魔术师",
+      "abilityText": "抽三张牌，然后将你手中的三张牌以任意顺序放在你的牌库顶和/或牌库底。"
+    },
+    "russian_fairy_tales_toad_pod": {
+      "name": "蟾蜍",
+      "abilityText": "你可以将此随从的控制权交给另一名玩家，以将他们在这里的另一个随从洗入其拥有者的牌库。"
+    },
+    "russian_fairy_tales_mass_transformation_pod": {
       "name": "弥撒变化",
       "effectText": "每名玩家将其手牌放到其牌库底，然后抽同等数量的牌。"
     },
