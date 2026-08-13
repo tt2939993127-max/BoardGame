@@ -14,6 +14,7 @@ import {
     setDiceThroneDiceValues,
     waitForDiceThronePhase,
 } from '../helpers/dicethrone';
+import { settleCurrentBonusDice } from './bonus-dice-flow';
 
 const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
 const DICETHRONE_TEST_TIMEOUT_MS = 120000;
@@ -354,10 +355,8 @@ test.describe('DiceThrone 核心 E2E', () => {
             payload: {},
         });
 
-        await dispatchDiceThroneCommand(page, {
-            type: 'SKIP_BONUS_DICE_REROLL',
-            playerId: '0',
-            payload: {},
+        await settleCurrentBonusDice(page, () => readDiceThroneHarnessState<DiceThroneMatchState>(page), {
+            sourceAbilityId: 'meditation',
         });
 
         await expect.poll(async () => {
@@ -387,10 +386,8 @@ test.describe('DiceThrone 核心 E2E', () => {
 
         await page.getByRole('button', { name: '闪避', exact: true }).click();
 
-        await dispatchDiceThroneCommand(page, {
-            type: 'SKIP_BONUS_DICE_REROLL',
-            playerId: '0',
-            payload: {},
+        await settleCurrentBonusDice(page, () => readDiceThroneHarnessState<DiceThroneMatchState>(page), {
+            sourceAbilityId: 'meditation',
         });
 
         await page.waitForFunction(

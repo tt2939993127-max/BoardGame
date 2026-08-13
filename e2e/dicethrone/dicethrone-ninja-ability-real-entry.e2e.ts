@@ -36,6 +36,7 @@ import {
     SLASH_2,
     SMOKE_SCREEN_2,
 } from '../../src/games/dicethrone/heroes/ninja/abilities';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 import '../../src/games/dicethrone/domain';
 
 type JsonRecord = Record<string, unknown>;
@@ -181,12 +182,6 @@ const closeCardSpotlightIfOpen = async (page: Page) => {
         await closeButton.click();
         await page.waitForTimeout(200);
     }
-};
-
-const closeBonusDieOverlay = async (page: Page) => {
-    const closeButton = page.getByLabel(/关闭|Close/i).first();
-    await expect(closeButton).toBeVisible({ timeout: 10000 });
-    await closeButton.click();
 };
 
 const chooseVariantByLabelIfVisible = async (page: Page, label: RegExp) => {
@@ -652,13 +647,9 @@ test.describe('DiceThrone Ninja 技能本体真实入口', () => {
             await clickResolvedAbilitySlot(match.guestPage, 'combo', 'poison-blade');
             await clickAdvancePhase(match.guestPage, '1');
 
-            const overlay = match.guestPage.getByTestId('bonus-die-overlay');
-            await expect(overlay).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '02-poison-blade-2-mask-overlay.png');
-            await screenshotLocator(overlay, testName, '03-poison-blade-2-mask-overlay-detail.png');
-
-            await closeBonusDieOverlay(match.guestPage);
-            await expect(overlay).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
+            await screenshot(match.guestPage, testName, '02-poison-blade-2-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await resolveDefenseOnPage(match.hostPage);
             await drainResponseWindows(match.hostPage, match.guestPage);
             await expect.poll(async () => {
@@ -684,7 +675,7 @@ test.describe('DiceThrone Ninja 技能本体真实入口', () => {
         }
     });
 
-    test('死亡盛放 II 应从真实槽位触发奖励骰特写并收口', async ({ browser }, testInfo) => {
+    test('死亡盛放 II 应从真实槽位进入右侧奖励骰盘并收口', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const match = await setupNinjaMatch(browser, testInfo.project.use.baseURL as string | undefined);
         const testName = '死亡盛放 II 应从真实槽位触发奖励骰特写并收口';
@@ -698,15 +689,9 @@ test.describe('DiceThrone Ninja 技能本体真实入口', () => {
             await screenshot(match.guestPage, testName, '01-death-blossom-2-before-click.png');
             await clickResolvedAbilitySlot(match.guestPage, 'sky', 'death-blossom');
             await clickAdvancePhase(match.guestPage, '1');
-            const overlay = match.guestPage.getByTestId('bonus-die-overlay');
-            await expect(overlay).toBeVisible({ timeout: 10000 });
-            await expect(overlay.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await expect(overlay.getByTestId('bonus-die-reroll-option-4')).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '02-death-blossom-2-bonus-dice-overlay.png');
-            await screenshotLocator(overlay, testName, '03-death-blossom-2-bonus-dice-overlay-detail.png');
-
-            await closeBonusDieOverlay(match.guestPage);
-            await expect(overlay).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
+            await screenshot(match.guestPage, testName, '02-death-blossom-2-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
                 const players = asRecordMap(core.players);

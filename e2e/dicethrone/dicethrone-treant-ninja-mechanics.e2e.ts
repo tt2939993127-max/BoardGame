@@ -25,6 +25,7 @@ import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { BLINK_2 } from '../../src/games/dicethrone/heroes/ninja/abilities';
 import { NINJA_CARDS } from '../../src/games/dicethrone/heroes/ninja/cards';
 import { TREANT_CARDS } from '../../src/games/dicethrone/heroes/treant/cards';
+import { expectRightTrayBonusDiceConfirmation, settleCurrentBonusDice } from './bonus-dice-flow';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -218,17 +219,6 @@ const screenshotCardSpotlightIfVisible = async (
     return true;
 };
 
-const closeBonusDieOverlay = async (page: Page) => {
-    const confirmDamageButton = page.getByRole('button', { name: /^(确认伤害|Confirm Damage)$/i }).first();
-    if (await confirmDamageButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmDamageButton.click();
-        return;
-    }
-    const closeButton = page.getByLabel(/关闭|Close/i).first();
-    await expect(closeButton).toBeVisible({ timeout: 5000 });
-    await closeButton.click();
-};
-
 const clickLifeSapPassive = async (page: Page) => {
     await closeDebugPanelIfOpen(page);
     const passiveButton = page.getByTestId('passive-action-treant-life-sap-0');
@@ -376,9 +366,8 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.hostPage, testName, '01-life-sap-entry-before-use.png');
 
             await clickLifeSapPassive(match.hostPage);
-            await expect(match.hostPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-            await expect(match.hostPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await screenshot(match.hostPage, testName, '02-life-sap-bonus-die-overlay.png');
+            await expectRightTrayBonusDiceConfirmation(match.hostPage, () => readHarnessCoreState(match.hostPage));
+            await screenshot(match.hostPage, testName, '02-life-sap-right-tray-before-confirm.png');
 
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.hostPage);
@@ -388,8 +377,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 return resources[RESOURCE_IDS.HP];
             }, { timeout: 10000 }).toBe(38);
 
-            await match.hostPage.getByLabel(/关闭|Close/i).first().click();
-            await expect(match.hostPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await settleCurrentBonusDice(match.hostPage, () => readHarnessCoreState(match.hostPage), {});
             await expect(match.hostPage.getByText('38').first()).toBeVisible({ timeout: 10000 });
             await screenshot(match.hostPage, testName, '03-life-sap-after-close.png');
         } finally {
@@ -1240,14 +1228,9 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.hostPage, testName, '01-trample-before-drag.png');
 
             await dragHandCardToPlay(match.hostPage, 'treant-card-trample');
-            const trampleBonusDieOverlay = match.hostPage.getByTestId('bonus-die-overlay');
-            await expect(trampleBonusDieOverlay).toBeVisible({ timeout: 10000 });
-            await expect(match.hostPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await screenshotLocator(trampleBonusDieOverlay, testName, '02-trample-bonus-dice-overlay-detail.png');
-            await screenshot(match.hostPage, testName, '02-trample-bonus-dice-overlay.png');
-
-            await closeBonusDieOverlay(match.hostPage);
-            await expect(match.hostPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.hostPage, () => readHarnessCoreState(match.hostPage));
+            await screenshot(match.hostPage, testName, '02-trample-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.hostPage, () => readHarnessCoreState(match.hostPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.hostPage);
                 const p0 = asRecord(asRecordMap(core.players)['0']);
@@ -1759,13 +1742,9 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.hostPage, testName, '01-soulfire-before-drag.png');
 
             await dragHandCardToPlay(match.hostPage, 'treant-card-soulfire');
-            const soulfireBonusDieOverlay = match.hostPage.getByTestId('bonus-die-overlay');
-            await expect(soulfireBonusDieOverlay).toBeVisible({ timeout: 10000 });
-            await expect(soulfireBonusDieOverlay).toContainText('魂火：1 树枝 / 1 树叶 / 1 树灵', { timeout: 10000 });
-            await screenshot(match.hostPage, testName, '02-soulfire-bonus-dice-overlay.png');
-            await screenshotLocator(soulfireBonusDieOverlay, testName, '02-soulfire-bonus-dice-overlay-detail.png');
-            await closeBonusDieOverlay(match.hostPage);
-            await expect(soulfireBonusDieOverlay).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.hostPage, () => readHarnessCoreState(match.hostPage));
+            await screenshot(match.hostPage, testName, '02-soulfire-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.hostPage, () => readHarnessCoreState(match.hostPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.hostPage);
                 const p0 = asRecord(asRecordMap(core.players)['0']);
@@ -1839,9 +1818,8 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.guestPage, testName, '01-dojo-mask-before-drag.png');
 
             await dragHandCardToPlay(match.guestPage, 'ninja-card-dojo');
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-            await expect(match.guestPage.getByText(/道场|Dojo|烟雾弹|忍术/i).first()).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '02-dojo-mask-bonus-die-overlay.png');
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage));
+            await screenshot(match.guestPage, testName, '02-dojo-mask-right-tray-before-confirm.png');
 
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
@@ -1855,8 +1833,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 };
             }, { timeout: 10000 }).toEqual({ smokeBomb: 1, ninjutsu: 2, handCount: 0 });
 
-            await match.guestPage.getByLabel(/关闭|Close/i).first().click();
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await screenshot(match.guestPage, testName, '03-dojo-mask-after-closeout.png');
 
             await prepareDojoScenario(1);
@@ -1866,8 +1843,8 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.guestPage, testName, '04-dojo-other-before-drag.png');
 
             await dragHandCardToPlay(match.guestPage, 'ninja-card-dojo');
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '05-dojo-other-bonus-die-overlay.png');
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage));
+            await screenshot(match.guestPage, testName, '05-dojo-other-right-tray-before-confirm.png');
 
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
@@ -1883,8 +1860,7 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
                 };
             }, { timeout: 10000 }).toEqual({ smokeBomb: 0, ninjutsu: 0, handCount: 1, deckDelta: 1 });
 
-            await match.guestPage.getByLabel(/关闭|Close/i).first().click();
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await screenshot(match.guestPage, testName, '06-dojo-other-after-closeout.png');
         } finally {
             await closeMatchContexts(match);
@@ -2523,12 +2499,9 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.guestPage, testName, '01-shuriken-before-drag.png');
 
             await dragHandCardToPlay(match.guestPage, 'ninja-card-shuriken');
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-            await expect(match.guestPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '02-shuriken-bonus-dice-overlay.png');
-
-            await closeBonusDieOverlay(match.guestPage);
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage));
+            await screenshot(match.guestPage, testName, '02-shuriken-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
                 const p1 = asRecord(asRecordMap(core.players)['1']);
@@ -2637,14 +2610,9 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.guestPage, testName, '01-escape-before-drag-pending-damage.png');
 
             await dragHandCardToPlay(match.guestPage, 'ninja-card-escape');
-            const bonusDieOverlay = match.guestPage.getByTestId('bonus-die-overlay');
-            await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
-            await expect(match.guestPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await screenshotLocator(bonusDieOverlay, testName, '02-escape-bonus-die-overlay-detail.png');
-            await screenshot(match.guestPage, testName, '02-escape-bonus-die-overlay.png');
-
-            await closeBonusDieOverlay(match.guestPage);
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage));
+            await screenshot(match.guestPage, testName, '02-escape-right-tray-before-confirm.png');
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
                 const p1 = asRecord(asRecordMap(core.players)['1']);
@@ -2962,12 +2930,10 @@ test.describe('DiceThrone Treant / Ninja 新英雄机制', () => {
             await screenshot(match.guestPage, testName, '01-ninjutsu-token-response-before-use.png');
 
             await clickTokenUseButton(match.guestPage);
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-            await expect(match.guestPage.getByTestId('bonus-die-reroll-option-0')).toBeVisible({ timeout: 10000 });
-            await screenshot(match.guestPage, testName, '02-ninjutsu-bonus-die-overlay.png');
+            await expectRightTrayBonusDiceConfirmation(match.guestPage, () => readHarnessCoreState(match.guestPage));
+            await screenshot(match.guestPage, testName, '02-ninjutsu-right-tray-before-confirm.png');
 
-            await match.guestPage.getByLabel(/关闭|Close/i).first().click();
-            await expect(match.guestPage.getByTestId('bonus-die-overlay')).toBeHidden({ timeout: 10000 });
+            await settleCurrentBonusDice(match.guestPage, () => readHarnessCoreState(match.guestPage), {});
             await expect.poll(async () => {
                 const core = await readHarnessCoreState(match.guestPage);
                 return core.pendingDamage ?? null;

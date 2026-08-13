@@ -47,6 +47,7 @@ import {
     STRATEGIC_SHIFT_2,
     WAR_MONGER_2,
 } from '../../src/games/dicethrone/heroes/zhanshujia/abilities';
+import { settleCurrentBonusDice } from './bonus-dice-flow';
 
 type JsonRecord = Record<string, unknown>;
 type MatchSetup = NonNullable<Awaited<ReturnType<typeof setupOnlineMatch>>>;
@@ -10145,17 +10146,9 @@ test.describe('DiceThrone 战术家 / 咒缚海盗新增英雄 intake', () => {
             const lootCount = dice.filter(die => die.face === CURSED_PIRATE_DICE_FACE_IDS.LOOT).length;
             const skullCount = dice.filter(die => die.face === CURSED_PIRATE_DICE_FACE_IDS.SKULL).length;
 
-            const confirmDamageButton = match.guestPage.getByRole('button', { name: /^(确认伤害|Confirm Damage)$/i }).first();
-            const confirmDamageVisible = await confirmDamageButton.isVisible({ timeout: 1000 }).catch(() => false);
-            if (confirmDamageVisible) {
-                await confirmDamageButton.click();
-            } else {
-                await dispatchDiceThroneCommand(match.guestPage, {
-                    type: 'SKIP_BONUS_DICE_REROLL',
-                    playerId: '1',
-                    payload: {},
-                });
-            }
+            await settleCurrentBonusDice(match.guestPage, () => readServerCore(match.matchId, match.guestPage), {
+                sourceAbilityId: 'make-your-mark',
+            });
 
             if (skullCount > 0) {
                 const guestModal = match.guestPage.locator('#modal-root');

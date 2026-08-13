@@ -66,7 +66,7 @@ import { getPlayerAbilityBaseDamage, getPlayerAbilityEffects, playerAbilityHasDa
 import { evaluateTriggerCondition } from './combat';
 import { findHeroCard } from '../heroes';
 import { hasCurrentChoiceAnchor, registerChoiceEffectHandler } from './choiceEffects';
-import { hasSpentTreantTreeSpiritThisTurn, hasUsablePassiveAction } from './passiveAbility';
+import { hasSpentTreantTreeSpiritThisTurn, hasUsableOwnUpkeepPassiveAction } from './passiveAbility';
 import { registerBonusDiceSettlementHandler } from './bonusDiceSettlement';
 import { isCurrentBonusRollSettlement } from './rollContext';
 import {
@@ -2226,7 +2226,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const hasPendingDamage = core.pendingDamage !== null && core.pendingDamage !== undefined;
             const hasPendingBonusDice = hasInteractivePendingBonusDiceSettlement(core);
             const hasUsableUpkeepPassiveAction = phase === 'upkeep'
-                && hasUsablePassiveAction(core, core.activePlayerId, 'upkeep');
+                && hasUsableOwnUpkeepPassiveAction(core, core.activePlayerId);
 
             if (
                 justEnteredPhase

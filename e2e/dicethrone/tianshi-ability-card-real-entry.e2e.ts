@@ -12,6 +12,7 @@ import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { ALL_TOKEN_DEFINITIONS } from '../../src/games/dicethrone/domain/characters';
 import { setDiceThroneBonusDiceValues } from '../helpers/dicethrone';
+import { expectBonusDiceAutoSettled, getRightTrayDie, settleCurrentBonusDice } from './bonus-dice-flow';
 import '../../src/games/dicethrone/domain';
 
 type JsonRecord = Record<string, any>;
@@ -278,31 +279,6 @@ const dragHandCardToPlay = async (page: Page, cardId: string): Promise<void> => 
     await page.mouse.move(2, 2);
 }
 
-const settleBonusOverlay = async (page: Page): Promise<void> => {
-    // 卡牌特写是 pointer-events-none 的非交互展示层，且对手可能连续产生多张
-    // 3 秒特写；它不是奖励骰交互载体，不应等待整条特写队列清空后才收口。
-    // 拖拽后的同一张手牌可能留下产品已有的卡牌查看层；它才可能挡住确认按钮，
-    // 因此仍按真实产品入口关闭它，不伪造状态。
-    const boardMagnify = page.getByTestId('board-magnify-overlay');
-    if (await boardMagnify.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await boardMagnify.getByRole('button', { name: /关闭预览|Close preview/i }).click();
-        await expect(boardMagnify).toBeHidden({ timeout: 3000 });
-    }
-
-    const overlay = page.getByTestId('bonus-die-overlay');
-    await expect(overlay).toBeVisible({ timeout: 10000 });
-    const actionButton = overlay.getByRole('button', { name: /确认伤害|确认伤害|关闭特写|Confirm damage|Close spotlight/i }).first();
-    await expect(actionButton).toBeVisible({ timeout: 10000 });
-    // 产品浮层保留 300ms 点击保护窗，避免触发浮层的同一次点击立刻关闭。
-    await page.waitForTimeout(350);
-    await actionButton.click({ force: true });
-    await expect.poll(async () => page.evaluate(() => {
-        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-        return state?.core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null;
-    }), { timeout: 10000 }).toBeNull();
-    await expect(overlay).toBeHidden({ timeout: 10000 });
-};
-
 const selectPlayerTarget = async (page: Page, playerId: string): Promise<void> => {
     const target = page.getByTestId(`dt-player-target-${playerId}`);
     await expect(target).toBeVisible({ timeout: 10000 });
@@ -385,33 +361,16 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             .toBe('divine-punishment');
 
         await advancePhase(page);
-        const overlay = page.getByTestId('bonus-die-overlay');
-        await expect(overlay).toBeVisible({ timeout: 10000 });
+        await expectBonusDiceAutoSettled(page, () => readState(game), { expectedDiceCount: 4 });
         await expect.poll(async () => {
             const state = await readState(game);
-            const settlement = state.core?.pendingBonusDiceSettlement;
-            return {
-                sourceAbilityId: settlement?.sourceAbilityId ?? null,
-                diceValues: settlement?.dice?.map((die: JsonRecord) => die.value) ?? [],
-            };
-        }, { timeout: 10000 }).toEqual({
-            sourceAbilityId: 'divine-punishment',
-            diceValues: [1, 4, 5, 6],
-        });
-        await game.screenshot('tianshi-divine-punishment-four-bonus-dice', testInfo);
-
-        await settleBonusOverlay(page);
-        await expect.poll(async () => {
-            const state = await readState(game);
-            const tianshi = state.core?.players?.['0'];
-            const monk = state.core?.players?.['1'];
             return {
                 pendingSettlement: state.core?.pendingBonusDiceSettlement ?? null,
                 pendingAttack: state.core?.pendingAttack ?? null,
-                opponentHp: monk?.resources?.[RESOURCE_IDS.HP] ?? null,
-                flight: tianshi?.tokens?.[TOKEN_IDS.FLIGHT] ?? 0,
-                purify: tianshi?.tokens?.[TOKEN_IDS.PURIFY] ?? 0,
-                dazzle: monk?.statusEffects?.[STATUS_IDS.DAZZLE] ?? 0,
+                opponentHp: state.core?.players?.['1']?.resources?.[RESOURCE_IDS.HP] ?? null,
+                flight: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.FLIGHT] ?? 0,
+                purify: state.core?.players?.['0']?.tokens?.[TOKEN_IDS.PURIFY] ?? 0,
+                dazzle: state.core?.players?.['1']?.statusEffects?.[STATUS_IDS.DAZZLE] ?? 0,
             };
         }, { timeout: 10000 }).toMatchObject({
             pendingSettlement: null,
@@ -421,7 +380,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             purify: 1,
             dazzle: 1,
         });
-        await game.screenshot('tianshi-divine-punishment-after-closeout', testInfo);
+        await game.screenshot('tianshi-divine-punishment-after-auto-settle', testInfo);
     });
 
     test('圣刃应从真实技能槽位结算基础攻击并回到无临时攻击状态', async ({ page, game }, testInfo) => {
@@ -545,10 +504,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await expect.poll(async () => (await readState(game)).core?.pendingAttack?.sourceAbilityId ?? null, { timeout: 10000 })
             .toBe('triumphant-return');
         await advancePhase(page);
-        await expect(page.getByTestId('bonus-die-overlay')).toBeVisible({ timeout: 10000 });
-        await game.screenshot('tianshi-triumphant-return-bonus-die', testInfo);
-        await settleBonusOverlay(page);
-
+        await expectBonusDiceAutoSettled(page, () => readState(game), { expectedDiceCount: 1 });
         await expect.poll(async () => {
             const state = await readState(game);
             return {
@@ -586,7 +542,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             madeUndefendable: true,
             taijiReductions: 0,
         });
-        await game.screenshot('tianshi-triumphant-return-after-closeout', testInfo);
+        await game.screenshot('tianshi-triumphant-return-after-auto-settle', testInfo);
     });
 
     test('天使斗篷应在真实防御阶段打开可重投奖励骰，并免费重投一次后收口', async ({ page, game }, testInfo) => {
@@ -607,8 +563,6 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await clickAbilitySlot(page, 'meditate', 'angelic-cloak');
         await advancePhase(page);
 
-        const overlay = page.getByTestId('bonus-die-overlay');
-        await expect(overlay).toBeVisible({ timeout: 10000 });
         await expect.poll(async () => {
             const state = await readState(game);
             const settlement = state.core?.pendingBonusDiceSettlement;
@@ -628,9 +582,9 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         });
         await game.screenshot('tianshi-angelic-cloak-reroll-open', testInfo);
 
-        const rerollOption = page.getByTestId('bonus-die-reroll-option-0');
-        await expect(rerollOption).toBeEnabled({ timeout: 5000 });
-        await rerollOption.click({ force: true });
+        const rerollDie = getRightTrayDie(page, 0);
+        await expect(rerollDie).toBeEnabled({ timeout: 5000 });
+        await rerollDie.click({ force: true });
         await expect.poll(async () => {
             const state = await readState(game);
             return {
@@ -638,10 +592,10 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
                 dieValue: state.core?.pendingBonusDiceSettlement?.dice?.[0]?.value ?? null,
             };
         }, { timeout: 10000 }).toEqual({ rerollCount: 1, dieValue: 6 });
-        await expect(rerollOption).toBeDisabled({ timeout: 5000 });
+        await expect(rerollDie).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
         await game.screenshot('tianshi-angelic-cloak-reroll-limit', testInfo);
 
-        await settleBonusOverlay(page);
+        await settleCurrentBonusDice(page, () => readState(game), { sourceAbilityId: 'angelic-cloak' });
         await expect.poll(async () => {
             const state = await readState(game);
             return {
@@ -911,7 +865,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
             .toBe(cardId);
         await expect.poll(async () => (await readState(game)).core?.pendingBonusDiceSettlement?.dice?.map((die: JsonRecord) => die.value) ?? [], { timeout: 10000 })
             .toEqual([1, 4, 4, 1, 1]);
-        await settleBonusOverlay(page);
+        await settleCurrentBonusDice(page, () => readState(game), { sourceAbilityId: cardId });
         await expectCardConsumed(game, cardId, 9);
         await expect.poll(async () => {
             const state = await readState(game);
@@ -936,7 +890,7 @@ test.describe('DiceThrone 炽天使技能与专属卡真实入口', () => {
         await dragHandCardToPlay(page, cardId);
         await expect.poll(async () => (await readState(game)).core?.pendingBonusDiceSettlement?.sourceAbilityId ?? null, { timeout: 10000 })
             .toBe(cardId);
-        await settleBonusOverlay(page);
+        await settleCurrentBonusDice(page, () => readState(game), { sourceAbilityId: cardId });
         await expectCardConsumed(game, cardId, 9);
         await expect.poll(async () => (await readState(game)).core?.players?.['0']?.tokens?.[TOKEN_IDS.FLIGHT] ?? 0, { timeout: 10000 })
             .toBe(1);

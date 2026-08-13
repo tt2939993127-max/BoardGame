@@ -280,6 +280,31 @@ const injectArtificerShockBotPreDamageChoice = async (matchId: string, page: Pag
 };
 
 test.describe('DiceThrone 工匠真实入口', () => {
+    test('工匠真实开局应自动穿过维护阶段进入主要阶段', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        await clearEvidenceScreenshotsForTest(testInfo);
+        const baseURL = testInfo.project.use.baseURL as string | undefined ?? getGameServerBaseURL();
+        const match = await setupArtificerMatch(browser, baseURL);
+
+        try {
+            await expect.poll(async () => {
+                const state = await getMatchState(match.matchId, match.hostPage) as JsonRecord;
+                const root = asRecord(state.G ?? state);
+                const sys = asRecord(root.sys);
+                return sys.phase ?? null;
+            }, {
+                timeout: 5000,
+                message: '工匠真实开局后应自动从 upkeep 进入主要阶段',
+            }).toBe('main1');
+
+            await expect(match.hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 10000 });
+            await expect(match.hostPage.locator('[data-tutorial-id="advance-phase-button"]')).toBeVisible({ timeout: 10000 });
+            await saveEvidenceScreenshot(match.hostPage, testInfo, '00-工匠开局-自动进入主要阶段');
+        } finally {
+            await cleanupDTMatch(match);
+        }
+    });
+
     test('真实在线双玩家应能选择工匠并看到玩家板、技能槽与手牌', async ({ browser }, testInfo) => {
         test.setTimeout(180000);
         await clearEvidenceScreenshotsForTest(testInfo);

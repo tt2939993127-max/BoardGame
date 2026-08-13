@@ -118,12 +118,19 @@ npm run dev:lite
 
 启动后访问 http://localhost:5173 即可。
 
-### 给 AI 的起步提示词
+### 给 AI 的首次接管提示词
 
-如果你完全不会编程，可以先把下面这段话直接复制给 AI：
+新 clone 本仓库后，直接把下面这段话交给 AI。它只负责把本机制作环境跑通，完成后即可专注游戏制作；不会擅自发布、部署或改动无关功能。
 
 ```text
-请先阅读 `https://github.com/zhuanggenhua/BoardGame` 这个仓库里的 `README.md`、`AGENTS.md` 和你认为必要的项目文档，然后一步一步告诉我怎样在本地启动这个项目并成功打开页面。
+这是刚 clone 的 BoardGame 项目。请直接接管首次本地搭建，不要只告诉我命令。
+
+1. 先阅读 README.md、AGENTS.md、.spec/AGENTS.md，并只加载“本地运行、测试、资源上传检查、创建游戏”直接相关的项目规范。
+2. 检查 Node、npm、Git 和可选 Docker 是否可用；安装项目依赖，按 .env.example 建立本地 .env。
+3. 启动项目：优先 npm run dev；Docker 或 MongoDB 不可用时改用 npm run dev:lite。确认 http://localhost:5173 可访问，并运行一项与本次环境相符的最小本地测试。
+4. 验证资源上传通道，但绝对不要真实上传：只运行 npm run assets:check。只有输出“已获取服务器对象清单”才算上传入口连通；若输出 SSH 回退、本地扫描、缺 token 或连接错误，只报告“上传入口未验证”及缺少的最小环境条件，不得改用 npm run assets:upload、SSH、部署或索要/输出密钥。
+5. Open Design 是可选项：仅当我说要做设计稿、设计系统或使用 Open Design MCP 时，才运行 npm run setup:open-design、npm run start:open-design，并检查 http://127.0.0.1:7456/api/health；安装后提醒我重启 Codex。未提出设计需求时跳过它。
+6. 最后用简短中文汇报：本地地址、实际启动模式、测试结果、上传入口是否已验证、Open Design 是否跳过/可用、以及任何阻塞的最小补救动作。环境完成后，不要继续扫描、重构、部署或处理其它系统；等我提出具体游戏制作任务。
 ```
 
 ### Open Design MCP（协作者可选）
@@ -134,7 +141,7 @@ npm run dev:lite
 npm run setup:design:mcp
 ```
 
-如果本机没有 Open Design 源码或 `od` 命令，可以让脚本安装到 `D:\codex-home\tools\open-design`：
+如果本机没有 Open Design 源码或 `od` 命令，脚本会安装到当前项目的 `.tools/open-design`：
 
 ```bash
 npm run setup:open-design:install

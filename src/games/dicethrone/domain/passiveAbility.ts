@@ -14,7 +14,7 @@ import type { DiceThroneCore, TurnPhase } from './core-types';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
 import { resolveCurrentRollContext } from './rollContext';
-import { isPlayerAllowedByRollContextPolicy } from './rules';
+import { isPlayerAllowedByRollContextPolicy } from './rollContextPolicy';
 
 // ============================================================================
 // 被动能力数据定义
@@ -280,4 +280,29 @@ export function hasUsablePassiveAction(
         }
     }
     return false;
+}
+
+/** 只识别明确要求玩家在维护阶段操作的被动动作。 */
+export function hasUsableOwnUpkeepPassiveAction(
+    state: DiceThroneCore,
+    playerId: PlayerId,
+): boolean {
+    const passives = getPlayerPassiveAbilities(state, playerId);
+    return passives.some((passive) => passive.actions.some((action, actionIndex) => (
+        action.timing === 'ownUpkeepPhase'
+        && isPassiveActionUsable(state, playerId, passive.id, actionIndex, 'upkeep')
+    )));
+}
+
+/** 只识别能实际改变当前骰区的被动动作，用于决定是否要暂停奖励骰结算。 */
+export function hasUsableDiceRerollPassiveAction(
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    phase: TurnPhase,
+): boolean {
+    const passives = getPlayerPassiveAbilities(state, playerId);
+    return passives.some((passive) => passive.actions.some((action, actionIndex) => (
+        action.type === 'rerollDie'
+        && isPassiveActionUsable(state, playerId, passive.id, actionIndex, phase)
+    )));
 }

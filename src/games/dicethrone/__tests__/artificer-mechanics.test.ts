@@ -2034,6 +2034,22 @@ describe('DiceThrone 工匠 L2 核心机制', () => {
         expect(auto).toBeUndefined();
     });
 
+    it('工匠 upkeep 只有任意时机动作时仍应自动推进，不创建空的下一阶段等待', () => {
+        const state = createHeroMatchup('artificer', 'monk')(['0', '1'], fixedRandom);
+        state.core.activePlayerId = '0';
+        state.core.players['0'].tokens[TOKEN_IDS.SYNTH] = 4;
+
+        const auto = diceThroneFlowHooks.onAutoContinueCheck?.({
+            state: { ...state, sys: { ...state.sys, phase: 'upkeep' } },
+            events: [{
+                type: 'SYS_PHASE_CHANGED',
+                payload: { from: 'discard', to: 'upkeep' },
+            }],
+        } as Parameters<NonNullable<typeof diceThroneFlowHooks.onAutoContinueCheck>>[0]);
+
+        expect(auto).toEqual({ autoContinue: true, playerId: '0' });
+    });
+
     it('工匠受击响应牌在不可防御攻击的防御阶段仍应允许打出', () => {
         const state = createHeroMatchup('artificer', 'monk')(['0', '1'], fixedRandom);
         state.core.players['0'].resources[RESOURCE_IDS.CP] = 5;

@@ -5,12 +5,19 @@ type JsonRecord = Record<string, any>;
 type ReadGameState = () => Promise<JsonRecord>;
 
 type RightTrayBonusDiceOptions = {
-    sourceAbilityId: string;
+    sourceAbilityId?: string;
+};
+
+type AutoSettledBonusDiceOptions = {
+    expectedDiceCount: number;
 };
 
 const readPendingBonusSettlement = async (readState: ReadGameState) => {
     const state = await readState();
-    return state?.core?.pendingBonusDiceSettlement ?? state?.G?.core?.pendingBonusDiceSettlement ?? null;
+    return state?.pendingBonusDiceSettlement
+        ?? state?.core?.pendingBonusDiceSettlement
+        ?? state?.G?.core?.pendingBonusDiceSettlement
+        ?? null;
 };
 
 const closeDebugPanelIfVisible = async (page: Page): Promise<void> => {
@@ -46,12 +53,19 @@ export const getRightTrayDie = (page: Page, dieId: number | string) => (
 export const expectRightTrayBonusDiceConfirmation = async (
     page: Page,
     readState: ReadGameState,
-    { sourceAbilityId }: RightTrayBonusDiceOptions,
+    { sourceAbilityId }: RightTrayBonusDiceOptions = {},
 ): Promise<void> => {
-    await expect.poll(async () => {
-        const settlement = await readPendingBonusSettlement(readState);
-        return settlement?.sourceAbilityId ?? null;
-    }, { timeout: 10000 }).toBe(sourceAbilityId);
+    const settlement = async () => {
+        return readPendingBonusSettlement(readState);
+    };
+    if (sourceAbilityId) {
+        await expect.poll(async () => {
+            const pending = await settlement();
+            return pending?.sourceAbilityId ?? null;
+        }, { timeout: 10000 }).toBe(sourceAbilityId);
+    } else {
+        await expect.poll(settlement, { timeout: 10000 }).not.toBeNull();
+    }
     await closeDebugPanelIfVisible(page);
 
     const { diceTray, rail } = rightTrayRail(page);
@@ -71,18 +85,42 @@ export const expectRightTrayBonusDiceConfirmation = async (
 export const expectRightTrayBonusDiceAwaitingResponse = async (
     page: Page,
     readState: ReadGameState,
-    { sourceAbilityId }: RightTrayBonusDiceOptions,
+    { sourceAbilityId }: RightTrayBonusDiceOptions = {},
 ): Promise<void> => {
-    await expect.poll(async () => {
-        const settlement = await readPendingBonusSettlement(readState);
-        return settlement?.sourceAbilityId ?? null;
-    }, { timeout: 10000 }).toBe(sourceAbilityId);
+    if (sourceAbilityId) {
+        await expect.poll(async () => {
+            const settlement = await readPendingBonusSettlement(readState);
+            return settlement?.sourceAbilityId ?? null;
+        }, { timeout: 10000 }).toBe(sourceAbilityId);
+    } else {
+        await expect.poll(() => readPendingBonusSettlement(readState), { timeout: 10000 }).not.toBeNull();
+    }
     await closeDebugPanelIfVisible(page);
 
     const { diceTray, rail } = rightTrayRail(page);
     await expect(page.getByTestId('bonus-die-overlay')).toHaveCount(0);
     await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
     await expect(diceTray).toBeVisible({ timeout: 10000 });
+    await expect(rail.locator('[data-tutorial-id="dice-confirm-button"]')).toHaveCount(0);
+};
+
+/**
+ * 无合法介入手段的奖励骰由领域层自动结算，但最终骰面仍要在右侧骰盘只读回看。
+ * 这不是确认流程，调用方仍须断言自己的伤害、资源或阶段结果。
+ */
+export const expectBonusDiceAutoSettled = async (
+    page: Page,
+    readState: ReadGameState,
+    { expectedDiceCount }: AutoSettledBonusDiceOptions,
+): Promise<void> => {
+    await expect.poll(() => readPendingBonusSettlement(readState), { timeout: 10000 }).toBeNull();
+    await closeDebugPanelIfVisible(page);
+
+    const { diceTray, rail } = rightTrayRail(page);
+    await expect(page.getByTestId('bonus-die-overlay')).toHaveCount(0);
+    await expect(page.getByTestId('bonus-dice-confirm-button')).toHaveCount(0);
+    await expect(diceTray).toBeVisible({ timeout: 10000 });
+    await expect(diceTray.getByTestId('dice-2d')).toHaveCount(expectedDiceCount);
     await expect(rail.locator('[data-tutorial-id="dice-confirm-button"]')).toHaveCount(0);
 };
 

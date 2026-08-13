@@ -12,10 +12,8 @@ import { getCustomActionMeta, isCustomActionCategory } from './effects';
 import { logger } from '../../../lib/logger';
 import type {
     DiceThroneCore,
-    DiceThroneRollContext,
     Die,
     DieFace,
-    TeamId,
     TurnPhase,
     AbilityCard,
     SelectableCharacterId,
@@ -28,6 +26,13 @@ import { CHARACTER_DATA_MAP } from './characters';
 import { playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
 import { getCurrentRollDice, getCurrentRollOwnerId, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
 import { canRerollBonusDiceSettlement } from './bonusDiceSettlement';
+import { hasUsableDiceRerollPassiveAction } from './passiveAbility';
+import {
+    areTeammates,
+    getSeatingOrder,
+    getTeamId,
+    isTeamMode,
+} from './rollContextPolicy';
 
 import { getGameMode } from './utils';
 
@@ -237,92 +242,15 @@ export const getTokenStackLimit = (state: DiceThroneCore, playerId: PlayerId, to
 // 团队模式规则（2v2）
 // ============================================================================
 
-const TEAM_MODE_PLAYER_COUNT = 4;
-
-export const isTeamMode = (state: DiceThroneCore): boolean => {
-    return Object.keys(state.players).length === TEAM_MODE_PLAYER_COUNT;
-};
-
-export const getSeatingOrder = (state: DiceThroneCore): PlayerId[] => {
-    const fallbackOrder = Object.keys(state.players) as PlayerId[];
-    const seatingOrder = state.seatingOrder?.filter((pid) => !!state.players[pid]) ?? [];
-    return seatingOrder.length === fallbackOrder.length ? seatingOrder : fallbackOrder;
-};
-
-const deriveTeamIdFromSeatIndex = (seatIndex: number): TeamId => {
-    return seatIndex % 2 === 0 ? 'A' : 'B';
-};
-
-export const buildTeamIdByPlayerIdFromSeatingOrder = (
-    seatingOrder: PlayerId[]
-): Record<PlayerId, TeamId> => {
-    return seatingOrder.reduce((acc, pid, seatIndex) => {
-        acc[pid] = deriveTeamIdFromSeatIndex(seatIndex);
-        return acc;
-    }, {} as Record<PlayerId, TeamId>);
-};
-
-export const getTeamIdByPlayerIdMap = (state: DiceThroneCore): Record<PlayerId, TeamId> => {
-    const playerIds = Object.keys(state.players) as PlayerId[];
-    const explicitMap = state.teamIdByPlayerId;
-    if (explicitMap && playerIds.every((pid) => explicitMap[pid])) {
-        return explicitMap as Record<PlayerId, TeamId>;
-    }
-
-    const seatingOrder = getSeatingOrder(state);
-    const derivedMap = buildTeamIdByPlayerIdFromSeatingOrder(seatingOrder);
-
-    // 防御性兜底：任何缺失映射的玩家默认归 A（不会影响 1v1）
-    for (const pid of playerIds) {
-        if (!derivedMap[pid]) {
-            derivedMap[pid] = 'A';
-        }
-    }
-
-    return derivedMap;
-};
-
-export const getTeamId = (state: DiceThroneCore, playerId: PlayerId): TeamId | undefined => {
-    if (!state.players[playerId]) return undefined;
-    if (!isTeamMode(state)) return 'A';
-    return getTeamIdByPlayerIdMap(state)[playerId];
-};
-
-export const areTeammates = (state: DiceThroneCore, playerA: PlayerId, playerB: PlayerId): boolean => {
-    if (!state.players[playerA] || !state.players[playerB]) return false;
-    if (!isTeamMode(state)) return playerA === playerB;
-    const teamA = getTeamId(state, playerA);
-    const teamB = getTeamId(state, playerB);
-    return !!teamA && teamA === teamB;
-};
-
-/**
- * 当前骰区策略的唯一操作者判定。
- * `allies` 包含骰区拥有者所在队伍；`both` 仅包含上下文显式记录的拥有者与目标。
- */
-export const isPlayerAllowedByRollContextPolicy = (
-    state: DiceThroneCore,
-    context: DiceThroneRollContext,
-    playerId: PlayerId,
-    action: 'modify' | 'reroll',
-): boolean => {
-    if (!state.players[playerId]) return false;
-
-    const scope = action === 'modify'
-        ? context.policy.modifiableBy
-        : context.policy.rerollableBy;
-    if (scope === 'none') return false;
-    if (scope === 'any') return true;
-
-    const isOwner = context.ownerPlayerId === playerId;
-    if (scope === 'owner') return isOwner;
-
-    const isAlly = areTeammates(state, context.ownerPlayerId, playerId);
-    if (scope === 'allies') return isAlly;
-    if (scope === 'opponents') return !isAlly;
-
-    return isOwner || context.targetPlayerId === playerId;
-};
+export {
+    areTeammates,
+    buildTeamIdByPlayerIdFromSeatingOrder,
+    getSeatingOrder,
+    getTeamId,
+    getTeamIdByPlayerIdMap,
+    isTeamMode,
+    isPlayerAllowedByRollContextPolicy,
+} from './rollContextPolicy';
 
 export const getTeammateId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
     if (!isTeamMode(state)) return undefined;
@@ -1648,11 +1576,11 @@ export const hasRespondableContent = (
         }
     }
 
-    // 被动能力（如教皇税）不单独触发响应窗口的打开。
-    // 原因：被动能力的"任意时刻"在投掷阶段中作为正常操作使用（确认前），
-    // 如果每次都因为有 CP 就弹响应窗口，会严重打断游戏节奏。
-    // USE_PASSIVE_ABILITY 仍在 allowedCommands 中，如果响应窗口因其他原因
-    // （可用卡牌/Token）已打开，玩家仍可在其中使用被动能力。
+    // 奖励骰已投出后，只有实际能重投当前骰区的被动能力才算响应手段。
+    // 抽牌、建造等“任意时刻”动作不能凭 timing 字样阻止奖励骰自动结算。
+    if (hasUsableDiceRerollPassiveAction(state, playerId, phase)) {
+        return true;
+    }
 
     return false;
 };

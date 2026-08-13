@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from '../framework';
 import type { Page } from '@playwright/test';
+import { expectRightTrayBonusDiceConfirmation, getRightTrayDie, settleCurrentBonusDice } from './bonus-dice-flow';
 
 type HandDiagCard = {
   cardId: string | null;
@@ -460,20 +461,6 @@ async function waitForCardResolved(
 
 async function waitForHandAnimationSettled(page: Page): Promise<void> {
   await expect(page.locator('[data-testid="hand-flying-card"]')).toHaveCount(0, { timeout: 5000 });
-}
-
-async function closeVisibleBonusDieOverlay(page: Page): Promise<void> {
-  const overlay = page.locator('[data-testid="bonus-die-overlay"]');
-  if (await overlay.count() === 0) return;
-  if (!(await overlay.first().isVisible().catch(() => false))) return;
-
-  const confirmButton = overlay.first().getByRole('button', { name: /确认伤害|confirm damage/i });
-  if (await confirmButton.count() > 0 && await confirmButton.first().isVisible().catch(() => false)) {
-    await confirmButton.first().click();
-  } else {
-    await overlay.first().click();
-  }
-  await expect(overlay).toHaveCount(0, { timeout: 5000 });
 }
 
 async function injectOffensiveRollDice(
@@ -1695,7 +1682,7 @@ test.describe('DiceThrone hand card preview regression', () => {
     test.setTimeout(240000);
     const evidenceDir = ensureEvidenceDir();
 
-    await test.step('枪手打出 card-wild-west（Loaded 特写 + 重投 + 点击收口）', async () => {
+    await test.step('枪手打出 card-wild-west（Loaded 奖励骰重投后由右侧骰盘确认）', async () => {
       await openAndInjectGunslingerAttackModifierScene(page, game, {
         cardId: 'card-wild-west',
         sourceAbilityId: 'showdown',
@@ -1728,9 +1715,8 @@ test.describe('DiceThrone hand card preview regression', () => {
       await expect(loadedOption).toBeVisible({ timeout: 5000 });
       await loadedOption.click({ force: true });
 
-      const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
-      await expect(overlay).toBeVisible({ timeout: 5000 });
-      const bonusDie = overlay.getByTestId('dice-2d').first();
+      await expectRightTrayBonusDiceConfirmation(page, () => readState(game), {});
+      const bonusDie = getRightTrayDie(page, 0);
       await expect(bonusDie).toBeVisible({ timeout: 5000 });
       await bonusDie.click({ force: true });
 
@@ -1747,8 +1733,7 @@ test.describe('DiceThrone hand card preview regression', () => {
         rerollCount: 1,
       });
 
-      await overlay.click({ force: true });
-      await expect(overlay).toBeHidden({ timeout: 5000 });
+      await settleCurrentBonusDice(page, () => readState(game), {});
 
       await expect.poll(async () => {
         const state = await readState(game);
@@ -1774,7 +1759,7 @@ test.describe('DiceThrone hand card preview regression', () => {
       });
       await clickHandCard(page, 'card-eat-my-lead');
 
-      await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeVisible({ timeout: 5000 });
+      await expectRightTrayBonusDiceConfirmation(page, () => readState(game), {});
       await expect.poll(async () => {
         const state = await readState(game);
         const entries = state?.sys?.eventStream?.entries ?? [];
@@ -1795,7 +1780,7 @@ test.describe('DiceThrone hand card preview regression', () => {
         knockdown: 1,
       });
 
-      await closeVisibleBonusDieOverlay(page);
+      await settleCurrentBonusDice(page, () => readState(game), {});
     });
 
     await waitForHandAnimationSettled(page);
@@ -1949,7 +1934,7 @@ test.describe('DiceThrone hand card preview regression', () => {
       });
       await clickHandCard(page, 'card-righteousness');
 
-      await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeVisible({ timeout: 5000 });
+      await expectRightTrayBonusDiceConfirmation(page, () => readState(game), {});
       await expect.poll(async () => {
         const state = await readState(game);
         const entries = state?.sys?.eventStream?.entries ?? [];
@@ -1972,7 +1957,7 @@ test.describe('DiceThrone hand card preview regression', () => {
         samuraiRetribution: 0,
       });
 
-      await closeVisibleBonusDieOverlay(page);
+      await settleCurrentBonusDice(page, () => readState(game), {});
     });
 
     await test.step('武士打出 card-zanshin', async () => {
@@ -1984,7 +1969,7 @@ test.describe('DiceThrone hand card preview regression', () => {
       });
       await clickHandCard(page, 'card-zanshin');
 
-      await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeVisible({ timeout: 5000 });
+      await expectRightTrayBonusDiceConfirmation(page, () => readState(game), {});
       await expect.poll(async () => {
         const state = await readState(game);
         const entries = state?.sys?.eventStream?.entries ?? [];
@@ -2014,7 +1999,7 @@ test.describe('DiceThrone hand card preview regression', () => {
         samuraiRetribution: 1,
       });
 
-      await closeVisibleBonusDieOverlay(page);
+      await settleCurrentBonusDice(page, () => readState(game), {});
     });
 
     await waitForHandAnimationSettled(page);
@@ -2135,159 +2120,4 @@ test.describe('DiceThrone hand card preview regression', () => {
     await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-settled-no-shame.png'), fullPage: true });
   });
 
-  test('samurai Masamune II 应展示 6 骰奖励骰并能完成真实 UI 收口', async ({ page, game }) => {
-    test.setTimeout(240000);
-    const evidenceDir = ensureEvidenceDir();
-
-    await openAndInjectSamuraiMasamune2Scene(page, game, {
-      defenderCharacter: 'paladin',
-    });
-    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-before-trigger.png'), fullPage: true });
-
-    await clickAbilitySlot(page, 'masamune');
-    await clickAdvancePhase(page);
-
-    await expect.poll(async () => {
-      const state = await readState(game);
-      return {
-        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
-        phase: state?.sys?.phase ?? null,
-        sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
-        defenseAbilityId: state?.core?.pendingAttack?.defenseAbilityId ?? null,
-      };
-    }, { timeout: 10000 }).toMatchObject({
-      reject: null,
-      phase: 'defensiveRoll',
-      sourceAbilityId: 'masamune-2-large-straight',
-      defenseAbilityId: 'holy-defense',
-    });
-
-    // 注意：openTestGame 默认以 player '0' 作为可交互视角；
-    // 进入 defensiveRoll 后掷骰者是 defender（此场景 defender 为 player '1'），因此“掷骰按钮”对 player '0' 视角是 disabled。
-    //
-    // 本用例的目标是验证 **Masamune II 的 6 骰奖励骰特写 UI** 及其“关闭后可继续”的收口链路，
-    // 因此我们按项目规范使用 TestHarness **直接注入一个真实可发生的 pendingBonusDiceSettlement**，
-    // 跳过“防御方掷骰”这一步（否则单页视角无法完成交互）。
-    await page.evaluate(() => {
-      const harness = (window as any).__BG_TEST_HARNESS__;
-      const state = harness?.state?.get?.();
-      if (!harness || !state) {
-        throw new Error('TestHarness state not ready');
-      }
-
-      const samuraiTokens = state.core?.players?.['0']?.tokens ?? {};
-      const paladinTokens = state.core?.players?.['1']?.tokens ?? {};
-
-      harness.state.set({
-        ...state,
-        sys: {
-          ...state.sys,
-          // 使 UI 处于“可继续推进”的稳定阶段，并且仍能显示奖励骰 overlay
-          phase: 'main2',
-        },
-        core: {
-          ...state.core,
-          pendingAttack: null,
-          pendingBonusDiceSettlement: {
-            id: 'masamune-2-large-straight-display-e2e',
-            sourceAbilityId: 'masamune-2-large-straight',
-            attackerId: '0',
-            targetId: '1',
-            dice: [
-              { index: 0, value: 1, face: 'katana' },
-              { index: 1, value: 4, face: 'helm' },
-              { index: 2, value: 6, face: 'rising_sun' },
-              { index: 3, value: 2, face: 'katana' },
-              { index: 4, value: 6, face: 'rising_sun' },
-              { index: 5, value: 5, face: 'helm' },
-            ],
-            rerollCostTokenId: '',
-            rerollCostAmount: 0,
-            rerollCount: 0,
-            maxRerollCount: 0,
-            readyToSettle: false,
-            displayOnly: true,
-            summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
-            summaryEffectParams: {
-              katanaCount: 2,
-              shameCount: 2,
-              retributionCount: 2,
-            },
-          },
-          players: {
-            ...state.core.players,
-            '0': {
-              ...state.core.players['0'],
-              tokens: {
-                ...samuraiTokens,
-                // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1；注入场景保持“真实可达状态”
-                samurai_retribution: 1,
-              },
-            },
-            '1': {
-              ...state.core.players['1'],
-              tokens: {
-                ...paladinTokens,
-                shame: 2,
-              },
-            },
-          },
-        },
-      });
-
-      (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
-    });
-
-    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
-    await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
-    await expect(bonusDieOverlay.getByTestId('dice-2d')).toHaveCount(6, { timeout: 10000 });
-    await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
-    await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*2.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
-
-    await expect.poll(async () => {
-      const state = await readState(game);
-      const settlementDice = state?.core?.pendingBonusDiceSettlement?.dice ?? [];
-      return {
-        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
-        phase: state?.sys?.phase ?? null,
-        pendingSettlementId: state?.core?.pendingBonusDiceSettlement?.id ?? null,
-        settlementDisplayOnly: state?.core?.pendingBonusDiceSettlement?.displayOnly ?? null,
-        settlementDiceCount: settlementDice.length,
-        settlementFaces: settlementDice.map((die: any) => die.face ?? null),
-        summaryEffectKey: state?.core?.pendingBonusDiceSettlement?.summaryEffectKey ?? null,
-        summaryEffectParams: state?.core?.pendingBonusDiceSettlement?.summaryEffectParams ?? null,
-        paladinShame: state?.core?.players?.['1']?.tokens?.shame ?? 0,
-        samuraiRetribution: state?.core?.players?.['0']?.tokens?.samurai_retribution ?? 0,
-      };
-    }, { timeout: 15000 }).toMatchObject({
-      reject: null,
-      phase: 'main2',
-      settlementDisplayOnly: true,
-      settlementDiceCount: 6,
-      settlementFaces: ['katana', 'helm', 'rising_sun', 'katana', 'rising_sun', 'helm'],
-      summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
-      paladinShame: 2,
-      samuraiRetribution: 1,
-    });
-
-    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-overlay.png'), fullPage: true });
-
-    await closeVisibleBonusDieOverlay(page);
-    await expect(bonusDieOverlay).toHaveCount(0, { timeout: 5000 });
-    await expect.poll(async () => {
-      const state = await readState(game);
-      return {
-        pendingSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
-        phase: state?.sys?.phase ?? null,
-        pendingAttack: state?.core?.pendingAttack ?? null,
-      };
-    }, { timeout: 10000 }).toMatchObject({
-      pendingSettlement: null,
-      phase: 'main2',
-      pendingAttack: null,
-    });
-
-    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-closed.png'), fullPage: true });
-    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-final.png'), fullPage: true });
-  });
 });

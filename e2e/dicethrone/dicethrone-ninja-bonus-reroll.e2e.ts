@@ -4,6 +4,7 @@ import { getHeroDieFace } from '../../src/games/dicethrone/domain/rules';
 import type { Die } from '../../src/games/dicethrone/domain/types';
 import { DEATH_BLOSSOM_2, GOING_FORWARD_2 } from '../../src/games/dicethrone/heroes/ninja/abilities';
 import { TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { expectRightTrayBonusDiceConfirmation, getRightTrayDie, settleCurrentBonusDice } from './bonus-dice-flow';
 import '../../src/games/dicethrone/domain';
 
 const createNinjaDiceWithValues = (values: number[]) =>
@@ -59,18 +60,6 @@ async function dismissAttackShowcaseIfVisible(page: any): Promise<void> {
         await continueButton.click();
         await expect(continueButton).toBeHidden({ timeout: 5000 }).catch(() => {});
     }
-}
-
-async function closeBonusDieOverlay(page: any): Promise<void> {
-    const confirmDamageButton = page.getByRole('button', { name: /^(确认伤害|Confirm Damage)$/i }).first();
-    if (await confirmDamageButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmDamageButton.click();
-        return;
-    }
-
-    const closeButton = page.getByLabel(/关闭|Close/i).first();
-    await expect(closeButton).toBeVisible({ timeout: 5000 });
-    await closeButton.click();
 }
 
 async function chooseVariantByLabel(page: any, label: RegExp): Promise<void> {
@@ -286,8 +275,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
         await dismissAttackShowcaseIfVisible(page);
         await clickAdvancePhase(page, '0');
 
-        const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
-        await expect(overlay).toBeVisible({ timeout: 5000 });
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), { sourceAbilityId: 'going-forward-2-main' });
         await expect.poll(async () => {
             const state = await game.getState();
             const settlement = state?.core?.pendingBonusDiceSettlement;
@@ -303,12 +291,12 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             maxRerollCount: 1,
             diceValues: [2, 3],
         });
-        await game.screenshot('ninja-going-forward-2-main-overlay', testInfo);
+        await game.screenshot('ninja-going-forward-2-main-right-tray', testInfo);
 
         await page.evaluate(() => {
             window.__BG_TEST_HARNESS__?.dice.setValues([1]);
         });
-        const rerollOption0 = page.getByTestId('bonus-die-reroll-option-0');
+        const rerollOption0 = getRightTrayDie(page, 0);
         await expect(rerollOption0).toBeVisible({ timeout: 5000 });
         await rerollOption0.click({ force: true });
 
@@ -325,13 +313,11 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             maxRerollCount: 1,
             diceValues: [1, 3],
         });
-        await expect(overlay).toContainText('已达到本次重掷上限', { timeout: 5000 });
-        await expect(page.getByTestId('bonus-die-reroll-option-0')).toBeDisabled({ timeout: 5000 });
-        await expect(page.getByTestId('bonus-die-reroll-option-1')).toBeDisabled({ timeout: 5000 });
+        await expect(getRightTrayDie(page, 0)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
+        await expect(getRightTrayDie(page, 1)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
         await game.screenshot('ninja-going-forward-2-main-limit-reached', testInfo);
 
-        await closeBonusDieOverlay(page);
-        await expect(overlay).toBeHidden({ timeout: 5000 });
+        await settleCurrentBonusDice(page, () => game.getState(), { sourceAbilityId: 'going-forward-2-main' });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
@@ -372,9 +358,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
         await dismissAttackShowcaseIfVisible(page);
         await clickAdvancePhase(page, '0');
 
-        const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
-        await expect(overlay).toBeVisible({ timeout: 5000 });
-        await expect(overlay).toContainText(/刀尖舔血：造成 4 点真实伤害/i, { timeout: 5000 });
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), { sourceAbilityId: 'going-forward-2-bleed' });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
@@ -389,10 +373,9 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             pendingDamage: null,
             defenderHp: 26,
         });
-        await game.screenshot('ninja-going-forward-2-bleed-overlay', testInfo);
+        await game.screenshot('ninja-going-forward-2-bleed-right-tray', testInfo);
 
-        await closeBonusDieOverlay(page);
-        await expect(overlay).toBeHidden({ timeout: 5000 });
+        await settleCurrentBonusDice(page, () => game.getState(), { sourceAbilityId: 'going-forward-2-bleed' });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
@@ -424,8 +407,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
         await dismissAttackShowcaseIfVisible(page);
         await clickAdvancePhase(page, '0');
 
-        const overlay = page.locator('[data-testid="bonus-die-overlay"]').first();
-        await expect(overlay).toBeVisible({ timeout: 5000 });
+        await expectRightTrayBonusDiceConfirmation(page, () => game.getState(), { sourceAbilityId: 'death-blossom' });
         await expect.poll(async () => {
             const state = await game.getState();
             const settlement = state?.core?.pendingBonusDiceSettlement;
@@ -441,12 +423,12 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             maxRerollCount: 2,
             diceValues: [1, 1, 1, 4, 4],
         });
-        await game.screenshot('ninja-death-blossom-2-overlay-initial', testInfo);
+        await game.screenshot('ninja-death-blossom-2-right-tray-initial', testInfo);
 
         await page.evaluate(() => {
             window.__BG_TEST_HARNESS__?.dice.setValues([6]);
         });
-        await page.getByTestId('bonus-die-reroll-option-0').click({ force: true });
+        await getRightTrayDie(page, 0).click({ force: true });
         await expect.poll(async () => {
             const state = await game.getState();
             const settlement = state?.core?.pendingBonusDiceSettlement;
@@ -463,7 +445,7 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
         await page.evaluate(() => {
             window.__BG_TEST_HARNESS__?.dice.setValues([6]);
         });
-        await page.getByTestId('bonus-die-reroll-option-1').click({ force: true });
+        await getRightTrayDie(page, 1).click({ force: true });
         await expect.poll(async () => {
             const state = await game.getState();
             const settlement = state?.core?.pendingBonusDiceSettlement;
@@ -477,13 +459,11 @@ test.describe('DiceThrone Ninja 奖励骰重投', () => {
             maxRerollCount: 2,
             diceValues: [6, 6, 1, 4, 4],
         });
-        await expect(overlay).toContainText('已达到本次重掷上限', { timeout: 5000 });
-        await expect(page.getByTestId('bonus-die-reroll-option-0')).toBeDisabled({ timeout: 5000 });
-        await expect(page.getByTestId('bonus-die-reroll-option-4')).toBeDisabled({ timeout: 5000 });
+        await expect(getRightTrayDie(page, 0)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
+        await expect(getRightTrayDie(page, 4)).toHaveAttribute('data-clickable', 'false', { timeout: 5000 });
         await game.screenshot('ninja-death-blossom-2-limit-reached', testInfo);
 
-        await closeBonusDieOverlay(page);
-        await expect(overlay).toBeHidden({ timeout: 5000 });
+        await settleCurrentBonusDice(page, () => game.getState(), { sourceAbilityId: 'death-blossom' });
         await expect.poll(async () => {
             const state = await game.getState();
             return {
