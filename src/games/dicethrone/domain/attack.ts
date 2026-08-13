@@ -9,7 +9,7 @@ import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
 import { applyEvents, getPendingAttackExpectedDamage } from './utils';
 import { reduce } from './reducer';
-import { isInteractiveBonusDiceSettlement } from './rules';
+import { hasPendingBonusDiceSettlement } from './rules';
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     event.type === 'CHOICE_REQUESTED'
@@ -17,7 +17,7 @@ const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     || event.type === 'INTERACTION_REQUESTED';
 
 const isInteractiveBonusDiceRerollEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'BONUS_DICE_REROLL_REQUESTED' && isInteractiveBonusDiceSettlement(event.payload.settlement);
+    event.type === 'BONUS_DICE_REROLL_REQUESTED' && hasPendingBonusDiceSettlement(event.payload.settlement);
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,

@@ -10,7 +10,7 @@ import type { EffectAction, RollDieConditionalEffect, RollDieDefaultEffect } fro
 export type { RollDieConditionalEffect, RollDieDefaultEffect };
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { getActiveDice, getAttackDiceFaceCounts, getAttackDiceValues, getFaceCounts, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit, isInteractiveBonusDiceSettlement } from './rules';
+import { getActiveDice, getAttackDiceFaceCounts, getAttackDiceValues, getFaceCounts, getOpponents, getPendingBonusSettlementDice, getPlayerDieFace, getTokenStackLimit, hasPendingBonusDiceSettlement } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS } from './ids';
 import type {
@@ -1541,12 +1541,12 @@ export function resolveEffectsToEvents(
             break;
         }
 
-        // withDamage 中的奖励骰必须先等玩家确认最终骰面。
+        // withDamage 中的奖励骰必须先等响应窗口或自身重投规则确定最终骰面。
         // 不能在临时骰尚未收口时继续生成后面的主伤害，否则确认后恢复父攻击
         // 会再按最终 bonusDamage 生成一次，导致同一笔攻击重复落地。
         if (immediateEvents.some((event) => (
             event.type === 'BONUS_DICE_REROLL_REQUESTED'
-            && isInteractiveBonusDiceSettlement(event.payload.settlement)
+            && hasPendingBonusDiceSettlement(event.payload.settlement)
         ))) {
             break;
         }

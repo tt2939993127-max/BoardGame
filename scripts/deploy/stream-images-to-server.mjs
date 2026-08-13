@@ -82,8 +82,11 @@ const localArchivePath = path.join(os.tmpdir(), `boardgame-images-${tag}-${proce
 const remoteArchivePath = `/tmp/boardgame-images-${tag}-${process.pid}.tar`;
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const localWatchdogScriptPath = path.join(scriptDir, 'watch-game-server-cpu.sh');
+const localCpuProfileHelperPath = path.join(scriptDir, 'capture-node-cpu-profile.mjs');
 const remoteWatchdogTempPath = `/tmp/boardgame-game-server-cpu-watch-${process.pid}.sh`;
+const remoteCpuProfileHelperTempPath = `/tmp/boardgame-cpu-profile-${process.pid}.mjs`;
 const remoteWatchdogPath = path.posix.join(remoteDir, 'scripts', 'deploy', 'watch-game-server-cpu.sh');
+const remoteCpuProfileHelperPath = path.posix.join(remoteDir, 'scripts', 'deploy', 'capture-node-cpu-profile.mjs');
 const remoteWatchdogInstallCommand = [
   'set -eu',
   `source=${shellQuote(remoteWatchdogTempPath)}`,
@@ -92,6 +95,17 @@ const remoteWatchdogInstallCommand = [
   'cleanup() { rm -f "$source" "$staged"; }',
   'trap cleanup EXIT',
   'bash -n "$source"',
+  'install -m 755 "$source" "$staged"',
+  'mv -f "$staged" "$target"',
+].join('; ');
+const remoteCpuProfileHelperInstallCommand = [
+  'set -eu',
+  `source=${shellQuote(remoteCpuProfileHelperTempPath)}`,
+  `target=${shellQuote(remoteCpuProfileHelperPath)}`,
+  'staged="${target}.new.$$"',
+  'cleanup() { rm -f "$source" "$staged"; }',
+  'trap cleanup EXIT',
+  'node --check "$source"',
   'install -m 755 "$source" "$staged"',
   'mv -f "$staged" "$target"',
 ].join('; ');
@@ -138,11 +152,27 @@ const uploadWatchdogToRemote = async () => {
   );
 };
 
+const uploadCpuProfileHelperToRemote = async () => {
+  await runCommand(
+    'scp',
+    [...sshClientArgs, localCpuProfileHelperPath, `${host}:${remoteCpuProfileHelperTempPath}`],
+    '上传容器内 Node CPU 采样工具',
+  );
+};
+
 const installWatchdogOnRemote = async () => {
   await runCommand(
     'ssh',
     [...sshClientArgs, host, remoteWatchdogInstallCommand],
     '校验并原子安装宿主 CPU 采集脚本',
+  );
+};
+
+const installCpuProfileHelperOnRemote = async () => {
+  await runCommand(
+    'ssh',
+    [...sshClientArgs, host, remoteCpuProfileHelperInstallCommand],
+    '校验并原子安装 Node CPU 采样工具',
   );
 };
 
@@ -163,6 +193,14 @@ const cleanupRemoteWatchdog = async () => {
     await runCommand('ssh', [...sshClientArgs, host, `rm -f ${shellQuote(remoteWatchdogTempPath)}`], '清理服务器临时 CPU 采集脚本');
   } catch (error) {
     console.warn(`[stream-images] 清理服务器临时 CPU 采集脚本失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+const cleanupRemoteCpuProfileHelper = async () => {
+  try {
+    await runCommand('ssh', [...sshClientArgs, host, `rm -f ${shellQuote(remoteCpuProfileHelperTempPath)}`], '清理服务器临时 CPU 采样工具');
+  } catch (error) {
+    console.warn(`[stream-images] 清理服务器临时 CPU 采样工具失败: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -207,6 +245,8 @@ const main = async () => {
   if (shouldDeploy) {
     console.log(`[stream-images] 发布前上传宿主 CPU 采集脚本: scp ${localWatchdogScriptPath} ${host}:${remoteWatchdogTempPath}`);
     console.log(`[stream-images] 发布前校验并原子安装宿主 CPU 采集脚本: ssh ${host} "${remoteWatchdogInstallCommand}"`);
+    console.log(`[stream-images] 发布前上传容器内 Node CPU 采样工具: scp ${localCpuProfileHelperPath} ${host}:${remoteCpuProfileHelperTempPath}`);
+    console.log(`[stream-images] 发布前校验并原子安装 Node CPU 采样工具: ssh ${host} "${remoteCpuProfileHelperInstallCommand}"`);
     console.log(`[stream-images] 输送完成后远端 update-local 部署: ssh ${host} "${remoteDeployCommand}"`);
   }
 
@@ -224,11 +264,14 @@ const main = async () => {
     if (shouldDeploy) {
       await uploadWatchdogToRemote();
       await installWatchdogOnRemote();
+      await uploadCpuProfileHelperToRemote();
+      await installCpuProfileHelperOnRemote();
       await runCommand('ssh', [...sshClientArgs, host, remoteDeployCommand], '远端 update-local 部署');
     }
   } finally {
     if (shouldDeploy) {
       await cleanupRemoteWatchdog();
+      await cleanupRemoteCpuProfileHelper();
     }
     await cleanupRemoteArchive();
     await cleanupLocalArchive();

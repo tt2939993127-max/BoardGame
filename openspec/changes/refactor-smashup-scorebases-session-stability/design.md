@@ -24,15 +24,17 @@ SmashUp 的计分阶段已经不是单个函数能描述的线性流程，而是
 ## Decisions
 
 ### Decision 1: 引入 SmashUp 专用 `scoring session` 作为唯一结算权威
-在 `sys` 中新增 SmashUp 专用 session 状态（命名实现期再定），至少显式保存：
+`scoring session` 不是第二个 session 栈：它必须是 `smashup:score-bases` resolution frame 的唯一业务元数据，并由该 frame 的 `step` 表示当前规则阶段。这样仍符合 resolution frame stack 是跨系统主控制流唯一权威的既有合同。
+
+该 session 至少显式保存：
 - 锁定的待计分基地集合
 - 当前正在结算的基地引用
 - 已完成基地集合
-- 当前结算阶段（beforeScoring / scored / afterScoringTriggers / afterScoringResponse / emitDeferred / nextBase）
+- 当前规则阶段（`SELECTED → BEFORE_MANDATORY → BEFORE_OPTIONAL → AWARD_VP → AFTER_MANDATORY → AFTER_OPTIONAL → CLEAR_BASE → CLEAR_REACTIONS → REPLACE_BASE → REVEAL_REACTIONS → DONE`）
 - 当前基地的延迟 post-scoring 事件
 - 当前基地的 afterScoring 初始力量快照
 
-之后所有“继续同一基地 / 继续下一个基地 / 等待交互 / 等待 response window / 恢复清场换基地”都只读写这份 session，不再靠多个松散 flag 拼接。
+每个阶段只能：发出正式领域事件后推进、创建子 frame 后暂停、或无副作用地推进到下一阶段。之后所有“继续同一基地 / 继续下一个基地 / 等待交互 / 等待 response window / 恢复清场换基地”都只读写这份 session，不再靠多个松散 flag 拼接。
 
 ### Decision 2: 延迟 `BASE_CLEARED/BASE_REPLACED` 只由 SmashUp session 驱动器补发
 `_deferredPostScoringEvents` 仍可作为 session 内部过渡数据，但：
@@ -67,19 +69,39 @@ SmashUp 的计分阶段已经不是单个函数能描述的线性流程，而是
 
 禁止在交互系统里写入、合并或解释 SmashUp 专属 `_deferredPostScoringEvents` 之类字段，避免游戏规则再次侵入通用引擎。
 
+### Decision 6: 权威 core 只由 pipeline 正式归约事件修改
+`scoreOneBase()`、reaction queue、interaction handler 与 `SmashUpEventSystem.afterEvents()` 可以计算“下一步要发什么”，但不得把临时 `reduce()` 的结果写回权威 `MatchState.core`，也不得在之后回滚 core、手工挑字段拼回 handler 的 core。
+
+若某一步需要基于尚未正式归约的事件决定后续内容，驱动器必须把该工作拆到下一轮已归约的 frame step；只有可证明纯粹、只用于本地计算且绝不回写 `MatchState` 的 projection 才可存在。`buildPreviewStateWithPendingDomainEvents()`、`mergePromptResultCoreWithPreEventState()` 和“先内部 reduce 再恢复 preScoreCore”的模式均是迁移后应删除的旧机制。
+
+### Decision 7: SmashUp reaction session 是 Me First!/After Scoring 的唯一 responder 权威
+SmashUp 的 reaction frame/session 单独拥有响应者顺序、当前响应者、已 pass 的玩家、行动后新一轮及关闭条件。通用 `ResponseWindowSystem` 不再为 SmashUp 建立镜像窗口，也不再把 `RESPONDER_CHANGED` / `CLOSED` 反向翻译成 SmashUp pass。
+
+这不是将所有游戏的 response window 改成 SmashUp 模型。其它游戏继续使用通用系统；SmashUp 仅使用现有 resolution frame + interaction 协议承接其专用反应轮。`hasRespondableContent()` 与实际可选项必须共用同一候选构建/合法性入口，禁止保留“是否可响应”和“实际能打什么”两套 probe。
+
+### Decision 8: 清场必须先成为事实，清场反应只从已清场事件产生
+`onMinionDiscardedFromBase`、leave-play 和 discard 触发不得在 `BASE_SCORED` 后预测性入队。`BASE_CLEARED` 正式归约后，后处理只对该事件实际移入弃牌堆的对象生成反应，并携带所需 LKI。这样被 After Scoring 移走的 First Mate 不会获得从未发生的弃牌触发，抽牌/洗牌类效果也能看到已更新的区域状态。
+
+### Decision 9: pipeline 轮次和视觉延迟不得成为规则阶段语义
+`_waitForPostScoringReduce`、`_waitForScoreBasesInteractionReduce`、`_waitForStartTurnInteractionReduce` 不得作为 SmashUp 规则恢复条件。frame 只在事件正式归约后才被下一轮驱动器消费，不需要游戏层猜测“已进入第几轮 afterEvents”。
+
+基地 reveal 的两秒表现延迟从规则 frame 移出：领域事件一次性完成清场与换基地，客户端按事件流播放动画并在本地锁住相关输入。刷新、联机恢复和 AI 不再读取墙上时钟来决定规则是否继续。
+
 ## Risks / Trade-offs
 - 这是高耦合链路重构，短期改动面会明显大于“修一个触发器”。
 - 需要同步改测试，否则旧测试会继续固化旧式 flag 行为。
 - 重构过程中，最容易回归的是“单基地正常计分”和“afterScoring 响应窗口关闭后的自动推进”。
 
 ## Migration Plan
-1. 先引入 session 结构与单一推进入口，但保持旧行为对齐。
-2. 把 deferred post-scoring 补发从 handler / event system / interaction system 逐步收回到 session。
-3. 收敛 `onPhaseExit('scoreBases')` 与 `multi_base_scoring` handler 的职责边界。
-4. 移除不再需要的 flag 或把它们降级为 session 内部字段。
-5. 用领域测试和 E2E 逐步锁定回归：单基地 → 多基地 → 链式 afterScoring → afterScoring response window → 重算。
+1. 先补事务级特征测试：阶段单调推进、事件只正式归约一次、清场事实后才产生 discard 反应，以及 reaction options 与“可响应”完全一致。
+2. 将 scoring session 收敛为 `smashup:score-bases` resolution frame 的完整规则步骤，不改变现有卡牌语义；先迁移单基地，后迁移多基地。
+3. 将 deferred cleanup、replacement 与 reveal 收回到该 frame；删除 InteractionSystem / handler / EventSystem 的续链所有权。
+4. 将 SmashUp response 改为 reaction frame 的单一控制器，删除 ResponseWindow 镜像与双向 pass 桥接。
+5. 删除影子 reduce、core restore/merge、pipeline 轮次 flag 和规则层动画 delay；只在删除后跑过特征测试才移除对应事故回归中的旧状态断言。
+6. 用领域测试和 E2E 逐步锁定回归：单基地 → 多基地 → 链式 afterScoring → afterScoring response window → 重算 → First Mate/弃牌区快照。
 
 ## Open Questions
 - session 状态最终是挂在 `sys.smashupScoring` 还是更通用命名下，但仅 SmashUp 使用？
 - 稳定基地引用最终采用“槽位引用”还是“槽位 + 原基地 defId 校验”？
 - `pendingPostScoringActions` 是否直接并入 scoring session，而不是继续留在 core？
+- 现有 reveal 动画在客户端以哪一组领域事件作为开始/结束信号，是否已有可复用 visual-event consumer？

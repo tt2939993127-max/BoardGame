@@ -27,6 +27,7 @@ import { getDieFaceByValue } from './diceRegistry';
 import { CHARACTER_DATA_MAP } from './characters';
 import { playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
 import { getCurrentRollDice, getCurrentRollOwnerId, isCurrentBonusRollSettlement, resolveCurrentRollContext } from './rollContext';
+import { canRerollBonusDiceSettlement } from './bonusDiceSettlement';
 
 import { getGameMode } from './utils';
 
@@ -138,15 +139,25 @@ export const getPendingBonusSettlementDice = (
     return Array.isArray(rawDice) ? rawDice : [];
 };
 
-/**
- * 未结算的奖励骰始终需要掷骰者确认。
- * 卡牌自身是否提供免费重掷，由命令校验和费用单独决定，不影响骰子能否被规则修改。
- */
-export const isInteractiveBonusDiceSettlement = (
+/** 未结算的奖励骰仍占用当前骰区，父流程和阶段推进不能绕过它。 */
+export const hasPendingBonusDiceSettlement = (
     settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined,
 ): boolean => Boolean(
     settlement
     && getPendingBonusSettlementDice(settlement).length > 0,
+);
+
+/**
+ * 只有奖励骰自身明确允许骰主继续重投时，才需要右侧骰盘的确认收口。
+ * 通用改骰牌的响应资格由 afterRollConfirmed 窗口决定，不能反推为骰主免费重投。
+ */
+export const canOwnerRerollPendingBonusDiceSettlement = (
+    state: DiceThroneCore,
+    settlement: DiceThroneCore['pendingBonusDiceSettlement'] | null | undefined = state.pendingBonusDiceSettlement,
+): boolean => Boolean(
+    settlement
+    && isCurrentBonusRollSettlement(state, settlement)
+    && canRerollBonusDiceSettlement(settlement, state.players[settlement.attackerId]?.tokens),
 );
 
 export const shouldOpenAfterRollConfirmedForBonusSettlement = (
@@ -603,8 +614,8 @@ export const isSetupReadyToStart = (args: {
  * 检查是否可以推进阶段
  */
 export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolean => {
-    // 卡牌自身允许重掷的奖励骰仍未收口时，主流程不能跳过它进入下一阶段。
-    if (isInteractiveBonusDiceSettlement(state.pendingBonusDiceSettlement)) {
+    // 任何未结算奖励骰都必须先由响应窗口或自身结算规则收口。
+    if (hasPendingBonusDiceSettlement(state.pendingBonusDiceSettlement)) {
         return false;
     }
 

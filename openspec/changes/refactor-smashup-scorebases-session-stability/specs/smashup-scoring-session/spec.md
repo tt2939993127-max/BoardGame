@@ -1,6 +1,6 @@
 ## ADDED Requirements
 ### Requirement: SmashUp scoreBases session SHALL be the single settlement authority
-SmashUp SHALL use a dedicated scoring session to drive the full `scoreBases` settlement chain, including locked eligible bases, current base, remaining bases, completion state, deferred post-scoring events, and re-entry after interactions or response windows.
+SmashUp SHALL use a dedicated scoring session, stored as the metadata and step of its `smashup:score-bases` resolution frame, to drive the full `scoreBases` settlement chain, including locked eligible bases, current base, remaining bases, completion state, deferred post-scoring events, and re-entry after interactions or response windows.
 
 #### Scenario: 多基地计分在同一 session 中推进
 - **GIVEN** `scoreBases` 阶段有多个已锁定的达标基地
@@ -76,3 +76,41 @@ SmashUp `afterScoring` interaction handlers SHALL only emit the domain outcome f
 - **WHEN** handler 返回结果
 - **THEN** 全局续链决定 MUST 由 scoring session 统一处理
 - **AND** handler 只关心当前能力自己的业务结果
+
+### Requirement: Scoring transaction SHALL advance only from formally reduced domain events
+SmashUp SHALL let the pipeline formally reduce every domain event that changes the authoritative core exactly once. The scoring frame SHALL decide later steps only from that formally reduced core and its own frame metadata.
+
+#### Scenario: 计分规划不得把预演 core 写回比赛状态
+- **GIVEN** 当前计分步骤需要发出一个或多个领域事件
+- **WHEN** driver 需要等待这些事件改变基地、手牌、弃牌堆或力量后才能决定下一步
+- **THEN** driver MUST 发出事件并在正式归约后继续对应 frame step
+- **AND** MUST NOT 把临时 reduce 的结果保存进权威 `MatchState.core` 后再恢复快照
+- **AND** MUST NOT 手工合并 interaction handler 前后 core 的部分字段来避免双重结算
+
+### Requirement: Clearing reactions SHALL originate from actual base clearing
+SmashUp SHALL create discard and leave-play reactions only after `BASE_CLEARED` has formally moved the relevant object out of the scored base.
+
+#### Scenario: After Scoring 移走的随从不会产生弃牌反应
+- **GIVEN** 一个随从在 `BASE_SCORED` 后仍留在基地
+- **AND** After Scoring 效果将它移到另一个基地
+- **WHEN** 原基地随后正式清场
+- **THEN** system MUST NOT create `onMinionDiscardedFromBase` reaction for that moved minion
+
+#### Scenario: 真正清场后的触发看到更新后的区域
+- **GIVEN** 一个随从实际因 `BASE_CLEARED` 进入弃牌堆
+- **WHEN** 其弃牌触发需要洗牌或抽牌
+- **THEN** trigger MUST observe the card already in its discard zone
+
+### Requirement: SmashUp reaction frame SHALL be the sole responder authority
+For SmashUp Me First and After Scoring windows, one reaction frame/session SHALL own responder order, current responder, passes, action-reset behavior, and closure. Generic ResponseWindow state SHALL NOT mirror or drive the same window.
+
+#### Scenario: 可响应判断与实际选项共用一个入口
+- **GIVEN** SmashUp needs to decide whether the current responder can act
+- **WHEN** it evaluates Me First or After Scoring options
+- **THEN** the same option builder and legality rules MUST determine both availability and the displayed options
+- **AND** system MUST NOT auto-skip a player when that builder can produce a legal option
+
+#### Scenario: 通用窗口事件不会反向推进 SmashUp pass
+- **GIVEN** 一个 SmashUp reaction frame 正在等待响应
+- **WHEN** generic `ResponseWindowSystem` processes unrelated state or events
+- **THEN** it MUST NOT translate them into a SmashUp pass or close that reaction frame

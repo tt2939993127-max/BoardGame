@@ -27,6 +27,30 @@
 
 ---
 
+# Current Findings: Smash Up 计分事务唯一权威审查（2026-08-12）
+
+## 已确认事实
+
+- 已有 OpenSpec `refactor-smashup-scorebases-session-stability` 已经是本问题的正式职责入口。它已正确提出“scoring session 存在于 resolution frame、延迟清场由 session 单一持有”，因此本轮更新该提案，不另建第二份改造计划。
+- 当前 `scoreOneBase()` 在 `BASE_SCORED` 后遍历当时仍在基地的随从并立即收集 `onMinionDiscardedFromBase`，真正的 `BASE_CLEARED` 则被作为 deferred post-scoring event 留到后面。这直接允许“After Scoring 移走随从，但该随从的弃牌触发已先执行”的因果错误。
+- 当前计分链确有影子执行：`scoreOneBase()` 内部多次 `reduce()`，外层为避免 pipeline 再归约而恢复 `preScoreCore`；`SmashUpEventSystem` 以 `buildPreviewStateWithPendingDomainEvents()` 构造预览 core，又以 `mergePromptResultCoreWithPreEventState()` 手工保留少量字段。这使 core 的真实写入权不再一眼可知。
+- 当前 Smash Up 同时保存 reaction session 的 `activePlayerId/passedPlayerIds`，并构造通用 ResponseWindow 的 `currentResponderIndex/passedPlayers` 镜像；事件系统还把通用窗口变更翻译成 Smash Up pass。实际可响应选项由 reaction session builder 计算，通用窗口是否跳过则调用 `game.ts` 中另一套 `hasRespondableContent()`，两者没有结构性等价保证。
+- 当前 `SmashUpEventSystem` priority 为 24，`FlowSystem` 当前 priority 为 60；旧事故资料中的“24 必须先于 25”不再是当前精确数值，但依赖 system priority 先后推进计分的结构风险仍然存在。
+- `_waitForPostScoringReduce`、`_waitForScoreBasesInteractionReduce`、`_waitForStartTurnInteractionReduce` 表示 Smash Up 规则层需要感知 pipeline 的后续轮次。`awaiting-post-scoring-delay` 和 `_smashupPostScoringBaseRevealDelayUntil` 则让两秒 UI 动画影响规则推进、AI recovery 和刷新恢复。
+
+## 方案裁决
+
+- 唯一控制流权威是已有 `smashup:score-bases` resolution frame；scoring session 不再作为平行栈，而是该 frame 的 metadata + step。
+- 权威 core 只能由 pipeline 对领域事件正式归约一次。临时 projection 绝不可写回 MatchState，且此次迁移目标是删掉影子 reduce、core restore 和字段级 merge。
+- Smash Up reaction frame/session 是 Me First 与 After Scoring 的唯一响应者权威。通用 ResponseWindow 继续服务其它游戏，不再镜像或推进 Smash Up。
+- `BASE_CLEARED` 是清场事实；discard/leave-play trigger 只从正式清场的实际结果产生。#128 的 First Mate 不是单卡特殊情况，而是这个不变量的回归样例。
+- pipeline round flag 和 reveal 动画 deadline 不属于规则状态机。前者由 frame 在正式归约后续步替代，后者应迁到客户端事件表现层。
+
+## 实施前未决项
+
+- reveal 动画需要确认当前客户端可复用的 visual-event consumer；在确认前不能直接删除视觉延迟。
+- `pendingPostScoringActions` 的唯一宿主需在实施阶段决定是否完全并入 scoring frame，避免 frame 与 core 各留一份主控制权。
+
 # Current Findings: 召唤师战争暗影精灵派系接入（2026-08-04）
 
 ## 已确认事实

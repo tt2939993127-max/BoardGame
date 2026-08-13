@@ -11795,7 +11795,7 @@ test.describe('大杀四方 Munchkin 怪物与宝藏 UI', () => {
         }, { timeout: 20000 }).toEqual({
             phase: 'playCards',
             ownVp: 7,
-            opponentVp: 6,
+            opponentVp: 7,
             scoredBaseLeftBoard: true,
             baseCleared: true,
             hasSuppressionEvent: true,

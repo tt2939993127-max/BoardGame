@@ -26,7 +26,7 @@ import { hasCurrentChoiceAnchor } from './choiceEffects';
 import {
     getActiveDice,
     getResponderQueue,
-    isInteractiveBonusDiceSettlement,
+    canOwnerRerollPendingBonusDiceSettlement,
     shouldOpenAfterRollConfirmedForBonusSettlement,
 } from './rules';
 import { isRemovableStatusId } from './statusRemoval';
@@ -999,7 +999,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         nextEvents.push(responseWindowEvent);
                     } else if (isBonusDiceAwaitingAfterRollConfirmedResponse(newState, payload.settlement)) {
                         // 已打开的窗口会在 RESPONSE_WINDOW_CLOSED 时统一续接；这里不能抢先结算。
-                    } else if (isInteractiveBonusDiceSettlement(payload.settlement)) {
+                    } else if (canOwnerRerollPendingBonusDiceSettlement(newState.core, payload.settlement)) {
                         const interaction: EngineInteractionDescriptor = {
                             id: `dt-bonus-dice-${payload.settlement.id}`,
                             kind: 'dt:bonus-dice',
@@ -1021,7 +1021,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 if (shouldQueueBonusDiceAfterResponseWindow(newState, dtEvent)) {
                     const settlement = newState.core.pendingBonusDiceSettlement;
                     if (settlement) {
-                        if (isInteractiveBonusDiceSettlement(settlement)) {
+                        if (canOwnerRerollPendingBonusDiceSettlement(newState.core, settlement)) {
                             const interaction: EngineInteractionDescriptor = {
                                 id: `dt-bonus-dice-${settlement.id}`,
                                 kind: 'dt:bonus-dice',

@@ -7044,6 +7044,25 @@
 - [ ] 下一步：
   - 继续剩余事件、预兆、物品和骰盘全家族 L3/L4 自审；guard 通过前不宣称山屋全面完成
 
+---
+
+# Current Task Plan: Smash Up 计分事务唯一权威重构方案（2026-08-12）
+
+目标状态：proposal-ready
+当前目标：只读审查当前 `main` 的 Smash Up `scoreBases`、reaction 与 pipeline 链路，并把已存在的 `refactor-smashup-scorebases-session-stability` OpenSpec 提案补齐为可执行的分期重构方案；本轮不修改运行时代码、不执行发布、不创建或切换分支。
+问题对象：`scoreOneBase()`、scoring resolution frame、SmashUp reaction session、通用 ResponseWindow、`SmashUpEventSystem.afterEvents()` 的计分续链，以及 #128 所示“事实发生前提前产生弃牌触发”的规则错误。
+真相来源：当前 `src/games/smashup/domain/`、`src/games/smashup/game.ts`、`src/engine/pipeline.ts`、现有 SmashUp 事故回归测试和已有 OpenSpec change。
+目标入口/环境：`D:\gongzuo\webgame\BoardGame` 的 `main` 工作区；保持现有未提交改动，不清理、不回滚。
+验收口径：形成一个与当前代码一致的分期方案，明确唯一状态/唯一写入口、删除目标、迁移顺序、兼容测试和仍需在实施前裁定的表现层问题；OpenSpec 严格校验通过。
+
+## 当前任务拆解
+
+- [x] 锁定当前对象、真相来源、环境和仅制定方案的范围。
+- [x] 验证计分内部 reduce/恢复、reaction-response 双权威、pipeline 轮次 flag、视觉延迟和提前 discard trigger 的当前代码证据。
+- [x] 审查已有 `refactor-smashup-scorebases-session-stability`，确认它是唯一正式方案入口而非新建平行提案。
+- [x] 将唯一 core 写入、唯一 responder、清场事实先于 discard trigger、frame 步骤和删除目标补入现有 OpenSpec。
+- [x] 运行 OpenSpec 严格校验并复核 diff。
+
 ## Current Addendum（2026-07-18 冰苔兽人）
 
 - [x] S0 录入合同与 OpenSpec 批准门禁已完成。

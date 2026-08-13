@@ -17,6 +17,12 @@ ENABLE_RESTART="${BG_GAME_SERVER_CPU_WATCH_RESTART:-0}"
 ENABLE_FEEDBACK="${BG_GAME_SERVER_CPU_FEEDBACK:-1}"
 FEEDBACK_URL="${BG_GAME_SERVER_CPU_FEEDBACK_URL:-http://127.0.0.1/internal/feedback/system}"
 FEEDBACK_TOKEN="${BG_GAME_SERVER_CPU_FEEDBACK_TOKEN:-${INTERNAL_FEEDBACK_TOKEN:-}}"
+ENABLE_CPU_PROFILE="${BG_GAME_SERVER_CPU_PROFILE:-1}"
+CPU_PROFILE_DURATION_SECONDS="${BG_GAME_SERVER_CPU_PROFILE_DURATION_SECONDS:-8}"
+CPU_PROFILE_TIMEOUT_SECONDS="${BG_GAME_SERVER_CPU_PROFILE_TIMEOUT_SECONDS:-20}"
+CPU_PROFILE_INSPECTOR_PORT=9229
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CPU_PROFILE_HELPER="$SCRIPT_DIR/capture-node-cpu-profile.mjs"
 
 usage() {
   cat <<'EOF'
@@ -37,6 +43,10 @@ Environment:
   BG_GAME_SERVER_CPU_FEEDBACK              set to 0 to disable internal feedback; default 1
   BG_GAME_SERVER_CPU_FEEDBACK_URL          internal feedback URL, default http://127.0.0.1/internal/feedback/system
   BG_GAME_SERVER_CPU_FEEDBACK_TOKEN        internal feedback token; defaults to INTERNAL_FEEDBACK_TOKEN
+  BG_GAME_SERVER_CPU_PROFILE               set to 0 to skip V8 CPU profile capture; default 1
+  BG_GAME_SERVER_CPU_PROFILE_DURATION_SECONDS V8 CPU profile duration before restart, default 8
+  BG_GAME_SERVER_CPU_PROFILE_TIMEOUT_SECONDS hard capture timeout, default 20
+  Inspector 由 Node 外部调试信号在容器 loopback 的默认端口 9229 打开
 EOF
 }
 
@@ -51,6 +61,8 @@ evidence_file="$EVIDENCE_DIR/$timestamp-$CONTAINER_NAME.txt"
 last_decision="unknown"
 last_reason="unknown"
 last_restarted="no"
+cpu_profile_status="not_attempted"
+cpu_profile_file=""
 
 json_escape() {
   local value="${1:-}"
@@ -158,6 +170,86 @@ capture_high_cpu_root_cause_evidence() {
   } >>"$evidence_file"
 }
 
+capture_v8_cpu_profile() {
+  {
+    echo
+    echo "## V8 CPU profile"
+    echo "profileEnabled=$ENABLE_CPU_PROFILE"
+    echo "profileDurationSeconds=$CPU_PROFILE_DURATION_SECONDS"
+    echo "profileTimeoutSeconds=$CPU_PROFILE_TIMEOUT_SECONDS"
+    echo "profileInspectorPort=$CPU_PROFILE_INSPECTOR_PORT"
+  } >>"$evidence_file"
+
+  if [[ "$ENABLE_CPU_PROFILE" != "1" ]]; then
+    cpu_profile_status="disabled"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    return 0
+  fi
+  if [[ ! "$CPU_PROFILE_DURATION_SECONDS" =~ ^[1-9][0-9]*$ ]] || [[ ! "$CPU_PROFILE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    cpu_profile_status="invalid_configuration"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    return 0
+  fi
+  if [[ ! -f "$CPU_PROFILE_HELPER" ]]; then
+    cpu_profile_status="helper_missing"
+    echo "cpuProfileStatus=$cpu_profile_status helper=$CPU_PROFILE_HELPER" >>"$evidence_file"
+    return 0
+  fi
+  if ! command -v timeout >/dev/null 2>&1; then
+    cpu_profile_status="timeout_command_missing"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    return 0
+  fi
+
+  local remote_helper="/tmp/boardgame-cpu-profile-$timestamp.mjs"
+  local remote_profile="/tmp/boardgame-cpu-profile-$timestamp.cpuprofile"
+  local local_profile="$EVIDENCE_DIR/$timestamp-$CONTAINER_NAME.cpuprofile"
+  local duration_ms=$((CPU_PROFILE_DURATION_SECONDS * 1000))
+
+  if ! docker cp "$CPU_PROFILE_HELPER" "$CONTAINER_NAME:$remote_helper" >>"$evidence_file" 2>&1; then
+    cpu_profile_status="helper_copy_failed"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    return 0
+  fi
+
+  # The Inspector is only opened on the container loopback interface. The process is restarted
+  # immediately after this bounded capture, so the debugger cannot remain available externally.
+  if ! docker exec "$CONTAINER_NAME" node -e '
+const pid = Number(process.argv[1]);
+if (!Number.isInteger(pid) || pid <= 0 || typeof process._debugProcess !== "function") process.exit(2);
+process._debugProcess(pid);
+' 1 >>"$evidence_file" 2>&1; then
+    cpu_profile_status="inspector_activation_failed"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    docker exec "$CONTAINER_NAME" rm -f "$remote_helper" >>"$evidence_file" 2>&1 || true
+    return 0
+  fi
+
+  if ! timeout "$CPU_PROFILE_TIMEOUT_SECONDS" docker exec "$CONTAINER_NAME" node "$remote_helper" \
+    --duration-ms "$duration_ms" \
+    --inspector-port "$CPU_PROFILE_INSPECTOR_PORT" \
+    --output "$remote_profile" >>"$evidence_file" 2>&1; then
+    cpu_profile_status="capture_failed_or_timed_out"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    docker exec "$CONTAINER_NAME" rm -f "$remote_helper" "$remote_profile" >>"$evidence_file" 2>&1 || true
+    return 0
+  fi
+  if ! docker cp "$CONTAINER_NAME:$remote_profile" "$local_profile" >>"$evidence_file" 2>&1; then
+    cpu_profile_status="profile_copy_failed"
+    echo "cpuProfileStatus=$cpu_profile_status" >>"$evidence_file"
+    docker exec "$CONTAINER_NAME" rm -f "$remote_helper" "$remote_profile" >>"$evidence_file" 2>&1 || true
+    return 0
+  fi
+
+  cpu_profile_status="captured"
+  cpu_profile_file="$local_profile"
+  {
+    echo "cpuProfileStatus=$cpu_profile_status"
+    echo "cpuProfileFile=$cpu_profile_file"
+  } >>"$evidence_file"
+  docker exec "$CONTAINER_NAME" rm -f "$remote_helper" "$remote_profile" >>"$evidence_file" 2>&1 || true
+}
+
 report_high_cpu_feedback() {
   local now_epoch="$1"
   local decision="${last_decision:-unknown}"
@@ -197,9 +289,13 @@ report_high_cpu_feedback() {
   host_name="$(hostname 2>/dev/null || echo unknown-host)"
   local content="[system][infra-cpu-watch] game-server CPU sustained high: average=${average_cpu}% highSamples=${high_samples}/${SAMPLE_COUNT} threshold=${THRESHOLD_PERCENT}% decision=${decision} restarted=${restarted}"
   local incident_key="infra-cpu-watch:${host_name}:${CONTAINER_NAME}:${THRESHOLD_PERCENT}"
+  local profile_evidence="process_thread_snapshot_in_evidence_file"
+  if [[ "$cpu_profile_status" == "captured" ]]; then
+    profile_evidence="process_thread_snapshot_and_v8_cpu_profile"
+  fi
   local state_snapshot
-  state_snapshot="{\"timestamp\":\"$(json_escape "$timestamp")\",\"host\":\"$(json_escape "$host_name")\",\"container\":\"$(json_escape "$CONTAINER_NAME")\",\"thresholdPercent\":${THRESHOLD_PERCENT},\"averageCpu\":${average_cpu},\"highSamples\":${high_samples},\"sampleCount\":${SAMPLE_COUNT},\"sampleIntervalSeconds\":${SAMPLE_INTERVAL_SECONDS},\"decision\":\"$(json_escape "$decision")\",\"reason\":\"$(json_escape "$reason")\",\"restarted\":\"$(json_escape "$restarted")\",\"rootCauseStatus\":\"not_determined_by_cpu_watch\",\"rootCauseEvidence\":\"process_thread_snapshot_in_evidence_file\",\"evidenceFile\":\"$(json_escape "$evidence_file")\"}"
-  local action_log="evidence=${evidence_file}; history=${HISTORY_LOG}; logsSince=${LOG_SINCE}; restartCooldownSeconds=${COOLDOWN_SECONDS}; feedbackCooldownSeconds=${FEEDBACK_COOLDOWN_SECONDS}; rootCauseStatus=not_determined_by_cpu_watch; rootCauseEvidence=process_thread_snapshot_in_evidence_file"
+  state_snapshot="{\"timestamp\":\"$(json_escape "$timestamp")\",\"host\":\"$(json_escape "$host_name")\",\"container\":\"$(json_escape "$CONTAINER_NAME")\",\"thresholdPercent\":${THRESHOLD_PERCENT},\"averageCpu\":${average_cpu},\"highSamples\":${high_samples},\"sampleCount\":${SAMPLE_COUNT},\"sampleIntervalSeconds\":${SAMPLE_INTERVAL_SECONDS},\"decision\":\"$(json_escape "$decision")\",\"reason\":\"$(json_escape "$reason")\",\"restarted\":\"$(json_escape "$restarted")\",\"rootCauseStatus\":\"not_determined_by_cpu_watch\",\"rootCauseEvidence\":\"$(json_escape "$profile_evidence")\",\"cpuProfileStatus\":\"$(json_escape "$cpu_profile_status")\",\"cpuProfileFile\":\"$(json_escape "$cpu_profile_file")\",\"evidenceFile\":\"$(json_escape "$evidence_file")\"}"
+  local action_log="evidence=${evidence_file}; history=${HISTORY_LOG}; logsSince=${LOG_SINCE}; restartCooldownSeconds=${COOLDOWN_SECONDS}; feedbackCooldownSeconds=${FEEDBACK_COOLDOWN_SECONDS}; rootCauseStatus=not_determined_by_cpu_watch; rootCauseEvidence=${profile_evidence}; cpuProfileStatus=${cpu_profile_status}; cpuProfileFile=${cpu_profile_file}"
   local payload_file="$EVIDENCE_DIR/$timestamp-$CONTAINER_NAME-feedback.json"
 
   cat >"$payload_file" <<EOF
@@ -340,6 +436,8 @@ if [[ "$ENABLE_RESTART" != "1" ]]; then
   echo "[watch-game-server-cpu] HIGH dry-run: set BG_GAME_SERVER_CPU_WATCH_RESTART=1 to restart; averageCpu=$average_cpu% evidence=$evidence_file"
   exit 2
 fi
+
+capture_v8_cpu_profile
 
 echo "[watch-game-server-cpu] HIGH: restarting $CONTAINER_NAME; averageCpu=$average_cpu% evidence=$evidence_file"
 if ! docker restart "$CONTAINER_NAME" >>"$evidence_file" 2>&1; then

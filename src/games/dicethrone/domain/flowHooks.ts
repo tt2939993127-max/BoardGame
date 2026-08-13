@@ -43,7 +43,7 @@ import {
     getTargetingRollChoiceOwnerId,
     isTeamMode,
     getPendingBonusSettlementDice,
-    isInteractiveBonusDiceSettlement,
+    hasPendingBonusDiceSettlement,
 } from './rules';
 import { resolveAttack, resolveAttackWithSneakImmunityAfterDefense, resolveOffensivePreDefenseEffects, resolvePostDamageEffects, resolveWithDamageAfterChoice } from './attack';
 import { resourceSystem } from './resourceSystem';
@@ -135,14 +135,10 @@ const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
 
 const isInteractiveBonusDiceRerollEvent = (event: DiceThroneEvent): boolean =>
     event.type === 'BONUS_DICE_REROLL_REQUESTED'
-    && isInteractiveBonusDiceSettlement(event.payload.settlement);
-
-const hasPendingBonusDiceSettlement = (core: DiceThroneCore): boolean =>
-    core.pendingBonusDiceSettlement !== null
-    && core.pendingBonusDiceSettlement !== undefined;
+    && hasPendingBonusDiceSettlement(event.payload.settlement);
 
 const hasInteractivePendingBonusDiceSettlement = (core: DiceThroneCore): boolean =>
-    isInteractiveBonusDiceSettlement(core.pendingBonusDiceSettlement)
+    hasPendingBonusDiceSettlement(core.pendingBonusDiceSettlement)
     && isCurrentBonusRollSettlement(core);
 
 registerBonusDiceSettlementHandler(POWDER_KEG_SETTLEMENT_ID, ({ state, settlement, timestamp }) => {

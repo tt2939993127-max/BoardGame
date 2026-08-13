@@ -11420,3 +11420,9 @@
 - [x] `ui-audit-loop` 结论：`PASS`，综合 `93/100`；未发现截图中的空素材、遮挡、裁切或主操作入口丢失。
 - [x] 该 PASS 覆盖派系选择/初始化和全部 13 个能力、4 张事件卡的真实选择/结算；能力级 L3/L4 不再保留暗影精灵 `scoped-debt`。
 - [x] OpenSpec strict validate 与完成门禁均通过，暗影精灵本轮目标已收口；派系目录仍按当前产品状态保留 `under_construction`。
+
+## 2026-08-12 Smash Up 计分事务唯一权威：方案审查
+
+- 已按当前源码完成只读审查，未修改运行时代码、分支或 worktree。
+- 已确认已有 `refactor-smashup-scorebases-session-stability` 是正确的 OpenSpec 唯一入口；本轮在该 change 内补入“frame 是唯一控制流宿主、core 只正式归约一次、reaction 是唯一 responder、清场事实先于弃牌触发、删除影子 reduce/round flag/规则层动画 delay”的分期方案。
+- 已完成 `openspec validate refactor-smashup-scorebases-session-stability --strict --no-interactive` 与本轮 diff 复核；严格校验通过，`git diff --check` 无错误。
