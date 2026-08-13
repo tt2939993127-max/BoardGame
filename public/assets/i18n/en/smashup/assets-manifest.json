@@ -1,0 +1,26 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "smashup",
+  "basePrefix": "official/i18n/en/smashup/",
+  "files": {
+    "cards/compressed/half_the_battle_geckos": {
+      "variants": {
+        "webp": {
+          "sha256": "2e7b19c01ae4ad5f30fcb40ce571ad6930221f3457b09c1147541d1efaea9edd",
+          "bytes": 1518200,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "cards/half_the_battle_geckos": {
+      "variants": {
+        "png": {
+          "sha256": "071489bdcf5675347c52354acf3cf0eb00eac8c170ef2dba458e85a51fcbd19e",
+          "bytes": 4959241,
+          "mime": "image/png"
+        }
+      }
+    }
+  }
+}
