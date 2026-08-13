@@ -31,10 +31,15 @@ import { getSmashUpReactionSession, resolveSmashUpReactionChoice } from './react
 import {
     getDeferredReplacementBaseDefIdFromBaseDeckReorderEvents,
     getDeferredPostScoringEvents,
+    getScoringSession,
     isScoringSessionAwaitingDeferredResolution,
     replaceDeferredPostScoringReplacementBase,
     updateScoringSession,
 } from './scoringSession';
+import {
+    DIRECT_SCORING_DEFERRED_FINALIZE_KEY,
+    finalizeCurrentScoringBase,
+} from './scoringFinalization';
 import { getCardDef } from '../data/cards';
 import { createFrankensteinBodyShopDistributionInteraction } from '../abilities/frankenstein';
 
@@ -694,6 +699,29 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                 if (resumedBranchingState !== newState) {
                     newState = resumedBranchingState;
                 }
+            }
+
+            if (
+                nextEvents.length === 0
+                && newState.sys.phase !== 'scoreBases'
+                && !newState.sys.interaction?.current
+                && (newState.sys.interaction?.queue?.length ?? 0) === 0
+                && !getSmashUpReactionSession(newState as MatchState<SmashUpCore>)
+                && isScoringSessionAwaitingDeferredResolution(newState as MatchState<SmashUpCore>)
+                && getScoringSession(newState as MatchState<SmashUpCore>)?.currentBaseRef
+                && (getDeferredPostScoringEvents(newState as MatchState<SmashUpCore>)?.length ?? 0) > 0
+                && (newState.sys as Record<string, unknown>)[DIRECT_SCORING_DEFERRED_FINALIZE_KEY] === true
+            ) {
+                const directScoringState = {
+                    ...newState,
+                    sys: {
+                        ...newState.sys,
+                        flowHalted: false,
+                    },
+                } as MatchState<SmashUpCore>;
+                const finalized = finalizeCurrentScoringBase(directScoringState, latestTimestamp, random);
+                newState = finalized.updatedState;
+                nextEvents.push(...finalized.events as GameEvent[]);
             }
 
             if (newState !== state || nextEvents.length > 0) {

@@ -6753,6 +6753,62 @@
       "name": "怪兽奇曲",
       "abilityText": "持续：此随从所在基地上每有一张你打出的法术，它便获得 +1 力量。"
     },
+    "kaiju_stomp_pod": {
+      "name": "践踏",
+      "effectText": "对一个基地打出。将其摧毁点减少 3 点，直到回合结束。持续：你在这里获得 +2 力量。"
+    },
+    "kaiju_radioactive_breath_pod": {
+      "name": "放射性吐息",
+      "effectText": "对一个基地打出。摧毁这里任意数量力量 2 或更低的随从。持续：你在这里获得 +3 力量。"
+    },
+    "kaiju_tail_smash_pod": {
+      "name": "尾击",
+      "effectText": "对一个基地打出。摧毁这里一个不由你控制、力量 3 或更低的随从。持续：你在这里获得 +4 力量。"
+    },
+    "kaiju_wade_through_the_buildings_pod": {
+      "name": "蹚过建筑",
+      "effectText": "对一个基地打出。摧毁这个基地上所有其他玩家的法术。持续：你在这里获得 +4 力量。"
+    },
+    "kaiju_oh_no_pod": {
+      "name": "哦，不！",
+      "effectText": "对一个基地打出。打出或移动哥佐拉到这里。持续：你在这里获得 +2 力量。"
+    },
+    "kaiju_pick_up_a_bus_pod": {
+      "name": "拾起一辆巴士",
+      "effectText": "从你的弃牌堆中选择一张可打在基地上的法术，并将其加入手牌。"
+    },
+    "kaiju_the_folly_of_men_pod": {
+      "name": "人类的愚蠢",
+      "effectText": "对一个基地打出。持续：你在此基地的随从和其他法术不会被其他玩家的卡牌摧毁。你在这里获得 +2 力量。"
+    },
+    "kaiju_kaiju_conflict_pod": {
+      "name": "怪兽冲突",
+      "effectText": "额外打出 2 个法术。"
+    },
+    "kaiju_there_goes_tokyo_pod": {
+      "name": "东京毁灭",
+      "effectText": "如果哥佐拉在场上，摧毁它所在的基地。将哥佐拉移动到另一个基地，并照常补出替换该基地的新基地。"
+    },
+    "kaiju_they_say_hes_got_to_go_pod": {
+      "name": "他们说它该走了",
+      "effectText": "把一个泰坦移动到另一个基地。"
+    },
+    "kaiju_kaiju_alliance_pod": {
+      "name": "怪兽联盟",
+      "effectText": "将所有基地的摧毁点减少 4 点，直到回合结束。"
+    },
+    "kaiju_johnny_pod": {
+      "name": "约翰",
+      "abilityText": "你可以将一个打在基地上的己方法术返回手牌，并将其作为额外法术打在这里。"
+    },
+    "kaiju_tiny_priestesses_pod": {
+      "name": "小祭女",
+      "abilityText": "打出或移动哥佐拉到本基地。"
+    },
+    "kaiju_kaijookey_pod": {
+      "name": "怪兽奇曲",
+      "abilityText": "持续：此随从所在基地上每有一张你打出的法术，它便获得 +1 力量。"
+    },
     "base_akihabara_high": {
       "name": "秋叶原",
       "abilityText": "在你打出一个随从到这里后，你在这里的其他随从直到回合结束获得 +1 力量。"
@@ -6766,6 +6822,10 @@
       "abilityText": "在你于本基地打出一个法术后，你在这里直到回合结束获得 +3 力量。"
     },
     "base_kaiju_island": {
+      "name": "怪兽岛",
+      "abilityText": "这里的泰坦不会让其他泰坦离场。这里的每个泰坦都会让其控制者在这里获得 +3 力量。"
+    },
+    "base_kaiju_island_pod": {
       "name": "怪兽岛",
       "abilityText": "这里的泰坦不会让其他泰坦离场。这里的每个泰坦都会让其控制者在这里获得 +3 力量。"
     },

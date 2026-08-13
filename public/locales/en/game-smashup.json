@@ -6803,6 +6803,62 @@
       "name": "Kaijookey",
       "abilityText": "Ongoing: This minion has +1 power for each of your actions played on this base."
     },
+    "kaiju_stomp_pod": {
+      "name": "Stomp",
+      "effectText": "Play on a base. Reduce its breakpoint by 3 until the end of the turn. Ongoing: You gain +2 power here."
+    },
+    "kaiju_radioactive_breath_pod": {
+      "name": "Radioactive Breath",
+      "effectText": "Play on a base. Destroy any number of minions here of power 2 or less. Ongoing: You gain +3 power here."
+    },
+    "kaiju_tail_smash_pod": {
+      "name": "Tail Smash",
+      "effectText": "Play on a base. Destroy a minion you don’t control here of power 3 or less. Ongoing: You gain +4 power here."
+    },
+    "kaiju_wade_through_the_buildings_pod": {
+      "name": "Wade Through the Buildings",
+      "effectText": "Play on a base. Destroy all other players’ actions on this base. Ongoing: You gain +4 power here."
+    },
+    "kaiju_oh_no_pod": {
+      "name": "Oh, No!",
+      "effectText": "Play on a base. Play or move Gorgodzolla to here. Ongoing: You gain +2 power here."
+    },
+    "kaiju_pick_up_a_bus_pod": {
+      "name": "Pick Up a Bus",
+      "effectText": "Choose an action in your discard pile that can be played on a base and place it into your hand."
+    },
+    "kaiju_the_folly_of_men_pod": {
+      "name": "The Folly of Men",
+      "effectText": "Play on a base. Ongoing: Your minions and other actions on this base cannot be destroyed by other players' cards. You gain +2 power here."
+    },
+    "kaiju_kaiju_conflict_pod": {
+      "name": "Kaiju Conflict",
+      "effectText": "Play two extra actions."
+    },
+    "kaiju_there_goes_tokyo_pod": {
+      "name": "There Goes Tokyo",
+      "effectText": "If Gorgodzolla is in play, destroy its base. Move Gorgodzolla to another base and replace the destroyed base normally."
+    },
+    "kaiju_they_say_hes_got_to_go_pod": {
+      "name": "They Say He’s Got to Go",
+      "effectText": "Move a titan to another base."
+    },
+    "kaiju_kaiju_alliance_pod": {
+      "name": "Kaiju Alliance",
+      "effectText": "Reduce the breakpoint of all bases by 4 until the end of the turn."
+    },
+    "kaiju_johnny_pod": {
+      "name": "Johnny",
+      "abilityText": "You may return one of your actions on a base to your hand and play it here as an extra action."
+    },
+    "kaiju_tiny_priestesses_pod": {
+      "name": "Tiny Priestesses",
+      "abilityText": "Play or move Gorgodzolla to here."
+    },
+    "kaiju_kaijookey_pod": {
+      "name": "Kaijookey",
+      "abilityText": "Ongoing: This minion has +1 power for each of your actions played on this base."
+    },
     "base_akihabara_high": {
       "name": "Akihabara High",
       "abilityText": "After you play a minion here, your other minions here gain +1 power until the end of the turn."
@@ -6816,6 +6872,10 @@
       "abilityText": "After you play an action on this base, you gain +3 power here until the end of the turn."
     },
     "base_kaiju_island": {
+      "name": "Kaiju Island",
+      "abilityText": "Titans here do not make other titans leave. Each titan here adds +3 power to its controller’s power here."
+    },
+    "base_kaiju_island_pod": {
       "name": "Kaiju Island",
       "abilityText": "Titans here do not make other titans leave. Each titan here adds +3 power to its controller’s power here."
     },
