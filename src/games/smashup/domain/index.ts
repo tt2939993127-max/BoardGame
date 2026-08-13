@@ -44,6 +44,8 @@ import type {
     ActionReturnToHandOptionArmedEvent,
     SpecialAfterScoringConsumedEvent,
     MunchkinTreasureRewardRevealedEvent,
+    ActivateSpecialCommand,
+    TriggerQueuedEvent,
 } from './types';
 import {
     PHASE_ORDER,
@@ -354,7 +356,7 @@ function hasPlayableAfterScoringBoardSpecial(state: MatchState<SmashUpCore>, bas
         };
 
         for (const minion of base.minions) {
-            const result = validate(probeState, {
+            const command: ActivateSpecialCommand = {
                 type: SU_COMMANDS.ACTIVATE_SPECIAL,
                 playerId,
                 payload: {
@@ -362,12 +364,13 @@ function hasPlayableAfterScoringBoardSpecial(state: MatchState<SmashUpCore>, bas
                     baseIndex,
                 },
                 timestamp: now,
-            } as any);
+            };
+            const result = validate(probeState, command);
             if (result.valid) return true;
         }
 
         for (const titan of getTitansOnBase(state.core, baseIndex)) {
-            const result = validate(probeState, {
+            const command: ActivateSpecialCommand = {
                 type: SU_COMMANDS.ACTIVATE_SPECIAL,
                 playerId,
                 payload: {
@@ -375,7 +378,8 @@ function hasPlayableAfterScoringBoardSpecial(state: MatchState<SmashUpCore>, bas
                     baseIndex,
                 },
                 timestamp: now,
-            } as any);
+            };
+            const result = validate(probeState, command);
             if (result.valid) return true;
         }
     }
@@ -409,10 +413,10 @@ function markEarlyScoringCleanupDiscardTriggerUids(
 function getQueuedTriggerMinionUids(eventsToInspect: SmashUpEvent[]): string[] {
     return eventsToInspect.flatMap((event) => {
         if (event.type !== SU_EVENTS.TRIGGER_QUEUED) return [];
-        const triggers = (event as any).payload?.triggers;
+        const triggers = (event as TriggerQueuedEvent).payload.triggers;
         if (!Array.isArray(triggers)) return [];
         return triggers
-            .map((trigger: any) => trigger?.triggerMinionUid)
+            .map((trigger) => trigger.triggerMinionUid)
             .filter((uid: unknown): uid is string => typeof uid === 'string');
     });
 }
