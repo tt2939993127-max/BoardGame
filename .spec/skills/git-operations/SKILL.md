@@ -226,6 +226,7 @@ git rebase ...
 ### 4.4 PR / GitHub API 文本编码
 
 - **编码由执行环境负责，不问用户确认（强制）**：创建或更新 PR、issue、release、comment、workflow dispatch 等 GitHub 文本对象时，若内容含中文或其它非 ASCII 字符，默认必须按 UTF-8 发送；不得把“要不要确认编码”交给用户判断。
+- **PR 文本默认中文（强制）**：面向本仓库的 PR 标题、正文、合并说明和关闭说明默认使用中文，除非用户明确要求英文、上游模板强制英文、或目标仓库维护者明确要求英文。技术名词、命令、路径、commit hash、错误原文和 checklist 标题可以保留英文，但解释、风险、验证和结论必须用中文写清。
 - **优先使用原生 UTF-8 工具链**：`gh pr create/edit`、GitHub API、脚本化 HTTP 请求都可以使用，但必须保证请求体是 UTF-8。Windows PowerShell 5.x 调 `Invoke-RestMethod` / `Invoke-WebRequest` 时，必须使用 `[System.Text.Encoding]::UTF8.GetBytes($json)` 作为 body，并设置 `Content-Type: application/json; charset=utf-8`；不要直接把含中文的字符串 body 交给默认编码。
 - **创建后必须回读验证**：PR 标题、正文或评论创建/更新后，必须通过 `gh pr view`、GitHub API、或等价读取回查标题/正文。若出现 `??`、`Ã`、`锟斤拷`、`æœ¬` 等 mojibake 迹象，必须立即用 UTF-8 body 修正后再汇报完成。
 - **不得为避免编码问题改成英文**：除非用户明确要求英文，否则中文标题/正文应保留中文语义；编码失败是执行问题，不是产品文案取舍。
