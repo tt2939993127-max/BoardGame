@@ -223,6 +223,13 @@ git rebase ...
 - merge 前若命中项目要求，先读：
   - `docs/git-merge-checklist.md`
 
+### 4.4 PR / GitHub API 文本编码
+
+- **编码由执行环境负责，不问用户确认（强制）**：创建或更新 PR、issue、release、comment、workflow dispatch 等 GitHub 文本对象时，若内容含中文或其它非 ASCII 字符，默认必须按 UTF-8 发送；不得把“要不要确认编码”交给用户判断。
+- **优先使用原生 UTF-8 工具链**：`gh pr create/edit`、GitHub API、脚本化 HTTP 请求都可以使用，但必须保证请求体是 UTF-8。Windows PowerShell 5.x 调 `Invoke-RestMethod` / `Invoke-WebRequest` 时，必须使用 `[System.Text.Encoding]::UTF8.GetBytes($json)` 作为 body，并设置 `Content-Type: application/json; charset=utf-8`；不要直接把含中文的字符串 body 交给默认编码。
+- **创建后必须回读验证**：PR 标题、正文或评论创建/更新后，必须通过 `gh pr view`、GitHub API、或等价读取回查标题/正文。若出现 `??`、`Ã`、`锟斤拷`、`æœ¬` 等 mojibake 迹象，必须立即用 UTF-8 body 修正后再汇报完成。
+- **不得为避免编码问题改成英文**：除非用户明确要求英文，否则中文标题/正文应保留中文语义；编码失败是执行问题，不是产品文案取舍。
+
 ## 5. 不该做的事
 
 - 不要把 Git 规则写成一整段大而全提示词塞回根 `AGENTS.md`
