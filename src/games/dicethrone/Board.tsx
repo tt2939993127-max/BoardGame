@@ -1,7 +1,7 @@
 import React from 'react';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 
-import { HAND_LIMIT, type InteractionDescriptor, type PendingBonusDiceSettlement, type TokenResponsePhase } from './domain/types';
+import { HAND_LIMIT, type InteractionDescriptor, type PendingBonusDiceSettlement } from './domain/types';
 import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore, Die } from './domain';
@@ -12,7 +12,6 @@ import {
     checkPlayCard,
     getPlayableCardsInResponseWindow,
     getAvailableAbilityIds,
-    getPendingBonusSettlementDice,
     getPlayerDieFace,
     getSeatingOrder,
     getOpponents,
@@ -228,7 +227,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 奖励骰的唯一展示载体是右侧骰盘。普通确认结算后 pending 会被清掉，
     // 但 currentRollContext 仍保留最终骰面供回看，因此不能再以 pending
     // 是否存在来决定旧事件流特写是否应出现。
-    const isRightTrayBonusDiceContext = G.currentRollContext?.kind === 'bonus';
     const isDirectDiceActor = React.useMemo(
         () => isDirectDiceInterferenceActor(G, currentResponseWindow, rootPid),
         [G, currentResponseWindow, rootPid],
@@ -554,11 +552,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 进攻特写只是进入防御的阅读层。一旦已恢复到 Token 响应，响应本体优先，
     // 否则本地重新挂载的特写遮罩会把可用 Token 留在画面里却无法点击。
     const hasBlockingAttackShowcase = isAttackShowcaseVisible && !isTokenResponseInteraction;
-    const tokenResponsePhase: TokenResponsePhase | null = pendingDamage
-        ? (pendingDamage.responderId === pendingDamage.sourcePlayerId ? 'attackerBoost' : 'defenderMitigation')
-        : null;
     const isTokenResponder = pendingDamage && (pendingDamage.responderId === rootPid);
-
     // 领域层计算当前阶段可用的 Token 列表（唯一数据源）
     const usableTokens = React.useMemo(() => {
         if (!pendingDamage) return [];
@@ -682,7 +676,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return isViewRolling ? access.availableAbilityIds : [];
     }, [isCurrentBonusDiceSettlementActive, isResponseWindowOpen, currentResponderId, viewPid, isViewRolling, access.availableAbilityIds, G, currentPhase]);
     
-    const availableAbilityIdsForRoller = isCurrentBonusDiceSettlementActive ? [] : access.availableAbilityIds;
+    const availableAbilityIdsForRoller = React.useMemo(
+        () => (isCurrentBonusDiceSettlementActive ? [] : access.availableAbilityIds),
+        [isCurrentBonusDiceSettlementActive, access.availableAbilityIds],
+    );
     const selectedAbilityId = currentPhase === 'defensiveRoll'
         ? (isViewRolling ? G.pendingAttack?.defenseAbilityId : undefined)
         : currentPhase === 'offensiveRoll'
@@ -804,6 +801,41 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         sysInteraction?.id,
         t,
     ]);
+
+    const nyraDamageResponse = React.useMemo(() => {
+        const companion = player?.companion;
+        const currentDamage = Math.max(0, pendingDamage?.currentDamage ?? 0);
+        if (
+            !isTokenResponseInteraction
+            || !pendingDamage
+            || !isTokenResponder
+            || player?.characterId !== 'lieren'
+            || !companion
+            || companion.hp <= 0
+            || G.pendingAttack?.isUltimate
+            || currentDamage <= 0
+        ) {
+            return undefined;
+        }
+
+        const maxAssignableDamage = Math.min(currentDamage, companion.hp);
+        return {
+            currentDamage,
+            maxAssignableDamage,
+            canRedirectToNyra: true,
+            canAllocateWithBond: (player.tokens[TOKEN_IDS.NYRAS_BOND] ?? 0) > 0 && maxAssignableDamage > 0,
+            onRedirectToNyra: () => engineMoves.useToken(TOKEN_IDS.NYRA_REDIRECT, currentDamage),
+            onAllocateWithBond: (amount: number) => engineMoves.useToken(TOKEN_IDS.NYRAS_BOND, amount),
+        };
+    }, [
+        G.pendingAttack?.isUltimate,
+        engineMoves,
+        isTokenResponder,
+        isTokenResponseInteraction,
+        pendingDamage,
+        player,
+    ]);
+
     const isDuelDirectDefenseOnly = false;
     const diceInteractionPlayerId = diceMultistepInteraction?.playerId != null
         ? String(diceMultistepInteraction.playerId)
@@ -1962,6 +1994,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         overrideHp={damageBuffer.get(`hp-${rootPid}`, player.resources[RESOURCE_IDS.HP] ?? 0)}
                         onAutoResponseToggle={setAutoResponseEnabled}
                         onBonusDiceResponseToggle={setBonusDiceResponseEnabled}
+                        onConsumeNyraBond={() => engineMoves.useToken('nyras_bond', 1)}
+                        nyraDamageResponse={nyraDamageResponse}
                     />
 
                     <CenterBoard
